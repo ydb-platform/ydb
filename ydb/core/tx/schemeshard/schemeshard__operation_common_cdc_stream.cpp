@@ -124,9 +124,43 @@ bool TProposeAtTable::HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOpera
     Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
     auto table = context.SS->Tables.at(pathId);
 
-    table->AlterVersion += 1;
-
     NIceDb::TNiceDb db(context.GetDB());
+
+    // Check if this is an index implementation table
+    // Check if this is an index implementation table
+    // If so, we need to sync the parent index version to match the impl table version
+    TPathId parentPathId = path->ParentPathId;
+    if (parentPathId && context.SS->PathsById.contains(parentPathId)) {
+        auto parentPath = context.SS->PathsById.at(parentPathId);
+        if (parentPath->IsTableIndex()) {
+            // This is an index impl table, sync parent index version directly
+            Y_ABORT_UNLESS(context.SS->Indexes.contains(parentPathId));
+            auto index = context.SS->Indexes.at(parentPathId);
+            
+            // Set index version to match impl table version (which will be incremented below)
+            index->AlterVersion = table->AlterVersion + 1;
+            
+            // Persist the index version update directly to database
+            db.Table<Schema::TableIndex>().Key(parentPathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(index->AlterVersion)
+            );
+            
+            // Clear caches and publish for the index
+            context.SS->ClearDescribePathCaches(parentPath);
+            context.OnComplete.PublishToSchemeBoard(OperationId, parentPathId);
+            
+            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        DebugHint() << " Synced parent index version with impl table"
+                                   << ", indexPathId: " << parentPathId
+                                   << ", indexName: " << parentPath->Name
+                                   << ", newVersion: " << index->AlterVersion
+                                   << ", at schemeshard: " << context.SS->SelfTabletId());
+        }
+    }
+
+    // Increment and persist the table's AlterVersion
+    // This happens AFTER DataShards have been notified and are waiting for the plan
+    table->AlterVersion += 1;
     context.SS->PersistTableAlterVersion(db, pathId, table);
 
     context.SS->ClearDescribePathCaches(path);

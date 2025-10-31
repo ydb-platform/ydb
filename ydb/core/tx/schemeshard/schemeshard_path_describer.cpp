@@ -1390,6 +1390,11 @@ void TSchemeShard::DescribeTable(
 {
     Y_UNUSED(typeRegistry);
 
+    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "DescribeTable publishing schema version"
+        << " AlterVersion=" << tableInfo.AlterVersion
+        << " for SchemeBoard");
+
     entry->SetTableSchemaVersion(tableInfo.AlterVersion);
     FillColumns(tableInfo, *entry->MutableColumns());
     FillKeyColumns(tableInfo, *entry->MutableKeyColumnNames(), *entry->MutableKeyColumnIds());

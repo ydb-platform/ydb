@@ -583,13 +583,8 @@ void DoDropStream(
         result.push_back(DropLock(NextPartId(opId, result), outTx));
     }
 
-    if (workingDirPath.IsTableIndex()) {
-        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
-        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
-        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
-
-        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
-    }
+    // Note: For DROP CDC streams on index impl tables, we don't create an AlterTableIndex sub-operation
+    // The index version sync is not needed for drops (no schema changes to track)
 
     for (const auto& streamPath : streamPaths) {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStreamImpl);

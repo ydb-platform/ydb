@@ -1699,4 +1699,617 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Verify it was created
         TestLs(runtime, "/MyRoot/.backups/collections/TestCollection/__ydb_backup_meta", false, NLs::PathExist);
     }
+
+    Y_UNIT_TEST(SingleTableWithGlobalSyncIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with one global sync covering index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream exists on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex", true, true);
+        UNIT_ASSERT(mainTableDesc.GetPathDescription().HasTable());
+        
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        bool foundMainTableCdc = false;
+        TString mainTableCdcName;
+        
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            const auto& cdcStream = tableDesc.GetCdcStreams(i);
+            if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainTableCdc = true;
+                mainTableCdcName = cdcStream.GetName();
+                Cerr << "Found main table CDC stream: " << mainTableCdcName << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainTableCdc, "Main table should have CDC stream with '_continuousBackupImpl' suffix");
+
+        // Verify CDC stream exists on index implementation table
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex/ValueIndex", true, true);
+        UNIT_ASSERT(indexDesc.GetPathDescription().HasTableIndex());
+        
+        // Get index implementation table (first child of index)
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto indexImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithIndex/ValueIndex/" + indexImplTableName, true, true);
+        UNIT_ASSERT(indexImplTableDesc.GetPathDescription().HasTable());
+        
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        bool foundIndexCdc = false;
+        TString indexCdcName;
+        
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            const auto& cdcStream = indexTableDesc.GetCdcStreams(i);
+            if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                indexCdcName = cdcStream.GetName();
+                Cerr << "Found index CDC stream: " << indexCdcName << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundIndexCdc, "Index implementation table should have CDC stream with '_continuousBackupImpl' suffix");
+
+        // Verify CDC stream names match pattern and use same timestamp
+        UNIT_ASSERT_VALUES_EQUAL(mainTableCdcName, indexCdcName);
+        UNIT_ASSERT_C(mainTableCdcName.Contains("Z") && mainTableCdcName.EndsWith("_continuousBackupImpl"), 
+            "CDC stream name should have X.509 timestamp format (YYYYMMDDHHMMSSZ_continuousBackupImpl)");
+    }
+
+    Y_UNIT_TEST(SingleTableWithMultipleGlobalSyncIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithMultipleIndexes"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with multiple global sync indexes
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithMultipleIndexes"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value1" Type: "Utf8" }
+                Columns { Name: "value2" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Value1Index"
+                KeyColumnNames: ["value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "Value2Index"
+                KeyColumnNames: ["value2"]
+                DataColumnNames: ["value1"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMultipleIndexes", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        TString mainCdcName;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            const auto& cdcStream = tableDesc.GetCdcStreams(i);
+            if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                mainCdcName = cdcStream.GetName();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!mainCdcName.empty(), "Main table should have CDC stream");
+
+        // Verify CDC streams on both indexes
+        TVector<TString> indexNames = {"Value1Index", "Value2Index"};
+        TVector<TString> indexCdcNames;
+        
+        for (const auto& indexName : indexNames) {
+            auto indexDesc = DescribePrivatePath(runtime, 
+                "/MyRoot/TableWithMultipleIndexes/" + indexName, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+            TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+            
+            auto indexImplTableDesc = DescribePrivatePath(runtime, 
+                "/MyRoot/TableWithMultipleIndexes/" + indexName + "/" + indexImplTableName, true, true);
+            const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+            
+            bool foundCdc = false;
+            for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+                const auto& cdcStream = indexTableDesc.GetCdcStreams(i);
+                if (cdcStream.GetName().EndsWith("_continuousBackupImpl")) {
+                    indexCdcNames.push_back(cdcStream.GetName());
+                    foundCdc = true;
+                    Cerr << "Found CDC stream on " << indexName << ": " << cdcStream.GetName() << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundCdc, "Index " + indexName + " should have CDC stream");
+        }
+
+        // Verify all streams use the same timestamp
+        UNIT_ASSERT_VALUES_EQUAL(indexCdcNames.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(mainCdcName, indexCdcNames[0]);
+        UNIT_ASSERT_VALUES_EQUAL(mainCdcName, indexCdcNames[1]);
+    }
+
+    Y_UNIT_TEST(TableWithMixedIndexTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithMixedIndexes"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with global sync + async indexes
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithMixedIndexes"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value1" Type: "Utf8" }
+                Columns { Name: "value2" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "SyncIndex"
+                KeyColumnNames: ["value1"]
+                Type: EIndexTypeGlobal
+            }
+            IndexDescription {
+                Name: "AsyncIndex"
+                KeyColumnNames: ["value2"]
+                Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMixedIndexes", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        bool foundMainCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainCdc, "Main table should have CDC stream");
+
+        // Verify CDC stream on global sync index ONLY
+        auto syncIndexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMixedIndexes/SyncIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(syncIndexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString syncImplTableName = syncIndexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto syncImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithMixedIndexes/SyncIndex/" + syncImplTableName, true, true);
+        const auto& syncTableDesc = syncImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundSyncCdc = false;
+        for (size_t i = 0; i < syncTableDesc.CdcStreamsSize(); ++i) {
+            if (syncTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundSyncCdc = true;
+                Cerr << "Found CDC stream on SyncIndex (expected)" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundSyncCdc, "Global sync index should have CDC stream");
+
+        // Verify NO CDC stream on async index
+        auto asyncIndexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithMixedIndexes/AsyncIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(asyncIndexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString asyncImplTableName = asyncIndexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto asyncImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithMixedIndexes/AsyncIndex/" + asyncImplTableName, true, true);
+        const auto& asyncTableDesc = asyncImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundAsyncCdc = false;
+        for (size_t i = 0; i < asyncTableDesc.CdcStreamsSize(); ++i) {
+            if (asyncTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundAsyncCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!foundAsyncCdc, "Async index should NOT have CDC stream");
+    }
+
+    Y_UNIT_TEST(MultipleTablesWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection with 2 tables
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table2"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create Table1 with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Index1"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create Table2 with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table2"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "Index2"
+                KeyColumnNames: ["data"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC streams on both main tables
+        TVector<TString> tables = {"Table1", "Table2"};
+        TVector<TString> indexes = {"Index1", "Index2"};
+        
+        for (size_t tableIdx = 0; tableIdx < tables.size(); ++tableIdx) {
+            const auto& tableName = tables[tableIdx];
+            const auto& indexName = indexes[tableIdx];
+            
+            // Check main table CDC
+            auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/" + tableName, true, true);
+            const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+            
+            bool foundMainCdc = false;
+            for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+                if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    foundMainCdc = true;
+                    Cerr << "Found CDC stream on " << tableName << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundMainCdc, tableName + " should have CDC stream");
+            
+            // Check index CDC
+            auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/" + tableName + "/" + indexName, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+            TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+            
+            auto indexImplTableDesc = DescribePrivatePath(runtime, 
+                "/MyRoot/" + tableName + "/" + indexName + "/" + indexImplTableName, true, true);
+            const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+            
+            bool foundIndexCdc = false;
+            for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+                if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                    foundIndexCdc = true;
+                    Cerr << "Found CDC stream on " << indexName << Endl;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundIndexCdc, indexName + " should have CDC stream");
+        }
+    }
+
+    Y_UNIT_TEST(IncrementalBackupWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableForIncremental"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with global sync index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableForIncremental"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup (creates CDC streams)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC streams were created for both main table and index
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableForIncremental", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        bool foundMainCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainCdc = true;
+                Cerr << "Found CDC stream on main table" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainCdc, "Main table should have CDC stream after full backup");
+
+        // Verify CDC stream on index
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableForIncremental/ValueIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto indexImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableForIncremental/ValueIndex/" + indexImplTableName, true, true);
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundIndexCdc = false;
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                Cerr << "Found CDC stream on index implementation table" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundIndexCdc, "Index implementation table should have CDC stream after full backup");
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+        // Execute incremental backup (rotates CDC, creates backup tables)
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup collection structure
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(2), // full + incremental
+        });
+
+        // Find the incremental backup directory (should end with "_incremental")
+        auto collectionDesc = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1, true, true);
+        TString incrBackupDir;
+        for (size_t i = 0; i < collectionDesc.GetPathDescription().ChildrenSize(); ++i) {
+            const auto& child = collectionDesc.GetPathDescription().GetChildren(i);
+            Cerr << "Child: " << child.GetName() << " PathState: " << child.GetPathState() << Endl;
+            if (child.GetName().EndsWith("_incremental")) {
+                incrBackupDir = child.GetName();
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!incrBackupDir.empty(), "Should find incremental backup directory");
+
+        // Verify backup table for main table exists
+        TestDescribeResult(DescribePath(runtime, 
+            "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir + "/TableForIncremental"), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        // Verify index backup table exists in __ydb_backup_meta/indexes/TableForIncremental/ValueIndex
+        TString indexBackupPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1 "/" + incrBackupDir + 
+            "/__ydb_backup_meta/indexes/TableForIncremental/ValueIndex";
+        TestDescribeResult(DescribePath(runtime, indexBackupPath), {
+            NLs::PathExist,
+            NLs::IsTable,
+        });
+
+        Cerr << "SUCCESS: Full backup created CDC streams for both main table and index" << Endl;
+        Cerr << "         Incremental backup created backup tables for both main table and index" << Endl;
+        Cerr << "         Index backup table verified at: " << indexBackupPath << Endl;
+    }
+
+    Y_UNIT_TEST(OmitIndexesFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        // Create incremental backup collection WITH OmitIndexes flag set
+        TString collectionSettings = R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig {
+                OmitIndexes: true
+            }
+        )";
+        
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // Create table with global sync index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+                Type: EIndexTypeGlobal
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Execute full backup
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify CDC stream exists on main table
+        auto mainTableDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex", true, true);
+        const auto& tableDesc = mainTableDesc.GetPathDescription().GetTable();
+        
+        bool foundMainCdc = false;
+        for (size_t i = 0; i < tableDesc.CdcStreamsSize(); ++i) {
+            if (tableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundMainCdc = true;
+                Cerr << "Found CDC stream on main table (expected)" << Endl;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(foundMainCdc, "Main table should have CDC stream even with OmitIndexes=true");
+
+        // Verify NO CDC stream on index (because OmitIndexes is true)
+        auto indexDesc = DescribePrivatePath(runtime, "/MyRoot/TableWithIndex/ValueIndex", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetPathDescription().ChildrenSize(), 1);
+        TString indexImplTableName = indexDesc.GetPathDescription().GetChildren(0).GetName();
+        
+        auto indexImplTableDesc = DescribePrivatePath(runtime, 
+            "/MyRoot/TableWithIndex/ValueIndex/" + indexImplTableName, true, true);
+        const auto& indexTableDesc = indexImplTableDesc.GetPathDescription().GetTable();
+        
+        bool foundIndexCdc = false;
+        for (size_t i = 0; i < indexTableDesc.CdcStreamsSize(); ++i) {
+            if (indexTableDesc.GetCdcStreams(i).GetName().EndsWith("_continuousBackupImpl")) {
+                foundIndexCdc = true;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!foundIndexCdc, "Index should NOT have CDC stream when OmitIndexes=true");
+
+        Cerr << "SUCCESS: OmitIndexes flag works correctly - main table has CDC, index does not" << Endl;
+    }
 } // TBackupCollectionTests

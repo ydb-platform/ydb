@@ -712,6 +712,12 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }
+    for (const auto& h : CompactionBlobEncoder.DataKeysBody) {
+        ss << "SYNC INIT DATA KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
+    }
+    for (const auto& h : CompactionBlobEncoder.HeadKeys) {
+        ss << "SYNC INIT HEAD KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
+    }
     for (const auto& h : BlobEncoder.DataKeysBody) {
         ss << "SYNC INIT DATA KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
     }
@@ -1139,6 +1145,10 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
 
 const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
 {
+    if ((offset >= CompactionBlobEncoder.EndOffset) && (offset < BlobEncoder.StartOffset)) {
+        offset = BlobEncoder.StartOffset;
+    }
+
     if (BlobEncoder.DataKeysBody.empty()) {
         return CompactionBlobEncoder;
     }
@@ -1169,8 +1179,13 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     }
 
     const TPartitionBlobEncoder& blobEncoder = GetBlobEncoder(offset);
+    offset = Max(offset, blobEncoder.StartOffset);
     const std::deque<TDataKey>& container = GetContainer(blobEncoder, offset);
-    PQ_ENSURE(!container.empty());
+    PQ_ENSURE(!container.empty())
+        ("offset", offset)
+        ("cz.StartOffset", CompactionBlobEncoder.StartOffset)("cz.EndOffset", CompactionBlobEncoder.EndOffset)
+        ("fwz.StartOffset", BlobEncoder.StartOffset)("fwz.EndOffset", BlobEncoder.EndOffset)
+        ;
 
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {
@@ -1178,8 +1193,10 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
                                         offset == p.Key.GetOffset() && p.Key.GetPartNo() > 0;
                     });
     // Always greater
-    PQ_ENSURE(it != container.begin())("StartOffset", blobEncoder.StartOffset)("HeadOffset", blobEncoder.Head.Offset)
-        ("offset", offset)("containter size", container.size())("first-elem", container.front().Key.ToString())
+    PQ_ENSURE(it != container.begin())
+        ("StartOffset", blobEncoder.StartOffset)("HeadOffset", blobEncoder.Head.Offset)
+        ("offset", offset)
+        ("containter size", container.size())("first-elem", container.front().Key.ToString())
         ("is-fast-write", blobEncoder.ForFastWrite);
     PQ_ENSURE(it == container.end() ||
                    offset < it->Key.GetOffset() ||

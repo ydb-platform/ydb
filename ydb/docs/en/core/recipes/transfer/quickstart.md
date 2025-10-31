@@ -1,4 +1,4 @@
-# Transfer — Quick Start
+# Transfer — quick start
 
 This guide helps you get started with [transfer](../../concepts/transfer.md) in {{ ydb-short-name }} using a basic example.
 

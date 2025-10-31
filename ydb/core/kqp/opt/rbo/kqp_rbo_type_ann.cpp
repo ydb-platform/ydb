@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max"};
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
@@ -207,17 +207,28 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
 
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
+
+        // The type of the column could be changed after aggregation.
         if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
-            Y_ENSURE(SupportedAggregationFunctions.count(it->second.second), "Unsupported aggregation function");
-            // For count need to update type
-            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->second.first, itemType->GetItemType()));
+            const auto& resultColName = it->second.first;
+            const auto& aggFunction = it->second.second;
+            Y_ENSURE(SupportedAggregationFunctions.count(aggFunction), "Unsupported aggregation function " + aggFunction);
+
+            const TTypeAnnotationNode* aggFieldType = itemType->GetItemType();
+            if (aggFunction == "count") {
+                aggFieldType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Uint64);
+            } else if (aggFunction == "sum") {
+                TPositionHandle dummyPos;
+                Y_ENSURE(GetSumResultType(dummyPos, *itemType->GetItemType(), aggFieldType, ctx.ExprCtx),
+                         "Unsupported type for sum aggregation function");
+            }
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(resultColName, aggFieldType));
         } else {
             newItemTypes.push_back(itemType);
         }
     }
 
-    auto resultType = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes));
-    aggregate->Type = resultType;
+    aggregate->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes));
     return TStatus::Ok;
 }
 

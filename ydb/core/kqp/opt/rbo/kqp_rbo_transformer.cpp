@@ -15,7 +15,7 @@ struct TJoinTableAliases {
     THashSet<TString> RightSideAliases;
 };
 
-THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max"};
+THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count"};
 
 TJoinTableAliases GatherJoinAliasesLeftSideMultiInputs(const TVector<TInfoUnit> &joinKeys, const THashSet<TString> &processedInputs) {
     TJoinTableAliases joinAliases;

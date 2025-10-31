@@ -457,6 +457,8 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExp
     // clang-format on
 }
 
+// This lambda returns are keys for following aggregation.
+// It has arguments in the following orders - inputs.
 TExprNode::TPtr BuildKeyExtractorLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields, TExprContext& ctx,
                                         const TPositionHandle pos) {
     // At fitst generate a lambda args, the size of args is equal to number of input columns.
@@ -499,6 +501,8 @@ TExprNode::TPtr BuildKeyExtractorLambda(const TVector<TString>& keyFields, const
     return ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(lambdaArgs)), std::move(lambdaResults));
 }
 
+// This lambdas initializes initial state for aggregation.
+// It has arguments in the following order - keys, inputs.
 TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
                                        const TVector<std::pair<TString, std::pair<TString, TString>>>& aggFields, TExprContext& ctx,
                                        const TPositionHandle pos) {
@@ -526,14 +530,25 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
 
     TVector<TExprNode::TPtr> lambdaResults;
     for (ui32 i = 0; i < aggFields.size(); ++i) {
-        // clang-format off
-        auto member = ctx.Builder(pos)
-                .Callable("Member")
-                    .Add(0, asStruct)
-                    .Atom(1, aggFields[i].second.first)
-            .Seal().Build();
-        // clang-format on
-        lambdaResults.push_back(member);
+        const auto& aggFunction = aggFields[i].first;
+        TExprNode::TPtr initState;
+        if (aggFunction == "count") {
+            // clang-format off
+            initState = ctx.Builder(pos)
+                .Callable("Uint64")
+                    .Atom(0, "1")
+                .Seal().Build();
+            // clang-format on
+        } else {
+            // clang-format off
+            initState = ctx.Builder(pos)
+                    .Callable("Member")
+                        .Add(0, asStruct)
+                        .Atom(1, aggFields[i].second.first)
+                .Seal().Build();
+            // clang-format on
+        }
+        lambdaResults.push_back(initState);
     }
 
     // Create a wide lambda - lambda with multiple outputs.
@@ -541,6 +556,8 @@ TExprNode::TPtr BuildInitHandlerLambda(const TVector<TString>& keyFields, const 
     // clang-forat on
 }
 
+// This lambda performs an aggregation.
+// It has arguments in the following order - keys, inputs, states.
 TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
                                          const TVector<std::pair<TString, std::pair<TString, TString>>>& aggFields,
                                          TExprContext& ctx, const TPositionHandle pos) {
@@ -596,18 +613,32 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
         const auto &aggFunction = aggField.first;
         const auto &columnName = aggField.second.first;
         const auto &stateName = aggField.second.second;
-
-        auto aggFunc = ctx.Builder(pos)
-            .Callable(AggregationFunctionToAggregationCallable[aggFunction])
-                .Callable(0, "Member")
-                    .Add(0, asStructStateColumns)
-                    .Atom(1, stateName)
-                .Seal()
-                .Callable(1, "Member")
-                    .Add(0, asStructInputColumns)
-                    .Atom(1, columnName)
-                .Seal()
-        .Seal().Build();
+        TExprNode::TPtr aggFunc;
+        if (aggFunction == "count") {
+            // clang-format off
+            aggFunc = ctx.Builder(pos)
+                .Callable("Inc")
+                    .Callable(0, "Member")
+                        .Add(0, asStructStateColumns)
+                        .Atom(1, stateName)
+                    .Seal()
+                .Seal().Build();
+            // clang-format on
+        } else {
+            // clang-format off
+            aggFunc = ctx.Builder(pos)
+                .Callable(AggregationFunctionToAggregationCallable[aggFunction])
+                    .Callable(0, "Member")
+                        .Add(0, asStructStateColumns)
+                        .Atom(1, stateName)
+                    .Seal()
+                    .Callable(1, "Member")
+                        .Add(0, asStructInputColumns)
+                        .Atom(1, columnName)
+                    .Seal()
+            .Seal().Build();
+            // clang-format on
+        }
         lambdaResults.push_back(aggFunc);
     }
 
@@ -618,6 +649,8 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
     return ctx.NewLambda(pos, ctx.NewArguments(pos, std::move(lambdaArgs)), std::move(lambdaResults));
 }
 
+// This lambda returns aggregation result.
+// It has arguments in the following order - keys, states.
 TExprNode::TPtr BuildFinishHandlerLambda(const TVector<TString>& keyFields,
                                          const TVector<std::pair<TString, std::pair<TString, TString>>>& aggFields,
                                          TExprContext& ctx, const TPositionHandle pos) {

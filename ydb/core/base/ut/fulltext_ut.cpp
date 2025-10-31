@@ -243,6 +243,19 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.clear_filter_length_min();
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"кот", "ест", "день"}));
     }
+
+    Y_UNIT_TEST(AnalyzeFilterNgram) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        TString text = "это текст";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"это", "текст"}));
+
+        analyzers.set_use_filter_ngram(true);
+        analyzers.set_filter_ngram_min_length(2);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "то", "это", "те", "ек", "кс", "ст", "тек", "екс", "кст"}));
+    }
 }
 
 }

@@ -189,6 +189,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+        Cerr << (TStringBuilder() << ">>>>> a " << alter.ShortDebugString() << Endl);
         if (alter.has_set_important()) {
             consumer.set_important(alter.set_important());
         }

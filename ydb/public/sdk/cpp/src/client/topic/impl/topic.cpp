@@ -843,6 +843,9 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
     }
 
     auto* deadLetterPolicy = proto.mutable_alter_dead_letter_policy();
+    if (DeadLetterPolicy_.Enabled_) {
+        deadLetterPolicy->set_set_enabled(DeadLetterPolicy_.Enabled_.value());
+    }
     if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
         deadLetterPolicy->mutable_alter_condition()->set_set_max_processing_attempts(
             DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());

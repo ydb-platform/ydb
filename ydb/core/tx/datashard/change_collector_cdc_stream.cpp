@@ -123,15 +123,8 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
     }
 
     bool value = false;
-    const auto& userTables = Self->GetUserTables();
-    Cerr << "CDC_DEBUG: NeedToReadKeys checking " << userTables.size() << " user tables" << Endl;
-    for (const auto& [tableLocalPathId, tableInfo] : userTables) {
-        Cerr << "CDC_DEBUG: Table LocalPathId=" << tableLocalPathId 
-             << " has " << tableInfo->CdcStreams.size() << " CDC streams" << Endl;
-        for (const auto& [streamPathId, streamInfo] : tableInfo->CdcStreams) {
-            Cerr << "CDC_DEBUG:   Stream PathId=" << streamPathId 
-                 << " State=" << static_cast<ui32>(streamInfo.State)
-                 << " Mode=" << static_cast<ui32>(streamInfo.Mode) << Endl;
+    for (const auto& [_, tableInfo] : Self->GetUserTables()) {
+        for (const auto& [_, streamInfo] : tableInfo->CdcStreams) {
             if (streamInfo.State == NKikimrSchemeOp::ECdcStreamStateDisabled) {
                 continue;
             }
@@ -152,29 +145,15 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
     }
 
     CachedNeedToReadKeys = value;
-    Cerr << "CDC_DEBUG: NeedToReadKeys returning " << value << Endl;
     return *CachedNeedToReadKeys;
 }
 
 bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
-    Cerr << "CDC_DEBUG: Collect called for TableId OwnerId=" << tableId.PathId.OwnerId 
-         << " LocalPathId=" << tableId.PathId.LocalPathId 
-         << " RowOp=" << static_cast<ui32>(rop) << Endl;
-    
-    if (!Self->IsUserTable(tableId)) {
-        const auto& userTables = Self->GetUserTables();
-        Cerr << "CDC_DEBUG: IsUserTable returned FALSE! TableId not in UserTables map." << Endl;
-        Cerr << "CDC_DEBUG: UserTables contains " << userTables.size() << " tables:" << Endl;
-        for (const auto& [localPathId, _] : userTables) {
-            Cerr << "CDC_DEBUG:   LocalPathId=" << localPathId << Endl;
-        }
-        Y_ENSURE(false, "Unknown table: " << tableId);
-    }
+    Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
-    Cerr << "CDC_DEBUG: Found user table with " << userTable->CdcStreams.size() << " CDC streams" << Endl;
     const auto& keyTags = userTable->KeyColumnIds;
     const auto& keyTypes = userTable->KeyColumnTypes;
     const auto valueTags = MakeValueTags(userTable->Columns);
@@ -194,9 +173,6 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     }
 
     for (const auto& [pathId, stream] : userTable->CdcStreams) {
-        Cerr << "CDC_DEBUG: Processing CDC stream PathId=" << pathId 
-             << " State=" << static_cast<ui32>(stream.State)
-             << " Mode=" << static_cast<ui32>(stream.Mode) << Endl;
         TMaybe<TRowState> initialState;
         TMaybe<TRowVersion> snapshotVersion;
 

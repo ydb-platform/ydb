@@ -257,7 +257,8 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.py --ya-make-command "'./ya make ${params[@]}'" --result-graph-path graph.json --result-context-path context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          YA_MAKE_COMMAD="./ya make ${params[@]}"
+          ./.github/scripts/graph_compare.py --ya-make-command "$YA_MAKE_COMMAD" --result-graph-path graph.json --result-context-path context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 

@@ -369,11 +369,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         ui64 mcmcSteps = args.GetArgOrDefault<uint64_t>("mcmcSteps", "100").GetValue();
-        for (ui64 n : args.GetArg<uint64_t>("N")) {
-            for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
-                for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
-                    for (double logStdDev : args.GetArgOrDefault<double>("logStdDev", "0.5")) {
-                        for (double logMean : args.GetArgOrDefault<double>("logMean", "1.0")) {
+        for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
+            for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
+                for (double logStdDev : args.GetArgOrDefault<double>("logStdDev", "0.5")) {
+                    for (double logMean : args.GetArgOrDefault<double>("logMean", "1.0")) {
+                        for (ui64 n : args.GetArg<uint64_t>("N")) {
                             Cout << "\n\n\n";
                             Cout << "================================= METRICS ================================\n";
                             auto initialDegrees = GenerateLogNormalDegrees(n, logMean, logStdDev);
@@ -419,11 +419,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                 (*ctx.OS) << "\n";
                             }
                         }
+                        stop:;
                     }
                 }
             }
         }
-    stop:;
     }
 
     template <auto TrivialTopology>

@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     ydb/library/workload/abstract
 )
 

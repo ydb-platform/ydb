@@ -54,9 +54,4 @@ java {
 {%-     endif %}
 }
 
-{#- Can be removed after Gradle 9. See https://github.com/gradle/gradle/issues/16791 #}
-
-tasks.withType<JavaExec>().configureEach {
-    javaLauncher.set(javaToolchains.launcherFor(java.toolchain))
-}
 {%  endif -%}

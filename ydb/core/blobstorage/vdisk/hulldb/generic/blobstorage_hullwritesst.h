@@ -507,7 +507,7 @@ namespace NKikimr {
 
         void Push(const TKey &key, const TMemRec &memRec, const TDataMerger *dataMerger) {
             // check that keys are coming in strictly ascending order
-            Y_ABORT_UNLESS(Recs.empty() || Recs.back().Key < key);
+            Y_ABORT_UNLESS(Recs.empty() || Recs.back().GetKey() < key);
 
             TMemRec newMemRec(memRec);
 

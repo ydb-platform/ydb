@@ -122,9 +122,6 @@ class TNeumannHashTable {
         Hash Hash;
         ui32 Index;
     };
-    template <>
-    struct TOutplaceImpl<true> : TOutplaceImpl<false> {
-    };
 
     using TOutplace = TOutplaceImpl<ConsecutiveDuplicates>;
     static_assert(sizeof(TOutplace) <= kEmbeddedSize);
@@ -181,10 +178,10 @@ class TNeumannHashTable {
     TNeumannHashTable(const TNeumannHashTable &) = delete;
     TNeumannHashTable &operator=(const TNeumannHashTable &) = delete;
 
-    void Build(const ui8 *const tuples, const ui8 *const overflow, ui32 nItems,
+    void Build(const ui8 *const tuples, const ui8 *const overflow, int nItems,
                ui32 estimatedLogSize = 0) {
-        Y_ASSERT(Layout_ != nullptr);
-        Y_ASSERT(Directories_.empty() && Buffer_.empty() &&
+        MKQL_ENSURE_S(Layout_ != nullptr);
+        MKQL_ENSURE_S(Directories_.empty() && Buffer_.empty() &&
                  Tuples_ == nullptr && Overflow_ == nullptr);
 
         if (estimatedLogSize == 0) {
@@ -209,7 +206,7 @@ class TNeumannHashTable {
             directory = {};
         }
 
-        for (ui32 ind = 0; ind != nItems; ++ind) {
+        for (int ind = 0; ind != nItems; ++ind) {
             const THash thash =
                 ReadUnaligned<THash>(tuples + Layout_->TotalRowSize * ind);
             auto &dir = *Directories_[getDirectorySlot(thash)];
@@ -229,10 +226,10 @@ class TNeumannHashTable {
 
         Buffer_.resize(BufferSlotSize_ * nItems);
 
-        constexpr ui32 prefetchInAdvance = 16;
+        constexpr int prefetchInAdvance = 16;
 
         if constexpr (Prefetch) {
-            for (ui32 ind = 0; ind != std::min(prefetchInAdvance, nItems); ++ind) {
+            for (int ind = 0; ind != std::min(prefetchInAdvance, nItems); ++ind) {
                 const ui8 *row = tuples + Layout_->TotalRowSize * ind;
                 const THash thash = ReadUnaligned<THash>(row);
                 auto &dir = *Directories_[getDirectorySlot(thash)];
@@ -243,7 +240,8 @@ class TNeumannHashTable {
         }
 
         const ui8 *row = tuples;
-        for (ui32 ind = 0; ind != nItems; ++ind, row += Layout_->TotalRowSize) {
+        int ind = 0;
+        for (; ind + prefetchInAdvance < nItems; ++ind, row += Layout_->TotalRowSize) {
             if constexpr (Prefetch) {
                 const ui8 *prow = row + Layout_->TotalRowSize * prefetchInAdvance;
                 const THash thash = ReadUnaligned<THash>(prow);
@@ -272,6 +270,28 @@ class TNeumannHashTable {
             if constexpr (ConsecutiveDuplicates) {
                 WriteUnaligned<ui32>(bufRow + RowIndexSize_, 0); 
             }
+        }
+        for(; ind < nItems;  ++ind, row += Layout_->TotalRowSize) {
+            const THash thash = ReadUnaligned<THash>(row);
+
+            auto &dir = *Directories_[getDirectorySlot(thash)];
+            dir -= 1ul << TDirectory::kBufferSlotShift;
+            const ui32 dataSlot = dir >> TDirectory::kBufferSlotShift;
+            ui8 *const bufRow = Buffer_.data() + BufferSlotSize_ * dataSlot;
+
+            if (IsInplace_) {
+                std::memcpy(bufRow, row,
+                            RowIndexSize_);
+            } else {
+                auto *const outRow = reinterpret_cast<TOutplace *>(bufRow);
+                outRow->Hash = *thash;
+                outRow->Index = ind;
+            }
+            
+            if constexpr (ConsecutiveDuplicates) {
+                WriteUnaligned<ui32>(bufRow + RowIndexSize_, 0); 
+            }
+
         }
 
         if constexpr (ConsecutiveDuplicates) {
@@ -414,9 +434,12 @@ class TNeumannHashTable {
 
         return iters;
     }
+    bool Empty(){
+        return Buffer_.empty();
+    }
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
-               auto &&onMatch) {
+               std::invocable<const ui8*> auto onMatch) const {
         Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 

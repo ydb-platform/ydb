@@ -2,11 +2,12 @@
 
 #include <string.h>
 
+#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
-#include <ydb/library/actors/interconnect/interconnect_address.h>
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 
 #include <library/cpp/testing/gtest/gtest.h>

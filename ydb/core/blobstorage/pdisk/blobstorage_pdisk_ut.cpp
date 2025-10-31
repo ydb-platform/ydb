@@ -10,6 +10,8 @@
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+
 #include <util/system/hp_timer.h>
 
 namespace NKikimr {
@@ -1562,9 +1564,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return data;
     }
 
-    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks) {
+    void ChunkWriteDifferentOffsetAndSizeImpl(bool plainDataChunks, bool rdmaAlloc) {
         TActorTestContext testCtx({
             .PlainDataChunks = plainDataChunks,
+            .UseRdmaAllocator = rdmaAlloc,
         });
         Cerr << "plainDataChunks# " << plainDataChunks << Endl;
 
@@ -1609,8 +1612,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         }
     }
     Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
-        for (int i = 0; i <= 1; ++i) {
-            ChunkWriteDifferentOffsetAndSizeImpl(i);
+        for (ui32 i = 0; i <= 3; ++i) {
+            ChunkWriteDifferentOffsetAndSizeImpl(i & 1, i & 2);
         }
     }
 
@@ -3032,5 +3035,87 @@ Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
         pdt.Run();
     }
 }
+/*
+Y_UNIT_TEST_SUITE(RDMA) {
+    void TestChunkReadWithRdmaAllocator(bool plainDataChunks) {
+        TActorTestContext testCtx({
+            .PlainDataChunks = plainDataChunks,
+            .UseRdmaAllocator = true,
+        });
+        TVDiskMock vdisk(&testCtx);
 
+        vdisk.InitFull();
+        vdisk.ReserveChunk();
+        vdisk.CommitReservedChunks();
+        auto chunk = *vdisk.Chunks[EChunkState::COMMITTED].begin();
+
+        for (i64 writeSize: {1_KB - 123, 64_KB, 128_KB + 8765}) {
+            for (i64 readOffset: {0_KB, 0_KB + 123, 4_KB, 8_KB + 123}) {
+                for (i64 readSize: {writeSize, writeSize - 567, writeSize - i64(8_KB), writeSize - i64(8_KB) + 987}) {
+                    if (readOffset < 0 || readSize < 0 || readOffset + readSize > writeSize) {
+                        continue;
+                    }
+                    Cerr << "chunkBufSize: " << writeSize << ", readOffset: " << readOffset << ", readSize: " << readSize << Endl;
+                    auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(PrepareData(writeSize));
+                    testCtx.Send(new NPDisk::TEvChunkWrite(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, 0, parts, nullptr, false, 0));
+                    auto write = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+
+                    testCtx.Send(new NPDisk::TEvChunkRead(
+                        vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
+                        chunk, readOffset, readSize, 0, nullptr));
+                    auto read = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                    TRcBuf readBuf = read->Data.ToString();
+                    NInterconnect::NRdma::TMemRegionSlice memReg = NInterconnect::NRdma::TryExtractFromRcBuf(readBuf);
+                    UNIT_ASSERT_C(!memReg.Empty(), "Failed to extract RDMA memory region from RcBuf");
+                    UNIT_ASSERT_VALUES_EQUAL_C(memReg.GetSize(), readSize, "Unexpected size of RDMA memory region");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorEncryptedChunks) {
+        TestChunkReadWithRdmaAllocator(false);
+    }
+    Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorPlainChunks) {
+        TestChunkReadWithRdmaAllocator(true);
+    }
+
+    Y_UNIT_TEST(TestRcBuf) {
+        ui32 size = 129961;
+        ui32 offset = 123;
+        ui32 tailRoom = 1111;
+        ui32 totalSize = size + tailRoom;
+        UNIT_ASSERT_VALUES_EQUAL(totalSize, 131072);
+
+        auto alloc1 = [](ui32 size, ui32 headRoom, ui32 tailRoom) {
+            TRcBuf buf = TRcBuf::UninitializedPageAligned(size + headRoom + tailRoom);
+            buf.TrimFront(size + tailRoom);
+            buf.TrimBack(size);
+            Cerr << "alloc1: " << buf.Size() << " " << buf.Tailroom() << " " << buf.UnsafeTailroom() << Endl;
+            return buf;
+        };
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto alloc2 = [memPool](ui32 size, ui32 headRoom, ui32 tailRoom) -> TRcBuf {
+            TRcBuf buf = memPool->AllocRcBuf(size + headRoom + tailRoom, NInterconnect::NRdma::IMemPool::EMPTY).value();
+            buf.TrimFront(size + tailRoom);
+            buf.TrimBack(size);
+            Cerr << "alloc2: " << buf.Size() << " " << buf.Tailroom() << " " << buf.UnsafeTailroom() << Endl;
+            return buf;
+        };
+
+        auto buf1 = TBufferWithGaps(offset, alloc1(size, 0, tailRoom));
+        auto buf2 = TBufferWithGaps(offset, alloc2(size, 0, tailRoom));
+
+        Cerr << "buf1: " << buf1.PrintState() << " " << buf1.Size() << " " << buf1.SizeWithTail() << Endl;
+        Cerr << "buf2: " << buf2.PrintState() << " " << buf2.Size() << " " << buf2.SizeWithTail() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(buf1.Size(), buf2.Size(), "Buffers should have the same size");
+
+        buf1.RawDataPtr(0, totalSize);
+        buf2.RawDataPtr(0, totalSize);
+    }
+}
+*/
 } // namespace NKikimr

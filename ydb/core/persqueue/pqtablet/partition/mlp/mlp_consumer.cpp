@@ -221,7 +221,7 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
-        RegisterWithSameMailbox(new TMessageEnricherActor(PartitionId, PartitionActorId, Config.GetName(), std::move(msgs))); // TODO excahnge
+        RegisterWithSameMailbox(new TMessageEnricherActor(TabletActorId, PartitionId, Config.GetName(), std::move(msgs)));
     }
     ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
@@ -451,7 +451,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), Hash(result.GetSourceId()));
+            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), static_cast<ui32>(Hash(result.GetSourceId())));
             ++messageCount;
         }
 

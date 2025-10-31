@@ -17,7 +17,7 @@ namespace NKikimr::NStorage {
         const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId, IOutputStream *out,
         const char *name);
 
-    bool HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+    std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
         const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
         const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name);
 

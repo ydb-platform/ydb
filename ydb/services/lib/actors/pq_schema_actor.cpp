@@ -236,7 +236,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 } else if (alterPolicy.has_set_move_action()) {
                     policy->clear_action();
                     // TODO check dlq not empty
-                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
+                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
                 } else if (alterPolicy.has_set_delete_action()) {
                     policy->clear_action();
                     policy->mutable_delete_action();

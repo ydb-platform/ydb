@@ -695,7 +695,7 @@
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
-            "error": "Calling this operation could cause at least 4 groups (2181038080, 2181038081, 2181038082, ...2181038083) to go into a dead state",
+            "error": "Calling this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...2181038083) to go into a dead state",
             "result": false
         },
         "restart_pdisk_viewer": {
@@ -6621,7 +6621,6 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
-                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },

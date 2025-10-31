@@ -252,13 +252,12 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command "./ya make ${params[@]}" --result-graph-path graph.json -result-context-path context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -271,7 +270,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
+          YA_MAKE_TARGET="--build-custom-json graph.json --custom-context context.json"
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do
@@ -296,8 +295,6 @@ runs:
           params+=(-A)
           params+=(--retest)
         fi
-
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
@@ -369,7 +366,7 @@ runs:
           MONITOR_PID=$!
 
           set +e
-          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
+          (./ya make ${params[@]} $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT

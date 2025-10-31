@@ -473,8 +473,8 @@ std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
     return degrees;
 }
 
-std::vector<int> GenerateLogNormalDegrees(int numVertices, double logMean,
-                                          double logStdDev, int minDegree,
+std::vector<int> GenerateLogNormalDegrees(int numVertices, double mu,
+                                          double sigma, int minDegree,
                                           int maxDegree) {
     if (maxDegree == -1) maxDegree = numVertices - 1;
 
@@ -487,10 +487,10 @@ std::vector<int> GenerateLogNormalDegrees(int numVertices, double logMean,
 
         double x = (double)k;
         double logX = std::log(x);
-        double z = (logX - logMean) / logStdDev;
+        double z = (logX - mu) / sigma;
 
         // PDF: (1/(x*σ*√(2π))) * exp(-(ln(x)-μ)²/(2σ²))
-        probabilities[k - minDegree] = (1.0 / (x * logStdDev * std::sqrt(2.0 * M_PI))) *
+        probabilities[k - minDegree] = (1.0 / (x * sigma * std::sqrt(2.0 * M_PI))) *
                                        std::exp(-0.5 * z * z);
     }
 

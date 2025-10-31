@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(NFulltext) {
 
         columnAnalyzers->set_filter_length_max(3);
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
-        UNIT_ASSERT_VALUES_EQUAL(error, "Invalid filter_length_min: should be less or equal than filter_length_max");
+        UNIT_ASSERT_VALUES_EQUAL(error, "Invalid filter_length_min: should be less than or equal to filter_length_max");
 
         columnAnalyzers->set_filter_length_min(-5);
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
@@ -255,6 +255,14 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_filter_ngram_min_length(2);
         analyzers.set_filter_ngram_max_length(3);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "то", "это", "те", "ек", "кс", "ст", "тек", "екс", "кст"}));
+
+        analyzers.set_filter_ngram_min_length(4);
+        analyzers.set_filter_ngram_max_length(10);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("слово", analyzers), (TVector<TString>{"слов", "лово", "слово"}));
+
+        analyzers.set_filter_ngram_min_length(10);
+        analyzers.set_filter_ngram_max_length(10);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("слово", analyzers), (TVector<TString>{}));
 
         analyzers.set_use_filter_ngram(false);
         analyzers.set_use_filter_edge_ngram(true);

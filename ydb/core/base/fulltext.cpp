@@ -151,9 +151,9 @@ namespace {
             ptr += symbolBytes;
         }
 
+        TVector<unsigned char> ngram(token.size());
         for (size_t len : xrange(lengthMin, Min(lengthMax, characters.size()) + 1)) {
             for (size_t start : xrange<size_t>(0, characters.size() - len + 1)) {
-                TVector<unsigned char> ngram(len * 4);
                 unsigned char* ptr = (unsigned char*)ngram.data();
                 for (size_t i : xrange(len)) {
                     WriteUTF8Char(characters[start + i], symbolBytes, ptr);
@@ -203,7 +203,7 @@ namespace {
                 return false;
             }
             if (settings.filter_ngram_min_length() > settings.filter_ngram_max_length()) {
-                error = "Invalid filter_ngram_min_length: should be less or equal than filter_ngram_max_length";
+                error = "Invalid filter_ngram_min_length: should be less than or equal to filter_ngram_max_length";
                 return false;
             }
         } else {
@@ -229,7 +229,7 @@ namespace {
                 return false;
             }
             if (settings.has_filter_length_min() && settings.has_filter_length_max() && settings.filter_length_min() > settings.filter_length_max()) {
-                error = "Invalid filter_length_min: should be less or equal than filter_length_max";
+                error = "Invalid filter_length_min: should be less than or equal to filter_length_max";
                 return false;
             }
         } else {

@@ -249,10 +249,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .DefaultProcessingTimeout(TDuration::Seconds(13))
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
+                        .AlterMoveAction("deadLetterQueue-topic-new")
                         .BeginCondition()
                             .MaxProcessingAttempts(17)
                         .EndCondition()
-                        .AlterMoveAction("deadLetterQueue-topic-new")
                     .EndDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 17);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterPolicy::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic-new");
     }
 
 

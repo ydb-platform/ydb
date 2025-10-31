@@ -290,8 +290,10 @@ public:
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
         IExecutorPool *pool = CreateTestExecutorPool(nodeId);
         setup->Executors[0].Reset(pool);
+#if !defined(_msan_enabled_)
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
         setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
+#endif
 
         // we create this actor for correct service lookup through ActorSystem
         setup->LocalServices.emplace_back(LoggerSettings_->LoggerActorId, TActorSetupCmd(

@@ -23,7 +23,7 @@ def log(msg: str):
 
 
 def do_compare(opts):
-    if opts.ya_make_command:
+    if not opts.ya_make_command:
         print('--ya-make-command not set')
         exit(1)
     ya = opts.ya_make_command.split(' ')[0]

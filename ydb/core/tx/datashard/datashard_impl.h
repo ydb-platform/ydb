@@ -1700,16 +1700,8 @@ public:
     }
 
     bool IsUserTable(const TTableId& tableId) const {
-        bool inTableInfos = TableInfos.find(tableId.PathId.LocalPathId) != TableInfos.end();
-        bool isSystemTable = TSysTables::IsSystemTable(tableId);
-        bool result = inTableInfos && !isSystemTable;
-        if (!result) {
-            Cerr << "CDC_DEBUG: IsUserTable returning FALSE for TableId OwnerId=" << tableId.PathId.OwnerId 
-                 << " LocalPathId=" << tableId.PathId.LocalPathId
-                 << " inTableInfos=" << inTableInfos
-                 << " isSystemTable=" << isSystemTable << Endl;
-        }
-        return result;
+        return (TableInfos.find(tableId.PathId.LocalPathId) != TableInfos.end())
+                && !TSysTables::IsSystemTable(tableId);
     }
 
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }

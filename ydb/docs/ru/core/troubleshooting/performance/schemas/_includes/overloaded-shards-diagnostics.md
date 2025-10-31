@@ -1,5 +1,6 @@
-1. Используйте Встроенный UI или Grafana, чтобы проверить, не перегружены ли узлы {{ ydb-short-name }}:
+1. Используйте Встроенный UI {% if audience == "tech"%} или Grafana, {% endif %} чтобы проверить, не перегружены ли узлы {{ ydb-short-name }}:
 
+{% if audience == "tech"%}
     - На панели мониторинга Grafana **[DB overview](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** проанализируйте диаграмму **Overloaded shard count**.
 
         ![](../_assets/overloaded-shards-dashboard.png)
@@ -12,6 +13,7 @@
 
         {% endnote %}
 
+{% endif %}
     - Во [Встроенном UI](../../../../reference/embedded-ui/index.md):
 
         1. Перейдите на вкладку **Databases** и выберите базу данных.

@@ -92,7 +92,7 @@
 
   - [Встроенный UI](../../reference/embedded-ui/index.md): веб-интерфейс для мониторинга состояния и диагностики кластера.
   - [Справочник по метрикам](../../reference/observability/metrics/index.md): полный список метрик для систем мониторинга.
-  - [Готовые дашборды для Grafana](../../reference/observability/metrics/grafana-dashboards.md): шаблоны для быстрой настройки мониторинга.
+ {% if audience == "tech"%} - [Готовые дашборды для Grafana](../../reference/observability/metrics/grafana-dashboards.md): шаблоны для быстрой настройки мониторинга. {% endif %}
 
 ### Безопасность и отказоустойчивость
 

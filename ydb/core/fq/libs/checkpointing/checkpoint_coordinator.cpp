@@ -28,7 +28,7 @@ using namespace NActors;
 
 TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings() {
     ui64 ms = 0;
-    if (!TryFromString<ui64>(GetEnv("DEFAULT_CHECKPOINTING_PERIOD_MS"), ms)) {
+    if (!TryFromString<ui64>(GetEnv("TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"), ms)) {
         return;
     }
     if (ms) {

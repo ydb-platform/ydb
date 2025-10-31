@@ -12,10 +12,12 @@
 
 namespace NFq {
 
+namespace {
+
 class TQuerySession final : public NKikimr::TQueryBase {
     using TBase = NKikimr::TQueryBase;
 
-    struct TDataQuery{
+    struct TDataQuery {
         TString Sql;
         std::shared_ptr<NYdb::TParamsBuilder> Params;
         TEvQuerySession::TTxControl TxControl;
@@ -132,9 +134,10 @@ private:
     bool IsFinishing = false;
 };
 
+} // namespace
+
 std::unique_ptr<NActors::IActor> MakeQuerySession() {
     return std::unique_ptr<NActors::IActor>(new TQuerySession());
 }
-
 
 } // namespace NFq

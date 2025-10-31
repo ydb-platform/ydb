@@ -1,6 +1,10 @@
 LIBRARY()
 
 SRCS(
+    local_session.cpp
+    local_table_client.cpp
+    sdk_session.cpp
+    sdk_table_client.cpp
     schema.cpp
     util.cpp
     ydb.cpp

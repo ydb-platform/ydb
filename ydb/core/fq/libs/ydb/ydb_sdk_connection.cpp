@@ -5,6 +5,8 @@
 
 namespace NFq {
 
+namespace {
+
 struct TSdkYdbConnection : public IYdbConnection {
 
     TSdkYdbConnection(
@@ -39,6 +41,8 @@ private:
     const TString Db;
     const TString TablePathPrefix;
 };
+
+} // namespace
 
 IYdbConnection::TPtr CreateSdkYdbConnection(
     const TExternalStorageSettings& config,

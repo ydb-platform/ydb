@@ -100,7 +100,7 @@ TFuture<TStatus> CheckGeneration(
            << ", pk: " << context->PrimaryKey
            << ", current generation: " << context->GenerationRead
            << ", expected/new generation: " << context->Generation
-           << ", operation: " << (int)context->OperationType;
+           << ", operation: " << context->OperationType;
 
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
     }

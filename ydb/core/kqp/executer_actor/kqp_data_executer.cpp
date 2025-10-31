@@ -2859,7 +2859,7 @@ private:
 
     void StartCheckpointCoordinator() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        bool enableCheckpointCoordinator = QueryServiceConfig.HasStreamingQueries()
+        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
             && context && context->CheckpointId;
         if (!enableCheckpointCoordinator) {

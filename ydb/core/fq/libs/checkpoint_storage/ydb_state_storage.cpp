@@ -620,7 +620,6 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                 taskIdsParam.EndList().Build();
             }
 
-          //  auto params = paramsBuilder.Build();
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
@@ -698,10 +697,7 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 
             // publish nodes
             auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
-
             paramsBuilder->AddParam("$graph_id").String(graphId).Build();
-
-         //   auto params = paramsBuilder.Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -849,8 +845,6 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
             paramsBuilder->AddParam("$blob").String(taskInfo.Rows.front()).Build();
             paramsBuilder->AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
             paramsBuilder->AddParam("$type").Uint8(static_cast<ui8>(taskInfo.Type)).Build();
-
-            //auto params = paramsBuilder.Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1

@@ -13,7 +13,6 @@ struct TEvQuerySession {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvExecuteDataQuery = EvBegin + 20,
-        EvCommit,
         EvRollback,
         EvEnd
     };
@@ -31,11 +30,12 @@ struct TEvQuerySession {
             const TString& sql,
             std::shared_ptr<NYdb::TParamsBuilder> params,
             const TTxControl& txControl,
-            NYdb::NTable::TExecDataQuerySettings /*execDataQuerySettings*/,
+            const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings,
             NThreading::TPromise<NYdb::NTable::TDataQueryResult> promise)
             : Sql(sql)
             , Params(params)
             , TxControl(txControl)
+            , ExecDataQuerySettings(execDataQuerySettings)
             , Promise(promise)
         {}
         const TString Sql;

@@ -707,27 +707,27 @@ TFuture<TIssues> TCheckpointStorage::Init()
     std::vector<NThreading::TFuture<NYdb::TStatus>> futures{f1, f2, f3};
 
     auto promise = NThreading::NewPromise<TIssues>();
-    NThreading::WaitAll(futures)
-        .Subscribe([futures = std::move(futures), promise](const auto& ) mutable {
-            auto check = [] (const NYdb::TStatus& status, auto& promise) mutable {
-                if (!IsTableCreated(status)) {
-                    auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-                    TStringStream ss;
-                    ss << "Failed to create table: " << status.GetStatus();
-                    if (issues) {
-                        ss << ", issues: ";
-                        issues.PrintTo(ss);
-                    }
-                    promise.SetValue(std::move(issues));
-                    return false;
-                }
-                return true;
-            };
-            if (check(futures[0].GetValue(), promise) && check(futures[1].GetValue(), promise) && check(futures[2].GetValue(), promise)) {
-                promise.SetValue(TIssues());
+    auto voidFuture = NThreading::WaitAll(futures);
+    
+    return voidFuture.Apply([futures = std::move(futures), promise](const auto& ) mutable {
+        TIssues issues;
+        auto check = [&issues] (const NYdb::TStatus& status) {
+            if (IsTableCreated(status)) {
+                return;
             }
-        });
-    return promise.GetFuture();
+            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+            TStringStream ss;
+            ss << "Failed to create table: " << status.GetStatus();
+            if (issues) {
+                ss << ", issues: ";
+                issues.PrintTo(ss);
+            }
+        };
+        check(futures[0].GetValue());
+        check(futures[1].GetValue());
+        check(futures[2].GetValue());
+        return NThreading::MakeFuture(issues);
+    });
 }
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
@@ -957,18 +957,7 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
                     .String(graphId)
                     .Build();
 
-            auto context = MakeIntrusive<TGenerationContext>(
-                session,
-                false,
-                prefix,
-                CoordinatorsSyncTable,
-                "graph_id",
-                "generation",
-                "???",
-                0UL,
-                settings);
-
-            auto future = context->Session->ExecuteDataQuery(
+            auto future = session->ExecuteDataQuery(
                 query,
                 TTxControl::BeginAndCommitTx(),
                 std::move(params),
@@ -1026,18 +1015,7 @@ TFuture<TIssues> TCheckpointStorage::MarkCheckpointsGC(
             .Timestamp(TInstant::Now())
             .Build();
 
-            auto context = MakeIntrusive<TGenerationContext>(
-                session,
-                false,
-                prefix,
-                CoordinatorsSyncTable,
-                "graph_id",
-                "generation",
-                "???",
-                0UL,
-                thisPtr->DefaultExecDataQuerySettings());
-
-            auto future = context->Session->ExecuteDataQuery(
+            auto future = session->ExecuteDataQuery(
                 query,
                 TTxControl::BeginAndCommitTx(),
                 std::move(params),
@@ -1151,18 +1129,7 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
                 WHERE graph_id = $graph_id
             )", prefix.c_str(), CheckpointsMetadataTable);
 
-            auto context = MakeIntrusive<TGenerationContext>(
-                session,
-                false,
-                prefix,
-                CoordinatorsSyncTable,
-                "graph_id",
-                "generation",
-                "???",
-                0UL,
-                thisPtr->DefaultExecDataQuerySettings());
-
-            return context->Session->ExecuteDataQuery(
+            return session->ExecuteDataQuery(
                 query,
                 TTxControl::BeginAndCommitTx(true),
                 std::move(paramsBuilder),

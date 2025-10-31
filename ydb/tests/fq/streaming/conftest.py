@@ -68,7 +68,8 @@ def kikimr(request):
     ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
     logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
-    os.environ["DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+    os.environ["TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+    os.environ["TEST_LEASE_DURATION_SEC"] = "5"
 
     config = get_ydb_config()
     cluster = KiKiMR(config)

@@ -3,6 +3,8 @@
 
 namespace NFq {
 
+namespace {
+
 struct TLocalYdbConnection : public IYdbConnection {
 
     TLocalYdbConnection(const TString& db, const TString& tablePathPrefix)
@@ -30,6 +32,8 @@ private:
     const TString Db;
     IYdbTableClient::TPtr TableClient;
 };
+
+} // namespace
 
 IYdbConnection::TPtr CreateLocalYdbConnection(const TString& db, const TString& tablePathPrefix) {
     return MakeIntrusive<TLocalYdbConnection>(db, tablePathPrefix);

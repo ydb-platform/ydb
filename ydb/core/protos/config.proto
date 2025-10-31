@@ -183,6 +183,7 @@ message TStaticNameserviceConfig {
     optional bool KeepSocket = 6 [default = true];
     optional bool ForceTcp = 7 [default = false];
     optional EDnsResolverType DnsResolverType = 8 [default = ARES];
+    optional bool AddTrailingDot = 9 [default = false];
 }
 
 message TDynamicNameserviceConfig {

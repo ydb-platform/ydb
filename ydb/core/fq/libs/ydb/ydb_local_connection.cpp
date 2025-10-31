@@ -8,9 +8,9 @@ namespace {
 struct TLocalYdbConnection : public IYdbConnection {
 
     TLocalYdbConnection(const TString& db, const TString& tablePathPrefix)
-    : TablePathPrefix(tablePathPrefix)
-    , Db(db)
-    , TableClient(CreateLocalTableClient()) {
+        : TablePathPrefix(tablePathPrefix)
+        , Db(db)
+        , TableClient(CreateLocalTableClient()) {
     }
 
     IYdbTableClient::TPtr GetTableClient() override {

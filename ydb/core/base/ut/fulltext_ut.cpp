@@ -255,6 +255,12 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_filter_ngram_min_length(2);
         analyzers.set_filter_ngram_max_length(3);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "то", "это", "те", "ек", "кс", "ст", "тек", "екс", "кст"}));
+
+        analyzers.set_use_filter_ngram(false);
+        analyzers.set_use_filter_edge_ngram(true);
+        analyzers.set_filter_ngram_min_length(2);
+        analyzers.set_filter_ngram_max_length(3);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "это", "те", "тек"}));
     }
 }
 

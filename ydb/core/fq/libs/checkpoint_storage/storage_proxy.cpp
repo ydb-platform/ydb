@@ -216,8 +216,8 @@ void TStorageProxy::Initialize() {
     auto stateInitFuture = StateStorage->Init();
 
     std::vector<NThreading::TFuture<NYql::TIssues>> futures{storageInitFuture, stateInitFuture};
-    NThreading::WaitAll(futures)
-        .Subscribe([futures = std::move(futures), actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& ) mutable {
+    auto voidFuture = NThreading::WaitAll(futures);
+    voidFuture.Subscribe([futures = std::move(futures), actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& ) mutable {
             actorSystem->Send(actorId, new TEvPrivate::TEvInitResult(futures[0].GetValue(), futures[1].GetValue()));
         });
 }

@@ -1,5 +1,6 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/local_table_client.h>
+#include <ydb/core/fq/libs/ydb/util.h>
 
 namespace NFq {
 
@@ -17,7 +18,7 @@ struct TLocalYdbConnection : public IYdbConnection {
         return TableClient;
     }
     TString GetTablePathPrefix() override {
-        return JoinPath({Db, TablePathPrefix});
+        return JoinPath(Db, TablePathPrefix);
     }
     TString GetDb() override {
         return Db;

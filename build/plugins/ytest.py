@@ -1056,7 +1056,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "NAME": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "CONFIG_TYPE": 1,
@@ -1097,7 +1097,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "NAME": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "FLAKE_MIGRATIONS_CONFIG": 1,
@@ -1126,7 +1126,7 @@ def on_add_py_linter_check(fields, unit, *args):
     )
     + LINTER_FIELDS_BASE
 )
-def on_add_json_explicit_linter_check(fields, unit, *args):
+def on_add_custom_explicit_linter_check(fields, unit, *args):
     if unit.get("TIDY") == "yes":
         return
     no_lint_value = _common.get_no_lint_value(unit)
@@ -1140,45 +1140,7 @@ def on_add_json_explicit_linter_check(fields, unit, *args):
         "DEPENDS": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
-        "CONFIGS": 1,
-        "GLOBAL_RESOURCES": unlimited,
-    }
-    _, spec_args = _common.sort_by_keywords(keywords, args)
-    name = spec_args['NAME'][0]
-    global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
-    for resource, _ in global_resources:
-        unit.onpeerdir(resource)
-    dart_record = create_dart_record(fields, unit, (), spec_args)
-    if not dart_record:
-        return
-    dart_record[df.ScriptRelPath.KEY] = 'custom_lint'
-    data = dump_test(unit, dart_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
-
-
-@df.with_fields(
-    (
-        df.TestFiles.from_macro_args,
-        df.LintConfigs.custom_explicit_configs,
-    )
-    + LINTER_FIELDS_BASE
-)
-def on_add_yaml_explicit_linter_check(fields, unit, *args):
-    if unit.get("TIDY") == "yes":
-        return
-    no_lint_value = _common.get_no_lint_value(unit)
-    if no_lint_value in ("none", "none_internal"):
-        return
-    unlimited = -1
-    keywords = {
-        "NAME": 1,
-        "WRAPPER_SCRIPT": 1,
-        "FILES": unlimited,
-        "DEPENDS": unlimited,
-        "FILE_PROCESSING_TIME": 1,
-        "EXTRA_PARAMS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "GLOBAL_RESOURCES": unlimited,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

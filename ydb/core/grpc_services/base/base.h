@@ -44,6 +44,7 @@ namespace NSchemeCache {
 
 namespace NRpcService {
     struct TRlPath {
+        TString DatabaseName;
         TString CoordinationNode;
         TString ResourcePath;
     };

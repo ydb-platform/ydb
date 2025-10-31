@@ -1,3 +1,6 @@
+#include <exception>
+#include <filesystem>
+#include <stdexcept>
 #include <util/generic/ptr.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
@@ -34,7 +37,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         explainRes.GetIssues().PrintTo(Cout);
-        UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
+        if (explainRes.GetStatus() != EStatus::SUCCESS) {
+            throw std::runtime_error("Couldn't execute query!");
+        }
 
         return *explainRes.GetStats()->GetPlan();
     }
@@ -98,19 +103,21 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return stats;
     }
 
-    std::optional<TRunningStatistics<double>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, const TString& query) {
-        Cout << resultType << "\n";
+    std::optional<std::map<std::string, TRunningStatistics<double>>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, const TString& query) {
+        std::map<std::string, TRunningStatistics<double>> results;
 
         std::optional<TRunningStatistics<ui64>> withoutCBO;
         if (resultType.contains("0")) {
             Cout << "--------------------------------- W/O CBO --------------------------------\n";
             withoutCBO = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/0));
+            results["0"] = withoutCBO->Cast<double>();
+
             if (!withoutCBO) {
                 return std::nullopt;
             }
 
             if (resultType == "0") {
-                return withoutCBO->Cast<double>();
+                return results;
             }
         }
 
@@ -118,43 +125,44 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         if (resultType.contains("CBO")) {
             Cout << "--------------------------------- CBO-SE ---------------------------------\n";
             withoutShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
+
+            results["CBO"] = withoutShuffleElimination->Cast<double>();
+            if (resultType.contains("0")) {
+                results["CBO-0"] = (*withoutShuffleElimination - *withoutCBO).Cast<double>();
+            }
+
             if (!withoutShuffleElimination) {
                 return std::nullopt;
             }
 
-            if (resultType == "CBO") {
-                return withoutShuffleElimination->Cast<double>();
-            }
-
-            if (resultType == "CBO-0") {
-                return (*withoutShuffleElimination - *withoutCBO).Cast<double>();
-            }
+            return results;
         }
 
         std::optional<TRunningStatistics<ui64>> withShuffleElimination;
         if (resultType.contains("SE")) {
             Cout << "--------------------------------- CBO+SE ---------------------------------\n";
             withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
+
+            results["SE"] = withShuffleElimination->Cast<double>();
+            if (resultType.contains("0")) {
+                results["SE-0"] = (*withShuffleElimination - *withoutCBO).Cast<double>();
+            }
+
             if (!withShuffleElimination) {
                 return std::nullopt;
             }
 
-            if (resultType == "SE") {
-                return withShuffleElimination->Cast<double>();
-            }
-
-            if (resultType == "SE-0") {
-                return (*withShuffleElimination - *withoutCBO).Cast<double>();
-            }
+            return results;
         }
 
         Cout << "--------------------------------------------------------------------------\n";
 
-        if (resultType == "SE-0/CBO-0") {
-            return (*withShuffleElimination - *withoutCBO) / (*withoutShuffleElimination - *withoutCBO);
-        } else {
-            return *withShuffleElimination / *withoutShuffleElimination;
+        results["SE"] = *withShuffleElimination / *withoutShuffleElimination;
+        if (resultType.contains("0")) {
+            results["SE-0"] = (*withShuffleElimination - *withoutCBO) / (*withoutShuffleElimination - *withoutCBO);
         }
+
+        return results;
     }
 
     std::unique_ptr<TKikimrRunner> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
@@ -179,7 +187,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return std::make_unique<TKikimrRunner>(serverSettings);
     }
 
-    std::optional<TRunningStatistics<double>> BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, TRelationGraph graph) {
+    std::optional<std::map<std::string, TRunningStatistics<double>>>
+    BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, TRelationGraph graph) {
         Cout << "================================= CREATE =================================\n";
         graph.DumpGraph(Cout);
 
@@ -330,10 +339,12 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         NYdb::NQuery::TSession Session;
 
         TRNG RNG;
-        std::optional<TUnbufferedFileOutput> OS;
+        std::string OutputDir;
+        std::map<std::string, TUnbufferedFileOutput> Streams = {};
+
     };
 
-    TTestContext CreateTestContext(TArgs args, uint64_t state = 0, std::string outputFile = "") {
+    TTestContext CreateTestContext(TArgs args, uint64_t state = 0, std::string outputDir = "") {
         TRNG rng = TRNG::Deserialize(state);
 
         auto numTablesRanged = args.GetArg<uint64_t>("N");
@@ -348,25 +359,60 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        std::optional<TUnbufferedFileOutput> os = std::nullopt;
-        if (!outputFile.empty()) {
-            os = TUnbufferedFileOutput(outputFile);
+        return { std::move(kikimr), std::move(db), std::move(session), std::move(rng), outputDir };
+    }
+
+    void WriteAllStats(TTestContext &ctx, const std::string& prefix,
+                       const std::string& header, const std::string& params,
+                       const std::map<std::string, TRunningStatistics<double>>& stats) {
+
+        if (ctx.OutputDir.empty()) {
+            return;
         }
 
-        return { std::move(kikimr), std::move(db), std::move(session), std::move(rng), std::move(os) };
+        if (!std::filesystem::exists(ctx.OutputDir)) {
+            std::filesystem::create_directory(ctx.OutputDir);
+        }
+
+        for (const auto &[key, stats]: stats) {
+            std::string name = prefix + key;
+
+            if (!ctx.Streams.contains(name)) {
+                auto filename = TString(ctx.OutputDir + "/" + name + ".csv");
+                auto &OS = ctx.Streams.emplace(name, TUnbufferedFileOutput(filename)).first->second;
+                OS << header;
+            }
+
+            auto &OS = ctx.Streams.find(name)->second;
+
+            OS << params;
+            DumpBoxPlotToCSV(OS, stats.GetStatistics());
+            OS << "\n";
+        }
+    }
+
+    void AccumulateAllStats(std::map<std::string, TRunningStatistics<double>>& cummulative,
+                            const std::map<std::string, TRunningStatistics<double>>& stats) {
+        for (auto &[key, stat] : stats) {
+            if (!cummulative.contains(key)) {
+                cummulative.emplace(key, stat);
+            }
+
+            cummulative.find(key)->second.AddValues(stat);
+        }
     }
 
     void RunMCMC(TTestContext &ctx, TBenchmarkConfig config, TArgs args) {
-        if (ctx.OS) {
-            (*ctx.OS) << "N,alpha,theta,logStdDev,logMean,repeats,seed,";
-            DumpBoxPlotCSVHeader(*ctx.OS);
-            (*ctx.OS) << "\n";
-        }
+        std::string header = "N,i,repeat,alpha,theta,logStdDev,logMean,repeats,seed," + BoxPlotCSVHeader() + "\n";
+        std::string headerCummulative = "N,i,alpha,theta,logStdDev,logMean,repeats" + BoxPlotCSVHeader() + "\n";
 
         std::string resultType = "SE";
         if (args.HasArg("result")) {
             resultType = args.GetString("result");
         }
+
+        ui32 globalNum = 0;
+        ui32 cummulativeNum = 0;
 
         ui64 mcmcSteps = args.GetArgOrDefault<uint64_t>("mcmcSteps", "100").GetValue();
         for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
@@ -384,7 +430,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
                             auto initialGraph = ConstructGraphHavelHakimi(fixedDegrees);
 
-                            TRunningStatistics<double> cummulative;
+                            std::map<std::string, TRunningStatistics<double>> cummulative;
 
                             ui64 repeats = args.GetArgOrDefault<uint64_t>("repeats", "1").GetValue();
                             for (ui64 i = 0; i < repeats; ++ i) {
@@ -393,7 +439,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                      << theta << "; logStdDev=" << logStdDev << "; logMean=" << logMean
                                      << "; seed=" << ctx.RNG.Serialize() << "'\n";
 
-                                // ui64 seed = ctx.RNG.Serialize();
+                                ui64 seed = ctx.RNG.Serialize();
 
                                 TRelationGraph graph = initialGraph;
                                 MCMCRandomize(ctx.RNG, graph, mcmcSteps);
@@ -405,19 +451,27 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                         goto stop;
                                     }
 
-                                    cummulative.AddValues(*result);
-                                } catch (...) {
-                                    Cout << "skipped\n";
+                                    AccumulateAllStats(cummulative, *result);
+
+                                    std::stringstream params;
+                                    params << n << "," << (globalNum ++) << "," << i
+                                           << "," << alpha << "," << theta << "," << logStdDev
+                                           << "," << logMean << "," << repeats << "," << seed << ",";
+
+                                    WriteAllStats(ctx, "", header, params.str(), *result);
+                                } catch (std::exception &exc) {
+                                    Cout << "Skipped run: " << exc.what() << "\n";
                                     continue;
                                 }
                             }
 
-                            if (ctx.OS) {
-                                (*ctx.OS) << n << "," << alpha << "," << theta << "," << logStdDev
-                                          << "," << logMean << "," << repeats << "," << 0 << ",";
-                                DumpBoxPlotToCSV(*ctx.OS, cummulative.GetStatistics());
-                                (*ctx.OS) << "\n";
-                            }
+                            std::stringstream params;
+                            params << n << "," << (cummulativeNum ++)
+                                   << "," << alpha << "," << theta
+                                   << "," << logStdDev << "," << logMean
+                                   << "," << repeats << ",";
+
+                            WriteAllStats(ctx, "cummulative-", headerCummulative, params.str(), cummulative);
                         }
                         stop:;
                     }
@@ -428,11 +482,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
     template <auto TrivialTopology>
     void RunTrivialTopology(TTestContext &ctx, TBenchmarkConfig config, TArgs args) {
-        if (ctx.OS) {
-            (*ctx.OS) << "N,alpha,theta,seed,";
-            DumpBoxPlotCSVHeader(*ctx.OS);
-            (*ctx.OS) << "\n";
-        }
+        // if (ctx.OS) {
+        //     (*ctx.OS) << "N,alpha,theta,seed,";
+        //     DumpBoxPlotCSVHeader(*ctx.OS);
+        //     (*ctx.OS) << "\n";
+        // }
 
         std::string resultType = "SE";
         if (args.HasArg("result")) {
@@ -455,11 +509,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                         goto stop;
                     }
 
-                    if (ctx.OS) {
-                        (*ctx.OS) << n << "," << alpha << "," << theta << "," << seed << ",";
-                        DumpBoxPlotToCSV(*ctx.OS, result->GetStatistics());
-                        (*ctx.OS) << "\n";
-                    }
+                    // if (ctx.OS) {
+                    //     (*ctx.OS) << n << "," << alpha << "," << theta << "," << seed << ",";
+                    //     DumpBoxPlotToCSV(*ctx.OS, result->GetStatistics());
+                    //     (*ctx.OS) << "\n";
+                    // }
                 }
             }
         }
@@ -485,7 +539,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             state = args.GetArg<uint64_t>("seed").GetValue();
         }
 
-        TTestContext ctx = CreateTestContext(args, state, GetTestParam("SAVE_FILE"));
+        TTestContext ctx = CreateTestContext(args, state, GetTestParam("SAVE_DIR"));
 
         if (topology == "mcmc") {
             RunMCMC(ctx, config, args);

@@ -27,7 +27,7 @@ namespace NKikimr::NKqp {
     
 
     /* for ci*/
-    
+
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     TString scriptEmptyVariants = R"(
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2$$);
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ALTER OBJECT  `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`$$true|false$$`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5|1$$`)
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     }
 
     TString scriptRestoreJsonArrayVariants = R"(
-        SCHEMA:
+        SCHEMA: 
         CREATE TABLE `/Root/ColumnTable` (
             Col1 Uint64 NOT NULL,
             Col2 JsonDocument,
@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             PRIMARY KEY (Col1)
         )
         PARTITION BY HASH(Col1)
-        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+        WITH (STORE  = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
         ------
         SCHEMA:
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)

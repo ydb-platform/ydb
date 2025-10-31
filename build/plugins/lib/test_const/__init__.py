@@ -183,6 +183,7 @@ FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
 CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
 YAMLFMT_FORMAT_RESOURCE = 'YAMLFMT_RESOURCE_GLOBAL'
+YQLLINT_RESOURCE = 'YQL_LINT_RESOURCE_GLOBAL'
 BLACK_RESOURCE = 'BLACK_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
@@ -467,6 +468,7 @@ class CppLinterName(Enum):
 class CustomExplicitLinterName(Enum):
     ClangFormatJson = "clang_format_json"
     YamlfmtFormatYaml = "yamlfmt_format_yaml"
+    Yqlfmt = "yqlfmt"
 
 
 class DefaultLinterConfig(Enum):
@@ -489,6 +491,7 @@ LINTER_TO_GLOBAL_RESOURCES = {
     CppLinterName.ClangFormat: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.ClangFormatJson: (('build/platform/clang/clang-format', CLANG_FORMAT_RESOURCE),),
     CustomExplicitLinterName.YamlfmtFormatYaml: (('build/external_resources/yamlfmt', YAMLFMT_FORMAT_RESOURCE),),
+    CustomExplicitLinterName.Yqlfmt: (('build/external_resources/yql-lint', YQLLINT_RESOURCE),),
 }
 
 # XXX: if a new linter is added to this mapping respective path to default config file must be available in the json

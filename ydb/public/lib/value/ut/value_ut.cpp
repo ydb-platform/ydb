@@ -48,6 +48,7 @@ TEST(TValue, IsNull) {
     TestIsNull("Value { List: [] }", true);
     TestIsNull("Value { List: [{Int32: 50}] }", false);
     TestIsNull("Value { List: [{Int32: 50}, {Int32: 60}] }", false);
+    TestIsNull("Value { List: [{ List: [] }] }", false);
     TestIsNull("Value { Tuple: [] }", true);
     TestIsNull("Value { Tuple: [{Int32: 50}] }", false);
     TestIsNull("Value { Tuple: [{Int32: 50}, {Uint32: 100}] }", false);

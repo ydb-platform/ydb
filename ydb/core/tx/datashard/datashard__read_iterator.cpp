@@ -45,8 +45,12 @@ struct TReadIteratorVectorTop {
     ui64 ByteSize = 0;
 
     void AddRow(TConstArrayRef<TCell> cells) {
+        const auto embedding = cells.at(Column).AsBuf();
+        if (!KMeans->IsExpectedFormat(embedding)) {
+            return;
+        }
         size_t bytes = EstimateSize(cells);
-        double distance = KMeans->CalcDistance(cells.at(Column).AsBuf(), Target);
+        double distance = KMeans->CalcDistance(embedding, Target);
         if (Rows.size() < Limit) {
             ByteSize += bytes;
             Rows.emplace_back(cells, distance);

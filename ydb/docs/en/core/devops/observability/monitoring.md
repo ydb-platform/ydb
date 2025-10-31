@@ -50,7 +50,20 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
 
 1. Edit the Prometheus [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml):
 
+<<<<<<< HEAD
     1. In the `targets` section, specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of each storage node and database node running on the server.
+=======
+    1. In the `targets` section of [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of storage nodes running on the servers.
+
+        ```json
+        - labels:
+            container: ydb-static
+          targets:
+          - "ydb-s1.example.com:8765"
+          - "ydb-s2.example.com:8765"
+          - "ydb-s3.example.com:8765"
+        ```
+>>>>>>> 2da234665 (YDBDOCS-1394-TRANSLATION (#27515))
 
         For example, for a cluster of three servers, where each server runs one storage node on port 8765 and two database nodes on ports 8766 and 8767, you need to specify nine addresses for all metric subgroups except disk metrics (for disk metric subgroups, you only need to specify storage node addresses):
 
@@ -68,7 +81,28 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
           - ydb-s3.example.com:8767
         ```
 
+<<<<<<< HEAD
         For a local single-node YDB cluster, specify one address in the `targets` section:
+=======
+   1. In the `targets` section of [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of all database nodes running on the servers.
+
+        ```json
+        - labels:
+            container: ydb-dynamic
+          targets:
+          - "ydb-s1.example.com:31002"
+          - "ydb-s1.example.com:31012"
+          - "ydb-s1.example.com:31022"
+          - "ydb-s2.example.com:31002"
+          - "ydb-s2.example.com:31012"
+          - "ydb-s2.example.com:31022"
+          - "ydb-s3.example.com:31002"
+          - "ydb-s3.example.com:31012"
+          - "ydb-s3.example.com:31022"
+        ```
+
+        For a local single-node YDB cluster, specify one address in the targets section:
+>>>>>>> 2da234665 (YDBDOCS-1394-TRANSLATION (#27515))
 
         ```json
         - targets: ["localhost:8765"]

@@ -33,6 +33,33 @@ UPDATE my_table ON
 SELECT * FROM $to_update;
 ```
 
+<<<<<<< HEAD
+=======
+## UPDATE ... RETURNING {update-returning}
+
+Используется для обновления строк и одновременного возврата их новых значений. Это позволяет получить информацию об обновленных записях за один запрос, избавляя от необходимости выполнять дополнительный SELECT.
+
+### Примеры
+
+* Возврат всех значений обновленных строк
+
+```yql
+UPDATE orders
+SET status = 'shipped'
+WHERE order_date < '2023-01-01'
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+UPDATE products
+SET price = price * 0.9
+WHERE category = 'Electronics'
+RETURNING product_id, name, price AS new_price;
+```
+
+>>>>>>> 2da234665 (YDBDOCS-1394-TRANSLATION (#27515))
 {% if feature_batch_operations %}
 
 ## См. также

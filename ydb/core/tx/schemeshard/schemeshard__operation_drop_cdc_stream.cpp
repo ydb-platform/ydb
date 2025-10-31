@@ -454,21 +454,6 @@ public:
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
         auto& txState = context.SS->CreateTx(OperationId, txType, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
-        
-        // Set CdcPathId for continuous backup detection
-        // If dropping multiple streams, check if any is continuous backup
-        for (const auto& streamPath : streamPaths) {
-            if (streamPath.Base()->Name.EndsWith("_continuousBackupImpl")) {
-                txState.CdcPathId = streamPath.Base()->PathId;
-                LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "TDropCdcStreamAtTable: Set CdcPathId for continuous backup"
-                            << ", operationId: " << OperationId
-                            << ", cdcPathId: " << streamPath.Base()->PathId
-                            << ", streamName: " << streamPath.Base()->Name
-                            << ", at schemeshard: " << context.SS->SelfTabletId());
-                break;
-            }
-        }
 
         tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateAlter;
         tablePath.Base()->LastTxId = OperationId.GetTxId();

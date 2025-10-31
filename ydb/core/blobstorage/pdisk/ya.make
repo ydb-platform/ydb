@@ -1,11 +1,11 @@
 LIBRARY()
 
-IF (YDB_ENABLE_PDISK_SHRED) 
+IF (YDB_ENABLE_PDISK_SHRED)
     CFLAGS(
         -DENABLE_PDISK_SHRED
     )
 ENDIF()
-IF (YDB_DISABLE_PDISK_ENCRYPTION) 
+IF (YDB_DISABLE_PDISK_ENCRYPTION)
     CFLAGS(
         -DDISABLE_PDISK_ENCRYPTION
     )
@@ -47,6 +47,7 @@ SRCS(
     blobstorage_pdisk.cpp
     blobstorage_pdisk_actor.cpp
     blobstorage_pdisk_blockdevice_async.cpp
+    blobstorage_pdisk_chunk_write_queue.cpp
     blobstorage_pdisk_completion_impl.cpp
     blobstorage_pdisk_delayed_cost_loop.cpp
     blobstorage_pdisk_driveestimator.cpp

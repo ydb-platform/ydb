@@ -1078,6 +1078,8 @@ struct TEvBlobStorage {
                 Y_ABORT_UNLESS(sh < id.BlobSize(),
                     "Please, don't read behind the end of the blob! BlobSize# %" PRIu32 " sh# %" PRIu32,
                     (ui32)id.BlobSize(), (ui32)sh);
+                Y_ABORT_UNLESS(TErasureType::IsCrcModeValid(id.CrcMode()),
+                        "Please, set correct CrcMode for query, CrcMode# %" PRIu32, id.CrcMode());
             }
 
             TString ToString() const {

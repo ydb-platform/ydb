@@ -1,5 +1,0 @@
-UNION()
-
-FROM_SANDBOX(FILE 9993951333 OUT_NOAUTO full_data.csv)
-
-END()

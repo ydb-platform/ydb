@@ -21,10 +21,8 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
     AFL_VERIFY(sourceArray);
     NSubColumns::TDataBuilder builder(columnType, settings);
     IChunkedArray::TReader reader(sourceArray);
-    // std::vector<std::shared_ptr<arrow::Array>> storage; // ??
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
-        // storage.emplace_back(address.GetArray()); // ??
         auto conclusion = settings.GetDataExtractor()->AddDataToBuilders(address.GetArray(), builder);
         if (conclusion.IsFail()) {
             return conclusion;

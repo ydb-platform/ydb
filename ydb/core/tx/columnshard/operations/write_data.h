@@ -27,16 +27,7 @@ public:
         return *OriginalDataSize;
     }
 
-    TString DebugString() const {
-        std::shared_ptr<arrow::RecordBatch> result;
-        if (Operation.HasPayloadSchema()) {
-            auto payloadSchema = NArrow::DeserializeSchema(Operation.GetPayloadSchema());
-            result = NArrow::DeserializeBatch(IncomingData, payloadSchema);
-        } else {
-            result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
-        }
-        return result->ToString();
-    }
+    TString DebugString() const;
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;

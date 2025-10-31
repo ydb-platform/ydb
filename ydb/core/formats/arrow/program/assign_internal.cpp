@@ -7,21 +7,19 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-
     if (KernelLogic) {
         auto resultKernel = KernelLogic->Execute(GetInput(), GetOutput(), context.MutableResources());
         if (resultKernel.IsFail()) {
             return resultKernel;
         } else if (*resultKernel) {
             return IResourceProcessor::EExecutionResult::Success;
+        } else {
         }
     }
-
     auto result = Function->Call(GetInput(), context.MutableResources());
     if (result.IsFail()) {
         return result;
     }
-
     context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), std::move(*result));
     return IResourceProcessor::EExecutionResult::Success;
 }

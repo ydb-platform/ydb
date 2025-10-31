@@ -138,7 +138,6 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 ReplyError(portionConclusion.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
                 return;
             }
-
             portions.emplace_back(portionConclusion.DetachResult());
         }
         auto writeController = std::make_shared<NOlap::TPortionWriteController>(

@@ -44,14 +44,17 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
     bool addRes = true;
 
     if (value.GetType() == NBinaryJson::EEntryType::String) {
-        res = NBinaryJson::SerializeToBinaryJson(TString(value.GetString()).Quote(), false);
+        NJson::TJsonValue jsonValue(value.GetString());
+        NJsonWriter::TBuf sout;
+        sout.WriteJsonValue(&jsonValue);
+        res = NBinaryJson::SerializeToBinaryJson(sout.Str(), false);
     } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
         const double val = value.GetNumber();
         double integer;
         if (modf(val, &integer)) {
             res = NBinaryJson::SerializeToBinaryJson(std::to_string(val), false);
         } else {
-            res = NBinaryJson::SerializeToBinaryJson( std::to_string((i64)integer), false);
+            res = NBinaryJson::SerializeToBinaryJson(std::to_string((i64)integer), false);
         }
     } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
         static const TString falseString = "false";
@@ -82,9 +85,13 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
     }
 
     if (addRes) {
-        auto resBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res);
-        AFL_VERIFY(resBinaryJson);
-        dataBuilder.AddKV(key, *resBinaryJson);
+        if (const TString* val = std::get_if<TString>(&res)) {
+            return TConclusionStatus::Fail(*val);
+        } else if (const NBinaryJson::TBinaryJson* resBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res)) {
+            dataBuilder.AddKV(key, *resBinaryJson);
+        } else {
+            return TConclusionStatus::Fail("undefined case for binary json construction");
+        }
     }
 
     return TConclusionStatus::Success();

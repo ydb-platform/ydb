@@ -5,7 +5,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/codegen_internal.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/table.h>
-#include <util/string/join.h>
 
 namespace NKikimr::NArrow::NSSA {
 
@@ -175,6 +174,7 @@ arrow::compute::FunctionRegistry* GetCustomFunctionRegistry() {
 TConclusion<arrow::Datum> TInternalFunction::Call(
     const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     auto funcNames = GetRegistryFunctionNames();
+
     auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
     TAccessorsCollection::TChunksMerger merger;
     while (auto arguments = argumentsReader.ReadNext()) {

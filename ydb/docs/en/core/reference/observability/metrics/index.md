@@ -26,9 +26,51 @@
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
-| `grpc.topic.stream_read.commits`<br/>`RATE`, | Number of method commits
+| `grpc.topic.stream_read.commits`<br/>`RATE`, | Commit number of method `Ydb::TopicService::StreamRead`.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.bytes`<br/>`RATE`, pieces | Number of bytes read by the `Ydb::TopicService::StreamRead` method.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.messages`<br/>`RATE`, pieces | Number of messages read by the method `Ydb::TopicService::StreamRead`.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.partition_session.errors`<br/>`RATE`, pieces | Number of errors when working with the partition.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.partition_session.started`<br/>`RATE`, pieces | The number of sessions launched per unit of time.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.partition_session.stopped`<br/>`RATE`, pieces | Number of sessions stopped per unit of time.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.partition_session.starting_count`<br/>`RATE`, pieces | The number of sessions being launched (it means, the client received a command to start a session, but the client has not yet launched the session).<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.partition_session.stopping_count`<br/>`RATE`, pieces | Number of sessions stopped.<br/>Labels:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_read.partition_session.count`<br/>`RATE`, pieces | Number of partition_session.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – consumer name |
+| `grpc.topic.stream_write.bytes`<br/>`RATE`, bytes | Number of bytes writing by `Ydb::TopicService::StreamWrite`.<br/>Labels:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.uncommitted_bytes`<br/>`RATE`, bytes | The number of bytes written by the `Ydb::TopicService::StreamWrite` method within transactions that have not yet been committed.<br/>Label:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.errors`<br/>`RATE`, pieces | Number of errors when calling the `Ydb::TopicService::StreamWrite` method.<br/>Labels:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.messages`<br/>`RATE`, pieces | Number of messages written by method `Ydb::TopicService::StreamWrite`.<br/>Label:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.uncommitted_messages`<br/>`RATE`, pieces | Number of messages written by method `Ydb::TopicService::StreamWrite` within transactions that have not yet been committed.<br/>Label:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.partition_throttled_milliseconds`<br/>`HIST_RATE`, pieces | Histogram counter. Intervals are specified in milliseconds. Shows the number of messages waiting at the quota.<br/>Label:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.sessions_active_count`<br/>`GAUGE`, pieces | Number of open recording sessions.<br/>Метки:<br/>- _topic_ – topic name |
+| `grpc.topic.stream_write.sessions_created`<br/>`RATE`, pieces | Number of recording sessions created.<br/>Метки:<br/>- _topic_ – topic name |
 
+## HTTP API Metrics {#http_api}
 
+| Metric name<br/>Type, units of measurement | Description<br/>Labels |
+| ----- | ----- |
+| `api.http.data_streams.request.count`<br/>`RATE`, pieces  | Number of HTTP requests.<br/>Labels:<br/>- _method_ – name of the HTTP API service method, for example `PutRecord` , `GetRecords`.<br/>- _topic_ – topic name |
+| `api.http.data_streams.request.bytes`<br/>`RATE`, bytes  | Total size of HTTP requests.<br/>Labels:<br/>- _method_ – name of the HTTP API service method, in this case only `PutRecord`.<br/>- _topic_ – topic name |
+| `api.http.data_streams.response.count`<br/>`RATE`, pieces  | Number of responses via HTTP protocol.<br/>Label:<br/>- _method_ – name of the HTTP API service method, for example `PutRecord` , `GetRecords`.<br/>- _topic_ – topic name.<br/>- _code_ – HTTP response code |
+| `api.http.data_streams.response.bytes`<br/>`RATE`, bytes  | Total size of HTTP responses.<br/>Label:<br/>- _method_ – name of the HTTP API service method, in this case only `GetRecords`.<br/>- _topic_ – topic name |
+| `api.http.data_streams.response.duration_milliseconds`<br/>`HIST_RATE`, pieces  | Histogram counter. Intervals are specified in milliseconds. Shows the number of responses whose execution time falls within a certain interval.<br/>Label:<br/>- _method_ – name of the HTTP API service method.<br/>- _topic_ – topic name |
+| `api.http.data_streams.get_records.messages`<br/>`RATE`, pieces | Number of messages written by the method `GetRecords`.<br/>Labels:<br/>- _topic_ – topic name |
+| `api.http.data_streams.put_record.messages`<br/>`RATE`, pieces | Number of messages written by the method `PutRecord` (always =1).<br/>Label:<br/>- _topic_ – topic name |
+| `api.http.data_streams.put_records.failed_messages`<br/>`RATE`, pieces | The number of messages sent by the `PutRecords` method that were not recorded.<br/>Метки:<br/>- _topic_ – topic name |
+| `api.http.data_streams.put_records.successful_messages`<br/>`RATE`, pieces | The number of messages sent by the `PutRecords` method that were successfully written.<br/>Метки:<br/>- _topic_ – topic name |
+| `api.http.data_streams.put_records.total_messages`<br/>`RATE`, pieces | Number of messages sent using the `PutRecords` method.<br/>Label:<br/>- _topic_ – topic name |
+
+## Kafka API metrics {#kafka_api}
+
+| Metric name<br/>Type, units of measurement | Description<br/>Labels |
+| ----- | ----- |
+| `api.kafka.request.count`<br/>`RATE`, pieces  | The number of requests via the Kafka protocol per unit of time.<br/>Label:<br/>- _method_ – name of the Kafka API service method, for example `PRODUCE`, `SASL_HANDSHAKE` |
+| `api.kafka.request.bytes`<br/>`RATE`, bytes | Total size of Kafka requests per unit of time.<br/>Label:<br/>- _method_ – name of the Kafka API service method, for example `PRODUCE`, `SASL_HANDSHAKE` |
+| `api.kafka.response.count`<br/>`RATE`, pieces  | The number of responses via the Kafka protocol per unit of time.<br/>Label:<br/>- _method_ – name of the Kafka API service method, for example `PRODUCE`, `SASL_HANDSHAKE`.<br/>- _error_code_ – Kafka response code |
+| `api.kafka.response.bytes`<br/>`RATE`, bytes | The total size of responses via the Kafka protocol per unit of time.<br/>Label:<br/>- _method_ – name of the Kafka API service method, for example `PRODUCE`, `SASL_HANDSHAKE` |
+| `api.kafka.response.duration_milliseconds`<br/>`HIST_RATE`, pieces | Histogram counter. Defines a set of intervals in milliseconds and for each of them shows the number of requests with execution time falling within this interval.<br/>Label:<br/>- _method_ – name of the Kafka API service method |
+| `api.kafka.produce.failed_messages`<br/>`RATE`, pieces | The number of messages per unit of time sent by the `PRODUCE` method that were not recorded.<br/>Label:<br/>- _topic_ – topic name |
+| `api.kafka.produce.successful_messages`<br/>`RATE`, pieces | The number of messages per unit of time sent by the `PRODUCE` method that were successfully recorded.<br/>Метки:<br/>- _topic_ – topic name |
+| `api.kafka.produce.total_messages`<br/>`RATE`, pieces | Number of messages per unit of time sent by the `PRODUCE` method.<br/>Label:<br/>- _topic_ – topic name |
 
 ## Session metrics {#sessions}
 

@@ -1284,9 +1284,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             UNIT_ASSERT(ConvertIPartsToString(parts.Get()) == res->Data.ToString().Slice());
         }
     }
+
     Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
-        for (ui32 i = 0; i <= 3; ++i) {
-            ChunkWriteDifferentOffsetAndSizeImpl(i & 1, i & 2);
+        for (ui32 i = 0; i <= 1; ++i) {
+            ChunkWriteDifferentOffsetAndSizeImpl(i & 1, false);
         }
     }
 
@@ -2129,7 +2130,17 @@ Y_UNIT_TEST_SUITE(ShredPDisk) {
 #endif
 }
 
-/*
+
+// RDMA use ibverbs shared library which is part of hardware vendor provided drivers and can't be linked staticaly
+// This library is not MSan-instrumented, so it causes msan fail if we run. So skip such run...
+static bool IsMsanEnabled() {
+#if defined(_msan_enabled_)
+    return true;
+#else
+    return false;
+#endif
+}
+
 Y_UNIT_TEST_SUITE(RDMA) {
     void TestChunkReadWithRdmaAllocator(bool plainDataChunks) {
         TActorTestContext testCtx({
@@ -2170,13 +2181,23 @@ Y_UNIT_TEST_SUITE(RDMA) {
     }
 
     Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorEncryptedChunks) {
+        if (IsMsanEnabled())
+            return;
+
         TestChunkReadWithRdmaAllocator(false);
     }
+
     Y_UNIT_TEST(TestChunkReadWithRdmaAllocatorPlainChunks) {
+        if (IsMsanEnabled())
+            return;
+
         TestChunkReadWithRdmaAllocator(true);
     }
 
     Y_UNIT_TEST(TestRcBuf) {
+        if (IsMsanEnabled())
+            return;
+
         ui32 size = 129961;
         ui32 offset = 123;
         ui32 tailRoom = 1111;
@@ -2210,6 +2231,15 @@ Y_UNIT_TEST_SUITE(RDMA) {
         buf1.RawDataPtr(0, totalSize);
         buf2.RawDataPtr(0, totalSize);
     }
+
+    Y_UNIT_TEST(ChunkWriteDifferentOffsetAndSize) {
+        if (IsMsanEnabled())
+            return;
+
+        for (ui32 i = 0; i <= 1; ++i) {
+            NTestSuiteTPDiskTest::ChunkWriteDifferentOffsetAndSizeImpl(i & 1, true);
+        }
+    }
 }
-*/
+
 } // namespace NKikimr

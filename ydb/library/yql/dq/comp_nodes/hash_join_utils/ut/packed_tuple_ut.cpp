@@ -59,16 +59,20 @@ Y_UNIT_TEST(TestCalculateCRC32Fallback) {
 }
 
 Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+#if YDB_HASH_JOIN_SIMD_ENABLED
     if (NX86::HaveSSE42())
         TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
     else
+#endif
         CTEST << "Skipped SSE42 test\n";
 }
 
 Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+#if YDB_HASH_JOIN_SIMD_ENABLED
     if (NX86::HaveAVX2())
         TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
     else
+#endif
         CTEST << "Skipped AVX2 test\n";
 }
 

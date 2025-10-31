@@ -23,6 +23,7 @@ namespace NPackedTuple {
 
 namespace {
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 // Transpose 8x8 bit-matrix packed in ui64 integer
 Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     /// fast path
@@ -90,6 +91,7 @@ void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
         x >>= 8;
     }
 }
+#endif
 
 } // namespace
 
@@ -218,7 +220,7 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
 
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
-
+#if YDB_HASH_JOIN_SIMD_ENABLED
     if (NX86::HaveAVX2())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
             columns);
@@ -226,7 +228,7 @@ TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
     if (NX86::HaveSSE42())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>>(
             columns);
-
+#endif
     return MakeHolder<TTupleLayoutFallback>(
         columns);
 }
@@ -348,6 +350,7 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     }
 }
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 template <typename TTraits>
 TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     const std::vector<TColumnDesc> &columns)
@@ -1582,6 +1585,7 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
+#endif
 
 void TTupleLayout::CalculateColumnSizes(
     const ui8 *res, ui32 count,

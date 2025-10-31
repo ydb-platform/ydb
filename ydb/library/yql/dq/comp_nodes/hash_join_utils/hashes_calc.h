@@ -2,7 +2,7 @@
 
 #include <util/system/unaligned_mem.h>
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd_platform.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -52,12 +52,14 @@ inline ui32 CalculateCRC32(const ui8 * data, ui32 size, ui32 hash = 0 ) {
 
 }
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 template
 __attribute__((target("avx2")))
 ui32 CalculateCRC32<NSimd::TSimdAVX2Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
 template
 __attribute__((target("sse4.2")))
 ui32 CalculateCRC32<NSimd::TSimdSSE42Traits>(const ui8 * data, ui32 size, ui32 hash = 0 );
+#endif
 
 }
 }

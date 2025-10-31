@@ -140,7 +140,7 @@ VALUES
             for k, v in parameters.items():
                 print("{}: {}".format(k, v))
 
-            wrapper.execute_dml(text_query, parameters, query_name="insert_binary_size")
+            wrapper.execute_dml(text_query, parameters)
             print("Successfully sent build stats to YDB")
             
     except Exception as e:

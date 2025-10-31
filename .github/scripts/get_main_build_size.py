@@ -15,9 +15,10 @@ branch = os.environ.get("branch_to_compare")
 
 def get_build_size(time_of_current_commit):
     try:
-        with YDBWrapper() as wrapper:
+        # Используем silent режим, чтобы логи не попадали в stdout и не загрязняли результат
+        with YDBWrapper(silent=True) as wrapper:
             if not wrapper.check_credentials():
-                print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+                print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=sys.stderr)
                 return 0
 
             sql = f"""
@@ -33,7 +34,7 @@ def get_build_size(time_of_current_commit):
             limit 1;    
             """
 
-            results = wrapper.execute_scan_query(sql, query_name="get_main_build_size")
+            results = wrapper.execute_scan_query(sql)
             
             if results:
                 row = results[0]
@@ -53,11 +54,12 @@ def get_build_size(time_of_current_commit):
                 }
             else:
                 print(
-                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'"
+                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'",
+                    file=sys.stderr
                 )
                 return 0
     except Exception as e:
-        print(f"Error: Failed to get main build size from YDB: {e}")
+        print(f"Error: Failed to get main build size from YDB: {e}", file=sys.stderr)
         return 0
 
 

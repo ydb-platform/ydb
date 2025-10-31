@@ -4,6 +4,7 @@ import datetime
 import inspect
 import json
 import os
+import sys
 import time
 import uuid
 import ydb
@@ -13,8 +14,12 @@ from contextlib import contextmanager
 class YDBWrapper:
     """Обертка для работы с YDB с логированием статистики"""
     
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None):
+    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False):
         # Приоритет: YDB_QA_CONFIG env > config file (JSON)
+        # По умолчанию логи идут в stdout (как было раньше)
+        # Если silent=True, логи идут в stderr (для скриптов, вызываемых из других скриптов)
+        self._log_stream = sys.stderr if silent else sys.stdout
+        
         ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
         
         if ydb_qa_config_env:
@@ -116,8 +121,8 @@ class YDBWrapper:
                 
                 # Пропускаем текущий файл (ydb_wrapper.py)
                 if 'ydb_wrapper.py' not in frame_filename:
-                    # Получаем имя файла без пути и расширения
-                    script_name = os.path.splitext(os.path.basename(frame_filename))[0]
+                    # Получаем имя файла без пути, но с расширением
+                    script_name = os.path.basename(frame_filename)
                     return script_name
             
             # Если не нашли, используем дефолтное значение
@@ -159,9 +164,9 @@ class YDBWrapper:
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         icons = {"start": "🚀", "progress": "⏳", "success": "✅", "error": "❌", "info": "ℹ️", "warning": "⚠️", "stats": "📊"}
         if details:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}")
+            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}", file=self._log_stream)
         else:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}")
+            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}", file=self._log_stream)
     
     def _setup_credentials(self):
         """Настройка учетных данных YDB"""
@@ -175,7 +180,7 @@ class YDBWrapper:
     def check_credentials(self):
         """Проверка наличия учетных данных YDB"""
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-            print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+            print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=self._log_stream)
             return False
         
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests

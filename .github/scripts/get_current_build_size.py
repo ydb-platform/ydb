@@ -22,11 +22,12 @@ def get_ydbd_path():
 
 
 def get_build_size():
+    import sys
     ydbd_path = get_ydbd_path()
     
     if not os.path.exists(ydbd_path):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
-        print("Error: {} not exists, skipping".format(ydbd_path))
+        print("Error: {} not exists, skipping".format(ydbd_path), file=sys.stderr)
         return 1
 
     binary_size_bytes = subprocess.check_output(
@@ -41,7 +42,7 @@ def get_build_size():
     if binary_size_bytes and binary_size_stripped_bytes:
         return {"size_bytes": size_bytes, "size_stripped_bytes": size_stripped_bytes}
     else:
-        print(f"Error: Cant get build size")
+        print(f"Error: Cant get build size", file=sys.stderr)
         return 1
 
 

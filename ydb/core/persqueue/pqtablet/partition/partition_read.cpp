@@ -499,15 +499,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "%s",
-                               (TStringBuilder() <<
-                                "\npos=" << pos <<
-                                "\ni=" << i <<
-                                "\nOffset=" << Offset <<
-                                "\nPartNo=" << PartNo <<
-                                "\noffset=" << offset <<
-                                "\npartNo=" << res.GetPartNo()
-                               ).data());
                 AFL_ENSURE(PartNo == res.GetPartNo())("pos", pos)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
 
                 if (userInfo) {

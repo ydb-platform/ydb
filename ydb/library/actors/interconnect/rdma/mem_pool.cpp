@@ -277,10 +277,15 @@ namespace NInterconnect::NRdma {
         return counters;
     }
 
+    static const NInterconnect::NRdma::NLinkMgr::TCtxsMap& GetAllCtxs() {
+        NInterconnect::NRdma::NLinkMgr::Init();
+        return NInterconnect::NRdma::NLinkMgr::GetAllCtxs();
+    }
+
     class TMemPoolBase: public IMemPool {
     public:
         TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter)
-            : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
+            : Ctxs(GetAllCtxs())
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {

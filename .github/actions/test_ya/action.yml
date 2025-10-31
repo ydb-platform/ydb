@@ -257,8 +257,11 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          YA_MAKE_COMMAD="./ya make ${params[@]}"
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAD" --result-graph-path=graph.json --result-context-path=context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          YA_MAKE_COMMAND="./ya make ${params[@]}"
+          if [ true = ${{ inputs.run_tests }} ]; then
+              YA_MAKE_COMMAND="$YA_MAKE_COMMAND -A"
+          fi
+          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=graph.json --result-context-path=context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -271,7 +274,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET="--build-custom-json graph.json --custom-context context.json"
+          YA_MAKE_TARGET="--build-custom-json graph.json --custom-context context.json ydb"
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do

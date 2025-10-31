@@ -370,7 +370,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
-        if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+        if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
             NotifyCA();
         }
     }
@@ -579,6 +579,7 @@ private:
         }
 
         if (WatermarkTracker) {
+            WatermarkTracker->ProcessIdlenessCheck(now);
             const auto watermark = WatermarkTracker->HandleIdleness(now);
 
             if (watermark) {

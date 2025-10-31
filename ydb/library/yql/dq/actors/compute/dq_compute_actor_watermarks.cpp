@@ -122,6 +122,14 @@ TMaybe<TInstant> TDqComputeActorWatermarks::GetMaxWatermark() const {
     return Tracker.GetNextIdlenessCheckAt();
 }
 
+bool TDqComputeActorWatermarks::AddScheduledIdlenessCheck(TInstant notifyTime) {
+    return Tracker.AddScheduledIdlenessCheck(notifyTime);
+}
+
+bool TDqComputeActorWatermarks::ProcessIdlenessCheck(TInstant notifyTime) {
+    return Tracker.RemoveExpiredIdlenessChecks(notifyTime);
+}
+
 void TDqComputeActorWatermarks::PopPendingWatermark() {
     LOG_T("Watermark " << *PendingWatermark << " was popped. ");
     PendingWatermark = Nothing();

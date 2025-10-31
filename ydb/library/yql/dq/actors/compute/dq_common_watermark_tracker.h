@@ -6,6 +6,7 @@
 #include <util/string/builder.h>
 #include <util/generic/set.h>
 #include <algorithm>
+#include <deque>
 
 namespace NYql::NDq {
 
@@ -146,6 +147,28 @@ public:
         return *last->Time - *first->Time;
     }
 
+    // return true if any checks was expired
+    bool RemoveExpiredIdlenessChecks(TInstant notifyTime) {
+        bool removedAny = false;
+        while (HasEarlierIdlenessChecks(notifyTime)) {
+            InflyIdlenessChecks_.pop_front();
+            removedAny = true;
+        }
+        return removedAny;
+    }
+
+    // return true if check needs to be scheduled
+    bool AddScheduledIdlenessCheck(TInstant notifyTime) {
+        if (HasEarlierIdlenessChecks(notifyTime)) {
+            // There are already idleness check scheduled at this or earlier time;
+            // Try to minimize infly checks
+            return false;
+        }
+        InflyIdlenessChecks_.push_front(notifyTime);
+        WATERMARK_LOG_T("Next idleness check scheduled at " << notifyTime);
+        return true;
+    }
+
 private:
     TMaybe<TInstant> RecalcWatermark() {
         if (WatermarksQueue_.empty()) {
@@ -162,6 +185,10 @@ private:
     }
 
 private:
+    bool HasEarlierIdlenessChecks(TInstant notifyTime) {
+        return !InflyIdlenessChecks_.empty() && InflyIdlenessChecks_.front() <= notifyTime;
+    }
+
     struct TInputState {
         TDuration IdleDelay = TDuration::Max(); // expiration delay or ::Max() if disabled
         TInstant ExpiresAt; // input will be marked idle and ignored at this time
@@ -202,6 +229,7 @@ private:
     // TODO: replace both TSet with custom binary heap
     TMaybe<TInstant> Watermark_;
     TString LogPrefix_;
+    std::deque<TInstant> InflyIdlenessChecks_;
 };
 #undef WATERMARK_LOG_T
 #undef WATERMARK_LOG_D

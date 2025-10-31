@@ -358,7 +358,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription())));
                 break;
             }
             default:

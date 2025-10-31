@@ -97,13 +97,15 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
@@ -202,10 +204,9 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             for (const auto& column : indexDesc.GetFulltextIndexDescription().GetSettings().columns()) {
                 if (column.has_analyzers()) {
                     auto typeInfo = baseColumnTypes.at(column.column());
-                    // TODO: support utf-8 in fulltext index
-                    if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
+                    if (typeInfo.GetTypeId() != NScheme::NTypeIds::String && typeInfo.GetTypeId() != NScheme::NTypeIds::Utf8) {
                         status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                        error = TStringBuilder() << "Fulltext column '" << column.column() << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
+                        error = TStringBuilder() << "Fulltext column '" << column.column() << "' expected type 'String' or 'Utf8' but got " << NScheme::TypeName(typeInfo);
                         return false;
                     }
                 }

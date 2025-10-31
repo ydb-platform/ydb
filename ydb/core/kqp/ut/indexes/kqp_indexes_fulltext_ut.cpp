@@ -1949,6 +1949,66 @@ Y_UNIT_TEST(NoIndexImplTableUpdates) {
     auto index = ReadIndex(db);
     CompareYson(R"([])", NYdb::FormatResultSetYson(index));
 }
+
+Y_UNIT_TEST(Utf8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    { // CreateTexts
+        TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    { // UpsertTexts
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (100, "Мышь спит"),
+                (200, "Собака ест")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    AddIndex(db);
+    { // UpsertRow
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (150, "Кошка ест мышь")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[150u];"ест"];
+        [[200u];"ест"];
+        [[150u];"кошка"];
+        [[100u];"мышь"];
+        [[150u];"мышь"];
+        [[200u];"собака"];
+        [[100u];"спит"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    {
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "ест"
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[150u]];
+            [[200u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
     
 }
 

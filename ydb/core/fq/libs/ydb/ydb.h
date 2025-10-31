@@ -98,7 +98,7 @@ struct TGenerationContext : public TThrRefBase {
     EOperationType OperationType = Register;
 
     // within this session we execute transaction
-    ISession::TPtr Session = nullptr;
+    ISession::TPtr Session;
 
     // - In Register and RegisterCheck operation - whether
     // to commit or not after upserting new generation (usually true)

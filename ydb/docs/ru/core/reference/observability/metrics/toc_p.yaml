@@ -1,5 +1,4 @@
 items:
 - name: Справка по метрикам
   href: index.md
-- name: Дашборды Grafana 
-  href: grafana-dashboards.md
+

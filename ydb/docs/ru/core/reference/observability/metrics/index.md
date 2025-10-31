@@ -1,10 +1,14 @@
 # Справка по метрикам
 
+{% if audience == "tech"%}
+
 {% note info %}
 
 См. также [{#T}](grafana-dashboards.md).
 
 {% endnote %}
+
+{% endif %}
 
 ## Метрики использования ресурсов {#resources}
 

@@ -7,8 +7,11 @@
 Для диагностики проблем с производительностью {{ ydb-short-name }} используются следующие инструменты:
 
 - [{{ ydb-short-name }} метрики](../../reference/observability/metrics/index.md).
+{% if audience == "tech"%}
 
     Диагностика большинства проблем с производительностью включает анализ [дашбордов в Grafana](../../reference/observability/metrics/grafana-dashboards.md), которые используют метрики {{ ydb-short-name }}, собираемые с помощью Prometheus. Описание установки Grafana и Prometheus см. в разделе [{#T}](../../devops/observability/monitoring.md);
+
+{% endif %}
 
 - [Логи {{ ydb-short-name }}](../../devops/observability/logging.md);
 - [Трассировка](../../reference/observability/tracing/setup.md);

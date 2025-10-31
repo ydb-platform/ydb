@@ -1,3 +1,5 @@
+{% if audience == "tech"%}
+
 # Дашборды Grafana для {{ ydb-short-name }}
 
 На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}. Как установить дашборды читайте в разделе [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
@@ -131,3 +133,5 @@
 | Hive node | Узел, на котором запущен Hive. |
 
 Скачать шаблон дашборда **Database Hive**: [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json).
+
+{% endif %}

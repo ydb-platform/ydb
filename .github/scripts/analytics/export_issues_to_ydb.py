@@ -605,7 +605,6 @@ def main():
             return 1
         
         table_path = "github_data/issues"
-        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
         batch_size = 100
         
         try:
@@ -701,8 +700,7 @@ def main():
                 .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
             )
             
-            # Используем bulk_upsert_batches для агрегированной статистики
-            ydb_wrapper.bulk_upsert_batches(full_table_path, transformed_issues, column_types, batch_size)
+            ydb_wrapper.bulk_upsert_batches(table_path, transformed_issues, column_types, batch_size)
             
             upload_elapsed = time.time() - upload_start_time
             print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")

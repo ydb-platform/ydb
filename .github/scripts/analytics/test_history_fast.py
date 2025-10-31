@@ -79,8 +79,7 @@ def get_missed_data_for_upload(ydb_wrapper):
 
 def main():
     # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         
         
         # Check credentials
@@ -88,11 +87,10 @@ def main():
             return 1
         
         table_path = "test_results/analytics/test_history_fast"
-        full_table_path = f'{ydb_wrapper.database_path}/{table_path}'
         batch_size = 1000
 
-        # Create table if it doesn't exist
-        create_test_history_fast_table(ydb_wrapper, full_table_path)
+        # Create table if it doesn't exist (wrapper добавит database_path автоматически)
+        create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
         prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper)
@@ -119,8 +117,8 @@ def main():
                 .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
-            # Используем bulk_upsert_batches для агрегированной статистики
-            ydb_wrapper.bulk_upsert_batches(full_table_path, prepared_for_upload_rows, column_types, batch_size)
+            # Используем bulk_upsert_batches для агрегированной статистики (wrapper добавит database_path автоматически)
+            ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_upload_rows, column_types, batch_size)
             print('Tests uploaded')
         else:
             print('Nothing to upload')

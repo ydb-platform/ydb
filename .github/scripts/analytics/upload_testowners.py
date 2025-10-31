@@ -85,7 +85,6 @@ def main():
     
     print('upserting testowners')
     create_tables(ydb_wrapper, table_path)
-    full_path = posixpath.join(ydb_wrapper.database_path, table_path)
     
     # Подготавливаем column_types
     column_types = (
@@ -97,8 +96,7 @@ def main():
         .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     )
     
-    # Используем bulk_upsert_batches
-    ydb_wrapper.bulk_upsert_batches(full_path, test_list, column_types, batch_size=1000)
+    ydb_wrapper.bulk_upsert_batches(table_path, test_list, column_types, batch_size=1000)
 
     print('testowners updated')
 

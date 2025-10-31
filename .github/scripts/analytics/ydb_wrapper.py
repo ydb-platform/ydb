@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import configparser
 import datetime
 import inspect
 import json
@@ -149,10 +148,6 @@ class YDBWrapper:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Контекстный менеджер - выход"""
-        pass  # Больше не нужно останавливать потоки
-    
-    def close(self):
-        """Корректное завершение работы"""
         pass  # Больше не нужно останавливать потоки
     
     def _log(self, level: str, message: str, details: str = ""):
@@ -722,9 +717,6 @@ class YDBWrapper:
             )
             raise
     
-    def get_session_id(self) -> str:
-        """Получение ID текущей сессии"""
-        return self._session_id
     
     def _get_github_action_info(self) -> dict:
         """Получение информации о GitHub Action если скрипт запущен в GitHub Actions"""
@@ -791,25 +783,6 @@ class YDBWrapper:
             return self._stats_db_tables[table_name]
         else:
             raise ValueError(f"Unknown database: {database}. Use 'main' or 'statistics'")
-    
-    def get_full_table_path(self, table_name: str, database: str = "main") -> str:
-        """Получить полный путь к таблице (database_path + table_path)
-        
-        Args:
-            table_name: Имя таблицы (например, 'test_results')
-            database: База данных ('main' или 'statistics')
-        
-        Returns:
-            Полный путь к таблице включая database_path
-        """
-        table_path = self.get_table_path(table_name, database)
-        
-        if database == "main":
-            return f"{self.database_path}/{table_path}"
-        elif database == "statistics":
-            return f"{self.stats_path}/{table_path}"
-        else:
-            raise ValueError(f"Unknown database: {database}")
     
     def get_available_tables(self, database: str = "main") -> dict:
         """Получить словарь всех доступных таблиц

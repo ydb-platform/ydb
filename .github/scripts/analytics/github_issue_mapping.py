@@ -125,7 +125,6 @@ def main():
             return 1
         
         table_path = "test_results/analytics/github_issue_mapping"
-        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
         
         try:
             # Get GitHub issues data
@@ -144,12 +143,12 @@ def main():
             mapping_data = convert_mapping_to_table_data(test_to_issue)
             print(f"Converted to {len(mapping_data)} table records")
             
-            # Create mapping table
-            create_test_issue_mapping_table(ydb_wrapper, full_table_path)
+            # Create mapping table (wrapper добавит database_path автоматически)
+            create_test_issue_mapping_table(ydb_wrapper, table_path)
             
-            # Bulk upsert mapping data
+            # Bulk upsert mapping data (wrapper добавит database_path автоматически)
             if mapping_data:
-                bulk_upsert_mapping_data(ydb_wrapper, full_table_path, mapping_data)
+                bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
             else:
                 print("No mapping data to insert")
         

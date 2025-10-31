@@ -24,7 +24,6 @@ def main():
     print(f'   🔧 Build type: {build_type}')
     print(f'   🌿 Branch: {branch}')
     
-    # Инициализируем YDB обертку с контекстным менеджером для автоматического закрытия
     with YDBWrapper() as ydb_wrapper:
       
         # Получаем последнюю дату из истории
@@ -217,8 +216,7 @@ def main():
                     .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                 )
                 
-                full_path = f"{ydb_wrapper.database_path}/{table_path}"
-                ydb_wrapper.bulk_upsert_batches(full_path, all_prepared_rows, column_types, batch_size=1000)
+                ydb_wrapper.bulk_upsert_batches(table_path, all_prepared_rows, column_types, batch_size=1000)
                 
                 print('✅ History updated successfully')
             else:

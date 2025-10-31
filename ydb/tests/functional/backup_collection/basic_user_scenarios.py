@@ -1123,6 +1123,206 @@ def backup_lifecycle(test_instance, collection_name: str, tables: List[str]):
 
 
 
+class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
+    def test_full_cycle_local_backup_restore_with_incrementals(self):
+        # Setup
+        t_orders = "orders"
+        t_products = "products"
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
+        extras = []
+        
+        # Create initial tables
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
+        
+        collection_src = f"test_incremental_{uuid.uuid4().hex[:8]}"
+        data_helper = DataHelper(self, t_orders)
+        
+        # Use orchestrator for entire lifecycle
+        with backup_lifecycle(self, collection_src, [full_orders, full_products]) as backup:
+            
+            # Create collection with incremental enabled
+            backup.create_collection(incremental_enabled=True)
+            
+            # ========== STAGE 1: Initial Full Backup ==========
+            # Modifications: Add/remove data + extra1 table
+            data_helper.modify(add_rows=[(10, 1000, "a1")], remove_ids=[2])
+            extras += self._add_more_tables("extra1", 1)
+            
+            backup.stage(BackupType.FULL, "Initial full backup with extra1 table")
+            
+            # ========== STAGE 2: First Incremental ==========
+            # Modifications: More data changes + extra2 table - extra1 table
+            data_helper.modify(add_rows=[(20, 2000, "b1")], remove_ids=[1])
+            extras += self._add_more_tables("extra2", 1)
+            if extras:
+                self._remove_tables([extras[0]])
+            
+            backup.stage(BackupType.INCREMENTAL, "First incremental after removing extra1")
+            
+            # ========== STAGE 3: Second Incremental ==========
+            # Modifications: Data updates + extra3 table - extra2 table
+            data_helper.modify(add_rows=[(30, 3000, "c1")], remove_ids=[10])
+            extras += self._add_more_tables("extra3", 1)
+            if len(extras) >= 2:
+                self._remove_tables([extras[1]])
+            
+            backup.stage(BackupType.INCREMENTAL, "Second incremental with extra3")
+            
+            # ========== STAGE 4: Second Full Backup ==========
+            # Modifications: More changes + extra4 table - extra3 table
+            extras += self._add_more_tables("extra4", 1)
+            if len(extras) >= 3:
+                self._remove_tables([extras[2]])
+            data_helper.modify(add_rows=[(40, 4000, "d1")], remove_ids=[20])
+            
+            backup.stage(BackupType.FULL, "Second full backup as new baseline")
+            
+            # ========== STAGE 5: Third Incremental ==========
+            # Just create a marker incremental after full2
+            backup.stage(BackupType.INCREMENTAL, "Third incremental after second full")
+            
+            # ========== STAGE 6: Fourth Incremental ==========
+            # Modifications: Final data state + extra5 table - extra4 table
+            extras += self._add_more_tables("extra5", 1)
+            if len(extras) >= 4:
+                self._remove_tables([extras[3]])
+            data_helper.modify(add_rows=[(50, 5000, "e1")], remove_ids=[30])
+            
+            backup.stage(BackupType.INCREMENTAL, "Final incremental with latest data")
+            
+            # Export all backups for advanced restore scenarios
+            export_dir = backup.export_all()
+            
+            # ==================== RESTORE TESTS ====================
+            logger.info("=== STARTING RESTORE TESTS ===")
+            
+            # Test 1: Should fail when tables exist
+            logger.info("TEST 1: Verifying restore fails when tables exist...")
+            result = backup.restore_to_stage(6, auto_remove_tables=False).should_fail().execute()
+            assert result['expected_failure'], "Expected RESTORE to fail when tables already exist"
+            
+            # Remove all tables for subsequent restore tests
+            self._remove_tables([full_orders, full_products] + extras)
+            
+            # Test 2: Restore to stage 1 (full backup 1)
+            logger.info("TEST 2: Restoring to stage 1 (initial full backup)...")
+            result = backup.restore_to_stage(1, auto_remove_tables=False).execute()
+            assert result['data_verified'] and result['schema_verified'], "Stage 1 restore failed"
+            
+            # Test 3: Restore to stage 2 (full1 + inc1)
+            logger.info("TEST 3: Restoring to stage 2 (full1 + incremental1)...")
+            self._remove_tables([full_orders, full_products])
+            result = backup.restore_to_stage(2, auto_remove_tables=False).execute()
+            assert result['success'] and result['data_verified'], "Stage 2 restore failed"
+            
+            # Test 4: Restore to stage 3 (full1 + inc1 + inc2)
+            logger.info("TEST 4: Restoring to stage 3 (full1 + inc1 + inc2)...")
+            self._remove_tables([full_orders, full_products])
+            result = backup.restore_to_stage(3, auto_remove_tables=False).execute()
+            assert result['success'] and result['data_verified'], "Stage 3 restore failed"
+            
+            # Test 5: Restore to stage 4 (full backup 2)
+            logger.info("TEST 5: Restoring to stage 4 (second full backup)...")
+            self._remove_tables([full_orders, full_products])
+            result = backup.restore_to_stage(4, auto_remove_tables=False).execute()
+            assert result['data_verified'] and result['schema_verified'], "Stage 4 restore failed"
+            
+            # ========== SPECIAL TEST: Incremental-only restore (should fail) ==========
+            logger.info("SPECIAL TEST: Verifying incremental-only restore fails...")
+            self._test_incremental_only_restore_failure(backup, export_dir)
+            
+            # Test 6: Restore to final stage (full2 + inc3 + inc4)
+            logger.info("TEST 6: Restoring to final stage 6...")
+            self._remove_tables([full_orders, full_products])
+            result = backup.restore_to_stage(6, auto_remove_tables=False).execute()
+            assert result['success'] and result['data_verified'], "Final stage restore failed"
+            
+            # ========== ADVANCED TEST: Cross-full restore ==========
+            # Verify we can restore to stage 5 (full2 + inc3)
+            logger.info("ADVANCED TEST: Cross-full restore to stage 5...")
+            self._remove_tables([full_orders, full_products])
+            result = backup.restore_to_stage(5, auto_remove_tables=False).execute()
+            assert result['success'], "Stage 5 restore failed"
+            
+            # Cleanup
+            if os.path.exists(export_dir):
+                shutil.rmtree(export_dir)
+            
+            logger.info("=== ALL RESTORE TESTS COMPLETED SUCCESSFULLY ===")
+    
+    def _test_incremental_only_restore_failure(self, backup_orchestrator, export_dir):
+        """
+        Special test: Verify that restoring incrementals without base full backup fails.
+        This is a critical validation for incremental backup integrity.
+        """
+        # Get all incremental snapshots after first full backup
+        incremental_stages = [
+            stage for stage in backup_orchestrator.stages 
+            if stage.backup_type == BackupType.INCREMENTAL and stage.stage_number > 1
+        ]
+        
+        if not incremental_stages:
+            logger.info("No incremental snapshots found for incremental-only test, skipping...")
+            return
+        
+        # Create a new collection for incremental-only import
+        inc_only_collection = f"inc_only_fail_test_{uuid.uuid4().hex[:8]}"
+        
+        # Create the collection
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{inc_only_collection}`
+                ( TABLE `/Root/orders`, TABLE `/Root/products` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code == 0, f"Failed to create incremental-only collection"
+        self.wait_for_collection(inc_only_collection, timeout_s=30)
+        
+        # Import ONLY incremental snapshots (no full backup base)
+        logger.info(f"Importing only incremental snapshots to {inc_only_collection}...")
+        for stage in incremental_stages[:2]:  # Just take first 2 incrementals
+            snapshot_name = stage.snapshot.name
+            src = os.path.join(export_dir, snapshot_name)
+            dest_path = f"/Root/.backups/collections/{inc_only_collection}/{snapshot_name}"
+            
+            logger.info(f"Importing incremental snapshot: {snapshot_name}")
+            r = yatest.common.execute(
+                [
+                    backup_bin(),
+                    "--verbose",
+                    "--endpoint",
+                    f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                    "--database",
+                    self.root_dir,
+                    "tools",
+                    "restore",
+                    "--path",
+                    dest_path,
+                    "--input",
+                    src,
+                ],
+                check_exit_code=False,
+            )
+            assert r.exit_code == 0, f"Failed to import incremental snapshot {snapshot_name}"
+        
+        # Wait for snapshots to be registered
+        time.sleep(5)
+        
+        # Now try to RESTORE - this should FAIL because there's no base full backup
+        logger.info("Attempting to restore from incremental-only collection (should fail)...")
+        rest_inc_only = self._execute_yql(f"RESTORE `{inc_only_collection}`;")
+        assert rest_inc_only.exit_code != 0, (
+            "CRITICAL: Restore from incremental-only collection succeeded but should have failed! "
+            "This indicates a serious issue with incremental backup validation."
+        )
+        logger.info("✓ Incremental-only restore correctly failed as expected")
+
+
+
+
 class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
     
     def _create_table_with_schema_data(self, session, path, not_null=False):

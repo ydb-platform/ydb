@@ -1,18 +1,18 @@
 {%- if prepareProtosTask %}
 val prepareMainProtos = tasks.register<Sync>("prepareMainProtos") {
-{%-     if target.proto_files|length %}
+{%-     if target.proto_files|length -%}
 {%-         if target.proto_namespace %}
     from("$arcadia_root/{{ target.proto_namespace }}") {
 {%-             for proto in target.proto_files %}
         include("{{ proto|replace(target.proto_namespace + "/", "") }}")
-{%-             endfor %}
+{%-             endfor -%}
 {%-         else %}
     from("$arcadia_root") {
 {#- list of all current project proto files -#}
 {%-             for proto in target.proto_files %}
         include("{{ proto }}")
-{%-             endfor %}
-{%          endif %}
+{%-             endfor -%}
+{%-         endif %}
     }
 {%      endif -%}
 {%-     if target.runs|length or target.custom_runs|length -%}

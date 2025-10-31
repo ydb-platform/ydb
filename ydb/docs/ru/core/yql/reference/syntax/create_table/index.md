@@ -27,9 +27,8 @@ CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] table_name (
 	PRIMARY KEY ( <column>[, ...]),
 	PARTITION BY ( <column>[, ...]),
     FAMILY column_family ( family_options[, ...])
-	CHANGEFEED <name> WITH (<changefeed_option> = <changefeed_value>[, ...])
 )
-[PARTITION BY HASH (column[, ...])]
+[PARTITION BY HASH (column[, ...])],
 [WITH (<setting_name> = <setting_value>[, ...])]
 
 [AS SELECT ...]

@@ -9,12 +9,6 @@ PEERDIR(
     library/cpp/digest/crc32c
 )
 
-IF (ARCH_X86_64 AND OS_LINUX)
-
-PEERDIR(
-    ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
-)
-
 SRCS(
     tuple.cpp
     accumulator.cpp
@@ -22,9 +16,21 @@ SRCS(
     page_hash_table.cpp
 )
 
+IF (ARCH_X86_64 AND OS_LINUX)
+
+PEERDIR(
+    ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
+)
+
 CFLAGS(
     -mprfchw
     -mavx2
+)
+
+ELSE()
+
+PEERDIR(
+    ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/exec/runtime_dispatching/Fallback_algo
 )
 
 ENDIF()

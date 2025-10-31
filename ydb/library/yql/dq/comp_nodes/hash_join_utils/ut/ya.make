@@ -30,10 +30,12 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
 )
 
-CFLAGS(
-    -mavx2
-    -mprfchw
-)
+IF (ARCH_X86_64 AND OS_LINUX)
+    CFLAGS(
+        -mavx2
+        -mprfchw
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

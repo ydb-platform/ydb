@@ -12,9 +12,12 @@ END()
 
 RECURSE(
     AVX2_algo
-    Fallback_algo
     main
     SSE42_algo
 )
 
 ENDIF()
+
+RECURSE(
+    Fallback_algo
+)

@@ -1118,9 +1118,116 @@ def backup_lifecycle(test_instance, collection_name: str, tables: List[str]):
         pass
 
 
+class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
+    def test_full_cycle_local_backup_restore(self):
+        # Setup
+        t_orders = "orders"
+        t_products = "products"
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
 
+        # Create initial tables
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
 
+        collection_src = f"test_basic_backup_{uuid.uuid4().hex[:8]}"
 
+        # Use orchestrator for entire lifecycle
+        with backup_lifecycle(self, collection_src, [full_orders, full_products]) as backup:
+
+            # Create backup collection (without incremental support for this test)
+            backup.create_collection(incremental_enabled=False)
+
+            # STAGE 1: Initial Backup
+
+            # Capture initial state (no modifications yet, just base data)
+            backup.stage(
+                BackupType.FULL,
+                "Initial backup with base data (orders: 3 rows, products: 3 rows)"
+            )
+
+            # STAGE 2: Modified Backup
+
+            # Modifications:
+            # 1. Add extra_table_1
+            # 2. Insert new row into orders
+            with self.session_scope() as session:
+                create_table_with_data(session, "extra_table_1")
+
+                session.transaction().execute(
+                    'PRAGMA TablePathPrefix("/Root"); '
+                    'UPSERT INTO orders (id, number, txt) VALUES (11, 111, "added1");',
+                    commit_tx=True,
+                )
+
+            # Create second backup with modifications
+            backup.stage(
+                BackupType.FULL,
+                "Modified backup with extra_table_1 and additional data (orders: 4 rows)"
+            )
+
+            # EXPORT BACKUPS
+            export_dir = backup.export_all()
+
+            # Verify we have exactly 2 exported backups
+            exported_items = sorted([
+                name for name in os.listdir(export_dir)
+                if os.path.isdir(os.path.join(export_dir, name))
+            ])
+            assert len(exported_items) >= 2, f"Expected at least 2 exported backups, got: {exported_items}"
+
+            # RESTORE TESTS
+
+            # Test 1: Restore should fail when tables exist
+            logger.info("\nTEST 1: Verifying restore fails when tables already exist...")
+            result = backup.restore_to_stage(2, auto_remove_tables=False).should_fail().execute()
+            assert result['expected_failure'], "Expected RESTORE to fail when tables already exist"
+            logger.info("✓ TEST 1 PASSED: Restore correctly failed with existing tables")
+
+            # Test 2: Restore Stage 1 (Initial state)
+
+            # Remove all tables first
+            self._remove_tables([full_orders, full_products, "/Root/extra_table_1"])
+
+            # Restore to stage 1
+            result = backup.restore_to_stage(1, auto_remove_tables=False).execute()
+            assert result['data_verified'], "Stage 1 data verification failed"
+            assert result['schema_verified'], "Stage 1 schema verification failed"
+
+            # Additional verification: extra_table_1 should NOT exist in stage 1
+            try:
+                self.driver.scheme_client.describe_path("/Root/extra_table_1")
+                raise AssertionError("extra_table_1 should not exist after restoring stage 1")
+            except Exception:
+                logger.info("Correctly verified extra_table_1 doesn't exist in stage 1")
+
+            # Verify orders table has only 3 original rows
+            restored_rows = self._capture_snapshot(t_orders)
+            assert len(restored_rows) == 4, f"Expected 4 rows (header + 3 data), got {len(restored_rows)}"
+
+            # ---------------- Test 3: Restore Stage 2 (Modified state) ----------------
+
+            # Remove all tables again
+            self._remove_tables([full_orders, full_products])
+
+            # Restore to stage 2
+            result = backup.restore_to_stage(2, auto_remove_tables=False).execute()
+            assert result['data_verified'], "Stage 2 data verification failed"
+            assert result['schema_verified'], "Stage 2 schema verification failed"
+
+            # Verify orders table has 4 rows (original 3 + 1 added)
+            restored_rows = self._capture_snapshot(t_orders)
+            assert len(restored_rows) == 5, f"Expected 5 rows (header + 4 data), got {len(restored_rows)}"
+
+            # Verify the added row exists
+            data_rows = restored_rows[1:]  # Skip header
+            found_added = any("added1" in str(row) for row in data_rows)
+            assert found_added, "Added row with 'added1' text not found in restored data"
+
+            # Cleanup
+            if os.path.exists(export_dir):
+                shutil.rmtree(export_dir)
 
 
 class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
@@ -1131,146 +1238,130 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
         full_orders = f"/Root/{t_orders}"
         full_products = f"/Root/{t_products}"
         extras = []
-        
+
         # Create initial tables
         with self.session_scope() as session:
             create_table_with_data(session, t_orders)
             create_table_with_data(session, t_products)
-        
+
         collection_src = f"test_incremental_{uuid.uuid4().hex[:8]}"
         data_helper = DataHelper(self, t_orders)
-        
-        # Use orchestrator for entire lifecycle
+
         with backup_lifecycle(self, collection_src, [full_orders, full_products]) as backup:
-            
+
             # Create collection with incremental enabled
             backup.create_collection(incremental_enabled=True)
-            
-            # ========== STAGE 1: Initial Full Backup ==========
+
+            # STAGE 1: Initial Full Backup
             # Modifications: Add/remove data + extra1 table
             data_helper.modify(add_rows=[(10, 1000, "a1")], remove_ids=[2])
             extras += self._add_more_tables("extra1", 1)
-            
+
             backup.stage(BackupType.FULL, "Initial full backup with extra1 table")
-            
-            # ========== STAGE 2: First Incremental ==========
+
+            # STAGE 2: First Incremental
             # Modifications: More data changes + extra2 table - extra1 table
             data_helper.modify(add_rows=[(20, 2000, "b1")], remove_ids=[1])
             extras += self._add_more_tables("extra2", 1)
             if extras:
                 self._remove_tables([extras[0]])
-            
+
             backup.stage(BackupType.INCREMENTAL, "First incremental after removing extra1")
-            
-            # ========== STAGE 3: Second Incremental ==========
+
+            # STAGE 3: Second Incremental
             # Modifications: Data updates + extra3 table - extra2 table
             data_helper.modify(add_rows=[(30, 3000, "c1")], remove_ids=[10])
             extras += self._add_more_tables("extra3", 1)
             if len(extras) >= 2:
                 self._remove_tables([extras[1]])
-            
+
             backup.stage(BackupType.INCREMENTAL, "Second incremental with extra3")
-            
-            # ========== STAGE 4: Second Full Backup ==========
+
+            # STAGE 4: Second Full Backup
             # Modifications: More changes + extra4 table - extra3 table
             extras += self._add_more_tables("extra4", 1)
             if len(extras) >= 3:
                 self._remove_tables([extras[2]])
             data_helper.modify(add_rows=[(40, 4000, "d1")], remove_ids=[20])
-            
+
             backup.stage(BackupType.FULL, "Second full backup as new baseline")
-            
-            # ========== STAGE 5: Third Incremental ==========
+
+            # STAGE 5: Third Incremental
             # Just create a marker incremental after full2
             backup.stage(BackupType.INCREMENTAL, "Third incremental after second full")
-            
-            # ========== STAGE 6: Fourth Incremental ==========
+
+            # STAGE 6: Fourth Incremental
             # Modifications: Final data state + extra5 table - extra4 table
             extras += self._add_more_tables("extra5", 1)
             if len(extras) >= 4:
                 self._remove_tables([extras[3]])
             data_helper.modify(add_rows=[(50, 5000, "e1")], remove_ids=[30])
-            
+
             backup.stage(BackupType.INCREMENTAL, "Final incremental with latest data")
-            
+
             # Export all backups for advanced restore scenarios
             export_dir = backup.export_all()
-            
-            # ==================== RESTORE TESTS ====================
-            logger.info("=== STARTING RESTORE TESTS ===")
-            
+
+            # RESTORE TESTS
+
             # Test 1: Should fail when tables exist
-            logger.info("TEST 1: Verifying restore fails when tables exist...")
             result = backup.restore_to_stage(6, auto_remove_tables=False).should_fail().execute()
             assert result['expected_failure'], "Expected RESTORE to fail when tables already exist"
-            
+
             # Remove all tables for subsequent restore tests
             self._remove_tables([full_orders, full_products] + extras)
-            
+
             # Test 2: Restore to stage 1 (full backup 1)
-            logger.info("TEST 2: Restoring to stage 1 (initial full backup)...")
             result = backup.restore_to_stage(1, auto_remove_tables=False).execute()
             assert result['data_verified'] and result['schema_verified'], "Stage 1 restore failed"
-            
+
             # Test 3: Restore to stage 2 (full1 + inc1)
-            logger.info("TEST 3: Restoring to stage 2 (full1 + incremental1)...")
             self._remove_tables([full_orders, full_products])
             result = backup.restore_to_stage(2, auto_remove_tables=False).execute()
             assert result['success'] and result['data_verified'], "Stage 2 restore failed"
-            
+
             # Test 4: Restore to stage 3 (full1 + inc1 + inc2)
-            logger.info("TEST 4: Restoring to stage 3 (full1 + inc1 + inc2)...")
             self._remove_tables([full_orders, full_products])
             result = backup.restore_to_stage(3, auto_remove_tables=False).execute()
             assert result['success'] and result['data_verified'], "Stage 3 restore failed"
-            
+
             # Test 5: Restore to stage 4 (full backup 2)
-            logger.info("TEST 5: Restoring to stage 4 (second full backup)...")
             self._remove_tables([full_orders, full_products])
             result = backup.restore_to_stage(4, auto_remove_tables=False).execute()
             assert result['data_verified'] and result['schema_verified'], "Stage 4 restore failed"
-            
-            # ========== SPECIAL TEST: Incremental-only restore (should fail) ==========
-            logger.info("SPECIAL TEST: Verifying incremental-only restore fails...")
+
+            # SPECIAL TEST: Incremental-only restore (should fail)
             self._test_incremental_only_restore_failure(backup, export_dir)
-            
+
             # Test 6: Restore to final stage (full2 + inc3 + inc4)
-            logger.info("TEST 6: Restoring to final stage 6...")
             self._remove_tables([full_orders, full_products])
             result = backup.restore_to_stage(6, auto_remove_tables=False).execute()
             assert result['success'] and result['data_verified'], "Final stage restore failed"
-            
-            # ========== ADVANCED TEST: Cross-full restore ==========
+
+            # ADVANCED TEST: Cross-full restore
             # Verify we can restore to stage 5 (full2 + inc3)
-            logger.info("ADVANCED TEST: Cross-full restore to stage 5...")
             self._remove_tables([full_orders, full_products])
             result = backup.restore_to_stage(5, auto_remove_tables=False).execute()
             assert result['success'], "Stage 5 restore failed"
-            
+
             # Cleanup
             if os.path.exists(export_dir):
                 shutil.rmtree(export_dir)
-            
-            logger.info("=== ALL RESTORE TESTS COMPLETED SUCCESSFULLY ===")
-    
+
     def _test_incremental_only_restore_failure(self, backup_orchestrator, export_dir):
-        """
-        Special test: Verify that restoring incrementals without base full backup fails.
-        This is a critical validation for incremental backup integrity.
-        """
         # Get all incremental snapshots after first full backup
         incremental_stages = [
-            stage for stage in backup_orchestrator.stages 
+            stage for stage in backup_orchestrator.stages
             if stage.backup_type == BackupType.INCREMENTAL and stage.stage_number > 1
         ]
-        
+
         if not incremental_stages:
             logger.info("No incremental snapshots found for incremental-only test, skipping...")
             return
-        
+
         # Create a new collection for incremental-only import
         inc_only_collection = f"inc_only_fail_test_{uuid.uuid4().hex[:8]}"
-        
+
         # Create the collection
         create_sql = f"""
             CREATE BACKUP COLLECTION `{inc_only_collection}`
@@ -1278,16 +1369,16 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
             WITH ( STORAGE = 'cluster' );
         """
         res = self._execute_yql(create_sql)
-        assert res.exit_code == 0, f"Failed to create incremental-only collection"
+        assert res.exit_code == 0, "Failed to create incremental-only collection"
         self.wait_for_collection(inc_only_collection, timeout_s=30)
-        
+
         # Import ONLY incremental snapshots (no full backup base)
         logger.info(f"Importing only incremental snapshots to {inc_only_collection}...")
         for stage in incremental_stages[:2]:  # Just take first 2 incrementals
             snapshot_name = stage.snapshot.name
             src = os.path.join(export_dir, snapshot_name)
             dest_path = f"/Root/.backups/collections/{inc_only_collection}/{snapshot_name}"
-            
+
             logger.info(f"Importing incremental snapshot: {snapshot_name}")
             r = yatest.common.execute(
                 [
@@ -1307,24 +1398,19 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
                 check_exit_code=False,
             )
             assert r.exit_code == 0, f"Failed to import incremental snapshot {snapshot_name}"
-        
+
         # Wait for snapshots to be registered
         time.sleep(5)
-        
+
         # Now try to RESTORE - this should FAIL because there's no base full backup
-        logger.info("Attempting to restore from incremental-only collection (should fail)...")
         rest_inc_only = self._execute_yql(f"RESTORE `{inc_only_collection}`;")
         assert rest_inc_only.exit_code != 0, (
             "CRITICAL: Restore from incremental-only collection succeeded but should have failed! "
             "This indicates a serious issue with incremental backup validation."
         )
-        logger.info("✓ Incremental-only restore correctly failed as expected")
-
-
 
 
 class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
-    
     def _create_table_with_schema_data(self, session, path, not_null=False):
         """Create table with additional expire_at column for schema testing."""
         full_path = "/Root/" + path
@@ -1354,7 +1440,7 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
             ),
             commit_tx=True,
         )
-    
+
     def _apply_schema_changes(self, session, table_path: str):
         """Apply schema modifications to a table."""
         # Add column
@@ -1362,27 +1448,27 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
             session.execute_scheme(f'ALTER TABLE `{table_path}` ADD COLUMN new_col Uint32;')
         except Exception:
             raise AssertionError("ADD COLUMN failed")
-        
+
         # Set TTL
         try:
             session.execute_scheme(f'ALTER TABLE `{table_path}` SET (TTL = Interval("PT0S") ON expire_at);')
         except Exception:
             raise AssertionError("SET TTL failed")
-        
+
         # Drop column
         try:
             session.execute_scheme(f'ALTER TABLE `{table_path}` DROP COLUMN number;')
         except Exception:
             raise AssertionError("DROP COLUMN failed")
-    
+
     def _apply_acl_with_variants(self, table_path: str, permission="ALL"):
         """Apply ACL trying multiple grant syntax variants."""
         desc_for_acl = self.driver.scheme_client.describe_path(table_path)
         owner_role = getattr(desc_for_acl, "owner", None) or "root@builtin"
-        
+
         def q(role: str) -> str:
             return "`" + role.replace("`", "") + "`"
-        
+
         role_candidates = [owner_role, "public", "everyone", "root"]
         grant_variants = []
         for r in role_candidates:
@@ -1394,18 +1480,18 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
                 ])
             else:
                 grant_variants.append(f"GRANT {permission} ON `{table_path}` TO {role_quoted};")
-        
+
         grant_variants.append(f"GRANT {permission} ON `{table_path}` TO {q(owner_role)};")
-        
+
         acl_applied = False
         for cmd in grant_variants:
             res = self._execute_yql(cmd)
             if res.exit_code == 0:
                 acl_applied = True
                 break
-        
+
         assert acl_applied, f"Failed to apply any GRANT variant for {table_path}"
-        
+
     def test_full_cycle_local_backup_restore_with_schema_changes(self):
         # Setup
         t_orders = "orders"
@@ -1413,20 +1499,20 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
         full_orders = f"/Root/{t_orders}"
         full_products = f"/Root/{t_products}"
         extra_tables = []
-        
+
         # Create initial tables with schema
         with self.session_scope() as session:
             self._create_table_with_schema_data(session, t_orders)
             self._create_table_with_schema_data(session, t_products)
-        
+
         collection_src = f"test_schema_backup_{uuid.uuid4().hex[:8]}"
-        
+
         # Custom DataHelper for schema test tables
         class SchemaDataHelper:
             def __init__(self, test_instance, table_name: str = "orders"):
                 self.test = test_instance
                 self.table_name = table_name
-            
+
             def modify_stage1(self):
                 """Modifications for stage 1."""
                 with self.test.session_scope() as session:
@@ -1441,7 +1527,7 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
                         'PRAGMA TablePathPrefix("/Root"); DELETE FROM products WHERE id = 1;',
                         commit_tx=True
                     )
-            
+
             def modify_stage2(self):
                 """Modifications for stage 2."""
                 with self.test.session_scope() as session:
@@ -1456,52 +1542,40 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
                         f'PRAGMA TablePathPrefix("/Root"); DELETE FROM {self.table_name} WHERE id = 2;',
                         commit_tx=True
                     )
-        
+
         data_helper = SchemaDataHelper(self, t_orders)
-        
-        # Use orchestrator for entire lifecycle
+
         with backup_lifecycle(self, collection_src, [full_orders, full_products]) as backup:
-            
+
             # Create collection (no incremental for this test)
             backup.create_collection(incremental_enabled=False)
-            
-            # STAGE 1 MODIFICATIONS
-            # - Add/remove data
-            # - Change ACLs
-            # - Add extra_table_1
+
             data_helper.modify_stage1()
             self._apply_acl_with_variants(full_orders, "ALL")
-            
+
             # Add extra table 1
             with self.session_scope() as session:
                 create_table_with_data(session, "extra_table_1")
             extra_tables.append("/Root/extra_table_1")
-            
+
             # STAGE 1: First full backup (captures state after initial modifications)
-            stage1 = backup.stage(BackupType.FULL, "After initial modifications with ACL and extra_table_1")
-            
-            # STAGE 2 MODIFICATIONS
-            # - More data changes
-            # - Add extra_table_2
-            # - Remove extra_table_1
-            # - Schema changes (add column, set TTL, drop column)
-            # - Change ACLs again
-            
+            backup.stage(BackupType.FULL, "After initial modifications with ACL and extra_table_1")
+
             data_helper.modify_stage2()
-            
+
             # Add extra table 2
             with self.session_scope() as session:
                 create_table_with_data(session, "extra_table_2")
             extra_tables.append("/Root/extra_table_2")
-            
+
             # Remove extra_table_1
             self._remove_tables(["/Root/extra_table_1"])
             extra_tables.remove("/Root/extra_table_1")
-            
+
             # Apply schema changes
             with self.session_scope() as session:
                 self._apply_schema_changes(session, full_orders)
-            
+
             # Change ACLs to SELECT only
             desc_for_acl = self.driver.scheme_client.describe_path(full_orders)
             owner_role = getattr(desc_for_acl, "owner", None) or "root@builtin"
@@ -1509,76 +1583,73 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
             cmd = f"GRANT SELECT ON `{full_orders}` TO `{owner_quoted}`;"
             res = self._execute_yql(cmd)
             assert res.exit_code == 0, "Failed to apply GRANT SELECT"
-            
+
             # STAGE 2: Second full backup (captures state with schema changes)
-            stage2 = backup.stage(BackupType.FULL, "After schema changes, ACL modifications, and table manipulations")
-            
+            backup.stage(BackupType.FULL, "After schema changes, ACL modifications, and table manipulations")
+
             # Export all backups
             export_dir = backup.export_all()
-            
+
             # RESTORE TESTS
-            
+
             # Test 1: Should fail when tables exist
             result = backup.restore_to_stage(2, auto_remove_tables=False).should_fail().execute()
             assert result['expected_failure'], "Expected RESTORE to fail when tables already exist"
-            
+
             # Remove all tables for restore tests
             self._remove_tables([full_orders, full_products] + extra_tables)
-            
+
             # Test 2: Restore to stage 1 (initial state with extra_table_1)
             logger.info("=== RESTORING STAGE 1 ===")
             result = backup.restore_to_stage(1, auto_remove_tables=False).execute()
             assert result['data_verified'], "Data verification failed for stage 1"
             assert result['schema_verified'], "Schema verification failed for stage 1"
-            
+
             # Verify that schema is original (without new_col, with number column)
             restored_schema = self._capture_schema(full_orders)
             assert 'expire_at' in restored_schema, "expire_at column missing after restore stage 1"
             assert 'number' in restored_schema, "number column missing after restore stage 1"
             assert 'new_col' not in restored_schema, "new_col should not exist after restore stage 1"
-            
+
             # Verify ACL has ALL permission
             restored_acl = self._capture_acl_pretty(full_orders)
             if restored_acl and 'show_grants' in restored_acl:
                 grants_output = restored_acl['show_grants'].upper()
                 # Should have broader permissions from stage 1
                 logger.info(f"Stage 1 ACL verification: {grants_output}")
-            
+
             # Remove all tables again for stage 2 restore
             self._remove_tables([full_orders, full_products, "/Root/extra_table_1"])
-            
+
             # Test 3: Restore to stage 2 (with schema changes and extra_table_2, without extra_table_1)
             logger.info("=== RESTORING STAGE 2 ===")
             result = backup.restore_to_stage(2, auto_remove_tables=False).execute()
             assert result['data_verified'], "Data verification failed for stage 2"
             assert result['schema_verified'], "Schema verification failed for stage 2"
-            
+
             # Verify schema changes are present
             restored_schema2 = self._capture_schema(full_orders)
             assert 'expire_at' in restored_schema2, "expire_at column missing after restore stage 2"
             assert 'number' not in restored_schema2, "number column should be dropped after restore stage 2"
             assert 'new_col' in restored_schema2, "new_col should exist after restore stage 2"
-            
+
             # Verify ACL has SELECT permission only
             restored_acl2 = self._capture_acl_pretty(full_orders)
             if restored_acl2 and 'show_grants' in restored_acl2:
                 grants_output2 = restored_acl2['show_grants'].upper()
                 # Should have SELECT permission from stage 2
                 logger.info(f"Stage 2 ACL verification: {grants_output2}")
-            
+
             # extra_table_1 should NOT exist
             try:
                 self.driver.scheme_client.describe_path("/Root/extra_table_1")
                 raise AssertionError("extra_table_1 should not exist after restore stage 2")
             except Exception:
                 logger.info("extra_table_1 correctly absent after stage 2 restore")
-            
+
             # Cleanup
             if os.path.exists(export_dir):
                 shutil.rmtree(export_dir)
-            
-            logger.info("=== TEST COMPLETED SUCCESSFULLY ===")
-
 
 
 class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
@@ -1597,7 +1668,6 @@ class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
         # Create collection name
         collection_src = f"chain_src_{uuid.uuid4().hex[:8]}"
 
-        # Use orchestrator for lifecycle (incremental enabled)
         with backup_lifecycle(self, collection_src, [full_orders, full_products]) as orchestrator:
             orchestrator.create_collection(incremental_enabled=True)
 
@@ -1617,11 +1687,11 @@ class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
                 }
                 return name
 
-            # -------- STAGE 1: full --------
+            # STAGE 1: full
             stage_full = orchestrator.stage(BackupType.FULL, "Full initial")
             _record(stage_full)
 
-            # -------- STAGE 2: inc1 --------
+            # STAGE 2: inc1
             DataHelper(self, t_orders).modify(add_rows=[(10, 1000, "inc1")])
             with self.session_scope() as session:
                 session.transaction().execute(
@@ -1630,19 +1700,18 @@ class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
             stage_inc1 = orchestrator.stage(BackupType.INCREMENTAL, "Inc 1")
             _record(stage_inc1)
 
-            # -------- STAGE 3: inc2 --------
+            # STAGE 3: inc2
             DataHelper(self, t_orders).modify(add_rows=[(20, 2000, "inc2")], remove_ids=[1])
             stage_inc2 = orchestrator.stage(BackupType.INCREMENTAL, "Inc 2")
             snap_inc2 = _record(stage_inc2)
 
-            # -------- STAGE 4: inc3 --------
+            # STAGE 4: inc3
             DataHelper(self, t_orders).modify(add_rows=[(30, 3000, "inc3")])
             stage_inc3 = orchestrator.stage(BackupType.INCREMENTAL, "Inc 3")
             _record(stage_inc3)
 
             assert len(recorded_snapshots) >= 2, f"Expected at least full+incrementals, got: {recorded_snapshots}"
 
-            # Export all backups to filesystem; orchestrator.export_all() will set orchestrator._export_dir
             export_dir = orchestrator.export_all()
             exported_items = sorted([d for d in os.listdir(export_dir) if os.path.isdir(os.path.join(export_dir, d))])
             assert exported_items, "No exported items found"
@@ -1655,9 +1724,7 @@ class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
 
             self._remove_tables([t_orders, t_products])
 
-            # Now prepare RestoreBuilder via orchestrator; this will import exported snapshots up to target_ts internally
             restore_builder = orchestrator.restore_to_stage(target_stage_number, auto_remove_tables=False)
-            # Execute restore (this will run _execute_yql("RESTORE `...`;") and — for incremental stages — poll for completion)
             res = restore_builder.execute()
             assert res.get("success", False) is True, f"Restore reported failure: {res}"
 
@@ -1668,38 +1735,24 @@ class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
             assert expected_orders is not None, "Expected orders snapshot rows missing"
             assert expected_products is not None, "Expected products snapshot rows missing"
 
-            # wait_for_table_rows does polling and raises on mismatch
             self.wait_for_table_rows(t_orders, expected_orders, timeout_s=90)
             self.wait_for_table_rows(t_products, expected_products, timeout_s=90)
 
-            # Log original collection presence (informational)
-            if not self.collection_exists(collection_src):
-                logger.info("Original collection %s not present after operations — OK (may be deleted)", collection_src)
-            else:
-                logger.info("Original collection %s still present after operations.", collection_src)
-
-            # Cleanup exported dir
-            try:
-                if os.path.exists(export_dir):
-                    shutil.rmtree(export_dir)
-            except Exception:
-                logger.exception("Failed to cleanup exported directory")
+            if os.path.exists(export_dir):
+                shutil.rmtree(export_dir)
 
 
 class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
     def _apply_acl_changes(self, table_path, role, permission="SELECT"):
-        """Apply ACL modifications to a table via YQL (keeps same helper name as original)."""
         owner_quoted = role.replace('`', '')
         cmd = f"GRANT {permission} ON `{table_path}` TO `{owner_quoted}`;"
         res = self._execute_yql(cmd)
         assert res.exit_code == 0, f"ACL change failed: {getattr(res, 'std_err', None)}"
 
     def _capture_acl(self, table_path: str):
-        """Thin wrapper to the base pretty ACL capture for naming parity in this test."""
         return self._capture_acl_pretty(table_path)
 
     def test_full_cycle_local_backup_restore_with_complex_schema_changes(self):
-        # Table names and paths (kept as constants for clarity)
         t_orders = "orders"
         t_products = "products"
         t_orders_copy = "orders_copy"
@@ -1720,14 +1773,13 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
         with backup_lifecycle(self, collection_src, [full_orders, full_products]) as backup:
             backup.create_collection(incremental_enabled=False)
 
-            # -------- STAGE 1: data change, ACL, add extra table, take full backup ----------
+            # STAGE 1: data change, ACL, add extra table, take full backup
             # Make changes
             data_helper.modify(add_rows=[(10, 100, "stage1")], remove_ids=[2])
 
             # Apply ACL (try owner)
             desc = self.driver.scheme_client.describe_path(full_orders)
             owner_role = getattr(desc, "owner", None) or "root@builtin"
-            # use helper to apply ACL; if it fails test should fail
             self._apply_acl_changes(full_orders, owner_role, "ALL")
 
             # add extra table via helper
@@ -1737,7 +1789,7 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
             # Stage 1: full
             backup.stage(BackupType.FULL, "Initial full after stage1 changes")
 
-            # -------- STAGE 2: more data change, add/drop tables, ALTER, copy, take full backup ----------
+            # STAGE 2: more data change, add/drop tables, ALTER, copy, take full backup
             data_helper.modify(add_rows=[(11, 111, "stage2")], remove_ids=[1])
             extras += self._add_more_tables("extra2", 1)
 
@@ -1755,7 +1807,6 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
             owner_role2 = getattr(desc2, "owner", None) or "root@builtin"
             self._apply_acl_changes(full_orders, owner_role2, "SELECT")
 
-            # copy orders -> orders_copy and create another table
             self._copy_table(t_orders, t_orders_copy)
             with self.session_scope() as session:
                 create_table_with_data(session, other_table)
@@ -1766,7 +1817,7 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
             # Export all backups to filesystem for import/restore tests
             export_dir = backup.export_all()
 
-            # ---------------- RESTORE TESTS ----------------
+            # RESTORE TESTS
 
             # Test A: attempt restore when targets exist -> should fail (use last stage)
             res_fail = backup.restore_to_stage(len(backup.stages), new_collection_name=None, auto_remove_tables=False).should_fail().execute()
@@ -1778,7 +1829,6 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
             rb1 = backup.restore_to_stage(1, auto_remove_tables=False)
             rb1_result = rb1.execute()
             assert rb1_result.get("success", False) is True, f"Restore to stage1 failed: {rb1_result}"
-            # additional verification is done in RestoreBuilder._verify_restored_data when expect provided via orchestrator.restore_to_stage
 
             # Clean tables
             self._remove_tables([full_orders, full_products])
@@ -1802,7 +1852,6 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
                 shutil.rmtree(export_dir)
 
 
-# ================ TEST CLASS ================
 class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(BaseTestBackupInFiles):
     def _apply_acl_changes(self, table_path, role, permission="SELECT"):
         """Apply ACL modifications to a table."""

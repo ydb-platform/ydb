@@ -31,9 +31,6 @@ static TString GetPathFromQueueUrlMap(const NJson::TJsonMap& json) {
 Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
     Y_UNIT_TEST_F(TestGetQueueUrlEmpty, TFixture) {
-        if ("X-Fail") {
-            return;
-        }
         auto json = GetQueueUrl({}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
     }

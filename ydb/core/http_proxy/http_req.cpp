@@ -1060,7 +1060,6 @@ namespace NKikimr::NHttpProxy {
             {
                 switch (ev->GetTypeRewrite()) {
                     HFunc(TEvents::TEvWakeup, HandleTimeout);
-                    HFunc(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult, Handle);
                     HFunc(TEvServerlessProxy::TEvErrorWithIssue, HandleErrorWithIssue);
                     HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
                     HFunc(TEvServerlessProxy::TEvToken, HandleToken);
@@ -1068,17 +1067,6 @@ namespace NKikimr::NHttpProxy {
                         HandleUnexpectedEvent(ev);
                         break;
                 }
-            }
-
-            void SendYdbDriverRequest(const TActorContext& ctx) {
-                Y_ABORT_UNLESS(HttpContext.Driver);
-
-                RequestState = TProcessorBase::TRequestState::StateAuthorization;
-
-                auto request = MakeHolder<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
-                request->DatabasePath = HttpContext.DatabasePath;
-
-                ctx.Send(MakeTenantDiscoveryID(), std::move(request));
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
@@ -1189,23 +1177,6 @@ namespace NKikimr::NHttpProxy {
                          });
             }
 
-            void Handle(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult::TPtr ev,
-                        const TActorContext& ctx) {
-                if (ev->Get()->DatabaseInfo) {
-                    auto& db = ev->Get()->DatabaseInfo;
-                    HttpContext.FolderId = db->FolderId;
-                    HttpContext.CloudId = db->CloudId;
-                    HttpContext.DatabaseId = db->Id;
-                    HttpContext.DiscoveryEndpoint = db->Endpoint;
-                    HttpContext.DatabasePath = db->Path;
-                    ReportInputCounters(ctx);
-                    SendGrpcRequestNoDriver(ctx);
-                    return;
-                }
-
-                ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Message);
-            }
-
             void ReportLatencyCounters(const TActorContext& ctx) {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
@@ -1283,22 +1254,25 @@ namespace NKikimr::NHttpProxy {
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                 }
 
-                if (HttpContext.DatabasePath.empty()) {
-                    auto databasePath = MaybeGetDatabasePathFromSQSTopicQueueUrl(Request);
-                    if (!databasePath.has_value() || databasePath.value().empty()) {
-                        TString errMsg = databasePath.has_value() ? TString{} : ": " + databasePath.error();
-                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing database path" + errMsg, static_cast<size_t>(NYds::EErrorCodes::MISSING_PARAMETER));
-                    }
-                    HttpContext.DatabasePath = databasePath.value();
-                }
                 if (auto queueUrl = MaybeGetQueueUrl(Request)) {
                     auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
                     if (!parsedQueueUrl.has_value()) {
-                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url: " + parsedQueueUrl.error(), static_cast<size_t>(NYds::EErrorCodes::MISSING_PARAMETER));
+                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url: " + parsedQueueUrl.error(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
                     }
                     TopicPath = parsedQueueUrl->TopicPath;
                     ConsumerName = parsedQueueUrl->Consumer;
                     IsFifo = parsedQueueUrl->Fifo;
+
+                    if (HttpContext.DatabasePath.empty()) {
+                        HttpContext.DatabasePath = parsedQueueUrl->Database;
+                    } else {
+                        if (HttpContext.DatabasePath != parsedQueueUrl->Database) {
+                            return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Queue url database  " + parsedQueueUrl->Database + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                        }
+                    }
+                    if (TopicPath.empty()) {
+                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing topic path", static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                    }
                 }
 
                 LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
@@ -1306,18 +1280,13 @@ namespace NKikimr::NHttpProxy {
                               "database '" << HttpContext.DatabasePath << "' " <<
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
-                // Use Signature or no sdk mode - then need to auth anyway
-                if (HttpContext.IamToken.empty() || !HttpContext.Driver) {
-                    // Test mode - no driver and no creds
-                    if (HttpContext.IamToken.empty() && !Signature) {
-                        SendGrpcRequestNoDriver(ctx);
-                    } else {
-                        AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
-                                                     ctx.SelfID, HttpContext, std::move(Signature)));
-                    }
+                if (HttpContext.IamToken.empty() && Signature) {
+                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
+                        ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
-                    SendYdbDriverRequest(ctx);
+                    SendGrpcRequestNoDriver(ctx);
                 }
+
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
 
                 TBase::Become(&TSqsTopicHttpRequestActor::StateWork);

@@ -145,33 +145,6 @@ runs:
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
-    - name: checkout scripts from main
-      shell: bash
-      run: |
-        #скрипты для checkout из main
-        MAIN_SCRIPTS=(
-          ".github/scripts/analytics/upload_tests_results.py"
-          ".github/scripts/analytics/ydb_wrapper.py"
-          ".github/scripts/send_build_stats.py"
-          ".github/scripts/get_build_diff.py"
-          ".github/scripts/get_current_build_size.py"
-          ".github/scripts/get_main_build_size.py"
-        )
-        
-        # Убеждаемся, что main доступен (для shallow clone может отсутствовать)
-        if ! git rev-parse --verify main >/dev/null 2>&1; then
-          git fetch origin main:main --depth=1 2>/dev/null || true
-        fi
-        
-        # Для каждого скрипта: если нет изменений в PR - берем из main
-        for script in "${MAIN_SCRIPTS[@]}"; do
-          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
-            git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script"
-          else
-            chmod +x "$script" && echo "✅ $script (PR version)"
-          fi
-        done
-
     - name: ya build and test
       id: build
       shell: bash
@@ -312,6 +285,31 @@ runs:
              fi
           done
         fi
+
+        #скрипты для checkout из main
+        MAIN_SCRIPTS=(
+          ".github/scripts/analytics/upload_tests_results.py"
+          ".github/scripts/analytics/ydb_wrapper.py"
+          ".github/scripts/send_build_stats.py"
+          ".github/scripts/get_build_diff.py"
+          ".github/scripts/get_current_build_size.py"
+          ".github/scripts/get_main_build_size.py"
+        )
+        
+        # Убеждаемся, что main доступен (для shallow clone может отсутствовать)
+        if ! git rev-parse --verify main >/dev/null 2>&1; then
+          git fetch origin main:main --depth=1 2>/dev/null || true
+        fi
+        
+        # Для каждого скрипта: если нет изменений в PR - берем из main
+        # git checkout main -- "$script" не меняет HEAD, только файлы в рабочей директории
+        for script in "${MAIN_SCRIPTS[@]}"; do
+          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
+            git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script"
+          else
+            chmod +x "$script" && echo "✅ $script (PR version)"
+          fi
+        done
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)

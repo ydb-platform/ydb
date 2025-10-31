@@ -27,7 +27,6 @@ namespace NKikimr::NHttpProxy {
         return NCloud::CreateAccessServiceWithCache(asSettings);
     }
 
-
     NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
     {
         NCloud::TIamTokenServiceSettings tsSettings;
@@ -39,12 +38,12 @@ namespace NKikimr::NHttpProxy {
         return NCloud::CreateIamTokenService(tsSettings);
     }
 
-    class THttpAuthActor : public NActors::TActorBootstrapped<THttpAuthActor> {
+    class THttpAuthActor: public NActors::TActorBootstrapped<THttpAuthActor> {
     public:
         using TBase = NActors::TActorBootstrapped<THttpAuthActor>;
 
         THttpAuthActor(const TActorId sender, THttpRequestContext& context,
-                          THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
+                       THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
             : Sender(sender)
             , Prefix(context.LogPrefix())
             , ServiceAccountId(context.ServiceAccountId)
@@ -75,7 +74,7 @@ namespace NKikimr::NHttpProxy {
                 default:
                     HandleUnexpectedEvent(ev);
                     break;
-                }
+            }
         }
 
         void SendDescribeRequest(const TActorContext& ctx) {
@@ -94,8 +93,7 @@ namespace NKikimr::NHttpProxy {
             if (navigate->ErrorCount) {
                 return ReplyWithError(
                     ctx, NYdb::EStatus::SCHEME_ERROR, TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists",
-                    NYds::EErrorCodes::NOT_FOUND
-                );
+                    NYds::EErrorCodes::NOT_FOUND);
             }
             Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
             if (navigate->ResultSet.front().PQGroupInfo) {
@@ -106,9 +104,15 @@ namespace NKikimr::NHttpProxy {
                 DatabasePath = CanonizePath(description.GetPQTabletConfig().GetYdbDatabasePath());
             }
             for (const auto& attr : navigate->ResultSet.front().Attributes) {
-                if (attr.first == "folder_id") FolderId = attr.second;
-                if (attr.first == "cloud_id") CloudId = attr.second;
-                if (attr.first == "database_id") DatabaseId = attr.second;
+                if (attr.first == "folder_id") {
+                    FolderId = attr.second;
+                }
+                if (attr.first == "cloud_id") {
+                    CloudId = attr.second;
+                }
+                if (attr.first == "database_id") {
+                    DatabaseId = attr.second;
+                }
             }
             SendAuthenticationRequest(ctx);
         }
@@ -118,7 +122,6 @@ namespace NKikimr::NHttpProxy {
         }
 
         void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-
             if (ev->Get()->Error) {
                 return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
             }
@@ -134,8 +137,7 @@ namespace NKikimr::NHttpProxy {
             if (!Signature.Get() && IamToken.empty()) {
                 return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
                                       "Neither Credentials nor IAM token was provided",
-                                      NYds::EErrorCodes::INCOMPLETE_SIGNATURE
-                );
+                                      NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
             }
             if (Signature) {
                 bool found = false;
@@ -147,27 +149,22 @@ namespace NKikimr::NHttpProxy {
                 }
                 if (!found) {
                     return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
-                        TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() <<
-                        " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
-                        NYds::EErrorCodes::INCOMPLETE_SIGNATURE
-                    );
+                                          TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() << " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
+                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
                 }
 
                 if (!TInstant::TryParseIso8601(Signature->GetSigningTimestamp(), signedAt)) {
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST,
                                           "Failed to parse Signature timestamp",
-                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE
-                    );
+                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
                 }
 
                 if (Signature->GetAccessKeyId().empty()) {
                     return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
                                           "Access key id should be provided",
-                                          NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN
-                    );
+                                          NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN);
                 }
             }
-
 
             if (Authorize) {
                 auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
@@ -180,19 +177,15 @@ namespace NKikimr::NHttpProxy {
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-                        .Signature = std::move(signature),
-                        .Database = DatabasePath,
-                        .PeerName = "",
-                        .Entries = entries
-                    }));
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Signature = std::move(signature),
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = "",
+                                                                                                     .Entries = entries}));
                 } else {
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-                        .Ticket = IamToken,
-                        .Database = DatabasePath,
-                        .PeerName = "",
-                        .Entries = entries
-                    }));
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = "",
+                                                                                                     .Entries = entries}));
                 }
                 return;
             }
@@ -228,17 +221,14 @@ namespace NKikimr::NHttpProxy {
                                         const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " <<
-                              "can not authenticate service account user: " << ev->Get()->Status.Msg);
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "can not authenticate service account user: " << ev->Get()->Status.Msg);
                 if (RetryCounter.HasAttemps()) {
                     SendAuthenticationRequest(ctx);
                     return;
                 }
-                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status)
-                                                                    ? NYdb::EStatus::UNAVAILABLE
-                                                                    : NYdb::EStatus::UNAUTHORIZED,
-                                         TStringBuilder() << "requestid " << RequestId
-                                         << "; can not authenticate service account user");
+                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status) ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                                      TStringBuilder() << "requestid " << RequestId
+                                                       << "; can not authenticate service account user");
 
             } else if (!ev->Get()->Response.subject().has_service_account()) {
                 return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
@@ -270,17 +260,14 @@ namespace NKikimr::NHttpProxy {
                                           const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " <<
-                              "IAM token issue error: " << ev->Get()->Status.Msg);
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " << "IAM token issue error: " << ev->Get()->Status.Msg);
 
                 if (RetryCounter.HasAttemps()) {
                     SendIamTokenRequest(ctx);
                     return;
                 }
-                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status)
-                                                                    ? NYdb::EStatus::UNAVAILABLE
-                                                                    : NYdb::EStatus::UNAUTHORIZED,
-                                            TStringBuilder() << "IAM token issue error: " << ev->Get()->Status.Msg);
+                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status) ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED,
+                                      TStringBuilder() << "IAM token issue error: " << ev->Get()->Status.Msg);
             }
             RetryCounter.Void();
 
@@ -326,7 +313,6 @@ namespace NKikimr::NHttpProxy {
         TString DatabasePath;
         TString StreamName;
     };
-
 
     NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature)
     {

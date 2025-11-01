@@ -13,8 +13,6 @@ namespace NYql::NDq {
     public:
         using TPtr = std::unique_ptr<TGenericCredentialsProvider>;
 
-        TGenericCredentialsProvider() = default; // No auth required
-
         TGenericCredentialsProvider(
             const TString& structuredToken,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);

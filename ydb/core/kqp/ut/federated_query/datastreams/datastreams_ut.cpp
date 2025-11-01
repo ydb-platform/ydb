@@ -658,7 +658,7 @@ public:
 
         auto listSplitsBuilder = mockClient->ExpectListSplits();
         auto fillListSplitExpectation = listSplitsBuilder
-            .ValidateArgs(settings.ValidateListSplitsArgs)
+            .ValidateArgs(settings.ValidateListSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
             .Select()
                 .DataSourceInstance(GetMockConnectorSourceInstance())
                 .Table(settings.TableName)
@@ -689,7 +689,8 @@ public:
         {
             auto columnsBuilder = readSplitsBuilder
                 .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
-                .ValidateArgs(settings.ValidateReadSplitsArgs)
+                .DataSourceInstance(GetMockConnectorSourceInstance())
+                .ValidateArgs(settings.ValidateReadSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()

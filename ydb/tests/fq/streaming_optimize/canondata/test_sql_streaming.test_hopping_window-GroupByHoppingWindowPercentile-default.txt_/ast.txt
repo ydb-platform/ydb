@@ -81,7 +81,7 @@
       (return (Just '($84 $85)))
     )))))
     (return (AsStruct '('Percentile0 (Nth $80 '0)) '('Percentile1 (Nth $80 '1)) '('"group0" $79)))
-  ))) '1))
+  ))) '1 '"group0"))
   (return (FlatMap (ExtractMembers $42 '('Percentile0 'Percentile1)) (lambda '($86) (block '(
     (let $87 (ResourceType '"Yson2.Node"))
     (let $88 '($87 '"" '1))

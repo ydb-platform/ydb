@@ -14,6 +14,8 @@ PEERDIR(
     ydb/core/protos
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/table
+    ydb/library/aclib/protos
+    ydb/core/grpc_services/local_rpc
 )
 
 YQL_LAST_ABI_VERSION()

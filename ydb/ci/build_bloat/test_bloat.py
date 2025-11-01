@@ -54,9 +54,10 @@ def generate(junit_path, output_dir):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="""A tool for analyzing tests time\n
+        description="""A tool for analyzing tests time
 
-To use it run ya make with '--junit <path>' and junit file will be generated"""
+To use it run ya make with '--build-results-report <path>' and convert the report to junit format,
+or pass a junit.xml file generated from the report"""
     )
     parser.add_argument(
         "-j",

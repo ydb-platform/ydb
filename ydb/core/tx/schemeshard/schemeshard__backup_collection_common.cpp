@@ -132,7 +132,12 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
 
     // Add index backup metadata directories if incremental backup is enabled
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
-    bool omitIndexes = incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes();
+    
+    // Check OmitIndexes from two possible locations:
+    // 1. Top-level OmitIndexes field (for full backups)
+    // 2. IncrementalBackupConfig.OmitIndexes (for incremental backups)
+    bool omitIndexes = bc->Description.GetOmitIndexes() || 
+                       (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
     
     if (incrBackupEnabled && !omitIndexes) {
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {

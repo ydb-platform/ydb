@@ -1101,7 +1101,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2001);
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(

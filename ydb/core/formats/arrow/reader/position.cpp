@@ -97,8 +97,8 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(const bool needData, const bool deepCopy) const {
-    return TRWSortableBatchPosition(Position, RecordsCount, ReverseSort, deepCopy ? Sorting->BuildCopy(Position) : Sorting,
-        (needData && Data) ? (deepCopy ? Data->BuildCopy(Position) : Data) : nullptr);
+    return TRWSortableBatchPosition(Position, RecordsCount, ReverseSort, deepCopy ? Sorting->BuildCopy() : Sorting,
+        (needData && Data) ? (deepCopy ? Data->BuildCopy() : Data) : nullptr);
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(

@@ -37,6 +37,10 @@ items:
   href: limits-ydb.md
 - name: Многоверсионное управление конкурентным доступом (MVCC)
   href: mvcc.md
+- name: Резервное копирование и восстановление
+  href: backup.md
+- name: Коллекции резервных копий
+  href: backup-collections.md
 - name: Асинхронная репликация
   href: async-replication.md
 - name: Режим bridge

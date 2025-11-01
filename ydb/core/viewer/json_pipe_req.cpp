@@ -803,6 +803,10 @@ void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
     entry.Path = SplitPath(path);
 
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -811,6 +815,10 @@ void TViewerPipeClient::RequestSchemeCacheNavigate(const TPathId& pathId) {
     entry.TableId.PathId = pathId;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -822,6 +830,10 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path", path);
@@ -838,6 +850,10 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path_id", pathId.ToString());
@@ -868,8 +884,10 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpList;
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
 
-    if (!Event->Get()->UserToken.empty())
-         request->UserToken = new NACLib::TUserToken(Event->Get()->UserToken);
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
 
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
             MakeSchemeCacheID(),

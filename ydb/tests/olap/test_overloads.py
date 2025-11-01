@@ -4,6 +4,8 @@ import pytest
 import logging
 import yatest.common
 import ydb
+import random
+import requests
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -103,6 +105,20 @@ class TestLogScenario(object):
         cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
         cls.ydb_client.wait_connection(timeout=60)
 
+    @classmethod
+    def _setup_ydb_rp(cls):
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        config = KikimrConfigGenerator(
+            extra_feature_flags={"enable_olap_reject_probability": True},
+        )
+        cls.cluster = KiKiMR(config)
+        cls.cluster.start()
+        node = cls.cluster.nodes[1]
+        cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
+        cls.ydb_client.wait_connection(timeout=60)
+        cls.mon_url = f"http://{node.host}:{node.mon_port}"
+
     def get_row_count(self) -> int:
         return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
 
@@ -156,6 +172,7 @@ class TestLogScenario(object):
     @pytest.mark.parametrize('writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit', [(1, 10000), (2, 10000), (1000, 1), (1000, 2), (1, 1), (2, 2)])
     def test_overloads_workload(self, writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit):
         self._setup_ydb(writing_in_flight_requests_count_limit, writing_in_flight_request_bytes_limit)
+
         wait_time: int = 60
         self.table_name: str = f"log_{writing_in_flight_requests_count_limit}_{writing_in_flight_request_bytes_limit}"
 
@@ -191,3 +208,63 @@ class TestLogScenario(object):
 
         logging.info(f"Count rows after insert {self.get_row_count()}")
         assert self.get_row_count() != 0
+
+    def tune_icb(self):
+        response = requests.post(
+            self.mon_url + "/actors/icb",
+            data="TabletControls.MaxTxInFly=0"
+        )
+        response.raise_for_status()
+
+    def test_overloads_reject_probability(self):
+        self._setup_ydb_rp()
+        self.tune_icb()
+
+        table_path = f"{self.ydb_client.database}/table_for_test_overloads_reject_probability"
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                id Uint64 NOT NULL,
+                v1 Int64,
+                v2 Int64,
+                PRIMARY KEY(id),
+            )
+            WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = 1,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
+            """
+        )
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("id", ydb.PrimitiveType.Uint64)
+        column_types.add_column("v1", ydb.PrimitiveType.Int64)
+        column_types.add_column("v2", ydb.PrimitiveType.Int64)
+
+        rows_count = 1000
+
+        data = [
+            {
+                "id": i,
+                "v1": 1,
+                "v2": -1,
+            }
+            for i in range(rows_count)
+        ]
+
+        self.ydb_client.bulk_upsert(table_path, column_types, data)
+
+        futures = []
+
+        for _ in range(19):
+            lb = random.randint(0, rows_count)
+            futures.append(self.ydb_client.query_async(f"UPDATE `{table_path}` SET v1 = v1 + 1, v2 = v2 - 1 WHERE id > {lb};"))
+
+        for future in futures:
+            future.result()
+
+        monitor = self.cluster.monitors[0].fetch()
+        _, rejectProbabilityCount = monitor.get_by_name('Deriviative/Overload/RejectProbability/Count')[0]
+
+        assert rejectProbabilityCount > 0

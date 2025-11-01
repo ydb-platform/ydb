@@ -23,6 +23,9 @@ class YdbClient:
     def query(self, statement):
         return self.session_pool.execute_with_retries(statement)
 
+    def query_async(self, statement, request_settings=None):
+        return self.session_pool.execute_with_retries_async(query=statement, settings=request_settings)
+
     def bulk_upsert(self, table_path, column_types: ydb.BulkUpsertColumns, data_slice):
         self.driver.table_client.bulk_upsert(
             table_path,

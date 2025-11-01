@@ -499,6 +499,7 @@ class TExecutor
 
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
+    TControlWrapper MaxTxInFly;
 
     TActorId BackupWriter;
 

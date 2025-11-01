@@ -46,6 +46,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::ShardWritesSizeInFly:
             Counters.OnWriteOverloadShardWritesSize(writeSize);
             break;
+        case EOverloadStatus::RejectProbability:
+            Counters.OnWriteOverloadRejectProbability(writeSize);
+            break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
     }
@@ -344,7 +347,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto& record = ev->Get()->Record;
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
-
 
     std::optional<TDuration> writeTimeout;
     if (record.HasTimeoutSeconds()) {

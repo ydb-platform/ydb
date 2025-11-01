@@ -18,7 +18,8 @@ static constexpr ui32 ColumnTableRowsNumber = 1000;
 
 class TTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, bool useRealThreads = false);
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 1, bool useRealThreads = false,
+        std::function<void(Tests::TServerSettings&)> modifySettings = [](Tests::TServerSettings&) {});
     ~TTestEnv();
 
     Tests::TServer& GetServer() const {
@@ -88,7 +89,8 @@ TDatabaseInfo CreateServerlessDatabaseColumnTables(TTestEnv& env, ui8 tableCount
 
 TPathId ResolvePathId(TTestActorRuntime& runtime, const TString& path, TPathId* domainKey = nullptr, ui64* saTabletId = nullptr);
 
-
+NKikimrScheme::TEvDescribeSchemeResult DescribeTable(
+    TTestActorRuntime& runtime, TActorId sender, const TString& path);
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime, TActorId sender, const TString &path);
 TVector<ui64> GetColumnTableShards(TTestActorRuntime& runtime, TActorId sender,const TString &path);
 
@@ -118,6 +120,12 @@ void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyze
 void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus);
 
 void WaitForSavedStatistics(TTestActorRuntime& runtime, const TPathId& pathId);
+
+ui64 GetRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId);
+void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount);
+void WaitForRowCount(
+    TTestActorRuntime& runtime, ui32 nodeIndex,
+    TPathId pathId, size_t expectedRowCount, size_t timeoutSec = 130);
 
 } // namespace NStat
 } // namespace NKikimr

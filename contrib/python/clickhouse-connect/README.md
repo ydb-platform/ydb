@@ -2,11 +2,12 @@
 
 A high performance core database driver for connecting ClickHouse to Python, Pandas, and Superset
 
-* Pandas DataFrames
+* Pandas DataFrames (numpy and arrow-backed)
 * Numpy Arrays
 * PyArrow Tables
+* Polars DataFrames
 * Superset Connector
-* SQLAlchemy 1.3 and 1.4 (limited feature set)
+* SQLAlchemy Core (select, joins, lightweight deletes; limited feature set)
 
 ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum compatibility.
 
@@ -16,7 +17,7 @@ ClickHouse Connect currently uses the ClickHouse HTTP interface for maximum comp
 pip install clickhouse-connect
 ```
 
-ClickHouse Connect requires Python 3.8 or higher.
+ClickHouse Connect requires Python 3.9 or higher. We officially test against Python 3.9 through 3.13.
 
 ### Superset Connectivity
 
@@ -30,9 +31,17 @@ When creating a Superset Data Source, either use the provided connection dialog,
 
 ### SQLAlchemy Implementation
 
-ClickHouse Connect incorporates a minimal SQLAlchemy implementation (without any ORM features) for compatibility with
-Superset. It has only been tested against SQLAlchemy versions 1.3.x and 1.4.x, and is unlikely to work with more
-complex SQLAlchemy applications.
+ClickHouse Connect includes a lightweight SQLAlchemy dialect implementation focused on compatibility with **Superset**
+and **SQLAlchemy Core**.
+
+Supported features include:
+- Basic query execution via SQLAlchemy Core
+- `SELECT` queries with `JOIN`s
+- Lightweight `DELETE` statements
+
+The implementation does not include ORM support and is not intended as a full SQLAlchemy dialect. While it can support
+a range of Core-based applications beyond Superset, it may not be suitable for more complex SQLAlchemy applications
+that rely on full ORM or advanced dialect functionality.
 
 ### Asyncio Support
 
@@ -42,4 +51,4 @@ See the [run_async example](./examples/run_async.py) for more details.
 ### Complete Documentation
 
 The documentation for ClickHouse Connect has moved to
-[ClickHouse Docs](https://clickhouse.com/docs/integrations/python) 
+[ClickHouse Docs](https://clickhouse.com/docs/integrations/python)

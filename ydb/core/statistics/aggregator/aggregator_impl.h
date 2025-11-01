@@ -33,7 +33,7 @@ public:
         return NKikimrServices::TActivity::STATISTICS_AGGREGATOR;
     }
 
-    TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info, bool forTests);
+    TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info);
 
 private:
     using TSSId = ui64;
@@ -55,7 +55,7 @@ private:
     struct TTxResolve;
     struct TTxDatashardScanResponse;
     struct TTxFinishTraversal;
-    struct TTxScheduleTrasersal;
+    struct TTxScheduleTraversal;
     struct TTxAggregateStatisticsResponse;
     struct TTxResponseTabletDistribution;
     struct TTxAckTimeout;
@@ -130,7 +130,7 @@ private:
     void PropagateStatistics();
     void PropagateFastStatistics();
     size_t PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
-        size_t lastSSIndex, bool useSizeLimit);
+        size_t lastSSIndex, bool useSizeLimit, ui64 cookie);
 
     void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
@@ -242,11 +242,18 @@ private:
     static constexpr size_t StatsOptimizeFirstNodesCount = 3; // optimize first nodes - fast propagation
     static constexpr size_t StatsSizeLimitBytes = 2 << 20; // limit for stats size in one message
 
-    TDuration PropagateInterval;
-    TDuration PropagateTimeout;
+    TDuration PropagateIntervalDedicated;
+    TDuration PropagateIntervalServerless;
+    TDuration PropagateInterval = TDuration::Seconds(5);
+
     static constexpr TDuration FastCheckInterval = TDuration::MilliSeconds(50);
 
-    std::unordered_map<TSSId, TString> BaseStatistics; // schemeshard id -> serialized stats for all paths
+    // Serialized stats for all paths from a single SchemeShard.
+    struct TSerializedBaseStats {
+        std::shared_ptr<TString> Committed; // Value that is safely persisted in local DB. Can be nullptr.
+        std::shared_ptr<TString> Latest; // Value from the latest update.
+    };
+    std::unordered_map<TSSId, TSerializedBaseStats> BaseStatistics;
 
     std::unordered_map<TSSId, size_t> SchemeShards; // all connected schemeshards
     std::unordered_map<TActorId, TSSId> SchemeShardPipes; // schemeshard pipe servers
@@ -261,6 +268,8 @@ private:
     std::unordered_set<TNodeId> FastNodes; // nodes for fast propagation
     std::unordered_set<TSSId> FastSchemeShards; // schemeshards for fast propagation
 
+    ui64 CurPropagationSeq = 0;
+    static constexpr ui64 InvalidPropagationSeq = -1; // used as request cookie for fast propagation requests
     bool PropagationInFlight = false;
     std::vector<TNodeId> PropagationNodes;
     std::vector<TSSId> PropagationSchemeShards;
@@ -340,6 +349,7 @@ private:
     TString GetNavigateTypeString() const;
 
     TString NavigateAnalyzeOperationId;
+    TString NavigateDatabase;
     TPathId NavigatePathId;
 
     // alternate between forced and scheduled traversals
@@ -349,6 +359,7 @@ private: // stored in local db
 
     TString ForceTraversalOperationId;
 
+    TString TraversalDatabase;
     TPathId TraversalPathId;
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
@@ -395,6 +406,7 @@ private: // stored in local db
     };
     struct TForceTraversalOperation {
         TString OperationId;
+        TString DatabaseName;
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;

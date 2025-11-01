@@ -37,6 +37,32 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         return !fetchToken.empty();
     }
 
+    void WaitRemoveScriptResults(TQueryClient& queryClient, const std::string& executionId) {
+        const TString countResultsQuery = fmt::format(R"(
+                SELECT COUNT(*)
+                FROM `.metadata/result_sets`
+                WHERE database = "/Root" AND execution_id = "{execution_id}" AND expire_at > CurrentUtcTimestamp();
+            )", "execution_id"_a=executionId);
+
+        const TInstant forgetChecksStart = TInstant::Now();
+        while (TInstant::Now() - forgetChecksStart <= TDuration::Minutes(1)) {
+            const auto result = queryClient.ExecuteQuery(countResultsQuery, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto resultSet = result.GetResultSetParser(0);
+            resultSet.TryNextRow();
+            const ui64 numberRows = resultSet.ColumnParser(0).GetUint64();
+            if (!numberRows) {
+                Cerr << "Forget duration: " << TInstant::Now() - forgetChecksStart << "\n";
+                return;
+            }
+
+            Cerr << "Rows remains: " << numberRows << ", elapsed time: " << TInstant::Now() - forgetChecksStart << "\n";
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_FAIL("Results removing timeout");
+    }
+
     void ExecuteSelectQuery(const TString& bucket, size_t fileSize, size_t numberRows) {
         using namespace fmt::literals;
 
@@ -54,7 +80,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         const TString externalDataSourceName = "/Root/external_data_source";
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, appConfig, NYql::NDq::CreateS3ActorsFactory(), {});
 
         auto queryClient = kikimr->GetQueryClient();
@@ -138,29 +164,7 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
         // Test forget operation
         auto status = operationClient.Forget(scriptExecutionOperation.Id()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
-
-        const TString countResultsQuery = fmt::format(R"(
-                SELECT COUNT(*)
-                FROM `.metadata/result_sets`
-                WHERE execution_id = "{execution_id}" AND expire_at > CurrentUtcTimestamp();
-            )", "execution_id"_a=scriptExecutionOperation.Metadata().ExecutionId);
-
-        const TInstant forgetChecksStart = TInstant::Now();
-        while (TInstant::Now() - forgetChecksStart <= TDuration::Minutes(1)) {
-            const auto result = queryClient.ExecuteQuery(countResultsQuery, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-
-            auto resultSet = result.GetResultSetParser(0);
-            resultSet.TryNextRow();
-            const ui64 numberRows = resultSet.ColumnParser(0).GetUint64();
-            if (!numberRows) {
-                return;
-            }
-
-            Cerr << "Rows remains: " << numberRows << ", elapsed time: " << TInstant::Now() - forgetChecksStart << "\n";
-            Sleep(TDuration::Seconds(1));
-        }
-        UNIT_FAIL("Results removing timeout");
+        WaitRemoveScriptResults(queryClient, scriptExecutionOperation.Metadata().ExecutionId);
     }
 
     Y_UNIT_TEST(ExecuteScriptWithLargeStrings) {
@@ -173,6 +177,45 @@ Y_UNIT_TEST_SUITE(KqpScriptExecResults) {
 
     Y_UNIT_TEST(ExecuteScriptWithThinFile) {
         ExecuteSelectQuery("test_bucket_execute_script_with_large_file", 5_MB, 500000);
+    }
+
+    Y_UNIT_TEST_TWIN(CleanupMultipleResultSets, WithResultsMeta) {
+        auto kikimr = NFederatedQueryTest::MakeKikimrRunner(true, nullptr, nullptr, std::nullopt, NYql::NDq::CreateS3ActorsFactory());
+        auto db = kikimr->GetQueryClient();
+
+        const TString query = R"(
+            SELECT * FROM AS_TABLE(ListReplicate(<|value: 42|>, 10000));
+            SELECT * FROM AS_TABLE(ListReplicate(<|value: 84|>, 13));
+            SELECT * FROM AS_TABLE(ListReplicate(<|value: 21|>, 1));
+            SELECT * FROM AS_TABLE(ListReplicate(<|value: 7|>, 42));
+            SELECT * FROM AS_TABLE(ListReplicate(<|value: 3|>, 500));)";
+
+        const auto scriptOp = db.ExecuteScript(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptOp.Status().GetStatus(), EStatus::SUCCESS, scriptOp.Status().GetIssues().ToOneLineString());
+        const auto resOp = WaitScriptExecutionOperation(scriptOp.Id(), kikimr->GetDriver());
+        UNIT_ASSERT_VALUES_EQUAL_C(resOp.Status().GetStatus(), EStatus::SUCCESS, resOp.Status().GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(resOp.Metadata().ExecStatus, EExecStatus::Completed);
+
+        if constexpr (!WithResultsMeta) {
+            const TString query = R"(
+                DELETE FROM `.metadata/script_executions`;
+                DELETE FROM `.metadata/script_execution_leases`;)";
+
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        NOperation::TOperationClient operationClient(kikimr->GetDriver());
+        const auto status = operationClient.Forget(resOp.Id()).ExtractValueSync();
+
+        if constexpr (WithResultsMeta) {
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToOneLineString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::NOT_FOUND, status.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "No such execution");
+        }
+
+        WaitRemoveScriptResults(db, resOp.Metadata().ExecutionId);
     }
 }
 

@@ -42,6 +42,11 @@ struct TAuthData {
     TString Database;
 };
 
+enum ENavigateRequestState : ui32 {
+    DESCRIBING_DATABASE = 0,
+    RESOLVING_DOMAIN_KEY = 1
+};
+
 public:
     TKafkaSaslAuthActor(const TContext::TPtr context, const ui64 correlationId, NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, const TMessagePtr<TSaslAuthenticateRequestData>& message)
         : Context(context)
@@ -74,6 +79,7 @@ private:
     void SendDescribeRequest(const NActors::TActorContext& ctx);
     bool TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& authData, const NActors::TActorContext& ctx);
     void SendResponseAndDie(EKafkaErrors errorCode, const TString& errorMessage, const TString& details, const NActors::TActorContext& ctx);
+    void GetPathByPathId(const TPathId& pathId, const TActorContext& ctx);
 
 private:
     const TContext::TPtr Context;
@@ -93,7 +99,10 @@ private:
     TString ResourcePath;
     TString CloudId;
     TString KafkaApiFlag;
+    TString ResourseDatabasePath;
     bool IsServerless = false;
+
+    ENavigateRequestState RequestState;
 };
 
 } // NKafka

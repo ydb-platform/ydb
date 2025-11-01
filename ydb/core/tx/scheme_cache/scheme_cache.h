@@ -4,7 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -69,12 +69,12 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     {}
 
     explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
-        : DomainKey(GetDomainKey(descr.GetDomainKey()))
+        : DomainKey(TPathId::FromDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
     {
         if (descr.HasResourcesDomainKey()) {
-            ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
+            ResourcesDomainKey = TPathId::FromDomainKey(descr.GetResourcesDomainKey());
         } else {
             ResourcesDomainKey = DomainKey;
         }
@@ -129,6 +129,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         return DomainKey != ResourcesDomainKey;
     }
 
+    inline TPathId GetResourcesDomainKey() {
+        return ResourcesDomainKey;
+    }
+
     TPathId DomainKey;
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
@@ -140,11 +144,6 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
 
     TString ToString() const;
 
-private:
-    inline static TPathId GetDomainKey(const NKikimrSubDomains::TDomainKey& protoKey) {
-        return TPathId(protoKey.GetSchemeShard(), protoKey.GetPathId());
-    }
-
 }; // TDomainInfo
 
 enum class ETableKind {
@@ -153,6 +152,7 @@ enum class ETableKind {
     KindSyncIndexTable = 2,
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
+    KindFulltextIndexTable = 5,
 };
 
 struct TSchemeCacheNavigate {
@@ -203,6 +203,8 @@ struct TSchemeCacheNavigate {
         KindBackupCollection = 23,
         KindTransfer = 24,
         KindSysView = 25,
+        KindSecret = 26,
+        KindStreamingQuery = 27,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -329,6 +331,16 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TSysViewDescription Description;
     };
 
+    struct TSecretInfo : public TAtomicRefCount<TSecretInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TSecretDescription Description;
+    };
+
+    struct TStreamingQueryInfo : public TAtomicRefCount<TStreamingQueryInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TStreamingQueryDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -385,6 +397,8 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
         TIntrusiveConstPtr<TBackupCollectionInfo> BackupCollectionInfo;
         TIntrusiveConstPtr<TSysViewInfo> SysViewInfo;
+        TIntrusiveConstPtr<TSecretInfo> SecretInfo;
+        TIntrusiveConstPtr<TStreamingQueryInfo> StreamingQueryInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

@@ -25,7 +25,7 @@ enum class TYtTableIntent: ui32 {
     View        = 1 << 1, // Read via view
     Override    = 1 << 2,
     Append      = 1 << 3,
-    Create      = 1 << 4, // Reserved. Not implemented yet
+    Create      = 1 << 4,
     Drop        = 1 << 5,
     Flush       = 1 << 6, // Untransactional write
 };
@@ -38,11 +38,11 @@ inline bool HasReadIntents(TYtTableIntents intents) {
 }
 
 inline bool HasModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create);
 }
 
 inline bool HasExclusiveModifyIntents(TYtTableIntents intents) {
-    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush);
+    return intents & (TYtTableIntent::Override | TYtTableIntent::Drop | TYtTableIntent::Flush | TYtTableIntent::Create);
 }
 
 struct TYtViewDescription {
@@ -53,7 +53,7 @@ struct TYtViewDescription {
 
     bool Fill(const TString& provider, const TString& cluster, const TString& sql, ui16 syntaxVersion,
         const TString& viewId, const TQContext& qContext, TExprContext& ctx,
-        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider, 
+        IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
         bool enableViewIsolation, IUdfResolver::TPtr udfResolver);
     void CleanupCompiledSQL();
 };

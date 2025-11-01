@@ -9,6 +9,10 @@ LICENSE(
     BSL-1.0 AND
     CC0-1.0 AND
     JSON AND
+
+
+
+
     MIT AND
     NCSA AND
     Protobuf-License AND
@@ -53,7 +57,6 @@ ADDINCL(
     contrib/libs/rapidjson/include
     contrib/libs/utf8proc
     contrib/libs/zstd/include
-    contrib/libs/xxhash
 )
 
 NO_COMPILER_WARNINGS()
@@ -349,4 +352,10 @@ SRCS(
     cpp/src/parquet/xxhasher.cc
 )
 
+
+IF (SANITIZER_TYPE == "memory")
+    NO_OPTIMIZE()
+ENDIF()
+
 END()
+

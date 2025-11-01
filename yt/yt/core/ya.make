@@ -9,6 +9,10 @@ IF (ARCH_X86_64)
     CFLAGS(-mpclmul)
 ENDIF()
 
+IF (YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE)
+    CXXFLAGS(-DYT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE)
+ENDIF()
+
 NO_LTO()
 
 SRCS(
@@ -113,6 +117,7 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
+    misc/backtrace.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp

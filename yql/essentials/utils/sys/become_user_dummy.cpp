@@ -22,5 +22,5 @@ void SendSignalOnParentThreadExit(int signo)
     Y_UNUSED(signo);
 }
 
-}
+} // namespace NYql
 #endif

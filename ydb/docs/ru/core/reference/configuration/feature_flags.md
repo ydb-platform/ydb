@@ -14,7 +14,6 @@ feature_flags:
 |---------------------------| ----------------------------------------------------|
 | `enable_vector_index`                                    | [Векторный индекс](../../dev/vector-indexes.md) для приближённого векторного поиска |
 | `enable_batch_updates`                                   | Поддержка запросов `BATCH UPDATE` и `BATCH DELETE` |
-| `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
@@ -24,3 +23,8 @@ feature_flags:
 | `enable_strict_acl_check`                                | Запрет на выдачу прав несуществующим пользователям и на удаление пользователей, которым выданы права |
 | `enable_strict_user_management`                          | Строгие правила администрирования локальных пользователей (т.е. администрировать локальных пользователей может только администратор кластера или базы данных)|
 | `enable_database_admin`                                  | Добавление роли администратора базы данных |
+| `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
+| `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
+| `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
+| `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
+

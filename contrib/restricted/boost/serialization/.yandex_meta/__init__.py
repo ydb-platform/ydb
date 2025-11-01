@@ -14,7 +14,7 @@ def post_install(self):
 boost_serialization = NixSourceProject(
     nixattr="boost_serialization",
     arcdir=boost.make_arcdir("serialization"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src",

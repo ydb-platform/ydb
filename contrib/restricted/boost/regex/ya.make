@@ -6,9 +6,9 @@ LICENSE(BSL-1.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.88.0)
+VERSION(1.89.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/regex/archive/boost-1.88.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/regex/archive/boost-1.89.0.tar.gz)
 
 PEERDIR(
     contrib/libs/icu
@@ -46,9 +46,6 @@ ENDIF()
 
 SRCS(
     src/posix_api.cpp
-    src/regex.cpp
-    src/regex_debug.cpp
-    src/static_mutex.cpp
     src/wide_posix_api.cpp
 )
 

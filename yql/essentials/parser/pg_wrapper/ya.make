@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 PROVIDES(
     yql_pg_runtime
 )
@@ -162,6 +164,10 @@ FILES(
     source.patch
     vars.txt
     verify.sh
+)
+
+SUPPRESSIONS(
+    ubsan.supp
 )
 
 END()

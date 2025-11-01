@@ -14,8 +14,10 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     bool supportRtmrMode,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
     const NPq::NProto::StreamingDisposition& disposition,
-    const std::vector<std::pair<TString, TString>>& taskSensorLabels) {
-    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels] (
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels,
+    const std::vector<ui64>& nodeIds,
+    bool useActorSystemThreadsInTopicClient) {
+    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds, useActorSystemThreadsInTopicClient] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -37,11 +39,13 @@ TDataProviderInitializer GetPqDataProviderInitializer(
 
             auto state = MakeIntrusive<TPqState>(sessionId);
             state->SupportRtmrMode = supportRtmrMode;
+            state->UseActorSystemThreadsInTopicClient = useActorSystemThreadsInTopicClient;
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
             state->Disposition = disposition;
             state->TaskSensorLabels = taskSensorLabels;
+            state->NodeIds = nodeIds;
             if (gatewaysConfig) {
                 state->Configuration->Init(gatewaysConfig->GetPq(), typeCtx, dbResolver, state->DatabaseIds);
             }

@@ -19,3 +19,4 @@ YQL_UDF_CONTRIB(hyperloglog_udf)
 RECURSE_FOR_TESTS(
     test
 )
+

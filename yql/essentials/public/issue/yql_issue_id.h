@@ -14,9 +14,9 @@
 #include <util/string/subst.h>
 
 #ifdef _win_
-#ifdef GetMessage
-#undef GetMessage
-#endif
+    #ifdef GetMessage
+        #undef GetMessage
+    #endif
 #endif
 
 namespace NYql {
@@ -29,7 +29,7 @@ const TIssueCode UNEXPECTED_ERROR = 1;
 inline TString SeverityToString(ESeverity severity)
 {
     auto ret = NYql::TSeverityIds::ESeverityId_Name(severity);
-    return ret.empty() ? "Unknown" : to_title(ret.substr(2)); //remove prefix "S_"
+    return ret.empty() ? "Unknown" : to_title(ret.substr(2)); // remove prefix "S_"
 }
 
 template <typename T>
@@ -43,7 +43,7 @@ inline TString IssueCodeToString(TIssueCode id) {
     }
 }
 
-template<typename TProto, const char* ResourceName>
+template <typename TProto, const char* ResourceName>
 class TIssueId {
     TProto ProtoIssues_;
     THashMap<TIssueCode, NYql::TSeverityIds::ESeverityId> IssuesMap_;
@@ -56,7 +56,7 @@ class TIssueId {
     }
 
     bool CheckSeverityNameFormat(const TString& name) const {
-        if (name.size() > 2 && name.substr(0,2) == "S_") {
+        if (name.size() > 2 && name.substr(0, 2) == "S_") {
             return true;
         }
         return false;
@@ -66,14 +66,14 @@ public:
     ESeverity GetSeverity(TIssueCode id) const {
         auto it = IssuesMap_.find(id);
         Y_ENSURE(it != IssuesMap_.end(), "Unknown issue id: "
-            << id << "(" << IssueCodeToString<TProto>(id) << ")");
+                                             << id << "(" << IssueCodeToString<TProto>(id) << ")");
         return it->second;
     }
 
     TString GetMessage(TIssueCode id) const {
         auto it = IssuesFormatMap_.find(id);
         Y_ENSURE(it != IssuesFormatMap_.end(), "Unknown issue id: "
-            << id << "(" << IssueCodeToString<TProto>(id) << ")");
+                                                   << id << "(" << IssueCodeToString<TProto>(id) << ")");
         return it->second;
     }
 
@@ -87,14 +87,14 @@ public:
         for (int i = 0; i < sDesc->value_count(); i++) {
             const auto& name = sDesc->value(i)->name();
             Y_ENSURE(CheckSeverityNameFormat(name),
-                "Wrong severity name: " << name << ". Severity must starts with \"S_\" prefix");
+                     "Wrong severity name: " << name << ". Severity must starts with \"S_\" prefix");
         }
 
         for (const auto& x : ProtoIssues_.ids()) {
             auto rv = IssuesMap_.insert(std::make_pair(x.code(), x.severity()));
             Y_ENSURE(rv.second, "Duplicate issue code found, code: "
-                << static_cast<int>(x.code())
-                << "(" << IssueCodeToString<TProto>(x.code()) <<")");
+                                    << static_cast<int>(x.code())
+                                    << "(" << IssueCodeToString<TProto>(x.code()) << ")");
         }
 
         // Check all IssueCodes have mapping to severity
@@ -102,27 +102,27 @@ public:
         for (int i = 0; i < eDesc->value_count(); i++) {
             auto it = IssuesMap_.find(eDesc->value(i)->number());
             Y_ENSURE(it != IssuesMap_.end(), "IssueCode: "
-                << eDesc->value(i)->name()
-                << " is not found in protobuf data file");
+                                                 << eDesc->value(i)->name()
+                                                 << " is not found in protobuf data file");
         }
 
         for (const auto& x : ProtoIssues_.ids()) {
             auto rv = IssuesFormatMap_.insert(std::make_pair(x.code(), x.format()));
             Y_ENSURE(rv.second, "Duplicate issue code found, code: "
-                << static_cast<int>(x.code())
-                << "(" << IssueCodeToString<TProto>(x.code()) <<")");
+                                    << static_cast<int>(x.code())
+                                    << "(" << IssueCodeToString<TProto>(x.code()) << ")");
         }
     }
 };
 
-template<typename TProto, const char* ResourceName>
+template <typename TProto, const char* ResourceName>
 inline ESeverity GetSeverity(TIssueCode id) {
     return Singleton<TIssueId<TProto, ResourceName>>()->GetSeverity(id);
 }
 
-template<typename TProto, const char* ResourceName>
+template <typename TProto, const char* ResourceName>
 inline TString GetMessage(TIssueCode id) {
     return Singleton<TIssueId<TProto, ResourceName>>()->GetMessage(id);
 }
 
-}
+} // namespace NYql

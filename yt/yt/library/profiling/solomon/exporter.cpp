@@ -376,7 +376,7 @@ void TSolomonExporter::HandleDebugTags(const IRequestPtr&, const IResponseWriter
     rsp->SetStatus(EStatusCode::OK);
     rsp->GetHeaders()->Add("Content-Type", "text/plain; charset=UTF-8");
 
-    auto tags = Registry_->GetTags().GetTopByKey();
+    auto tags = Registry_->GetTagRegistry().GetTopByKey();
     std::vector<std::pair<std::string, size_t>> tagList{tags.begin(), tags.end()};
     std::sort(tagList.begin(), tagList.end(), [] (auto a, auto b) {
         return std::tie(a.second, a.first) > std::tie(b.second, b.first);
@@ -656,6 +656,7 @@ void TSolomonExporter::DoHandleShard(
             options.SensorFilter = [&] (const std::string& sensorName) {
                 return Config_->MatchShard(sensorName) == Config_->Shards[*name];
             };
+            options.StripSensorsNamePrefix |= Config_->Shards[*name]->StripSensorsNamePrefix;
         } else {
             options.SensorFilter = [this] (const std::string& sensorName) {
                 return FilterDefaultGrid(sensorName);
@@ -866,13 +867,26 @@ bool TSolomonExporter::FilterDefaultGrid(const std::string& sensorName)
 
 TSharedRef TSolomonExporter::DumpSensors()
 {
+    auto tagSet = TTagSet();
+    if (Config_->Host) {
+        tagSet.AddRequiredTag(TTag("host", *Config_->Host));
+    }
+    for (const auto& [key, value] : Config_->InstanceTags) {
+        tagSet.AddRequiredTag(TTag(key, value));
+    }
+
+    return DumpSensors(std::move(tagSet));
+}
+
+TSharedRef TSolomonExporter::DumpSensors(TTagSet customTagSet)
+{
     auto guard = WaitFor(TAsyncLockWriterGuard::Acquire(&Lock_))
         .ValueOrThrow();
 
     Registry_->ProcessRegistrations();
     Registry_->Collect(OffloadThreadPool_->GetInvoker());
 
-    return SerializeProtoToRef(Registry_->DumpSensors(Config_->Host, Config_->InstanceTags));
+    return SerializeProtoToRef(Registry_->DumpSensors(std::move(customTagSet)));
 }
 
 void TSolomonExporter::AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors)

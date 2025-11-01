@@ -582,7 +582,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>()));
 
     app.SetEnableDataColumnForIndexTable(true);
-    app.SetEnableSystemViews(opts.EnableSystemViews_);
     app.SetEnablePersistentQueryStats(opts.EnablePersistentQueryStats_);
     app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
@@ -594,6 +593,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
+    app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
@@ -622,6 +623,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
+
+    if (!app.ColumnShardConfig.HasStatistics()) {
+        app.ColumnShardConfig.MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+        app.ColumnShardConfig.MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+    }
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
@@ -656,7 +662,12 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.AddSystemBackupSID(sid);
     }
 
-    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot);
+    if (opts.DataShardStatsReportIntervalSeconds_) {
+        app.DataShardConfig.SetStatsReportIntervalSeconds(
+            *opts.DataShardStatsReportIntervalSeconds_);
+    }
+
+    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot, opts.NStoragePools_);
 
     SetupLogging(runtime);
     SetupChannelProfiles(app, ChannelsCount);
@@ -803,7 +814,7 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot) {
+void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot, ui32 storagePoolCount) {
     app.ClearDomainsAndHive();
     ui32 planResolution = 50;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
@@ -812,7 +823,7 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
                 TVector<ui64>{TTestTxConfig::Coordinator},
                 TVector<ui64>{},
                 TVector<ui64>{TTestTxConfig::TxAllocator},
-                DefaultPoolKinds(2));
+                DefaultPoolKinds(storagePoolCount));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());

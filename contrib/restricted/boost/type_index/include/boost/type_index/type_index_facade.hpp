@@ -9,18 +9,27 @@
 #ifndef BOOST_TYPE_INDEX_TYPE_INDEX_FACADE_HPP
 #define BOOST_TYPE_INDEX_TYPE_INDEX_FACADE_HPP
 
-#include <boost/config.hpp>
-#include <boost/container_hash/hash_fwd.hpp>
+#include <boost/type_index/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
+#if !defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 #include <string>
 #include <cstring>
 #include <type_traits>
 #include <iosfwd>               // for std::basic_ostream
+
+#include <boost/config.hpp>
+#include <boost/container_hash/hash_fwd.hpp>
+#endif
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
 namespace boost { namespace typeindex {
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 /// \class type_index_facade
 ///
@@ -274,7 +283,11 @@ inline std::size_t hash_value(const type_index_facade<Derived, TypeInfo>& lhs) n
     return static_cast<Derived const&>(lhs).hash_code();
 }
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 }} // namespace boost::typeindex
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_TYPE_INDEX_FACADE_HPP
 

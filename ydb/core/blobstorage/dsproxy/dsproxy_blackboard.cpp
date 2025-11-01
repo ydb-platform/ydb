@@ -584,7 +584,7 @@ void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, T
 
 void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id, size_t blobIdx) {
     const auto [it, inserted] = BlobStates.try_emplace(id);
-    Y_ABORT_UNLESS(inserted);
+    Y_VERIFY_S(inserted, "Id# " << id);
     TBlobState& state = it->second;
     state.Init(id, *Info);
     state.BlobIdx = blobIdx;

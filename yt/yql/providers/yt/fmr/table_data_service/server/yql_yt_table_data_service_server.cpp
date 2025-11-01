@@ -25,7 +25,8 @@ enum class ETableDataServiceRequestHandler {
     Get,
     Delete,
     DeleteGroups,
-    Clear
+    Clear,
+    Ping
 };
 
 class TReplier: public TRequestReplier {
@@ -70,6 +71,9 @@ private:
         } else if (queryPath == "clear") {
             YQL_ENSURE(httpRequest.Method == "POST");
             return ETableDataServiceRequestHandler::Clear;
+        } else if (queryPath == "ping") {
+            YQL_ENSURE(httpRequest.Method == "GET");
+            return ETableDataServiceRequestHandler::Ping;
         }
         return Nothing();
     }
@@ -80,11 +84,8 @@ public:
     TTableDataServiceServer(ILocalTableDataService::TPtr tableDataService, const TTableDataServiceServerSettings& settings)
         : TableDataService_(tableDataService),
         Host_(settings.Host),
-        Port_(settings.Port),
-        WorkerId_(settings.WorkerId),
-        WorkersNum_(settings.WorkersNum)
+        Port_(settings.Port)
     {
-        YQL_ENSURE(WorkerId_ >= 0 && WorkerId_ < WorkersNum_);
         THttpServer::TOptions opts;
         opts.AddBindAddress(Host_, Port_);
         HttpServer_ = MakeHolder<THttpServer>(this, opts.EnableKeepAlive(true).EnableCompression(true));
@@ -94,19 +95,21 @@ public:
         THandler deleteTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteTableDataServiceHandler, this, std::placeholders::_1);
         THandler deleteGroupsTableDataServiceHandler = std::bind(&TTableDataServiceServer::DeleteGroupsTableDataServiceHandler, this, std::placeholders::_1);
         THandler clearTableDataServiceHandler = std::bind(&TTableDataServiceServer::ClearTableDataServiceHander, this, std::placeholders::_1);
+        THandler pingTableDataServiceHandler = std::bind(&TTableDataServiceServer::PingTableDataServiceHandler, this, std::placeholders::_1);
 
         Handlers_ = std::unordered_map<ETableDataServiceRequestHandler, THandler>{
             {ETableDataServiceRequestHandler::Put, putTableDataServiceHandler},
             {ETableDataServiceRequestHandler::Get, getTableDataServiceHandler},
             {ETableDataServiceRequestHandler::Delete, deleteTableDataServiceHandler},
             {ETableDataServiceRequestHandler::DeleteGroups, deleteGroupsTableDataServiceHandler},
-            {ETableDataServiceRequestHandler::Clear, clearTableDataServiceHandler}
+            {ETableDataServiceRequestHandler::Clear, clearTableDataServiceHandler},
+            {ETableDataServiceRequestHandler::Ping, pingTableDataServiceHandler}
         };
     }
 
     void Start() override {
         HttpServer_->Start();
-        Cerr << "Table data service server with id " << WorkerId_ << " is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_) << "\n";
+        Cerr << "Table data service server is listnening on url " <<  "http://" + Host_ + ":" + ToString(Port_) << "\n";
     }
 
     void Stop() override {
@@ -127,8 +130,6 @@ private:
     ILocalTableDataService::TPtr TableDataService_;
     const TString Host_;
     const ui16 Port_;
-    const ui64 WorkerId_;
-    const ui64 WorkersNum_;
 
     struct TTableDataServiceKey {
         TString Group;
@@ -189,6 +190,10 @@ private:
         YQL_LOG_CTX_ROOT_SESSION_SCOPE(GetLogContext(input));
         YQL_CLOG(TRACE, FastMapReduce) << "Clearing table data service";
         TableDataService_->Clear().GetValueSync();
+        return THttpResponse(HTTP_OK);
+    }
+
+    THttpResponse PingTableDataServiceHandler(THttpInput& /*input*/) {
         return THttpResponse(HTTP_OK);
     }
 };

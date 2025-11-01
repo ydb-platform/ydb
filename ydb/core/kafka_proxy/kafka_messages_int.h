@@ -17,8 +17,6 @@
 namespace NKafka {
 namespace NPrivate {
 
-static constexpr bool DEBUG_ENABLED = false;
-
 struct TWriteCollector {
     ui32 NumTaggedFields = 0;
 };
@@ -191,7 +189,11 @@ public:
 
     inline static void DoLog(const TValueType& value) {
         if constexpr (DEBUG_ENABLED) {
-            Cerr << "Was read field '" << Meta::Name << "' value " << value << Endl;
+            if constexpr (sizeof(TValueType) == 1) {
+                Cerr << "Was read field '" << Meta::Name << "' value " << (size_t)value << Endl;
+            } else {
+                Cerr << "Was read field '" << Meta::Name << "' value " << value << Endl;
+            }
         }
     }
 };
@@ -483,12 +485,15 @@ public:
             value.emplace();
 
             if (magic < CURRENT_RECORD_VERSION) {
+                size_t end = readable.position() + length;
+
                 TKafkaRecordBatchV0 v0;
                 v0.Read(readable, magic);
 
-                value->Magic = v0.Record.Magic;
-                value->Crc = v0.Record.Crc;
+                value->Magic = 2;
                 value->Attributes = v0.Record.Attributes & 0x07;
+                value->BaseTimestamp = 0;
+                value->BaseOffset = 0;
 
                 value->Records.resize(1);
                 auto& record = value->Records.front();
@@ -497,6 +502,21 @@ public:
                 record.TimestampDelta = v0.Record.Timestamp;
                 record.Key = v0.Record.Key;
                 record.Value = v0.Record.Value;
+
+                while(readable.position() < end) {
+                    magic = readable.take(16);
+
+                    v0 = {};
+                    v0.Read(readable, magic);
+
+                    value->Records.resize(value->Records.size() + 1);
+                    auto& record = value->Records.back();
+                    record.Length = v0.Record.MessageSize;
+                    record.OffsetDelta = v0.Offset;
+                    record.TimestampDelta = v0.Record.Timestamp;
+                    record.Key = v0.Record.Key;
+                    record.Value = v0.Record.Value;
+                }
             } else {
                 (*value).Read(readable, magic);
             }
@@ -633,16 +653,16 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
                     ++collector.NumTaggedFields;
 
                     i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
-                    collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size); 
+                    collector.Size += size + SizeOfUnsignedVarint(Meta::Tag) + SizeOfUnsignedVarint(size);
                     if constexpr (DEBUG_ENABLED) {
-                        Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;                    
+                        Cerr << "Size of field '" << Meta::Name << "' " << size << " + " << SizeOfUnsignedVarint(Meta::Tag) << " + " << SizeOfUnsignedVarint(size) << Endl;
                     }
                 }
             } else {
                 i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
                 collector.Size += size;
                 if constexpr (DEBUG_ENABLED) {
-                    Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;                    
+                    Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
                 }
             }
         }
@@ -651,7 +671,7 @@ inline void Size(TSizeCollector& collector, TKafkaInt16 version, const typename 
             i64 size = TypeStrategy<Meta, typename Meta::Type>::DoSize(version, value);
             collector.Size += size;
             if constexpr (DEBUG_ENABLED) {
-                Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;                    
+                Cerr << "Size of field '" << Meta::Name << "' " << size << Endl;
             }
         }
     }

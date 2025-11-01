@@ -36,6 +36,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, LatchedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NoReply);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, FlakyCall);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DelayedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequireCoolFeature);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequestBytesThrottledCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, StreamingEcho,
@@ -49,6 +50,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetTraceBaggage);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, CustomMetadata);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetChannelFailureError);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, ManuallyCanceledByServer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

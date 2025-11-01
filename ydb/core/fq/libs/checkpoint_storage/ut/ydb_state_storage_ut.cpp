@@ -36,7 +36,6 @@ public:
     {}
 
     TStateStoragePtr GetStateStorage(const char* tablePrefix) {
-
         NConfig::TCheckpointCoordinatorConfig config;
         auto& stateStorageConfig = *config.MutableStorage();
         stateStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));

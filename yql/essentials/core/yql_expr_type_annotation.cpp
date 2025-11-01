@@ -159,7 +159,8 @@ bool IsDatetimeToDatetimeCastAllowed(EDataSlot from, EDataSlot to) {
 }
 
 IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& node,
-    const TTypeAnnotationNode& sourceType, const TTypeAnnotationNode& expectedType, TConvertFlags flags, bool raiseIssues = false) {
+    const TTypeAnnotationNode& sourceType, const TTypeAnnotationNode& expectedType, TConvertFlags flags,
+    bool raiseIssues, const TTypeAnnotationContext* typeCtx) {
 
     if (IsSameAnnotation(sourceType, expectedType)) {
         return IGraphTransformer::TStatus::Ok;
@@ -201,7 +202,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
     if (expectedType.GetKind() == ETypeAnnotationKind::Optional) {
         auto nextType = expectedType.Cast<TOptionalExprType>()->GetItemType();
         auto originalNode = node;
-        auto status1 = TryConvertToImpl(ctx, node, sourceType, *nextType, flags, raiseIssues);
+        auto status1 = TryConvertToImpl(ctx, node, sourceType, *nextType, flags, raiseIssues, typeCtx);
         if (status1.Level != IGraphTransformer::TStatus::Error) {
             node = ctx.NewCallable(node->Pos(), "Just", { node });
             return IGraphTransformer::TStatus::Repeat;
@@ -211,7 +212,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (node->IsCallable("Just")) {
             auto sourceItemType = sourceType.Cast<TOptionalExprType>()->GetItemType();
             auto value = node->HeadRef();
-            auto status = TryConvertToImpl(ctx, value, *sourceItemType, *nextType, flags, raiseIssues);
+            auto status = TryConvertToImpl(ctx, value, *sourceItemType, *nextType, flags, raiseIssues, typeCtx);
             if (status.Level != IGraphTransformer::TStatus::Error) {
                 node = ctx.NewCallable(node->Pos(), "Just", { value });
                 return IGraphTransformer::TStatus::Repeat;
@@ -220,7 +221,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             auto sourceItemType = sourceType.Cast<TOptionalExprType>()->GetItemType();
             auto arg = ctx.NewArgument(node->Pos(), "item");
             auto originalArg = arg;
-            auto status = TryConvertToImpl(ctx, arg, *sourceItemType, *nextType, flags, raiseIssues);
+            auto status = TryConvertToImpl(ctx, arg, *sourceItemType, *nextType, flags, raiseIssues, typeCtx);
             if (status.Level != IGraphTransformer::TStatus::Error) {
                 auto lambda = ctx.NewLambda(node->Pos(),
                     ctx.NewArguments(node->Pos(), { originalArg }),
@@ -232,7 +233,16 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         }
 
         if (IsNull(sourceType)) {
-            node = ctx.NewCallable(node->Pos(), "Nothing", { ExpandType(node->Pos(), expectedType, ctx) });
+            auto res = ctx.NewCallable(node->Pos(), "Nothing", { ExpandType(node->Pos(), expectedType, ctx) });
+            if (typeCtx) {
+                res = KeepWorld(res, *node, ctx, *typeCtx);
+            }
+
+            if (node->HasSideEffects()) {
+                res = ctx.NewCallable(node->Pos(), "Seq", { node, res });
+            }
+
+            node = res;
             return IGraphTransformer::TStatus::Repeat;
         }
     }
@@ -550,7 +560,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Build();
                 }
 
-                auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags, raiseIssues);
+                auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags, raiseIssues, typeCtx);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     if (raiseIssues) {
                         ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
@@ -606,7 +616,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 auto status = TryConvertToImpl(
                     ctx, targetItem,
                     *fromUnderlying->GetItems()[*fromTargetIndex]->GetItemType(),
-                    *toUnderlying->GetItems()[*toTargetIndex]->GetItemType(), flags, raiseIssues);
+                    *toUnderlying->GetItems()[*toTargetIndex]->GetItemType(), flags, raiseIssues, typeCtx);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
@@ -623,7 +633,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     auto fromElement = item->GetItemType();
                     auto toElement = toUnderlying->GetItems()[*toIndex]->GetItemType();
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
-                    auto status1 = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues);
+                    auto status1 = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues, typeCtx);
                     if (status1.Level == IGraphTransformer::TStatus::Error) {
                         return status1;
                     }
@@ -653,7 +663,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 auto status = TryConvertToImpl(
                     ctx, targetItem,
                     *fromUnderlying->GetItems()[targetIndex],
-                    *toUnderlying->GetItems()[targetIndex], flags, raiseIssues);
+                    *toUnderlying->GetItems()[targetIndex], flags, raiseIssues, typeCtx);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
@@ -664,7 +674,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     }
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
                     auto status1 = TryConvertToImpl(ctx, arg, *fromUnderlying->GetItems()[i],
-                        *toUnderlying->GetItems()[i], flags, raiseIssues);
+                        *toUnderlying->GetItems()[i], flags, raiseIssues, typeCtx);
                     if (status1.Level == IGraphTransformer::TStatus::Error) {
                         return status1;
                     }
@@ -719,7 +729,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     auto arg = ctx.NewArgument(node->Pos(), "item");
                     auto originalArg = arg;
 
-                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues);
+                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues, typeCtx);
                     if (status.Level == IGraphTransformer::TStatus::Error) {
                         return status;
                     }
@@ -754,7 +764,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     auto arg = ctx.NewArgument(node->Pos(), "item");
                     auto originalArg = arg;
 
-                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues);
+                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues, typeCtx);
                     if (status.Level == IGraphTransformer::TStatus::Error) {
                         return status;
                     }
@@ -790,7 +800,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 const auto oldType = from->GetItems()[i];
                 const auto newType = to->GetItems()[i];
                 auto value = node->ChildPtr(i);
-                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues); status.Level == IGraphTransformer::TStatus::Error) {
+                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues, typeCtx);
+                    status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
 
@@ -831,7 +842,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Seal()
                     .Build();
 
-                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues); status.Level == IGraphTransformer::TStatus::Error) {
+                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues, typeCtx);
+                    status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
 
@@ -870,7 +882,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
         for (ui32 i = node->IsCallable("List") ? 1 : 0; i < node->ChildrenSize(); ++i) {
             auto value = node->ChildPtr(i);
-            auto status = TryConvertToImpl(ctx, value, *oldItemType, *newItemType, flags, raiseIssues);
+            auto status = TryConvertToImpl(ctx, value, *oldItemType, *newItemType, flags, raiseIssues, typeCtx);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -888,7 +900,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto nextType = to->GetItemType();
         auto arg = ctx.NewArgument(node->Pos(), "item");
         auto originalArg = arg;
-        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags, raiseIssues);
+        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags, raiseIssues, typeCtx);
         if (status.Level != IGraphTransformer::TStatus::Error) {
             auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { originalArg }), std::move(arg));
 
@@ -904,7 +916,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto nextType = to->GetItemType();
         auto arg = ctx.NewArgument(node->Pos(), "item");
         auto originalArg = arg;
-        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags, raiseIssues);
+        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags, raiseIssues, typeCtx);
         if (status.Level != IGraphTransformer::TStatus::Error) {
             auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { originalArg }), std::move(arg));
 
@@ -930,8 +942,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         for (ui32 i = node->IsCallable("Dict") ? 1 : 0; i < node->ChildrenSize(); ++i) {
             auto valueKey = node->Child(i)->ChildPtr(0);
             auto valuePayload = node->Child(i)->ChildPtr(1);
-            auto status = TryConvertToImpl(ctx, valueKey, *oldKeyType, *newKeyType, flags, raiseIssues);
-            status = status.Combine(TryConvertToImpl(ctx, valuePayload, *oldPayloadType, *newPayloadType, flags, raiseIssues));
+            auto status = TryConvertToImpl(ctx, valueKey, *oldKeyType, *newKeyType, flags, raiseIssues, typeCtx);
+            status = status.Combine(TryConvertToImpl(ctx, valuePayload, *oldPayloadType, *newPayloadType, flags, raiseIssues, typeCtx));
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -953,8 +965,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto arg = ctx.NewArgument(node->Pos(), "item");
         auto key = ctx.NewCallable(node->Pos(), "Nth", { arg, ctx.NewAtom(node->Pos(), "0") });
         auto value = ctx.NewCallable(node->Pos(), "Nth", { arg, ctx.NewAtom(node->Pos(), "1") });
-        auto status = TryConvertToImpl(ctx, key, *oldKeyType, *newKeyType, flags, raiseIssues);
-        status = status.Combine(TryConvertToImpl(ctx, value, *oldPayloadType, *newPayloadType, flags, raiseIssues));
+        auto status = TryConvertToImpl(ctx, key, *oldKeyType, *newKeyType, flags, raiseIssues, typeCtx);
+        status = status.Combine(TryConvertToImpl(ctx, value, *oldPayloadType, *newPayloadType, flags, raiseIssues, typeCtx));
         if (status.Level != IGraphTransformer::TStatus::Error) {
             auto body = ctx.NewList(node->Pos(), { key, value });
             auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { arg }), std::move(body));
@@ -967,17 +979,35 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (from->GetTag() == to->GetTag()) {
             auto nextType = to->GetBaseType();
             auto arg = ctx.NewCallable(node->Pos(), "Untag", { node, ctx.NewAtom(node->Pos(), from->GetTag()) });
-            auto status = TryConvertToImpl(ctx, arg, *from->GetBaseType(), *nextType, flags, raiseIssues);
+            auto status = TryConvertToImpl(ctx, arg, *from->GetBaseType(), *nextType, flags, raiseIssues, typeCtx);
             if (status.Level != IGraphTransformer::TStatus::Error) {
                 node = ctx.NewCallable(node->Pos(), "AsTagged", { arg, ctx.NewAtom(node->Pos(), from->GetTag()) });
                 return IGraphTransformer::TStatus::Repeat;
             }
         }
     } else if (expectedType.GetKind() == ETypeAnnotationKind::List && sourceType.GetKind() == ETypeAnnotationKind::EmptyList) {
-        node = ctx.NewCallable(node->Pos(), "List", { ExpandType(node->Pos(), expectedType, ctx) });
+        auto res = ctx.NewCallable(node->Pos(), "List", { ExpandType(node->Pos(), expectedType, ctx) });
+        if (typeCtx) {
+            res = KeepWorld(res, *node, ctx, *typeCtx);
+        }
+
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node, res });
+        }
+
+        node = res;
         return IGraphTransformer::TStatus::Repeat;
     } else if (expectedType.GetKind() == ETypeAnnotationKind::Dict && sourceType.GetKind() == ETypeAnnotationKind::EmptyDict) {
-        node = ctx.NewCallable(node->Pos(), "Dict", { ExpandType(node->Pos(), expectedType, ctx) });
+        auto res = ctx.NewCallable(node->Pos(), "Dict", { ExpandType(node->Pos(), expectedType, ctx) });
+        if (typeCtx) {
+            res = KeepWorld(res, *node, ctx, *typeCtx);
+        }
+
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node, res });
+        }
+
+        node = res;
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -3723,7 +3753,7 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     case ETypeAnnotationKind::Void: return true;
     case ETypeAnnotationKind::Tuple: {
         const auto tupleType = type.Cast<TTupleExprType>();
-        if (const auto size = tupleType->GetSize()) {
+        if (/* const auto size = */ tupleType->GetSize()) {
             for (const auto& item : tupleType->GetItems()) {
                 if (!IsInstantEqual(*item)) {
                     return false;
@@ -3734,7 +3764,7 @@ bool IsInstantEqual(const TTypeAnnotationNode& type) {
     }
     case ETypeAnnotationKind::Struct: {
         const auto structType = type.Cast<TStructExprType>();
-        if (const auto size = structType->GetSize()) {
+        if (/* const auto size = */ structType->GetSize()) {
             for (const auto& item : structType->GetItems()) {
                 if (!IsInstantEqual(*item)) {
                     return false;
@@ -3848,6 +3878,44 @@ bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationN
         ctx.AddError(err);
         return false;
     }
+    return true;
+}
+
+bool EnsureLinearType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected linear type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Linear) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected linear type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx) {
+    if (HasError(node.GetTypeAnn(), ctx)) {
+        return false;
+    }
+
+    if (!node.GetTypeAnn()) {
+        YQL_ENSURE(node.Type() == TExprNode::Lambda);
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dynamic linear type, but got lambda"));
+        return false;
+    }
+
+    if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::DynamicLinear) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected dynamic linear type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
     return true;
 }
 
@@ -4305,8 +4373,11 @@ const TTypeAnnotationNode* MakeSequenceType(ETypeAnnotationKind sequenceKind, co
     ythrow yexception() << "Wrong sequence kind.";
 }
 
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
+IGraphTransformer::TStatus TryConvertToInternal2(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags, bool useTypeDiff, const TTypeAnnotationContext* typeCtx);
+
+IGraphTransformer::TStatus TryConvertToInternal1(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, TConvertFlags flags, bool useTypeDiff, const TTypeAnnotationContext* typeCtx) {
     if (HasError(node->GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4330,11 +4401,21 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
         return IGraphTransformer::TStatus::Error;
     }
 
-    return TryConvertTo(node, *node->GetTypeAnn(), expectedType, ctx, flags, useTypeDiff);
+    return TryConvertToInternal2(node, *node->GetTypeAnn(), expectedType, ctx, flags, useTypeDiff, typeCtx);
 }
 
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
+IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
+    return TryConvertToInternal1(node, expectedType, ctx, flags, useTypeDiff, nullptr);
+}
+
+IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags) {
+    return TryConvertToInternal1(node, expectedType, ctx, flags, typeCtx.UseTypeDiffForConvertToError, &typeCtx);
+}
+
+IGraphTransformer::TStatus TryConvertToInternal2(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags, bool useTypeDiff, const TTypeAnnotationContext* typeCtx) {
     if (HasError(node->GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4348,15 +4429,25 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
                     TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
             }
         });
-    auto status = TryConvertToImpl(ctx, node, sourceType, expectedType, flags, /* raiseIssues */ true);
+    auto status = TryConvertToImpl(ctx, node, sourceType, expectedType, flags, /* raiseIssues */ true, typeCtx);
     if (status.Level  == IGraphTransformer::TStatus::Error) {
         guard.RaiseIssueForEmptyScope();
     }
     return status;
 }
 
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags) {
+IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags, bool useTypeDiff) {
+    return TryConvertToInternal2(node, sourceType, expectedType, ctx, flags, useTypeDiff, nullptr);
+}
+
+IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags) {
+    return TryConvertToInternal2(node, sourceType, expectedType, ctx, flags, typeCtx.UseTypeDiffForConvertToError, &typeCtx);
+}
+
+IGraphTransformer::TStatus TrySilentConvertToInternal1(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, TConvertFlags flags, const TTypeAnnotationContext* typeCtx) {
     if (node->Type() == TExprNode::Lambda) {
         auto currentType = &expectedType;
         ui32 optLevel = 0;
@@ -4384,12 +4475,27 @@ IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TType
         return IGraphTransformer::TStatus::Error;
     }
 
-    return TrySilentConvertTo(node, *node->GetTypeAnn(), expectedType, ctx, flags);
+    return TryConvertToImpl(ctx, node, *node->GetTypeAnn(), expectedType, flags, false, typeCtx);
+}
+
+IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, TConvertFlags flags) {
+    return TrySilentConvertToInternal1(node, expectedType, ctx, flags, nullptr);
+}
+
+IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags) {
+    return TrySilentConvertToInternal1(node, expectedType, ctx, flags, &typeCtx);
 }
 
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags) {
-    return TryConvertToImpl(ctx, node, sourceType, expectedType, flags);
+    return TryConvertToImpl(ctx, node, sourceType, expectedType, flags, false, nullptr);
+}
+
+IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags) {
+    return TryConvertToImpl(ctx, node, sourceType, expectedType, flags, false, &typeCtx);
 }
 
 bool IsDataTypeNumeric(EDataSlot dataSlot) {
@@ -4579,18 +4685,9 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
     return {};
 }
 
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
-    if (!node1->GetTypeAnn() || !node2->GetTypeAnn()) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    return SilentInferCommonType(node1, *node1->GetTypeAnn(), node2, *node2->GetTypeAnn(), ctx, commonType, flags);
-}
-
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
+IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
     TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
+    const TTypeAnnotationNode*& commonType, TConvertFlags flags, const TTypeAnnotationContext* typeCtx) {
     if (IsSameAnnotation(type1, type2)) {
         commonType = &type1;
         return IGraphTransformer::TStatus::Ok;
@@ -4598,12 +4695,12 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
 
     auto newFlags = flags;
     newFlags.Set(NConvertFlags::DisableTruncation);
-    if (const auto status = TrySilentConvertTo(node1, type1, type2, ctx, newFlags); status != IGraphTransformer::TStatus::Error) {
+    if (const auto status = TryConvertToImpl(ctx, node1, type1, type2, newFlags, false, typeCtx); status != IGraphTransformer::TStatus::Error) {
         commonType = &type2;
         return status;
     }
 
-    if (const auto status = TrySilentConvertTo(node2, type2, type1, ctx, newFlags); status != IGraphTransformer::TStatus::Error) {
+    if (const auto status = TryConvertToImpl(ctx, node2, type2, type1, newFlags, false, typeCtx); status != IGraphTransformer::TStatus::Error) {
         commonType = &type1;
         return status;
     }
@@ -4614,7 +4711,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
         node1 = ctx.NewCallable(node1->Pos(), "Just", { std::move(node1) });
 
         const TTypeAnnotationNode* commonItemType;
-        if (SilentInferCommonType(node1, *type1Opt, node2, type2, ctx, commonItemType, flags) != IGraphTransformer::TStatus::Error) {
+        if (SilentInferCommonTypeInternal(node1, *type1Opt, node2, type2, ctx, commonItemType, flags, typeCtx)
+            != IGraphTransformer::TStatus::Error) {
             commonType = commonItemType;
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -4628,7 +4726,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
         node2 = ctx.NewCallable(node2->Pos(), "Just", { std::move(node2) });
 
         const TTypeAnnotationNode* commonItemType;
-        if (SilentInferCommonType(node1, type1, node2, *type2Opt, ctx, commonItemType, flags) != IGraphTransformer::TStatus::Error) {
+        if (SilentInferCommonTypeInternal(node1, type1, node2, *type2Opt, ctx, commonItemType, flags, typeCtx)
+            != IGraphTransformer::TStatus::Error) {
             commonType = commonItemType;
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -4682,7 +4781,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
         auto item1 = arg1;
         auto item2 = arg2;
         const TTypeAnnotationNode* commonItemType;
-        if (SilentInferCommonType(item1, *item1type, item2, *item2type, ctx, commonItemType, flags) != IGraphTransformer::TStatus::Error) {
+        if (SilentInferCommonTypeInternal(item1, *item1type, item2, *item2type, ctx, commonItemType, flags, typeCtx)
+            != IGraphTransformer::TStatus::Error) {
             if (item1 != arg1) {
                 node1 = ctx.Builder(node1->Pos())
                     .Callable("OrderedMap")
@@ -4725,7 +4825,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
                 auto arg1 = ctx.NewCallable(node1->Pos(), "Nth", { node1, atom });
                 auto arg2 = ctx.NewCallable(node2->Pos(), "Nth", { node2, atom });
                 const TTypeAnnotationNode* commonItemType;
-                if (SilentInferCommonType(arg1, *item1type, arg2, *item2type, ctx, commonItemType, flags) == IGraphTransformer::TStatus::Error) {
+                if (SilentInferCommonTypeInternal(arg1, *item1type, arg2, *item2type, ctx, commonItemType, flags, typeCtx)
+                    == IGraphTransformer::TStatus::Error) {
                     hasError = true;
                     break;
                 }
@@ -4770,7 +4871,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
                 auto arg1 = ctx.NewCallable(node1->Pos(), "Member", { node1, atom });
                 auto arg2 = ctx.NewCallable(node2->Pos(), "Member", { node2, atom });
                 const TTypeAnnotationNode* commonItemType;
-                if (SilentInferCommonType(arg1, *member1->GetItemType(), arg2, *member2->GetItemType(), ctx, commonItemType, flags) == IGraphTransformer::TStatus::Error) {
+                if (SilentInferCommonTypeInternal(arg1, *member1->GetItemType(), arg2, *member2->GetItemType(), ctx, commonItemType, flags, typeCtx)
+                    == IGraphTransformer::TStatus::Error) {
                     hasError = true;
                     break;
                 }
@@ -4856,7 +4958,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
             auto oldValue1 = value1;
             auto oldValue2 = value2;
             const TTypeAnnotationNode* commonPayloadType;
-            if (SilentInferCommonType(value1, *payload1type, value2, *payload2type, ctx, commonPayloadType, flags) != IGraphTransformer::TStatus::Error) {
+            if (SilentInferCommonTypeInternal(value1, *payload1type, value2, *payload2type, ctx, commonPayloadType, flags, typeCtx)
+                != IGraphTransformer::TStatus::Error) {
                 if (oldValue1 != value1) {
                     auto body1 = ctx.NewList(node1->Pos(), { key1, value1 });
                     auto lambda1 = ctx.NewLambda(node1->Pos(), ctx.NewArguments(node1->Pos(), { arg1 }), std::move(body1));
@@ -4884,7 +4987,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
             const TTypeAnnotationNode* commonBaseType;
             auto arg1 = ctx.NewCallable(node1->Pos(), "Untag", { node1, atom });
             auto arg2 = ctx.NewCallable(node2->Pos(), "Untag", { node2, atom });
-            if (SilentInferCommonType(arg1, *taggedType1->GetBaseType(), arg2, *taggedType2->GetBaseType(), ctx, commonBaseType, flags) != IGraphTransformer::TStatus::Error) {
+            if (SilentInferCommonTypeInternal(arg1, *taggedType1->GetBaseType(), arg2, *taggedType2->GetBaseType(), ctx, commonBaseType, flags, typeCtx)
+                != IGraphTransformer::TStatus::Error) {
                 commonType = ctx.MakeType<TTaggedExprType>(commonBaseType, taggedType1->GetTag());
                 node1 = ctx.NewCallable(node1->Pos(), "AsTagged", { arg1, atom });
                 node2 = ctx.NewCallable(node2->Pos(), "AsTagged", { arg2, atom });
@@ -4925,7 +5029,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
                 auto originalArg2 = arg2;
 
                 const TTypeAnnotationNode* commonBaseType;
-                if (SilentInferCommonType(arg1, *elem1, arg2, *elem2, ctx, commonBaseType, flags) == IGraphTransformer::TStatus::Error) {
+                if (SilentInferCommonTypeInternal(arg1, *elem1, arg2, *elem2, ctx, commonBaseType, flags, typeCtx)
+                    == IGraphTransformer::TStatus::Error) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -5006,7 +5111,8 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
                     auto originalArg2 = arg2;
 
                     const TTypeAnnotationNode* commonBaseType;
-                    if (SilentInferCommonType(arg1, *elem1->GetItemType(), arg2, *elem2->GetItemType(), ctx, commonBaseType, flags) == IGraphTransformer::TStatus::Error) {
+                    if (SilentInferCommonTypeInternal(arg1, *elem1->GetItemType(), arg2, *elem2->GetItemType(), ctx, commonBaseType, flags, typeCtx)
+                        == IGraphTransformer::TStatus::Error) {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -5073,7 +5179,38 @@ IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const T
     return IGraphTransformer::TStatus::Error;
 }
 
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx, bool useTypeDiff) {
+IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
+    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
+    if (!node1->GetTypeAnn() || !node2->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return SilentInferCommonTypeInternal(node1, *node1->GetTypeAnn(), node2, *node2->GetTypeAnn(), ctx, commonType, flags, nullptr);
+}
+
+IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
+    if (!node1->GetTypeAnn() || !node2->GetTypeAnn()) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return SilentInferCommonTypeInternal(node1, *node1->GetTypeAnn(), node2, *node2->GetTypeAnn(), ctx, commonType, flags, &typeCtx);
+}
+
+IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
+    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
+    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
+    return SilentInferCommonTypeInternal(node1, type1, node2, type2, ctx, commonType, flags, nullptr);
+}
+
+IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
+    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx, const TTypeAnnotationContext& typeCtx,
+    const TTypeAnnotationNode*& commonType, TConvertFlags flags) {
+    return SilentInferCommonTypeInternal(node1, type1, node2, type2, ctx, commonType, flags, &typeCtx);
+}
+
+IGraphTransformer::TStatus ConvertChildrenToTypeInternal(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx,
+    bool useTypeDiff, const TTypeAnnotationContext* typeCtx) {
     if (!input->ChildrenSize()) {
         return IGraphTransformer::TStatus::Ok;
     }
@@ -5085,12 +5222,21 @@ IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, c
             return IGraphTransformer::TStatus::Error;
         }
 
-        status = status.Combine(TryConvertTo(input->ChildRef(i), *targetType, ctx, {}, useTypeDiff));
+        status = status.Combine(TryConvertToInternal1(input->ChildRef(i), *targetType, ctx, {}, useTypeDiff, typeCtx));
         if (status == IGraphTransformer::TStatus::Error)
             break;
     }
 
     return status;
+}
+
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, const TTypeAnnotationNode* targetType, TExprContext& ctx, bool useTypeDiff) {
+    return ConvertChildrenToTypeInternal(input, targetType, ctx, useTypeDiff, nullptr);
+}
+
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx) {
+    return ConvertChildrenToTypeInternal(input, targetType, ctx, typeCtx.UseTypeDiffForConvertToError, &typeCtx);
 }
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
@@ -5279,6 +5425,11 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
             }
 
             return false;
+        }
+
+        if (lambdaBody.IsCallable("WithWorld")) {
+            syncList->emplace(lambdaBody.ChildPtr(1), syncList->size());
+            return true;
         }
     }
 
@@ -6012,6 +6163,20 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
         return ret;
     }
 
+    case ETypeAnnotationKind::Linear:
+    {
+        auto ret = ctx.NewCallable(position, "LinearType",
+            { ExpandType(position, *type.Cast<TLinearExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
+    case ETypeAnnotationKind::DynamicLinear:
+    {
+        auto ret = ctx.NewCallable(position, "DynamicLinearType",
+            { ExpandType(position, *type.Cast<TDynamicLinearExprType>()->GetItemType(), ctx) });
+        return ret;
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported kind: " << (ui32)type.GetKind());
     }
@@ -6376,6 +6541,18 @@ const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode
     } else {
         return ctx.MakeType<TBlockExprType>(underlyingType);
     }
+}
+
+const TTypeAnnotationNode* GetLinearItemType(const TTypeAnnotationNode& type, bool& isDynamic) {
+    YQL_ENSURE(type.IsLinearOrDynamicLinear());
+    const auto kind = type.GetKind();
+    if (kind == ETypeAnnotationKind::Linear) {
+        isDynamic = false;
+        return type.Cast<TLinearExprType>()->GetItemType();
+    }
+
+    isDynamic = true;
+    return type.Cast<TDynamicLinearExprType>()->GetItemType();
 }
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx) {

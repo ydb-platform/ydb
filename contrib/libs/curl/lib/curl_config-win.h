@@ -1044,6 +1044,9 @@
 /* if Unix domain sockets are enabled  */
 /* #undef USE_UNIX_SOCKETS */
 
+/* enable websockets support */
+#define USE_WEBSOCKETS 1
+
 /* enable multiple SSL backends */
 /* #undef CURL_WITH_MULTI_SSL */
 

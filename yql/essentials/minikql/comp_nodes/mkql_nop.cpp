@@ -10,5 +10,5 @@ IComputationNode* WrapNop(TCallable& callable, const TComputationNodeFactoryCont
     return LocateNode(ctx.NodeLocator, callable, 0);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

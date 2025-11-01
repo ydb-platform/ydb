@@ -71,6 +71,8 @@ void TQueueStaticExportConfig::Register(TRegistrar registrar)
         .Default("%UNIX_TS-%PERIOD");
     registrar.Parameter("use_upper_bound_for_table_names", &TThis::UseUpperBoundForTableNames)
         .Default(false);
+    registrar.Parameter("enable_export_from_queue_with_hunks", &TThis::EnableExportFromQueueWithHunks)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->ExportPeriod && config->ExportCronSchedule) {

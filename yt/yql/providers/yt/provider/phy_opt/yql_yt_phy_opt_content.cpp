@@ -126,6 +126,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
         (const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr
     {
         if (nodesToOptimize.find(input.Get()) != nodesToOptimize.end()) {
+            auto newSettings = RemoveSettings(*input->Child(TYtTableContent::idx_Settings), EYtSettingType::BlockInputReady, ctx);
             if (auto read = TYtTableContent(input).Input().Maybe<TYtReadTable>()) {
                 bool materialize = false;
                 const bool singleSection = 1 == read.Cast().Input().Size();
@@ -191,7 +192,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         syncList[path.Table().Cast<TYtOutput>().Operation().Ptr()] = syncList.size();
 
                         if (singleSection) {
-                            return ctx.ChangeChild(*input, TYtTableContent::idx_Input, path.Table().Ptr());
+                            return Build<TYtTableContent>(ctx, input->Pos())
+                                .Input(path.Table().Ptr())
+                                .Settings(std::move(newSettings))
+                                .Done().Ptr();
                         } else {
                             newSections.push_back(Build<TYtSection>(ctx, section.Pos())
                                 .Paths()
@@ -212,9 +216,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         .Input()
                             .Add(newSections)
                         .Build()
-                        .Done();
+                        .Done().Ptr();
 
-                    return ctx.ChangeChild(*input, TYtTableContent::idx_Input, newRead.Ptr());
+                    return Build<TYtTableContent>(ctx, input->Pos())
+                        .Input(std::move(newRead))
+                        .Settings(std::move(newSettings))
+                        .Done().Ptr();
                 }
             }
             else if (auto out = TYtTableContent(input).Input().Maybe<TYtOutput>()) {
@@ -251,6 +258,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                                             .Columns<TCoVoid>().Build()
                                             .Ranges<TCoVoid>().Build()
                                             .Stat<TCoVoid>().Build()
+                                            .QLFilter<TCoVoid>().Build()
                                         .Build()
                                     .Build()
                                     .Settings<TCoNameValueTupleList>()
@@ -274,7 +282,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                             .OutIndex().Value(0U).Build()
                             .Done().Ptr();
 
-                        return ctx.ChangeChild(*input, TYtTableContent::idx_Input, std::move(newOutput));
+                        return Build<TYtTableContent>(ctx, input->Pos())
+                            .Input(std::move(newOutput))
+                            .Settings(std::move(newSettings))
+                            .Done().Ptr();
                     }
                 }
             }

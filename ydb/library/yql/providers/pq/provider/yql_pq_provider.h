@@ -45,6 +45,7 @@ public:
 
 public:
     bool SupportRtmrMode = false;
+    bool UseActorSystemThreadsInTopicClient = true;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 
@@ -57,6 +58,7 @@ public:
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
     NPq::NProto::StreamingDisposition Disposition;
     std::vector<std::pair<TString, TString>> TaskSensorLabels;
+    std::vector<ui64> NodeIds;
 };
 
 TDataProviderInitializer GetPqDataProviderInitializer(
@@ -64,7 +66,9 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     bool supportRtmrMode = false,
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr,
     const NPq::NProto::StreamingDisposition& disposition = {},
-    const std::vector<std::pair<TString, TString>>& taskSensorLabels = {}
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels = {},
+    const std::vector<ui64>& nodeIds = {},
+    bool useActorSystemThreadsInTopicClient = true
 );
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);

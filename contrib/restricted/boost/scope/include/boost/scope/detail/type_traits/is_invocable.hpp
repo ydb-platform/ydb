@@ -36,6 +36,8 @@ using std::is_invocable;
 
 #else
 
+#include <utility> // std::declval
+
 namespace boost {
 namespace scope {
 namespace detail {

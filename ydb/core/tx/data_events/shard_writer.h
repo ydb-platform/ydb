@@ -46,6 +46,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr GlobalTimeoutCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadLimitExceededCount;
 
 public:
     TCSUploadCounters()
@@ -62,6 +64,8 @@ public:
         , FailsCount(TBase::GetDeriviative("Fails"))
         , GlobalTimeoutCount(TBase::GetDeriviative("GlobalTimeouts"))
         , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
+        , RetryBySubscribeOnOverloadCount(TBase::GetDeriviative("RetryBySubscribeOnOverload"))
+        , RetryBySubscribeOnOverloadLimitExceededCount(TBase::GetDeriviative("RetryBySubscribeOnOverloadLimitExceeded"))
     {
     }
 
@@ -71,6 +75,14 @@ public:
 
     void OnRetryTimeout() const {
         RetryTimeoutCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverload() const {
+        RetryBySubscribeOnOverloadCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverloadLimitExceeded() const {
+        RetryBySubscribeOnOverloadLimitExceededCount->Inc();
     }
 
     void OnRequest(const ui64 rows, const ui64 bytes) const {
@@ -207,7 +219,6 @@ public:
     void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
 
 protected:
-    void Die(const NActors::TActorContext& ctx) override;
     void PassAway() override;
 
 private:

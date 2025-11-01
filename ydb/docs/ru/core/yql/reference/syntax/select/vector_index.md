@@ -1,17 +1,5 @@
 # VIEW (Векторный индекс)
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
-
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
-{% endnote %}
-
-{% endif %}
-
 Для выполнения запроса `SELECT` с использованием [векторного индекса](../../../../concepts/glossary.md#vector-index) в строчно-ориентированной таблице используйте следующий синтаксис:
 
 ```yql
@@ -38,6 +26,12 @@ SELECT ...
 
 {% endnote %}
 
+{% note warning %}
+
+{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
+
+{% endnote %}
+
 ## KMeansTreeSearchTopSize
 
 Векторный поиск по индексу основан на приближённом алгоритме (ANN, Approximate Nearest Neighbors). Это значит, что результат поиска по векторному индексу может отличаться от результата поиска при полном сканировании таблицы.
@@ -56,6 +50,9 @@ SELECT *
     ORDER BY Knn::CosineDistance(embedding, $target)
     LIMIT 10
 ```
+
+Принципы работы и настройки векторного индекса подробно описаны в отдельной
+статье [{#T}](../../../../dev/vector-indexes-kmeans-tree-type.md).
 
 ## Примеры
 

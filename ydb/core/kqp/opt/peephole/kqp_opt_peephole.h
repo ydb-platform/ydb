@@ -4,6 +4,8 @@
 
 namespace NKikimr::NKqp::NOpt {
 
+std::unordered_set<std::string_view> GetNonDeterministicFunctions();
+
 TAutoPtr<NYql::IGraphTransformer> CreateKqpTxPeepholeTransformer(
     NYql::IGraphTransformer* typeAnnTransformer,
     NYql::TTypeAnnotationContext& typesCtx, 

@@ -2,11 +2,10 @@ import array
 import struct
 import sys
 
-from typing import Sequence, MutableSequence, Dict, Optional, Union, Generator
+from typing import Sequence, MutableSequence, Dict, Optional, Union, Generator, Callable
 
 from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError, DataError
 from clickhouse_connect.driver.types import Closable
-
 
 # pylint: disable=invalid-name
 must_swap = sys.byteorder == 'big'
@@ -218,3 +217,74 @@ class StreamContext:
         self._in_context = False
         self.source.close()
         self.gen = None
+
+# pylint: disable=too-many-return-statements
+def get_rename_method(method: Optional[str]) -> Optional[Callable[[str], str]]:
+    def _to_camel(s: str) -> str:
+        if not s:
+            return ""
+        out, up = [], False
+        for ch in s:
+            if ch.isspace() or ch == "_":
+                up = True
+            elif up:
+                out.append(ch.upper())
+                up = False
+            else:
+                out.append(ch)
+        return "".join(out)
+
+    def _to_underscore(s: str) -> str:
+        if not s:
+            return ""
+        out, prev = [], 0
+        for ch in s:
+            if ch.isspace():
+                if prev == 0:
+                    out.append("_")
+                prev = 1
+            elif ch.isupper():
+                if prev == 0:
+                    out.append("_")
+                    out.append(ch.lower())
+                elif prev == 1:
+                    out.append(ch.lower())
+                else:
+                    out.append(ch)
+                prev = 2
+            else:
+                out.append(ch)
+                prev = 0
+        return "".join(out)[1:] if out and out[0] == "_" else "".join(out)
+
+    def _remove_prefix(s: str) -> str:
+        i = s.rfind(".")
+        return s[i + 1 :] if i >= 0 else s
+
+    if not method:
+        return None
+
+    name = method.strip().upper()
+
+    if name == "NONE":
+        return None
+    if name == "REMOVE_PREFIX":
+        return _remove_prefix
+    if name == "TO_CAMELCASE":
+        return _to_camel
+    if name == "TO_CAMELCASE_WITHOUT_PREFIX":
+        return lambda s: _to_camel(_remove_prefix(s))
+    if name == "TO_UNDERSCORE":
+        return _to_underscore
+    if name == "TO_UNDERSCORE_WITHOUT_PREFIX":
+        return lambda s: _to_underscore(_remove_prefix(s))
+
+    valid_options = [
+        "none",
+        "remove_prefix",
+        "to_camelcase",
+        "to_camelcase_without_prefix",
+        "to_underscore",
+        "to_underscore_without_prefix",
+    ]
+    raise ValueError(f"Invalid option '{name}'. Expected one of {valid_options}")

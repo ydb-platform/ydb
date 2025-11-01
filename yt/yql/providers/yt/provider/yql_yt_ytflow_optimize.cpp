@@ -17,7 +17,7 @@ using namespace NNodes;
 
 class TYtYtflowOptimization: public IYtflowOptimization {
 public:
-    TYtYtflowOptimization(TYtState* state)
+    TYtYtflowOptimization(TYtState::TWeakPtr state)
         : State_(state)
     {
         Y_UNUSED(State_);
@@ -91,11 +91,11 @@ public:
     }
 
 private:
-    TYtState* State_;
+    TYtState::TWeakPtr State_;
 };
 
-THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IYtflowOptimization> CreateYtYtflowOptimization(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtYtflowOptimization>(state);
 }
 

@@ -31,25 +31,32 @@
 namespace NKikimr::NArrow {
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(typeInfo);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>(const NScheme::TTypeInfo& typeInfo) {
-    return arrow::decimal(typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::BooleanType>() {
+    return arrow::uint8();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>(const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(typeInfo);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+}
+
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
+    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+}
+
+template <>
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
     return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>(const NScheme::TTypeInfo& typeInfo) {
-    Y_UNUSED(typeInfo);
+std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
     return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
@@ -57,9 +64,10 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeInfo, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
-        result = CreateEmptyArrowImpl<TType>(typeInfo);
+        result = CreateEmptyArrowImpl<TType>();
         return true;
     });
+
     if (success) {
         return result;
     }
@@ -70,6 +78,8 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
 arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId) {
     std::shared_ptr<arrow::DataType> result;
     switch (typeId.GetTypeId()) {
+        case NScheme::NTypeIds::Bool:
+            return std::make_shared<arrow::UInt8Type>();
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Datetime64:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
@@ -79,17 +89,19 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeIn
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
             return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+        case NScheme::NTypeIds::Decimal:
+            return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
         default:
             return GetArrowType(typeId);
     }
 }
 
 arrow::Result<arrow::FieldVector> MakeArrowFields(
-    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, const std::set<std::string>& notNullColumns) {
+    const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(columns.size());
+    fields.reserve(ydbColumns.size());
     TVector<TString> errors;
-    for (auto& [name, ydbType] : columns) {
+    for (auto& [name, ydbType] : ydbColumns) {
         std::string colName(name.data(), name.size());
         auto arrowType = GetArrowType(ydbType);
         if (arrowType.ok()) {

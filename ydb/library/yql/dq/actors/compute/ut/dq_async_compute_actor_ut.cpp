@@ -1,5 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/string/cast.h>
+
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
@@ -37,8 +39,8 @@ namespace NYql::NDq {
 
 namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
-#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
-#define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream);
+#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
+#define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
 struct TMockHttpRequest : NMonitoring::IMonHttpRequest {
     TStringStream Out;
     TCgiParameters Params;
@@ -111,6 +113,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase {
 
         if (TESTS_VERBOSE) {
             SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
+            SetLogPriority(NKikimrServices::DQ_TASK_RUNNER, NActors::NLog::EPriority::PRI_TRACE);
         }
     }
 };
@@ -125,8 +128,8 @@ NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory() {
 }
 
 struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
-    static constexpr ui64 InputChannelId = 1;
-    static constexpr ui64 OutputChannelId = 2;
+    static constexpr ui64 InputChannelId = 1000;
+    static constexpr ui64 OutputChannelId = 2000;
     static constexpr ui32 InputStageId = 123;
     static constexpr ui32 ThisStageId = 456;
     static constexpr ui32 OutputStageId = 789;
@@ -137,7 +140,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     static constexpr i32 MaxTransformedValue = 10;
     TActorSystem ActorSystem;
     TActorId EdgeActor;
-    TActorId SrcEdgeActor;
+    std::unordered_map<ui64, TActorId> SrcEdgeActor; // ChannelId -> actor
     TActorId DstEdgeActor;
 
     TScopedAlloc Alloc;
@@ -196,7 +199,6 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         ActorSystem.Start();
 
         EdgeActor = ActorSystem.AllocateEdgeActor();
-        SrcEdgeActor = ActorSystem.AllocateEdgeActor();
         DstEdgeActor = ActorSystem.AllocateEdgeActor();
     }
 
@@ -388,13 +390,16 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
     // Adds dummy input channel with channelId
     // returns IDqOutputChannel::TPtr that can be used to inject data/checkpoints/watermarks into channel
-    auto AddDummyInputChannel(NDqProto::TDqTask& task, ui64 channelId) {
-        auto& input = *task.AddInputs();
+    auto AddDummyInputChannel(NDqProto::TTaskInput& input, ui64 channelId) {
         auto& channel = *input.AddChannels();
         input.MutableUnionAll(); // for side-effect
         channel.SetId(channelId);
+        const auto& [srcEdgeActor, inserted] = SrcEdgeActor.try_emplace(channelId);
+        if (inserted) {
+            srcEdgeActor->second = ActorSystem.AllocateEdgeActor();
+        }
         auto& chEndpoint = *channel.MutableSrcEndpoint();
-        ActorIdToProto(SrcEdgeActor, chEndpoint.MutableActorId());
+        ActorIdToProto(srcEdgeActor->second, chEndpoint.MutableActorId());
         channel.SetWatermarksMode(NDqProto::WATERMARKS_MODE_DEFAULT);
         channel.SetCheckpointingMode(NDqProto::CHECKPOINTING_MODE_DEFAULT);
         channel.SetInMemory(true);
@@ -412,10 +417,27 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TDqOutputChannelSettings settings;
         settings.TransportVersion = TransportVersion;
         settings.MutableSettings.IsLocalChannel = true;
+        settings.Level = TCollectStatsLevel::Profile;
         return CreateDqOutputChannel(channelId, ThisStageId,
                 (IsWide ? static_cast<TType*>(WideRowType) : RowType), HolderFactory,
                 settings,
                 logFunc);
+    }
+
+    auto AddDummyInputChannel(NDqProto::TDqTask& task, ui64 channelId) {
+        auto& input = *task.AddInputs();
+        return AddDummyInputChannel(input, channelId);
+    }
+
+    auto AddDummyInputChannels(NDqProto::TDqTask& task, ui64 baseChannelId, ui64 numChannels) {
+        auto& input = *task.AddInputs();
+        TVector<IDqOutputChannel::TPtr> fakeOutputs;
+
+        for (; numChannels--; ++baseChannelId) {
+            fakeOutputs.push_back(AddDummyInputChannel(input, baseChannelId));
+        }
+
+        return fakeOutputs;
     }
 
     // Adds dummy output channel with channelId
@@ -443,14 +465,14 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                                     ThisStageId,
                                     type,
                                     10_MB,
-                                    TCollectStatsLevel::None,
+                                    TCollectStatsLevel::Profile,
                                     TypeEnv,
                                     HolderFactory,
                                     TransportVersion,
                                     NKikimr::NMiniKQL::EValuePackerVersion::V0);
     }
 
-    auto CreateTestAsyncCA(NDqProto::TDqTask& task) {
+    auto CreateTestAsyncCA(NDqProto::TDqTask& task, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
         TVector<NKikimr::NMiniKQL::TComputationNodeFactory> compNodeFactories = {
             NYql::GetCommonDqFactory(),
             NKikimr::NMiniKQL::GetYqlFactory()
@@ -474,17 +496,19 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                 });
         TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 1_MB;
-        memoryLimits.MkqlLightProgramMemoryLimit = 10_MB;
-        memoryLimits.MkqlHeavyProgramMemoryLimit = 20_MB;
-        memoryLimits.MkqlProgramHardMemoryLimit = 30_MB;
-        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 32_MB);
+        memoryLimits.MkqlLightProgramMemoryLimit = 40_MB;
+        memoryLimits.MkqlHeavyProgramMemoryLimit = 60_MB;
+        memoryLimits.MkqlProgramHardMemoryLimit = 80_MB;
+        memoryLimits.MemoryQuotaManager = std::make_shared<TGuaranteeQuotaManager>(64_MB, 40_MB);
+        TComputeRuntimeSettings runtimeSettings;
+        runtimeSettings.StatsMode = statsMode;
         auto actor = CreateDqAsyncComputeActor(
                 EdgeActor, // executerId,
                 LogPrefix,
                 &task, // NYql::NDqProto::TDqTask* task,
                 CreateAsyncIoFactory(),
                 FunctionRegistry.Get(),
-                {}, // TComputeRuntimeSettings& settings,
+                runtimeSettings,
                 memoryLimits,
                 taskRunnerActorFactory,
                 {}, // ::NMonitoring::TDynamicCounterPtr taskCounters,
@@ -496,6 +520,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
     }
 
     TUnboxedValueBatch CreateRow(ui32 value, ui64 ts) {
+        LOG_D("create " << value << " " << ts);
         if (IsWide) {
             TUnboxedValueBatch result(WideRowType);
             result.PushRow([&](ui32 idx) {
@@ -521,13 +546,21 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
-    bool ReceiveData(auto&& cb, auto&& cbWatermark, auto dqInputChannel) {
-        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor});
+    // cb(TUnboxedValue& value, ui32 column) is called for each value in a row
+    // cbWatermark(TInstant watermark) is called for each received watermark
+    // beforeFinalAck() is called before sending final ack (when CA is still definitely alive)
+    bool ReceiveData(auto&& cb, auto&& cbWatermark, auto&& beforeFinalAck, auto dqInputChannel) {
+        auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelData>({DstEdgeActor}, TDuration::Seconds(20));
+        if (!ev) {
+            throw yexception() << "Failed";
+        }
         LOG_D("Got " << ev->Get()->Record.DebugString());
         TDqSerializedBatch sbatch;
-        sbatch.Proto = ev->Get()->Record.GetChannelData().GetData();
+        auto& channelData = *ev->Get()->Record.MutableChannelData();
+        sbatch.Proto = std::move(*channelData.MutableData());
         dqInputChannel->Push(std::move(sbatch));
-        if (ev->Get()->Record.GetChannelData().GetFinished()) {
+        bool finished = channelData.GetFinished();
+        if (finished) {
             dqInputChannel->Finish();
         }
         TUnboxedValueBatch batch;
@@ -566,22 +599,34 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                         LOG_D("null");
                         UNIT_ASSERT(false);
                     }
+                    LOG_D("/");
                     return true;
                 })) {
                     return false;
                 }
             }
         }
-        if (ev->Get()->Record.GetChannelData().HasWatermark()) {
-            auto watermark = TInstant::MicroSeconds(ev->Get()->Record.GetChannelData().GetWatermark().GetTimestampUs());
+        if (channelData.HasWatermark()) {
+            auto watermark = TInstant::MicroSeconds(channelData.GetWatermark().GetTimestampUs());
             cbWatermark(watermark);
+        }
+        if (dqInputChannel->IsFinished()) {
+            beforeFinalAck();
+        }
+        if (!ev->Get()->Record.GetNoAck()) {
+            auto ack = new TEvDqCompute::TEvChannelDataAck;
+            ack->Record.SetChannelId(channelData.GetChannelId());
+            ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+            ack->Record.SetFreeSpace(3123); // XXX simulates limited channel size
+            ack->Record.SetFinish(channelData.GetFinished());
+            ActorSystem.Send(ev->Sender, ev->Recipient, ack);
         }
         return !dqInputChannel->IsFinished();
     }
 
     void WaitForChannelDataAck(auto channelId, auto seqNo) {
         for (;;) {
-            auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelDataAck>({SrcEdgeActor});
+            auto ev = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvChannelDataAck>(SrcEdgeActor[channelId]);
             LOG_D("Got ack " << ev->Get()->Record);
             UNIT_ASSERT_EQUAL(ev->Get()->Record.GetChannelId(), channelId);
             if (ev->Get()->Record.GetSeqNo() == seqNo) {
@@ -606,111 +651,191 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         }
     }
 
-    void BasicTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
-        LogPrefix = TStringBuilder() << "Square Test for:"
-           << " packets=" << packets
-           << " doWatermark=" << doWatermark
-           << " waitIntermediateAcks=" << waitIntermediateAcks
-           << " ";
-        NDqProto::TDqTask task;
-        GenerateSquareProgram(task, [](auto& ctx) {
-            return ctx.template MakeType<TDataExprType>(EDataSlot::Int32);
-        });
-        auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
-        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
+    static constexpr ui32 NoAckPeriod = 2;
 
-        auto asyncCA = CreateTestAsyncCA(task);
-        ActorSystem.EnableScheduleForActor(asyncCA, true);
-        ui32 seqNo = 0;
-        ui32 val = 0;
+    void SendData(auto&& generator, const auto& asyncCA, ui32 packets, bool waitIntermediateAcks) {
         for (ui32 packet = 1; packet <= packets; ++packet) {
             bool isFinal = packet == packets;
-            bool noAck = (packet % 2) == 0; // set noAck on even packets
+            bool noAck = (packet % NoAckPeriod) == 0; // set noAck on even packets
 
-            PushRow(CreateRow(++val, packet), dqOutputChannel);
-            PushRow(CreateRow(++val, packet), dqOutputChannel);
-            PushRow(CreateRow(++val, packet), dqOutputChannel);
-            if (doWatermark) {
-                NDqProto::TWatermark watermark;
-                watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
-                dqOutputChannel->Push(std::move(watermark));
-            }
+            auto [dqOutputChannel, seqNo] = generator(packet, isFinal);
             if (isFinal) {
                 dqOutputChannel->Finish();
             }
 
             auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
-            evInputChannelData->Record.SetSeqNo(++seqNo);
-            evInputChannelData->Record.SetNoAck(noAck);
+            evInputChannelData->Record.SetSeqNo(++*seqNo);
             auto& chData = *evInputChannelData->Record.MutableChannelData();
+            auto channelId = dqOutputChannel->GetChannelId();
+            chData.SetChannelId(channelId);
             if (TDqSerializedBatch serializedBatch; dqOutputChannel->Pop(serializedBatch)) {
                 *chData.MutableData() = serializedBatch.Proto;
                 Y_ENSURE(serializedBatch.Payload.Empty()); // TODO
             }
             if (NDqProto::TWatermark watermark; dqOutputChannel->Pop(watermark)) {
                 *chData.MutableWatermark() = watermark;
+                noAck = false; // packet containing watermark must be acked
             }
             if (NDqProto::TCheckpoint checkpoint; dqOutputChannel->Pop(checkpoint)) {
                 *chData.MutableCheckpoint() = checkpoint;
+                noAck = false; // packet containing checkpoint must be acked
             }
-            chData.SetChannelId(InputChannelId);
-            chData.SetFinished(dqOutputChannel->IsFinished());
+            if (dqOutputChannel->IsFinished()) {
+                chData.SetFinished(true);
+                noAck = false; // final packet must be acked
+            }
+            evInputChannelData->Record.SetNoAck(noAck);
             LOG_D("Sending " << packet << "/" << packets << " "  << chData);
-            ActorSystem.Send(asyncCA, SrcEdgeActor, evInputChannelData.Release());
-            if ((isFinal || waitIntermediateAcks) && !noAck) {
-                WaitForChannelDataAck(InputChannelId, seqNo);
+            ActorSystem.Send(asyncCA, SrcEdgeActor[channelId], evInputChannelData.Release());
+            if ((dqOutputChannel->IsFinished() || waitIntermediateAcks) && !noAck) {
+                WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
             }
         }
+    }
 
-        TMap<ui32, ui32> receivedData;
-        TMaybe<TInstant> watermark;
-        while (ReceiveData(
-                [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
-                    UNIT_ASSERT(!!val);
-                    UNIT_ASSERT(val.IsEmbedded());
-                    if (RowType->GetMemberName(column) == "ts") {
-                        auto ts = val.Get<ui64>();
-                        if (watermark) {
-                            UNIT_ASSERT_GT(ts, watermark->Seconds());
-                        }
-                        return true;
-                    }
-                    UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
-                    auto data = val.Get<i32>();
-                    LOG_D(data);
-                    ++receivedData[data];
-                    return true;
-                },
-                [this, &watermark](const auto& receivedWatermark) {
-                    watermark = receivedWatermark;
-                    LOG_D("Got watermark " << *watermark);
-                },
-                dqInputChannel))
-        {}
-        DumpMonPage(asyncCA, [this](auto&& str) {
-            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-            // TODO add validation
-            LOG_D(str);
-        });
-        UNIT_ASSERT_EQUAL(receivedData.size(), val);
-        for (; val > 0; --val) {
-            UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
-        }
+    void SendFinish(const auto& asyncCA, auto dqOutputChannel, auto* seqNo) {
+        auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
+        evInputChannelData->Record.SetSeqNo(++*seqNo);
+        auto& chData = *evInputChannelData->Record.MutableChannelData();
+        auto channelId = dqOutputChannel->GetChannelId();
+        chData.SetChannelId(channelId);
+        chData.SetFinished(true);
+        evInputChannelData->Record.SetNoAck(false);
+        LOG_D("Sending FINISH " << chData);
+        ActorSystem.Send(asyncCA, SrcEdgeActor[channelId], evInputChannelData.Release());
+        WaitForChannelDataAck(dqOutputChannel->GetChannelId(), *seqNo);
     }
 
 #if 0 // TODO: switch when inputtransform will be fixed; just log for now
 #define WEAK_UNIT_ASSERT_GT_C UNIT_ASSERT_GT_C
+#define WEAK_UNIT_ASSERT_LE_C UNIT_ASSERT_LE_C
+#define WEAK_UNIT_ASSERT_EQUAL_C UNIT_ASSERT_EQUAL_C
 #define WEAK_UNIT_ASSERT UNIT_ASSERT
 #else
 #define WEAK_UNIT_ASSERT_GT_C(A, B, C) do { if (!((A) > (B))) LOG_E("Assert " #A " > " #B " failed " << C); } while(0)
+#define WEAK_UNIT_ASSERT_LE_C(A, B, C) do { if (!((A) <= (B))) LOG_E("Assert " #A " <= " #B " failed " << C); } while(0)
+#define WEAK_UNIT_ASSERT_EQUAL_C(A, B, C) do { if (!((A) == (B))) LOG_E("Assert " #A " == " #B " failed " << C); } while(0)
 #define WEAK_UNIT_ASSERT(A) do { if (!(A)) LOG_E("Assert " #A " failed "); } while(0)
 #endif
-    void InputTransformTests(ui32 packets, bool doWatermark, bool waitIntermediateAcks) {
+    void BasicMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng, NDqProto::EDqStatsMode statsMode = NDqProto::DQ_STATS_MODE_PROFILE) {
+        LogPrefix = TStringBuilder() << "Square Test for:"
+           << " packets=" << packets
+           << " watermarkPeriod=" << watermarkPeriod
+           << " waitIntermediateAcks=" << waitIntermediateAcks
+           << " channels=" << numChannels
+           << " ";
+        NDqProto::TDqTask task;
+        GenerateSquareProgram(task, [](auto& ctx) {
+            return ctx.template MakeType<TDataExprType>(EDataSlot::Int32);
+        });
+        auto dqOutputChannels = AddDummyInputChannels(task, InputChannelId, numChannels);
+        auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowType) : RowType));
+
+        auto asyncCA = CreateTestAsyncCA(task, statsMode);
+        ActorSystem.EnableScheduleForActor(asyncCA, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+
+        ui32 val = 0;
+        TMaybe<TInstant> expectedWatermark;
+        TVector<ui32> seqNo(numChannels);
+        TVector<ui64> activeChannels(numChannels);
+        std::iota(activeChannels.begin(), activeChannels.end(), 0);
+        SendData([&](auto packet, bool isFinal) {
+            auto channelIdxIdx = rng() % activeChannels.size();
+            std::swap(activeChannels[channelIdxIdx], activeChannels.back());
+            auto channelIdx = activeChannels.back();
+            auto dqOutputChannel = dqOutputChannels[channelIdx];
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            PushRow(CreateRow(++val, packet), dqOutputChannel);
+            if (watermarkPeriod && packet % watermarkPeriod == 0) {
+                LOG_D("push watermark" << packet);
+                NDqProto::TWatermark watermark;
+                watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
+                dqOutputChannel->Push(std::move(watermark));
+                expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
+            }
+            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
+                // when we have more than one active channels left, we may randomly finish it midway
+                dqOutputChannel->Finish();
+                activeChannels.pop_back();
+            }
+            return std::pair { dqOutputChannel, &seqNo[channelIdx] };
+        },
+        asyncCA, packets, waitIntermediateAcks);
+        // Finish all unfinished channels (when we have more than one channel left, only one is forcibly finished on final packet)
+        for (ui32 channelIdx = 0; channelIdx < numChannels; ++channelIdx) {
+            auto dqOutputChannel = dqOutputChannels[channelIdx];
+            if (dqOutputChannel->IsFinished()) {
+                continue;
+            }
+            SendFinish(asyncCA, dqOutputChannel, &seqNo[channelIdx]);
+        }
+
+        TMap<ui32, ui32> receivedData;
+        TMaybe<TInstant> watermark;
+        try {
+            while (ReceiveData(
+                    [this, &receivedData, &watermark](const NUdf::TUnboxedValue& val, ui32 column) {
+                        UNIT_ASSERT(!!val);
+                        UNIT_ASSERT(val.IsEmbedded());
+                        if (RowType->GetMemberName(column) == "ts") {
+                            auto ts = val.Get<ui64>();
+                            if (watermark) {
+                                UNIT_ASSERT_GT_C(ts, watermark->Seconds(), ts << " >= " << watermark->Seconds());
+                            }
+                            return true;
+                        }
+                        UNIT_ASSERT_EQUAL(RowType->GetMemberName(column), "id");
+                        auto data = val.Get<i32>();
+                        LOG_D(data);
+                        ++receivedData[data];
+                        return true;
+                    },
+                    [this, &watermark](const auto& receivedWatermark) {
+                        watermark = receivedWatermark;
+                        LOG_D("Got watermark " << *watermark);
+                    },
+                    [this, &asyncCA]() {
+                        DumpMonPage(asyncCA, [this](auto&& str) {
+                            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                            // TODO add validation
+                            LOG_D(str);
+                        });
+                    },
+                    dqInputChannel))
+            {}
+        } catch(...) {
+            DumpMonPage(asyncCA, [this](auto&& str) {
+                LOG_D(str);
+            });
+            throw;
+        }
+        UNIT_ASSERT_EQUAL_C(receivedData.size(), val, "expected size " << val << " != " << receivedData.size());
+        for (; val > 0; --val) {
+            UNIT_ASSERT_EQUAL_C(receivedData[val * val], 1, "expected count for " << (val * val));
+        }
+        if (expectedWatermark) {
+            WEAK_UNIT_ASSERT(!!watermark);
+            if (watermark) {
+                UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
+                LOG_D("Last watermark " << *watermark);
+            } else {
+                LOG_E("NO WATERMARK");
+            }
+        } else {
+            UNIT_ASSERT(!watermark);
+        }
+    }
+
+    void InputTransformMultichannelTests(ui32 packets, ui32 watermarkPeriod, bool waitIntermediateAcks, ui32 numChannels, auto& rng) {
         LogPrefix = TStringBuilder() << "InputTransform Test for:"
            << " packets=" << packets
-           << " doWatermark=" << doWatermark
+           << " watermarkPeriod=" << watermarkPeriod
            << " waitIntermediateAcks=" << waitIntermediateAcks
+           << " channels=" << numChannels
            << " ";
         NDqProto::TDqTask task;
         GenerateEmptyProgram(task, [](auto& ctx) {
@@ -728,7 +853,7 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             return structType;
         });
         TMap<i32, ui32> expectedData;
-        auto dqOutputChannel = AddDummyInputChannel(task, InputChannelId);
+        auto dqOutputChannels = AddDummyInputChannels(task, InputChannelId, numChannels);
         auto dqInputChannel = AddDummyOutputChannel(task, OutputChannelId, (IsWide ? static_cast<TType*>(WideRowTransformedType) : RowTransformedType));
         SetInputTransform(task,
                 TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
@@ -737,12 +862,19 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
 
         auto asyncCA = CreateTestAsyncCA(task);
         ActorSystem.EnableScheduleForActor(asyncCA, true);
-        ui32 seqNo = 0;
-        ui32 val = 0;
-        for (ui32 packet = 1; packet <= packets; ++packet) {
-            bool isFinal = packet == packets;
-            bool noAck = (packet % 2) == 0; // set noAck on even packets
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
 
+        ui32 val = 0;
+        TMaybe<TInstant> expectedWatermark;
+        TVector<ui32> seqNo(numChannels);
+        TVector<ui64> activeChannels(numChannels);
+        std::iota(activeChannels.begin(), activeChannels.end(), 0);
+
+        SendData([&](auto packet, bool isFinal) {
+            auto channelIdxIdx = rng() % activeChannels.size();
+            std::swap(activeChannels[channelIdxIdx], activeChannels.back());
+            auto channelIdx = activeChannels.back();
+            auto dqOutputChannel = dqOutputChannels[channelIdx];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
@@ -756,36 +888,27 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
             ++expectedData[val];
             PushRow(CreateRow(++val, packet), dqOutputChannel);
             ++expectedData[val];
-            if (doWatermark) {
+            if (watermarkPeriod && packet % watermarkPeriod == 0) {
                 NDqProto::TWatermark watermark;
                 watermark.SetTimestampUs(TInstant::Seconds(packet).MicroSeconds());
                 dqOutputChannel->Push(std::move(watermark));
+                expectedWatermark = std::max(expectedWatermark, TMaybe<TInstant>(TInstant::Seconds(packet)));
             }
-            if (isFinal) {
+            if (isFinal || activeChannels.size() > 1 && rng() % std::max(packets/numChannels, ui32{1}) == 0) {
+                // when we have more than one active channels left, we may randomly finish it midway
                 dqOutputChannel->Finish();
+                activeChannels.pop_back();
             }
-
-            auto evInputChannelData = MakeHolder<TEvDqCompute::TEvChannelData>();
-            evInputChannelData->Record.SetSeqNo(++seqNo);
-            evInputChannelData->Record.SetNoAck(noAck);
-            auto& chData = *evInputChannelData->Record.MutableChannelData();
-            if (TDqSerializedBatch serializedBatch; dqOutputChannel->Pop(serializedBatch)) {
-                *chData.MutableData() = serializedBatch.Proto;
-                Y_ENSURE(serializedBatch.Payload.Empty()); // TODO
+            return std::pair { dqOutputChannel, &seqNo[channelIdx] };
+        },
+        asyncCA, packets, waitIntermediateAcks);
+        // Finish all unfinished channels (when we have more than one channel left, only one is forcibly finished on final packet)
+        for (ui32 channelIdx = 0; channelIdx < numChannels; ++channelIdx) {
+            auto dqOutputChannel = dqOutputChannels[channelIdx];
+            if (dqOutputChannel->IsFinished()) {
+                continue;
             }
-            if (NDqProto::TWatermark watermark; dqOutputChannel->Pop(watermark)) {
-                *chData.MutableWatermark() = watermark;
-            }
-            if (NDqProto::TCheckpoint checkpoint; dqOutputChannel->Pop(checkpoint)) {
-                *chData.MutableCheckpoint() = checkpoint;
-            }
-            chData.SetChannelId(InputChannelId);
-            chData.SetFinished(dqOutputChannel->IsFinished());
-            LOG_D("Sending " << packet << "/" << packets << " "  << chData);
-            ActorSystem.Send(asyncCA, SrcEdgeActor, evInputChannelData.Release());
-            if ((isFinal || waitIntermediateAcks) && !noAck) {
-                WaitForChannelDataAck(InputChannelId, seqNo);
-            }
+            SendFinish(asyncCA, dqOutputChannel, &seqNo[channelIdx]);
         }
 
         TMap<i32, ui32> receivedData;
@@ -799,16 +922,16 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     if (columnName == "e.id") {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
-                        LOG_D(column << "id = " << val.Get<i32>());
+                        LOG_D(column << " id = " << val.Get<i32>());
                         col0 = val.Get<i32>();
                         ++receivedData[val.Get<i32>()];
                     } else if (columnName == "e.ts") {
                         UNIT_ASSERT(!!val);
                         UNIT_ASSERT(val.IsEmbedded());
                         auto ts = val.Get<ui64>();
-                        LOG_D(column << "ts = " << ts);
+                        LOG_D(column << " ts = " << ts);
                         if (watermark) {
-                            WEAK_UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
+                            UNIT_ASSERT_GT_C(ts, watermark->Seconds(), "Timestamp " << ts << " before watermark: " << watermark->Seconds());
                         }
                     } else if (columnName == "u.key") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
@@ -817,10 +940,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                             UNIT_ASSERT(!!cval);
                             UNIT_ASSERT(cval.IsEmbedded());
                             auto data = cval.Get<i32>();
-                            LOG_D(column << "key = " << data);
+                            LOG_D(column << " key = " << data);
                             UNIT_ASSERT_EQUAL_C(data, col0, data << "!=" << col0);
                         } else {
                             UNIT_ASSERT_C(!val, "null (1) expected for " << col0);
+                            LOG_D(column << " key IS NULL");
                         }
                     } else if (columnName == "u.data") {
                         if (col0 >= MinTransformedValue && col0 <= MaxTransformedValue) {
@@ -828,10 +952,11 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                             const auto cval = val.GetOptionalValue();
                             UNIT_ASSERT(!!cval);
                             auto ref = TString(cval.AsStringRef());
-                            LOG_D(column << "data = '" << ref << "'");
+                            LOG_D(column << " data = '" << ref << "'");
                             UNIT_ASSERT_EQUAL(ref, ToString(col0));
                         } else {
                             UNIT_ASSERT_C(!val, "null (2) expected for " << col0);
+                            LOG_D(column << " data IS NULL");
                         }
                     } else {
                         UNIT_ASSERT_C(false, "Unexpected column " << column << " name " << columnName);
@@ -842,26 +967,47 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
                     watermark = receivedWatermark;
                     LOG_D("Got watermark " << *watermark);
                 },
+                [this, &asyncCA]() {
+                    DumpMonPage(asyncCA, [this](auto&& str) {
+                        UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
+                        UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
+                        // TODO add validation
+                        LOG_D(str);
+                    });
+                },
                 dqInputChannel))
         {}
-        DumpMonPage(asyncCA, [this](auto&& str) {
-            UNIT_ASSERT_STRING_CONTAINS(str, "<h3>Sources</h3>");
-            UNIT_ASSERT_STRING_CONTAINS(str, LogPrefix);
-            // TODO add validation
-            LOG_D(str);
-        });
-        UNIT_ASSERT_EQUAL(receivedData.size(), expectedData.size());
+        UNIT_ASSERT_EQUAL_C(receivedData.size(), expectedData.size(), "received " << receivedData.size() << " != expected " << expectedData.size());
         for (auto [receivedVal, receivedCnt] : receivedData) {
             UNIT_ASSERT_EQUAL_C(receivedCnt, expectedData[receivedVal], "expected count for " << receivedVal << ": " << receivedCnt << " != " << expectedData[receivedVal]);
         }
-        if (doWatermark) {
+        if (expectedWatermark) {
             WEAK_UNIT_ASSERT(!!watermark);
             if (watermark) {
+                UNIT_ASSERT_LE_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " <= " << expectedWatermark);
+                WEAK_UNIT_ASSERT_EQUAL_C(*watermark, expectedWatermark, "Expected " << (*watermark) << " == " << expectedWatermark << ", Watermark Delay is " << (*expectedWatermark - *watermark));
                 LOG_D("Last watermark " << *watermark);
             } else {
                 LOG_E("NO WATERMARK");
             }
+        } else {
+            UNIT_ASSERT(!watermark);
         }
+    }
+
+    auto GetRandomSeed() {
+        uint32_t seed = 0; // by default tests are reproducible (fixed-seed PRNG)
+        if (auto env = getenv("RANDOM_SEED")) {
+            if (*env) {
+                // with non-empty $RANDOM_SEED use it as seed (to reproduce random test failures)
+                seed = ::FromString<uint32_t>(env);
+            } else {
+                // with empty $RANDOM_SEED make tests truly random
+                seed = (std::random_device {})();
+                Cerr << "RANDOM_SEED=" << seed << Endl;
+            }
+        }
+        return seed;
     }
 };
 
@@ -871,20 +1017,44 @@ Y_UNIT_TEST_SUITE(TAsyncComputeActorTest) {
     Y_UNIT_TEST_F(Empty, TAsyncCATestFixture) { }
 
     Y_UNIT_TEST_F(Basic, TAsyncCATestFixture) {
+        TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
+        auto seed = GetRandomSeed();
+        std::mt19937 rng(seed);
+        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
         for (bool waitIntermediateAcks : { false, true }) {
-            for (bool doWatermark : { false, true }) {
-                for (ui32 packets : { 1, 2, 3, 4, 5 }) {
-                    BasicTests(packets, doWatermark, waitIntermediateAcks);
+            for (ui32 watermarkPeriod : { 0, 1, 3 }) {
+                for (ui32 packets : sizes) {
+                    for (ui32 numChannels : { 1, 3, 7, 16 }) {
+                        std::mt19937 trng(seed);
+                        BasicMultichannelTests(packets, watermarkPeriod, waitIntermediateAcks, numChannels, trng);
+                    }
                 }
             }
         }
     }
 
-    Y_UNIT_TEST_F(InputTransform, TAsyncCATestFixture) {
-        for (bool waitIntermediateAcks : { false, true }) {
-            for (bool doWatermark : { false, true }) {
-                for (ui32 packets : { 1, 2, 3, 4, 5, 111 }) {
-                    InputTransformTests(packets, doWatermark, waitIntermediateAcks);
+    Y_UNIT_TEST_F(StatsMode, TAsyncCATestFixture) {
+        for (auto statsMode : {
+                NDqProto::DQ_STATS_MODE_NONE,
+                NDqProto::DQ_STATS_MODE_BASIC,
+                NDqProto::DQ_STATS_MODE_FULL,
+                NDqProto::DQ_STATS_MODE_PROFILE,
+                }) {
+            std::mt19937 rng;
+            BasicMultichannelTests(5, 1, true, 1, rng, statsMode);
+        }
+    }
+
+    Y_UNIT_TEST_F(InputTransformMultichannel, TAsyncCATestFixture) {
+        TVector<ui32> sizes{ 1, 2, 3, 4, 5, 51, 128, 251 };
+        std::mt19937 rng(GetRandomSeed());
+        for (ui32 t = 0; t < 16; ++t) sizes.push_back(1 + rng() % 734);
+        for (ui32 numChannels: { 1, 2, 7, 11 }) {
+            for (bool waitIntermediateAcks : { false, true }) {
+                for (ui32 watermarkPeriod : { 0, 1, 3 }) {
+                    for (ui32 packets : sizes) {
+                        InputTransformMultichannelTests(packets, watermarkPeriod, waitIntermediateAcks, numChannels, rng);
+                    }
                 }
             }
         }

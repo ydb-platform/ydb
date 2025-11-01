@@ -1,23 +1,31 @@
 items:
 - name: Глоссарий
   href: glossary.md
+- name: Аналитические возможности
+  include:
+    path: analytics/toc_p.yaml
+    mode: link
 - name: Архитектура
   href: architecture.md
 - name: Соединение с БД
   href: connect.md
-- name: Структура кластера
+- name: Схемные объекты
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
     mode: link
 - name: Топология кластера
   href: topology.md
+- name: Выполнение запросов
+  href: query_execution.md
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы
   href: secondary_indexes.md
 - name: Векторный поиск
   href: vector_search.md
+- name: Спиллинг
+  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -31,7 +39,10 @@ items:
   href: mvcc.md
 - name: Асинхронная репликация
   href: async-replication.md
-  when: feature_async_replication
+- name: Режим bridge
+  href: bridge.md
+- name: Трансфер данных
+  href: transfer.md
 - name: Оптимизатор запросов
   href: optimizer.md
 - name: Федеративные запросы

@@ -12,19 +12,20 @@ extern PyObject *ZstdError;
 
 FrameParametersObject *get_frame_parameters(PyObject *self, PyObject *args,
                                             PyObject *kwargs) {
-    static char *kwlist[] = {"data", NULL};
+    static char *kwlist[] = {"data", "format", NULL};
 
     Py_buffer source;
     ZSTD_frameHeader header;
+    ZSTD_format_e format = ZSTD_f_zstd1;
     FrameParametersObject *result = NULL;
     size_t zresult;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "y*:get_frame_parameters",
-                                     kwlist, &source)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "y*|I:get_frame_parameters",
+                                     kwlist, &source, &format)) {
         return NULL;
     }
 
-    zresult = ZSTD_getFrameHeader(&header, source.buf, source.len);
+    zresult = ZSTD_getFrameHeader_advanced(&header, source.buf, source.len, format);
 
     if (ZSTD_isError(zresult)) {
         PyErr_Format(ZstdError, "cannot get frame parameters: %s",
@@ -77,7 +78,7 @@ PyType_Slot FrameParametersSlots[] = {
 };
 
 PyType_Spec FrameParametersSpec = {
-    "zstd.FrameParameters",
+    "zstandard.backend_c.FrameParameters",
     sizeof(FrameParametersObject),
     0,
     Py_TPFLAGS_DEFAULT,

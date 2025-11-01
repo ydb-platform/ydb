@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -39,6 +39,7 @@ public:
         const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(std::move(settings))
+        , IsPrefixed(Settings.HasRootClusterColumnIndex())
         , LogPrefix(TStringBuilder() << "VectorResolveActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
@@ -173,14 +174,28 @@ private:
             RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (EmptyIndex) {
+            LevelsFinished = true;
+        }
         while (!LevelsFinished) {
             if (!LevelClusters.size()) {
                 LevelClusters.clear();
                 if (!ResolvedLevel) {
-                    LevelClusters.insert(0);
+                    if (IsPrefixed) {
+                        for (size_t i = 0; i < PendingRows.size(); i++) {
+                            auto rootClusterId = (ui64)PendingRows[i].GetElement(Settings.GetRootClusterColumnIndex()).GetInt128();
+                            PrevClusters.push_back(rootClusterId);
+                            if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(rootClusterId)) {
+                                LevelClusters.insert(rootClusterId);
+                            }
+                        }
+                    } else {
+                        PrevClusters.resize(PendingRows.size());
+                        LevelClusters.insert(0);
+                    }
                 } else {
                     for (auto cluster: PrevClusters) {
-                        if (!(cluster & NKikimr::NTableIndex::PostingParentFlag)) {
+                        if (!NKikimr::NTableIndex::NKMeans::HasPostingParentFlag(cluster)) {
                             LevelClusters.insert(cluster);
                         }
                     }
@@ -190,20 +205,19 @@ private:
                     LevelsFinished = true;
                     break;
                 }
-                NextClusters.clear();
-                NextClusters.resize(PendingRows.size());
+                NextClusters = PrevClusters;
                 CurClusters.reset();
             }
             while (LevelClusters.size() > 0) {
                 auto cluster = *LevelClusters.begin();
-                if (ResolvedLevel > 0 ? !CurClusters : !RootClusters) {
+                if (IsPrefixed || ResolvedLevel > 0 ? !CurClusters : !RootClusters) {
                     ReadChildClusters(cluster);
                     return;
                 }
-                auto & clusters = (ResolvedLevel > 0 ? CurClusters : RootClusters);
-                auto & clusterIds = (ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
+                auto & clusters = (IsPrefixed || ResolvedLevel > 0 ? CurClusters : RootClusters);
+                auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
                 for (size_t i = 0; i < PendingRows.size(); i++) {
-                    if (ResolvedLevel > 0 && PrevClusters[i] != cluster) {
+                    if ((ResolvedLevel > 0 || IsPrefixed) && PrevClusters[i] != cluster) {
                         continue;
                     }
                     auto embedding = PendingRows[i].GetElement(Settings.GetVectorColumnIndex());
@@ -230,19 +244,19 @@ private:
         return TypeEnv.BindAllocator();
     }
 
-    static TTableRange RawParentRange(NTableIndex::TClusterId parent) {
+    static TTableRange RawParentRange(NTableIndex::NKMeans::TClusterId parent) {
         auto from = parent > 0 ? TCell::Make(parent - 1) : TCell(); // null is -infinity
         auto to = TCell::Make(parent); // missing key suffix is +infinity
         return TTableRange({&from, 1}, false, {&to, 1}, true);
     }
 
-    static TSerializedTableRange ParentRange(NTableIndex::TClusterId parent) {
+    static TSerializedTableRange ParentRange(NTableIndex::NKMeans::TClusterId parent) {
         auto from = parent > 0 ? TCell::Make(parent - 1) : TCell(); // null is -infinity
         auto to = TCell::Make(parent); // missing key suffix is +infinity
         return TSerializedTableRange({&from, 1}, false, {&to, 1}, true);
     }
 
-    void ReadChildClusters(NTableIndex::TClusterId parent) {
+    void ReadChildClusters(NTableIndex::NKMeans::TClusterId parent) {
         if (ReadingChildClusters) {
             return;
         }
@@ -251,7 +265,7 @@ private:
         ReadUsingActor(parent);
     }
 
-    void ReadUsingActor(NTableIndex::TClusterId parent) {
+    void ReadUsingActor(NTableIndex::NKMeans::TClusterId parent) {
         auto range = ParentRange(parent);
         auto arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         auto src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
@@ -281,14 +295,14 @@ private:
 
         auto* meta = src->AddColumns();
         meta->SetId(Settings.GetLevelTableParentColumnId());
-        meta->SetName(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn);
+        meta->SetName(NTableIndex::NKMeans::ParentColumn);
         meta->SetType(ui64Type.TypeId);
         *meta->MutableTypeInfo() = NKikimrProto::TTypeInfo();
         meta->SetNotNull(true);
 
         meta = src->AddColumns();
         meta->SetId(Settings.GetLevelTableClusterColumnId());
-        meta->SetName(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn);
+        meta->SetName(NTableIndex::NKMeans::IdColumn);
         meta->SetType(ui64Type.TypeId);
         *meta->MutableTypeInfo() = NKikimrProto::TTypeInfo();
         meta->SetNotNull(true);
@@ -296,7 +310,7 @@ private:
         auto stringType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NScheme::NTypeIds::String), "");
         meta = src->AddColumns();
         meta->SetId(Settings.GetLevelTableCentroidColumnId());
-        meta->SetName(NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn);
+        meta->SetName(NTableIndex::NKMeans::CentroidColumn);
         meta->SetType(stringType.TypeId);
         *meta->MutableTypeInfo() = NKikimrProto::TTypeInfo();
         meta->SetNotNull(true);
@@ -311,6 +325,9 @@ private:
     }
 
     void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
+        if (!ReadActorInput) {
+            return;
+        }
         TMaybe<TInstant> watermark;
         ui64 freeSpace = 32*1024*1024; // FIXME The value doesn't really matter, but where to take it from?
         NKikimr::NMiniKQL::TUnboxedValueBatch rows;
@@ -319,12 +336,12 @@ private:
             auto guard = BindAllocator();
             ReadActorInput->GetAsyncInputData(rows, watermark, finished, freeSpace);
             rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                NTableIndex::TClusterId parent = value.GetElement(0).Get<ui64>();
+                NTableIndex::NKMeans::TClusterId parent = value.GetElement(0).Get<ui64>();
                 if (parent != ReadingChildClustersOf) {
                     RuntimeError("Returned clusters for invalid parent", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                     return;
                 }
-                NTableIndex::TClusterId child = value.GetElement(1).Get<ui64>();
+                NTableIndex::NKMeans::TClusterId child = value.GetElement(1).Get<ui64>();
                 auto centroid = value.GetElement(2);
                 FetchedClusters[child] = TString(centroid.AsStringRef());
             });
@@ -369,6 +386,12 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
+            // Index is empty
+            EmptyIndex = true;
+            ContinueResolveClusters();
+            return;
+        }
         TVector<ui64> clusterIds;
         TVector<TString> clusterRows;
         for (auto & pp: FetchedClusters) {
@@ -395,6 +418,11 @@ private:
     i64 ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) {
         auto guard = BindAllocator();
 
+        if (EmptyIndex) {
+            PendingRows.clear();
+            return 0;
+        }
+
         i64 totalSize = 0;
 
         while (PendingRows.size() > 0 && freeSpace > 0) {
@@ -406,13 +434,20 @@ private:
             // Output columns: Cluster ID + Source table PK [ + Data Columns ]
             auto newValue = HolderFactory.CreateDirectArrayHolder(1 + Settings.CopyColumnIndexesSize(), rowItems);
 
-            *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
-            rowSize += sizeof(NUdf::TUnboxedValuePod);
-
+            if (Settings.GetClusterColumnOutPos() == 0) {
+                // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                rowSize += sizeof(NUdf::TUnboxedValuePod);
+            }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
                 *rowItems++ = currentValue.GetElement(colIdx);
                 rowSize += NMiniKQL::GetUnboxedValueSize(currentValue.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                if (Settings.GetClusterColumnOutPos() == i+1) {
+                    // We support inserting cluster ID column into any position to maintain alphabetical order of columns
+                    *rowItems++ = NUdf::TUnboxedValuePod((ui64)PrevClusters[PendingRows.size()]);
+                    rowSize += sizeof(NUdf::TUnboxedValuePod);
+                }
             }
 
             totalSize += rowSize;
@@ -480,6 +515,7 @@ private:
     // Parameters
 
     const NKikimrTxDataShard::TKqpVectorResolveSettings Settings;
+    const bool IsPrefixed;
     const TString LogPrefix;
     const ui64 InputIndex;
     NUdf::TUnboxedValue Input;
@@ -500,22 +536,23 @@ private:
 
     NKikimr::NMiniKQL::TUnboxedValueDeque PendingRows;
     bool ReadingChildClusters = false;
-    NTableIndex::TClusterId ReadingChildClustersOf = {};
+    NTableIndex::NKMeans::TClusterId ReadingChildClustersOf = {};
 
     NYql::NDq::IDqComputeActorAsyncInput* ReadActorInput = nullptr;
     TActorId ReadActorId = {};
     bool Failed = false;
 
-    TMap<NTableIndex::TClusterId, TString> FetchedClusters;
+    TMap<NTableIndex::NKMeans::TClusterId, TString> FetchedClusters;
     ui32 ResolvedLevel = 0;
     bool LevelsFinished = false;
-    TVector<NTableIndex::TClusterId> PrevClusters;
-    TVector<NTableIndex::TClusterId> NextClusters;
-    TSet<NTableIndex::TClusterId> LevelClusters;
+    TVector<NTableIndex::NKMeans::TClusterId> PrevClusters;
+    TVector<NTableIndex::NKMeans::TClusterId> NextClusters;
+    TSet<NTableIndex::NKMeans::TClusterId> LevelClusters;
     std::unique_ptr<NKikimr::NKMeans::IClusters> RootClusters;
-    TVector<NTableIndex::TClusterId> RootClusterIds;
+    TVector<NTableIndex::NKMeans::TClusterId> RootClusterIds;
+    bool EmptyIndex = false;
     std::unique_ptr<NKikimr::NKMeans::IClusters> CurClusters;
-    TVector<NTableIndex::TClusterId> CurClusterIds;
+    TVector<NTableIndex::NKMeans::TClusterId> CurClusterIds;
 
     TVector<NKikimrDataEvents::TLock> Locks;
 

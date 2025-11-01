@@ -23,7 +23,6 @@ PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
-    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
 )
@@ -43,20 +42,24 @@ SRCS(
     pqtablet_ut.cpp
     quota_tracker_ut.cpp
     sourceid_ut.cpp
-    type_codecs_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp
-    microseconds_sliding_window_ut.cpp
-    fetch_request_ut.cpp
+    partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
-    list_all_topics_ut.cpp
-    cache_eviction_ut.cpp
 )
 
 RESOURCE(
     ydb/core/persqueue/ut/resources/counters_datastreams.html counters_datastreams.html
     ydb/core/persqueue/ut/resources/counters_pqproxy_firstclass.html counters_pqproxy_firstclass.html
     ydb/core/persqueue/ut/resources/counters_topics.html counters_topics.html
+    ydb/core/persqueue/ut/resources/counters_topics_extended.html counters_topics_extended.html
+
+    ydb/core/persqueue/ut/resources/partition_counters/federation/after_write.html federation_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation/after_read.html federation_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation/turned_off.html federation_turned_off.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_write.html first_class_citizen_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_read.html first_class_citizen_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/turned_off.html first_class_citizen_turned_off.html
 
     ydb/core/persqueue/ut/resources/counters_pqproxy.html counters_pqproxy.html
 

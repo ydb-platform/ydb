@@ -18,6 +18,11 @@ items:
   include:
     mode: link
     path: dev/toc_p.yaml
+- name: Для аналитиков и инженеров данных
+  href: analyst/index.md
+  include:
+    mode: link
+    path: analyst/toc_p.yaml
 - name: Для инженеров безопасности
   href: security/index.md
   include:
@@ -69,5 +74,15 @@ items:
       href: "https://yandex.cloud/ru/training/ydb-admin?utm_medium=owned&utm_source=oss_docs"
     - name: Курс для разработчиков
       href: "https://ydb.yandex.ru/training/ydb-developer?utm_medium=owned&utm_source=oss_docs"
-    - name: Сертификация
-      href: "https://yandex.cloud/ru/certification/ydb-competencies?utm_medium=owned&utm_source=oss_docs"
+    - name: Сертификация для администраторов
+      href: "https://yandex.cloud/ru/certification/ydbadministrator?utm_medium=owned&utm_source=oss_docs"
+    - name: Сертификация для разработчиков
+      href: "https://yandex.cloud/ru/certification/ydbdeveloper?utm_medium=owned&utm_source=oss_docs"
+- name: Карьера
+  labeled: true
+  when: audience != "tech"
+  items:
+    - name: Команда
+      href: "https://ydb.tech/ru/careers/"
+    - name: Студентам
+      href: "https://ydb.tech/ru/students/"

@@ -270,9 +270,10 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////
         // Operations with Fresh
         //////////////////////////////////////////////////////////////////////////////////////
-        void PutToFresh(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer) {
+        void PutToFresh(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+                std::optional<ui64> checksum) {
             Y_DEBUG_ABORT_UNLESS(Loaded);
-            Fresh.PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+            Fresh.PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer), checksum);
         }
 
         void PutToFresh(ui64 lsn, const TKey &key, const TMemRec &memRec) {

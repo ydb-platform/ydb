@@ -52,7 +52,7 @@ public:
 
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt, i32 runtimeParameterSizeLimit)
         : QueryId(queryId)
         , Database(database)
         , ApplicationName(applicationName)
@@ -62,6 +62,7 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
+        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
@@ -69,15 +70,24 @@ public:
         , UserToken(ev->Get()->GetUserToken())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
-        , ResultSetFormatSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
+        , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
+        , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
             AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
+
         if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
+
+                if ((typedValue.type().has_list_type() || typedValue.type().has_tuple_type()) &&
+                    typedValue.value().items().size() > static_cast<i32>(runtimeParameterSizeLimit))
+                {
+                    RuntimeParameterSizeLimitSatisfied = false;
+                }
             }
         }
 
@@ -89,6 +99,9 @@ public:
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
+        if (KqpSessionSpan && AppData()) {
+            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+        }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {
@@ -129,6 +142,7 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+    const i64 Generation = 0;
 
     TActorId RequestActorId;
 
@@ -184,7 +198,11 @@ public:
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
 
-    TResultSetFormatSettings ResultSetFormatSettings;
+    NFormats::TFormatsSettings FormatsSettings;
+
+    i32 RuntimeParameterSizeLimit = 0;
+    bool RuntimeParameterSizeLimitSatisfied = true;
+
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -284,8 +302,8 @@ public:
         return IsSplitted();
     }
 
-    const TResultSetFormatSettings& GetResultSetFormatSettings() const {
-        return ResultSetFormatSettings;
+    const NFormats::TFormatsSettings& GetFormatsSettings() const {
+        return FormatsSettings;
     }
 
     // todo: gvit
@@ -615,6 +633,7 @@ public:
     bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
 
     bool HasUserToken() const;
+
 };
 
 

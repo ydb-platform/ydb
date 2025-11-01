@@ -1,4 +1,33 @@
+import json
+import os
+
+import pytest
+import library.python.resource as resource
+
 from build.plugins.lib.nots.typescript.ts_glob import ts_glob, TsGlobConfig
+
+test_tsconfig_real_files_prefix = "resfs/file/test-data/tsconfig-real-files/"
+test_tsconfig_real_files_cases = [
+    r[len(test_tsconfig_real_files_prefix) :] for r in resource.iterkeys("resfs/file/test-data/tsconfig-real-files/")
+]
+
+
+# see README.md for instruction to add more real-live cases
+@pytest.mark.parametrize("test_case", test_tsconfig_real_files_cases)
+def test_tsconfig_real_files(test_case):
+    tsconfig = json.loads(resource.find(test_tsconfig_real_files_prefix + test_case).decode("utf-8"))
+    compiler_options = tsconfig.get("compilerOptions", {})
+
+    ts_glob_config = TsGlobConfig(
+        root_dir=compiler_options.get("rootDir", "./"),
+        out_dir=compiler_options.get("outDir", None),
+        include=tsconfig.get("include", []),
+    )
+
+    all_files = [os.path.normpath(f) for f in tsconfig.get("files", [])]
+    filtered_files = ts_glob(ts_glob_config, all_files)
+
+    assert set(all_files) == set(filtered_files)
 
 
 class TestTsGlobIncluding:

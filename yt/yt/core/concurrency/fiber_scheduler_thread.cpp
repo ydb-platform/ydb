@@ -193,6 +193,13 @@ Y_FORCE_INLINE ELogLevel SwapMinLogLevel(ELogLevel minLogLevel)
     return result;
 }
 
+Y_FORCE_INLINE std::string SwapMessageTag(std::string messageTag)
+{
+    auto result = std::move(GetThreadMessageTag());
+    SetThreadMessageTag(std::move(messageTag));
+    return result;
+}
+
 Y_FORCE_INLINE TExceptionSafeContext* GetMachineContext()
 {
     return &FiberContext()->MachineContext;
@@ -806,6 +813,7 @@ protected:
         Fls_ = SwapCurrentFls(Fls_);
         TContextSwitchManager::Get()->OnIn();
         MinLogLevel_ = SwapMinLogLevel(MinLogLevel_);
+        MessageTag_ = SwapMessageTag(MessageTag_);
     }
 
     ~TBaseSwitchHandler()
@@ -813,12 +821,14 @@ protected:
         YT_VERIFY(FiberId_ == InvalidFiberId);
         YT_VERIFY(!Fls_);
         YT_VERIFY(MinLogLevel_ == ELogLevel::Minimum);
+        YT_VERIFY(MessageTag_.empty());
     }
 
 private:
     TFls* Fls_ = nullptr;
     TFiberId FiberId_ = InvalidFiberId;
     ELogLevel MinLogLevel_ = ELogLevel::Minimum;
+    std::string MessageTag_;
 };
 
 class TFiberSwitchHandler;

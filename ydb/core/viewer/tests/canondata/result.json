@@ -1,22 +1,122 @@
 {
-    "test.test_counter": {
+    "test.TestViewer.test_async_replication_describe": {
+        "create_result": {
+            "status": "SUCCESS",
+            "version": 10
+        },
+        "describe_result": {
+            "connection_params": {
+                "connection_string": "text",
+                "database": "/Root/dedicated_db",
+                "endpoint": "text",
+                "oauth": {}
+            },
+            "error": {
+                "issues": [
+                    {
+                        "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                        "severity": 1
+                    }
+                ]
+            },
+            "row_consistency": {},
+            "self": {
+                "created_at": {
+                    "plan_step": "not-zero-number-text",
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
+                "name": "TestAsyncReplication",
+                "owner": "root@builtin",
+                "type": "REPLICATION"
+            }
+        }
+    },
+    "test.TestViewer.test_counter": {
         "status_code": 200,
         "text": "1\n"
     },
-    "test.test_operations_list": {
+    "test.TestViewer.test_operations_list": {
         "next_page_token": "0",
         "status": "SUCCESS"
     },
-    "test.test_operations_list_page": {
+    "test.TestViewer.test_operations_list_page": {
         "next_page_token": "0",
         "status": "SUCCESS"
     },
-    "test.test_operations_list_page_bad": {
+    "test.TestViewer.test_operations_list_page_bad": {
         "status_code": 400,
         "text": "offset must be a multiple of limit"
     },
-    "test.test_pqrb_tablet": {
+    "test.TestViewer.test_pqrb_tablet": {
         "response_create_topic": {
+            "status": "SUCCESS",
             "version": "not-zero-number"
         },
         "response_tablet_info": {
@@ -57,7 +157,7 @@
             ]
         }
     },
-    "test.test_scheme_directory": {
+    "test.TestViewer.test_scheme_directory": {
         "1-get": {
             "children": [
                 {
@@ -144,10 +244,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         },
@@ -250,10 +388,48 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         },
@@ -347,15 +523,53 @@
                             "ydb.generic.manage"
                         ],
                         "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
                     }
                 ],
                 "name": "Root/dedicated_db",
                 "owner": "user1",
+                "permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
                 "type": "DATABASE"
             }
         }
     },
-    "test.test_security": {
+    "test.TestViewer.test_security": {
         "cluster_nodes_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
@@ -487,9 +701,61 @@
         "restart_pdisk_viewer": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        },
+        "storage_nodes_database": {
+            "FieldsAvailable": "10000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_monitoring": {
+            "FieldsAvailable": "10000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_root": {
+            "FieldsAvailable": "10000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
+        },
+        "storage_nodes_viewer": {
+            "FieldsAvailable": "10000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000011",
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "NodeId": 1
+                }
+            ],
+            "TotalNodes": "1"
         }
     },
-    "test.test_storage_groups": {
+    "test.TestViewer.test_storage_groups": {
         "FieldsAvailable": "0111111111111111111111",
         "FieldsRequired": "1111111111111111111111",
         "FoundGroups": 5,
@@ -497,6 +763,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
@@ -513,22 +780,24 @@
                 "Used": "0",
                 "VDisks": [
                     {
-                        "AvailableSize": "text",
+                        "AllocatedSize": "0",
+                        "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "NodeId": 1,
                         "PDisk": {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
+                            "SlotCount": "not-zero-number-text",
                             "SlotSize": "not-zero-number-text",
                             "Status": "accepted-value",
                             "TotalSize": "not-zero-number-text",
                             "Type": "hdd",
                             "Whiteboard": {
-                                "AvailableSize": "text",
+                                "AvailableSize": "not-zero-number-text",
                                 "Category": "0",
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
@@ -550,7 +819,7 @@
                         "VDiskId": "0-1-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -586,6 +855,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
@@ -604,22 +874,24 @@
                 "Used": "0",
                 "VDisks": [
                     {
-                        "AvailableSize": "text",
+                        "AllocatedSize": "0",
+                        "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "NodeId": 1,
                         "PDisk": {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
+                            "SlotCount": "not-zero-number-text",
                             "SlotSize": "not-zero-number-text",
                             "Status": "accepted-value",
                             "TotalSize": "not-zero-number-text",
                             "Type": "hdd",
                             "Whiteboard": {
-                                "AvailableSize": "text",
+                                "AvailableSize": "not-zero-number-text",
                                 "Category": "0",
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
@@ -641,7 +913,7 @@
                         "VDiskId": "2181038080-1-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -677,6 +949,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "1",
@@ -695,22 +968,24 @@
                 "Used": "0",
                 "VDisks": [
                     {
-                        "AvailableSize": "text",
+                        "AllocatedSize": "0",
+                        "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "NodeId": 1,
                         "PDisk": {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
+                            "SlotCount": "not-zero-number-text",
                             "SlotSize": "not-zero-number-text",
                             "Status": "accepted-value",
                             "TotalSize": "not-zero-number-text",
                             "Type": "hdd",
                             "Whiteboard": {
-                                "AvailableSize": "text",
+                                "AvailableSize": "not-zero-number-text",
                                 "Category": "0",
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
@@ -732,7 +1007,7 @@
                         "VDiskId": "2181038081-1-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -768,6 +1043,7 @@
             {
                 "AllocationUnits": "32",
                 "Available": "not-zero-number-text",
+                "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "2",
@@ -786,22 +1062,24 @@
                 "Used": "0",
                 "VDisks": [
                     {
-                        "AvailableSize": "text",
+                        "AllocatedSize": "0",
+                        "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "NodeId": 1,
                         "PDisk": {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
+                            "SlotCount": "not-zero-number-text",
                             "SlotSize": "not-zero-number-text",
                             "Status": "accepted-value",
                             "TotalSize": "not-zero-number-text",
                             "Type": "hdd",
                             "Whiteboard": {
-                                "AvailableSize": "text",
+                                "AvailableSize": "not-zero-number-text",
                                 "Category": "0",
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
@@ -823,7 +1101,7 @@
                         "VDiskId": "2181038082-2-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -859,6 +1137,7 @@
             {
                 "AllocationUnits": "52",
                 "Available": "not-zero-number-text",
+                "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
                 "GroupGeneration": "2",
@@ -877,22 +1156,24 @@
                 "Used": "0",
                 "VDisks": [
                     {
-                        "AvailableSize": "text",
+                        "AllocatedSize": "0",
+                        "AvailableSize": "not-zero-number-text",
                         "DiskSpace": "Green",
                         "NodeId": 1,
                         "PDisk": {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "DecommitStatus": "DECOMMIT_NONE",
                             "DiskSpace": "Green",
                             "Guid": "1",
                             "PDiskId": "1-1",
                             "Path": "SectorMap:1:64",
+                            "SlotCount": "not-zero-number-text",
                             "SlotSize": "not-zero-number-text",
                             "Status": "accepted-value",
                             "TotalSize": "not-zero-number-text",
                             "Type": "hdd",
                             "Whiteboard": {
-                                "AvailableSize": "text",
+                                "AvailableSize": "not-zero-number-text",
                                 "Category": "0",
                                 "ChangeTime": "not-zero-number-text",
                                 "Device": "Green",
@@ -914,7 +1195,7 @@
                         "VDiskId": "2181038083-2-0-0-0",
                         "Whiteboard": {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -950,7 +1231,7 @@
         ],
         "TotalGroups": 5
     },
-    "test.test_topic_data": {
+    "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
             "status_code": 400,
             "text": "Only read_timestamp or offset parameter may be specified, not both"
@@ -1204,82 +1485,143 @@
             "Truncated": true
         }
     },
-    "test.test_transfer_describe": {
-        "connection_params": {
-            "connection_string": "text",
-            "database": "/Root/dedicated_db",
-            "endpoint": "text",
-            "oauth": {}
-        },
-        "error": {
-            "issues": [
+    "test.TestViewer.test_topic_data_cdc": {
+        "alter": null,
+        "data": {
+            "EndOffset": 1,
+            "Messages": [
                 {
-                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
-                    "severity": 1
-                }
-            ]
-        },
-        "row_consistency": {},
-        "self": {
-            "created_at": {
-                "plan_step": "not-zero-number-text",
-                "tx_id": "not-zero-number-text"
-            },
-            "effective_permissions": [
-                {
-                    "permission_names": [
-                        "ydb.database.connect"
-                    ],
-                    "subject": "USERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.generic.list"
-                    ],
-                    "subject": "METADATA-READERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.granular.select_row"
-                    ],
-                    "subject": "DATA-READERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.tables.modify"
-                    ],
-                    "subject": "DATA-WRITERS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.granular.create_directory",
-                        "ydb.granular.write_attributes",
-                        "ydb.granular.create_table",
-                        "ydb.granular.remove_schema",
-                        "ydb.granular.create_queue",
-                        "ydb.granular.alter_schema"
-                    ],
-                    "subject": "DDL-ADMINS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.access.grant"
-                    ],
-                    "subject": "ACCESS-ADMINS"
-                },
-                {
-                    "permission_names": [
-                        "ydb.generic.manage"
-                    ],
-                    "subject": "DATABASE-ADMINS"
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
+                    "Offset": 0,
+                    "OriginalSize": 40,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 40,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
-            "name": "TestAsyncReplication",
-            "owner": "root@builtin",
-            "type": "REPLICATION"
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "insert": {
+            "status": "SUCCESS",
+            "version": 10
+        },
+        "update": {
+            "status": "SUCCESS",
+            "version": 10
         }
     },
-    "test.test_viewer_acl": {
+    "test.TestViewer.test_transfer_describe": {
+        "describe_result": {
+            "batch_settings": {
+                "flush_interval": {
+                    "seconds": "60"
+                }
+            },
+            "connection_params": {
+                "connection_string": "text",
+                "oauth": {}
+            },
+            "consumer_name": "OurConsumer",
+            "destination_path": "/Root/dedicated_db/TestTransferDestinationTable",
+            "running": {},
+            "self": {
+                "created_at": {
+                    "plan_step": "not-zero-number-text",
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "database"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "viewer"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.read"
+                        ],
+                        "subject": "monitoring"
+                    }
+                ],
+                "name": "TestTransfer",
+                "owner": "root@builtin",
+                "type": "TRANSFER"
+            },
+            "source_path": "TestTransferSourceTopic",
+            "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
+        },
+        "table_result": {
+            "status": "SUCCESS",
+            "version": 10
+        },
+        "topic_result": {
+            "status": "SUCCESS",
+            "version": 10
+        },
+        "transfer_result": {
+            "status": "SUCCESS",
+            "version": 10
+        }
+    },
+    "test.TestViewer.test_viewer_acl": {
         "/Root": {
             "Common": {
                 "ACL": [
@@ -1332,7 +1674,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1412,7 +1755,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1498,7 +1842,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1578,7 +1923,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1664,7 +2010,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1744,7 +2091,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1830,7 +2178,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1910,7 +2259,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -1996,7 +2346,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2076,7 +2427,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2111,7 +2463,7 @@
             }
         }
     },
-    "test.test_viewer_acl_write": [
+    "test.TestViewer.test_viewer_acl_write": [
         {},
         {
             "Common": {
@@ -2126,6 +2478,42 @@
                         "InheritanceType": [
                             "Inherit"
                         ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
                         "Subject": "user1"
                     }
                 ],
@@ -2179,7 +2567,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2218,6 +2607,42 @@
                         "InheritanceType": [
                             "Inherit"
                         ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
                         "Subject": "user1"
                     }
                 ],
@@ -2228,6 +2653,44 @@
         {},
         {
             "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
                 "EffectiveACL": [
                     {
                         "AccessRights": [
@@ -2278,7 +2741,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2306,6 +2770,42 @@
                             "Inherit"
                         ],
                         "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
                     }
                 ],
                 "Owner": "root",
@@ -2315,6 +2815,44 @@
         {},
         {
             "Common": {
+                "ACL": [
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
+                    }
+                ],
                 "EffectiveACL": [
                     {
                         "AccessRights": [
@@ -2365,7 +2903,8 @@
                             "CreateTable",
                             "CreateQueue",
                             "RemoveSchema",
-                            "AlterSchema"
+                            "AlterSchema",
+                            "WriteUserAttributes"
                         ],
                         "AccessType": "Allow",
                         "InheritanceType": [
@@ -2393,6 +2932,42 @@
                             "Inherit"
                         ],
                         "Subject": "DATABASE-ADMINS"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "database"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "viewer"
+                    },
+                    {
+                        "AccessRights": [
+                            "SelectRow",
+                            "ReadAttributes",
+                            "DescribeSchema"
+                        ],
+                        "AccessType": "Allow",
+                        "InheritanceType": [
+                            "Inherit"
+                        ],
+                        "Subject": "monitoring"
                     }
                 ],
                 "Owner": "user1",
@@ -2400,7 +2975,7 @@
             }
         }
     ],
-    "test.test_viewer_autocomplete": {
+    "test.TestViewer.test_viewer_autocomplete": {
         "/Root": {
             "Result": {
                 "Entities": [
@@ -2495,7 +3070,7 @@
             "Version": 2
         }
     },
-    "test.test_viewer_bsgroupinfo": {
+    "test.TestViewer.test_viewer_bsgroupinfo": {
         "BSGroupStateInfo": [
             {
                 "ErasureSpecies": "none",
@@ -2597,7 +3172,7 @@
         "ResponseDuration": "not-zero-number",
         "ResponseTime": "not-zero-number-text"
     },
-    "test.test_viewer_check_access": {
+    "test.TestViewer.test_viewer_check_access": {
         "/Root": {
             "read": false
         },
@@ -2614,7 +3189,7 @@
             "read": false
         }
     },
-    "test.test_viewer_cluster": {
+    "test.TestViewer.test_viewer_cluster": {
         "CoresTotal": "not-zero-number",
         "CoresUsed": "not-zero-number",
         "DataCenters": "not-empty-array",
@@ -2700,7 +3275,7 @@
         "Tenants": "3",
         "Versions": "not-empty-array"
     },
-    "test.test_viewer_describe": {
+    "test.TestViewer.test_viewer_describe": {
         "/Root": {
             "LastExistedPrefixDescription": {},
             "Path": "/Root",
@@ -3044,7 +3619,7 @@
                     ]
                 },
                 "Self": {
-                    "ACL": "",
+                    "ACL": "text",
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -3056,7 +3631,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "10",
+                    "PathVersion": "16",
                     "SchemeshardId": "72075186224037897"
                 }
             },
@@ -3310,7 +3885,7 @@
             "Status": "StatusSuccess"
         }
     },
-    "test.test_viewer_healthcheck": {
+    "test.TestViewer.test_viewer_healthcheck": {
         "/Root": {
             "location": {
                 "host": "text",
@@ -3352,7 +3927,7 @@
             "self_check_result": "accepted-value"
         }
     },
-    "test.test_viewer_nodelist": {
+    "test.TestViewer.test_viewer_nodelist": {
         "/Root": [
             {
                 "Address": "",
@@ -3469,7 +4044,7 @@
             }
         ]
     },
-    "test.test_viewer_nodes": {
+    "test.TestViewer.test_viewer_nodes": {
         "/Root": {
             "FieldsAvailable": "10000000010000110111111100000111",
             "FieldsRequired": "00000000000000000000000000000101",
@@ -3994,7 +4569,7 @@
             "TotalNodes": "3"
         }
     },
-    "test.test_viewer_nodes_all": {
+    "test.TestViewer.test_viewer_nodes_all": {
         "/Root": {
             "FieldsAvailable": "11111111110111111111111111111111",
             "FieldsRequired": "11111111111111111111111111111111",
@@ -4017,7 +4592,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -4187,7 +4762,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4222,7 +4797,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4257,7 +4832,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4292,7 +4867,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4327,7 +4902,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -4994,7 +5569,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -5216,7 +5791,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5251,7 +5826,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5286,7 +5861,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5321,7 +5896,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5356,7 +5931,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -5787,7 +6362,7 @@
             "TotalNodes": "3"
         }
     },
-    "test.test_viewer_nodes_issue_14992": {
+    "test.TestViewer.test_viewer_nodes_issue_14992": {
         "response_group": {
             "FieldsAvailable": "10000000110111110111111100000111",
             "FieldsRequired": "00000000001100000010000000000101",
@@ -6020,10 +6595,10 @@
             "TotalNodes": "3"
         }
     },
-    "test.test_viewer_pdiskinfo": {
+    "test.TestViewer.test_viewer_pdiskinfo": {
         "PDiskStateInfo": [
             {
-                "AvailableSize": "text",
+                "AvailableSize": "not-zero-number-text",
                 "Category": "0",
                 "ChangeTime": "not-zero-number-text",
                 "Device": 1,
@@ -6045,7 +6620,7 @@
         "ResponseDuration": "not-zero-number",
         "ResponseTime": "not-zero-number-text"
     },
-    "test.test_viewer_query": {
+    "test.TestViewer.test_viewer_query": {
         "/Root": {
             "result": [
                 {
@@ -6062,7 +6637,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/dedicated_db": {
             "result": [
@@ -6080,7 +6656,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6098,7 +6675,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6116,7 +6694,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "no-database": {
             "result": [
@@ -6134,10 +6713,69 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
-    "test.test_viewer_query_from_table": {
+    "test.TestViewer.test_viewer_query_event_stream": {
+        "content_type": "text/event-stream",
+        "events": [
+            {
+                "data": {
+                    "meta": {
+                        "node_id": "not-zero-number",
+                        "query_id": "text",
+                        "session_id": "text"
+                    },
+                    "version": 10
+                },
+                "event": "SessionCreated"
+            },
+            {
+                "data": {
+                    "meta": {
+                        "result_index": 0,
+                        "seq_no": 1
+                    },
+                    "result": {
+                        "columns": [
+                            {
+                                "name": "id",
+                                "type": "Int64?"
+                            },
+                            {
+                                "name": "name",
+                                "type": "Utf8?"
+                            }
+                        ],
+                        "rows": [
+                            [
+                                "1",
+                                "one"
+                            ],
+                            [
+                                "2",
+                                "two"
+                            ],
+                            [
+                                "3",
+                                "three"
+                            ]
+                        ]
+                    }
+                },
+                "event": "StreamData"
+            },
+            {
+                "data": {
+                    "status": "SUCCESS"
+                },
+                "event": "QueryResponse"
+            }
+        ],
+        "status_code": 200
+    },
+    "test.TestViewer.test_viewer_query_from_table": {
         "/Root/dedicated_db": {
             "result": [
                 {
@@ -6167,7 +6805,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6198,7 +6837,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6229,10 +6869,11 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
-    "test.test_viewer_query_from_table_different_schemas": {
+    "test.TestViewer.test_viewer_query_from_table_different_schemas": {
         "classic": [
             {
                 "id": "1",
@@ -6272,7 +6913,8 @@
                     "three"
                 ]
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "multi": {
             "result": [
@@ -6303,7 +6945,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "ydb": {
             "result": [
@@ -6320,7 +6963,8 @@
                     "name": "three"
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "ydb2": {
             "result": [
@@ -6351,10 +6995,11 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
-    "test.test_viewer_query_issue_13757": {
+    "test.TestViewer.test_viewer_query_issue_13757": {
         "/Root": {
             "result": [
                 {
@@ -6374,7 +7019,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/dedicated_db": {
             "result": [
@@ -6395,7 +7041,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6416,7 +7063,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6437,7 +7085,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "no-database": {
             "result": [
@@ -6458,10 +7107,11 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
-    "test.test_viewer_query_issue_13945": {
+    "test.TestViewer.test_viewer_query_issue_13945": {
         "/Root": {
             "result": [
                 {
@@ -6478,7 +7128,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/dedicated_db": {
             "result": [
@@ -6496,7 +7147,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/serverless_db": {
             "result": [
@@ -6514,7 +7166,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "/Root/shared_db": {
             "result": [
@@ -6532,7 +7185,8 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         },
         "no-database": {
             "result": [
@@ -6550,10 +7204,11 @@
                     ]
                 }
             ],
-            "version": 9
+            "status": "SUCCESS",
+            "version": 10
         }
     },
-    "test.test_viewer_query_long": {
+    "test.TestViewer.test_viewer_query_long": {
         "execute_response": {
             "execution_id": "text",
             "operation_id": "text",
@@ -6585,7 +7240,7 @@
                     ]
                 }
             ],
-            "version": 9
+            "version": 10
         },
         "fetch_by_execution_id": {
             "execution_id": "text",
@@ -6617,7 +7272,7 @@
                     ]
                 }
             ],
-            "version": 9
+            "version": 10
         },
         "fetch_by_operation_id": {
             "execution_id": "text",
@@ -6650,7 +7305,7 @@
                     ]
                 }
             ],
-            "version": 9
+            "version": 10
         },
         "fetch_error_no_id": {
             "status_code": 400,
@@ -6661,7 +7316,7 @@
             "text": "operation_id or execution_id required for fetch-long-query"
         }
     },
-    "test.test_viewer_query_long_multipart": {
+    "test.TestViewer.test_viewer_query_long_multipart": {
         "execute_stream_response": {
             "multipart_parts": [
                 {
@@ -6764,11 +7419,12 @@
             "text": "operation_id or execution_id required for fetch-long-query"
         }
     },
-    "test.test_viewer_storage_nodes": {
+    "test.TestViewer.test_viewer_storage_nodes": {
         "/Root": {
-            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsAvailable": "10000000110011110111111100000111",
             "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
@@ -6845,9 +7501,10 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsAvailable": "10000000110011110111111100000111",
             "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
@@ -6924,9 +7581,10 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsAvailable": "10000000110011110111111100000111",
             "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
@@ -7006,9 +7664,10 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "10000000110000110111111100000111",
+            "FieldsAvailable": "10000000110011110111111100000111",
             "FieldsRequired": "00000000000000000000000000000111",
             "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
@@ -7085,10 +7744,10 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "10000000010100110111111100000111",
+            "FieldsAvailable": "10000000110111110111111100000111",
             "FieldsRequired": "00000000000100000000000000000111",
-            "FoundNodes": "3",
-            "NeedFilter": true,
+            "FoundNodes": "1",
+            "MaximumDisksPerNode": "1",
             "Nodes": [
                 {
                     "NodeId": 1,
@@ -7159,148 +7818,12 @@
                         "SystemState": "Green",
                         "TotalSessions": "number"
                     }
-                },
-                {
-                    "NodeId": 50001,
-                    "SystemState": {
-                        "ChangeTime": "not-zero-number-text",
-                        "CoresTotal": "not-zero-number",
-                        "CoresUsed": "not-zero-number",
-                        "Endpoints": [
-                            {
-                                "Address": "text",
-                                "Name": "grpc"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "http-mon"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "ic"
-                            }
-                        ],
-                        "Host": "text",
-                        "LoadAverage": "not-empty-array",
-                        "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
-                        "NodeId": 50001,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "Batch",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IO",
-                                "Threads": 1,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IC",
-                                "Threads": 1,
-                                "Usage": "number"
-                            }
-                        ],
-                        "RealNumberOfCpus": "not-zero-number",
-                        "Roles": "not-empty-array",
-                        "StartTime": "not-zero-number-text",
-                        "SystemState": "Green",
-                        "Tenants": [
-                            "/Root/shared_db"
-                        ],
-                        "TotalSessions": "number"
-                    }
-                },
-                {
-                    "NodeId": 50000,
-                    "SystemState": {
-                        "ChangeTime": "not-zero-number-text",
-                        "CoresTotal": "not-zero-number",
-                        "CoresUsed": "not-zero-number",
-                        "Endpoints": [
-                            {
-                                "Address": "text",
-                                "Name": "grpc"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "http-mon"
-                            },
-                            {
-                                "Address": "text",
-                                "Name": "ic"
-                            }
-                        ],
-                        "Host": "text",
-                        "LoadAverage": "not-empty-array",
-                        "Location": {},
-                        "MemoryLimit": "not-zero-number-text",
-                        "NodeId": 50000,
-                        "NumberOfCpus": "not-zero-number",
-                        "PoolStats": [
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "System",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "User",
-                                "Threads": 3,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "Batch",
-                                "Threads": 2,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IO",
-                                "Threads": 1,
-                                "Usage": "number"
-                            },
-                            {
-                                "Limit": "not-zero-number",
-                                "Name": "IC",
-                                "Threads": 1,
-                                "Usage": "number"
-                            }
-                        ],
-                        "RealNumberOfCpus": "not-zero-number",
-                        "Roles": "not-empty-array",
-                        "StartTime": "not-zero-number-text",
-                        "SystemState": "Green",
-                        "Tenants": [
-                            "/Root/dedicated_db"
-                        ],
-                        "TotalSessions": "number"
-                    }
                 }
             ],
-            "TotalNodes": "3"
+            "TotalNodes": "1"
         }
     },
-    "test.test_viewer_storage_nodes_all": {
+    "test.TestViewer.test_viewer_storage_nodes_all": {
         "/Root": {
             "FieldsAvailable": "11111111110111111111111111111111",
             "FieldsRequired": "11111111111111111111111111111111",
@@ -7323,7 +7846,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -7493,7 +8016,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7528,7 +8051,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7563,7 +8086,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7598,7 +8121,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7633,7 +8156,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7692,7 +8215,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -7862,7 +8385,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7897,7 +8420,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7932,7 +8455,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -7967,7 +8490,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8002,7 +8525,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8061,7 +8584,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -8231,7 +8754,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8266,7 +8789,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8301,7 +8824,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8336,7 +8859,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8371,7 +8894,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8430,7 +8953,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -8600,7 +9123,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8635,7 +9158,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8670,7 +9193,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8705,7 +9228,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8740,7 +9263,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -8799,7 +9322,7 @@
                     "NodeId": 1,
                     "PDisks": [
                         {
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "Category": "0",
                             "ChangeTime": "not-zero-number-text",
                             "Device": "Green",
@@ -9021,7 +9544,7 @@
                     "VDisks": [
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9056,7 +9579,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9091,7 +9614,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9126,7 +9649,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9161,7 +9684,7 @@
                         },
                         {
                             "AllocatedSize": "0",
-                            "AvailableSize": "text",
+                            "AvailableSize": "not-zero-number-text",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
                             "FrontQueues": "Green",
@@ -9200,7 +9723,165 @@
             "TotalNodes": "1"
         }
     },
-    "test.test_viewer_sysinfo": {
+    "test.TestViewer.test_viewer_storage_nodes_no_database": {
+        "FieldsAvailable": "10000000110111110111111100000111",
+        "FieldsRequired": "00000000000100000000000000000111",
+        "FoundNodes": "1",
+        "MaximumDisksPerNode": "1",
+        "Nodes": [
+            {
+                "NodeId": 1,
+                "SystemState": {
+                    "ChangeTime": "not-zero-number-text",
+                    "CoresTotal": "not-zero-number",
+                    "CoresUsed": "not-zero-number",
+                    "Endpoints": [
+                        {
+                            "Address": "text",
+                            "Name": "grpc"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "http-mon"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "ic"
+                        }
+                    ],
+                    "Host": "text",
+                    "LoadAverage": "not-empty-array",
+                    "Location": {
+                        "DataCenter": "1",
+                        "Rack": "1",
+                        "Unit": "1"
+                    },
+                    "MaxDiskUsage": "not-zero-number",
+                    "MemoryLimit": "not-zero-number-text",
+                    "NodeId": 1,
+                    "NumberOfCpus": "not-zero-number",
+                    "PoolStats": [
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "System",
+                            "Threads": 2,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "User",
+                            "Threads": 3,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "Batch",
+                            "Threads": 2,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "IO",
+                            "Threads": 1,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "IC",
+                            "Threads": 1,
+                            "Usage": "number"
+                        }
+                    ],
+                    "RealNumberOfCpus": "not-zero-number",
+                    "Roles": "not-empty-array",
+                    "StartTime": "not-zero-number-text",
+                    "SystemState": "Green",
+                    "TotalSessions": "number"
+                }
+            }
+        ],
+        "TotalNodes": "1"
+    },
+    "test.TestViewer.test_viewer_storage_nodes_no_database_filter_node_id": {
+        "FieldsAvailable": "10000000110111110111111100000111",
+        "FieldsRequired": "00000000000100000000000000000111",
+        "FoundNodes": "1",
+        "MaximumDisksPerNode": "1",
+        "Nodes": [
+            {
+                "NodeId": 1,
+                "SystemState": {
+                    "ChangeTime": "not-zero-number-text",
+                    "CoresTotal": "not-zero-number",
+                    "CoresUsed": "not-zero-number",
+                    "Endpoints": [
+                        {
+                            "Address": "text",
+                            "Name": "grpc"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "http-mon"
+                        },
+                        {
+                            "Address": "text",
+                            "Name": "ic"
+                        }
+                    ],
+                    "Host": "text",
+                    "LoadAverage": "not-empty-array",
+                    "Location": {
+                        "DataCenter": "1",
+                        "Rack": "1",
+                        "Unit": "1"
+                    },
+                    "MaxDiskUsage": "not-zero-number",
+                    "MemoryLimit": "not-zero-number-text",
+                    "NodeId": 1,
+                    "NumberOfCpus": "not-zero-number",
+                    "PoolStats": [
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "System",
+                            "Threads": 2,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "User",
+                            "Threads": 3,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "Batch",
+                            "Threads": 2,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "IO",
+                            "Threads": 1,
+                            "Usage": "number"
+                        },
+                        {
+                            "Limit": "not-zero-number",
+                            "Name": "IC",
+                            "Threads": 1,
+                            "Usage": "number"
+                        }
+                    ],
+                    "RealNumberOfCpus": "not-zero-number",
+                    "Roles": "not-empty-array",
+                    "StartTime": "not-zero-number-text",
+                    "SystemState": "Green",
+                    "TotalSessions": "number"
+                }
+            }
+        ],
+        "TotalNodes": "1"
+    },
+    "test.TestViewer.test_viewer_sysinfo": {
         "ResponseDuration": "not-zero-number",
         "ResponseTime": "not-zero-number-text",
         "SystemStateInfo": [
@@ -9402,7 +10083,7 @@
             }
         ]
     },
-    "test.test_viewer_tabletinfo": {
+    "test.TestViewer.test_viewer_tabletinfo": {
         "detailed": {
             "/Root": {
                 "ProcessDuration": "not-zero-number-text",
@@ -10784,14 +11465,14 @@
             }
         }
     },
-    "test.test_viewer_tenantinfo": {
+    "test.TestViewer.test_viewer_tenantinfo": {
         "TenantInfo": [
             {
                 "AliveNodes": 1,
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "CreateTime": "not-zero-number-text",
-                "Id": "72057594046678944-1",
+                "Id": "1",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": {},
@@ -10838,7 +11519,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-6",
+                "Id": "6",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -10905,12 +11586,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-8",
+                "Id": "8",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root",
-                "ResourceId": "72057594046678944-7",
+                "ResourceId": "7",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -10925,7 +11606,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72057594046678944-7",
+                "Id": "7",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -10984,7 +11665,7 @@
             }
         ]
     },
-    "test.test_viewer_tenantinfo_db": {
+    "test.TestViewer.test_viewer_tenantinfo_db": {
         "/Root": {
             "TenantInfo": [
                 {
@@ -10992,7 +11673,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11043,7 +11724,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11114,11 +11795,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11137,7 +11818,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11203,7 +11884,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72057594046678944-1",
+                    "Id": "1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -11250,7 +11931,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-6",
+                    "Id": "6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11317,12 +11998,12 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-8",
+                    "Id": "8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Overall": "Green",
                     "Owner": "root",
-                    "ResourceId": "72057594046678944-7",
+                    "ResourceId": "7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -11337,7 +12018,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72057594046678944-7",
+                    "Id": "7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -11397,13 +12078,13 @@
             ]
         }
     },
-    "test.test_viewer_vdiskinfo": {
+    "test.TestViewer.test_viewer_vdiskinfo": {
         "ResponseDuration": "not-zero-number",
         "ResponseTime": "not-zero-number-text",
         "VDiskStateInfo": [
             {
                 "AllocatedSize": "0",
-                "AvailableSize": "text",
+                "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
                 "FrontQueues": 1,
@@ -11438,7 +12119,7 @@
             },
             {
                 "AllocatedSize": "0",
-                "AvailableSize": "text",
+                "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
                 "FrontQueues": 1,
@@ -11473,7 +12154,7 @@
             },
             {
                 "AllocatedSize": "0",
-                "AvailableSize": "text",
+                "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
                 "FrontQueues": 1,
@@ -11508,7 +12189,7 @@
             },
             {
                 "AllocatedSize": "0",
-                "AvailableSize": "text",
+                "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
                 "FrontQueues": 1,
@@ -11543,7 +12224,7 @@
             },
             {
                 "AllocatedSize": "0",
-                "AvailableSize": "text",
+                "AvailableSize": "not-zero-number-text",
                 "ChangeTime": "not-zero-number-text",
                 "DiskSpace": 1,
                 "FrontQueues": 1,
@@ -11578,14 +12259,11 @@
             }
         ]
     },
-    "test.test_wait_for_cluster_ready": {
-        "wait_good": true
-    },
-    "test.test_whoami_database": {
+    "test.TestViewer.test_whoami_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1></body></html>"
     },
-    "test.test_whoami_monitoring": {
+    "test.TestViewer.test_whoami_monitoring": {
         "AuthType": "Login",
         "GroupSIDs": [
             "USERS",
@@ -11599,7 +12277,7 @@
         "OriginalUserToken": "text",
         "UserSID": "monitoring"
     },
-    "test.test_whoami_root": {
+    "test.TestViewer.test_whoami_root": {
         "AuthType": "Login",
         "GroupSIDs": [
             "all-users@well-known",
@@ -11620,7 +12298,7 @@
         "OriginalUserToken": "text",
         "UserSID": "root"
     },
-    "test.test_whoami_viewer": {
+    "test.TestViewer.test_whoami_viewer": {
         "AuthType": "Login",
         "GroupSIDs": [
             "USERS",

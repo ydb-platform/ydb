@@ -20,6 +20,7 @@ PEERDIR(
     yql/essentials/core/credentials
     yql/essentials/core/qplayer/storage/interface
     yql/essentials/core/qplayer/udf_resolver
+    yql/essentials/core/qplayer/url_lister
     yql/essentials/sql
     yql/essentials/sql/v1
     yql/essentials/sql/v1/lexer/antlr4

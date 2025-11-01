@@ -141,6 +141,7 @@ namespace NInterconnect {
         };
 
         const TLoadParams Params;
+        const TFinishCallback FinishCallback;
         TInstant NextMessageTimestamp;
         THashMap<TString, TMessageInfo> InFly;
         ui64 NextId = 1;
@@ -149,13 +150,14 @@ namespace NInterconnect {
         ui64 NumDropped = 0;
         std::shared_ptr<std::atomic_uint64_t> Traffic;
 
+
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::EActivityType::INTERCONNECT_LOAD_ACTOR;
         }
 
-        TLoadActor(const TLoadParams& params)
-            : Params(params)
+        TLoadActor(const TLoadParams& params, const TFinishCallback& finishCallback)
+            : Params(params), FinishCallback(finishCallback)
         {}
 
         void Bootstrap(const TActorContext& ctx) {
@@ -390,16 +392,91 @@ namespace NInterconnect {
             CFunc(EvPublishResults, PublishResults);
             CFunc(EvGenerateMessages, GenerateMessages);
             HFunc(TEvLoadMessage, Handle);
+            HFunc(NMon::TEvHttpInfo, Handle);
         )
+
+        void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(RenderHTML(false, ctx), ev->Get()->SubRequestId));
+        }
 
         void Die(const TActorContext& ctx) override {
             PublishResults(ctx, false);
+            if (FinishCallback)
+                FinishCallback(ctx, RenderHTML(true, ctx));
             TActorBootstrapped::Die(ctx);
+        }
+
+        TString RenderHTML(bool finished, const TActorContext& ctx) {
+            const auto duration = ctx.Now() - ThroughputFirstSample;
+
+            TStringStream msg;
+
+            TStringStream str;
+            HTML(str) {
+                TABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Window"; }
+                            TABLEH() { str << "Bytes";  }
+                            TABLEH() { str << "Samples"; }
+                            TABLEH() { str << "b/s";  }
+                            TABLEH() { str << "Common"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << duration; }
+                            TABLED() { str << ThroughputBytes; }
+                            TABLED() { str << ThroughputSamples; }
+                            TABLED() { str << ui64(ThroughputBytes * 1000000 / duration.MicroSeconds()); }
+                            TABLED() { str << ui64((*Traffic - TrafficAtBegin) * 1000000 / duration.MicroSeconds()); }
+                        }
+                    }
+                }
+                if (Histogram) {
+                    TABLE_CLASS("table table-condensed") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { str << "Window"; }
+                                TABLEH() { str << "Samples"; }
+                                TABLEH() { str << "0.5";  }
+                                TABLEH() { str << "0.9"; }
+                                TABLEH() { str << "0.99";  }
+                                TABLEH() { str << "0.999"; }
+                                TABLEH() { str << "0.9999";  }
+                                TABLEH() { str << "1.0"; }
+                            }
+                        }
+
+                        const auto duration = Histogram.back().first - Histogram.front().first;
+                        std::vector<TDuration> v;
+                        v.reserve(Histogram.size());
+                        for (const auto& item : Histogram) {
+                            v.push_back(item.second);
+                        }
+                        std::sort(v.begin(), v.end());
+
+                        TABLEBODY() {
+                            TABLER() {
+                                TABLED() { str << duration; }
+                                TABLED() { str << Histogram.size(); }
+                                for (const auto q : {0.5, 0.9, 0.99, 0.999, 0.9999, 1.0}) {
+                                    TABLED() { str << Sprintf(" %.4f# ", q) << v[q * (v.size() - 1U)].ToString().c_str(); }
+                                }
+                            }
+                        }
+                    }
+                }
+                str << "Dropped:" << NumDropped << "</br>";
+                if (finished) {
+                    str << "Finished." << "</br>";
+                }
+            }
+            return str.Str();
         }
     };
 
-    IActor* CreateLoadActor(const TLoadParams& params) {
-        return new TLoadActor(params);
+    IActor* CreateLoadActor(const TLoadParams& params, const TFinishCallback& finishCallback) {
+        return new TLoadActor(params, finishCallback);
     }
-
 }

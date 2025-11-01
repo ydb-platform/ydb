@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i * 10000, 1000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i * 10000, 2000);
         }
-        csController->WaitCompactions(TDuration::Seconds(5));
 
+        csController->WaitCompactions(TDuration::Seconds(5));
         auto tableClient = kikimr.GetTableClient();
         {
             auto selectQuery = TString(R"(
@@ -229,15 +229,15 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
         }
         {
-            auto selectQuery = Sprintf(R"(
-                SELECT COUNT(*)
-                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-            )",
-                tablePathId1);
+            auto selectQuery = TString(R"(
+                SELECT Sum(Rows) as Rows
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_portion_stats`
+            )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
+
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("column0")), 150);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("Rows")), 10 * 1000);
         }
     }
 
@@ -568,9 +568,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), tablePathId);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[3].at("Kind")), "SPLIT_COMPACTED");
         }
         {
             auto selectQuery = TString(R"(
@@ -596,8 +596,12 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows")), 20000);
+            UNIT_ASSERT_LE(rows.size(), 2);
+            int totalRows = 0;
+            for (const auto& row : rows) {
+                totalRows += GetUint64(row.at("Rows"));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(totalRows, 20000);
         }
     }
 
@@ -652,11 +656,11 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[2].at("Kind")), "SPLIT_COMPACTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[1].at("Kind")), "SPLIT_COMPACTED");
         }
 
         {
@@ -673,9 +677,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui32 numExpected = 3 * 3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "SPLIT_COMPACTED");
         }
 
         {
@@ -696,9 +700,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             ui32 numExpected = 2 * 3;
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), numExpected);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), tablePathId3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("Kind")), "SPLIT_COMPACTED");
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[numExpected - 1].at("PathId")), tablePathId1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "INSERTED");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[numExpected - 1].at("Kind")), "SPLIT_COMPACTED");
         }
     }
 

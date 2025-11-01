@@ -25,7 +25,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute/ut/proto
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/actors/task_runner
-    ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/comp_nodes/no_llvm
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/transform
     ydb/library/yql/providers/dq/task_runner
@@ -40,6 +40,8 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+SIZE(MEDIUM)
 
 END()
 

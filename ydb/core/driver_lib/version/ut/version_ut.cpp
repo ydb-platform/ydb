@@ -189,6 +189,19 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 false
         );
     }
+    Y_UNIT_TEST(DefaulPatchTag) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 14 }
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 15, .Patch = 1 }
+                }, 
+                true
+        );
+    }
     Y_UNIT_TEST(LimitOld) {
         Test(
                 TCurrentCompatibilityInfo{

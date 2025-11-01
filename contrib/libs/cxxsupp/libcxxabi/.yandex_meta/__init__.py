@@ -45,14 +45,24 @@ def post_install(self):
     )
 
     with self.yamakes["."] as libcxxabi:
-        # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl
         libcxxabi.after(
             "SRCS",
             """
-            IF (NOT MUSL)
-                CFLAGS(
-                    -DHAVE___CXA_THREAD_ATEXIT_IMPL
-                )
+            IF (OS_ANDROID)
+                # __cxa_thread_atexit_impl was introduced in Android 6.0
+                # https://android.googlesource.com/platform/bionic/+/main/libc/libc.map.txt#16
+                IF (ANDROID_API >= 23)
+                    CFLAGS(
+                        -DHAVE___CXA_THREAD_ATEXIT_IMPL
+                    )
+                ENDIF()
+            ELSE()
+                # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl
+                IF (NOT MUSL)
+                    CFLAGS(
+                        -DHAVE___CXA_THREAD_ATEXIT_IMPL
+                    )
+                ENDIF()
             ENDIF()
             """,
         )
@@ -80,7 +90,7 @@ def post_install(self):
 
 
 libcxxabi = NixSourceProject(
-    owners=["g:cpp-committee", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/cxxsupp/libcxxabi",
     # nixos-24.05 merged libcxx and libcxxabi.
     # Use the primer and override sourceRoot in override.nix as aworkaround.

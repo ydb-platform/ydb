@@ -393,7 +393,7 @@ protected:
         for (const TActorId& actorId : TestActors) {
             IActor* actor = Runtime->FindActor(actorId);
             if (actor != nullptr) {
-                const bool isPipe = actor->ActivityType == NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
+                const bool isPipe = actor->GetActivityType() == NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
                 if (isPipe) {
                     UNIT_ASSERT_C(IsIn(destroyedActors, actorId),
                                   "Pipe client was not destroyed after test actor worked. Pipe client actor id: " << actorId);
@@ -530,13 +530,13 @@ public:
     }
 
     void HandlesTimeout() {
-        EXPECT_CALL(GetMockPQMetaCache(), HandleDescribeAllTopics(_, _)); // gets request and doesn't reply
+        EXPECT_CALL(GetMockPQMetaCache(), HandleDescribeTopicsByName(_, _)); // gets request and doesn't reply
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
         Runtime->EnableScheduleForActor(Actor->SelfId());
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back([](IEventHandle& h) { return h.Type == TEvPqMetaCache::TEvDescribeAllTopicsRequest::EventType; }, 1);
+        options.FinalEvents.emplace_back([](IEventHandle& h) { return h.Type == TEvPqMetaCache::TEvDescribeTopicsByNameRequest::EventType; }, 1);
         Runtime->DispatchEvents(options);
 
         Runtime->UpdateCurrentTime(Runtime->GetCurrentTime() + TDuration::MilliSeconds(90000 + 1));
@@ -546,20 +546,20 @@ public:
     }
 
     void FailsOnFailedGetAllTopicsRequest() {
-        GetMockPQMetaCache().SetAllTopicsAnswer(false);
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer();
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
 
         GrabResponseEvent();
-        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, {"Marker# PQ15", "Marker# PQ17"});
+        AssertFailedResponse(NPersQueue::NErrorCode::UNKNOWN_TOPIC, {"Marker# PQ95", "Marker# PQ17"});
     }
 
     void FailsOnNotOkStatusInGetNodeRequest() {
         auto entry = MakeEntry(1);
         entry.Status = TSchemeCacheNavigate::EStatus::PathErrorUnknown;
 
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, TSchemeCacheNavigate::TResultSet{entry});
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(TSchemeCacheNavigate::TResultSet{entry});
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest(1);
         RegisterActor(request);
@@ -572,7 +572,7 @@ public:
         auto resultSet = MakeResultSet();
         resultSet[0].Status = ESchemeStatus::RootUnknown;
 
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, std::move(resultSet));
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -586,7 +586,7 @@ public:
         resultSet[1].Kind = TSchemeCacheNavigate::KindPath;
         resultSet[1].PQGroupInfo = nullptr;
 
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, std::move(resultSet));
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -598,7 +598,7 @@ public:
     void FailsOnNoBalancerInGetNodeRequest() {
         auto resultSet = MakeResultSet();
         SetBalancerId(resultSet, 0, Nothing());
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, std::move(resultSet));
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -610,7 +610,7 @@ public:
     void FailsOnZeroBalancerTabletIdInGetNodeRequest() {
         auto resultSet = MakeResultSet();
         SetBalancerId(resultSet, 0, 0);
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, std::move(resultSet));
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::move(resultSet));
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -623,7 +623,7 @@ public:
         auto resultSet = MakeResultSet();
         resultSet[1].Status = TSchemeCacheNavigate::EStatus::LookupError;
         //SetBalancerId(resultSet, 1, 0);
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, resultSet);
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(resultSet);
 
         NKikimrClient::TPersQueueRequest request = MakeValidRequest();
         RegisterActor(request);
@@ -642,7 +642,7 @@ public:
 
     template <class TResponseEvent>
     void HandlesPipeDisconnectionImpl(EDisconnectionMode disconnectionMode, std::function<void(EDisconnectionMode disconnectionMode)> dataValidationFunction, bool requestTheWholeTopic = false) {
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, std::forward<TSchemeCacheNavigate::TResultSet>(MakeResultSet()));
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(std::forward<TSchemeCacheNavigate::TResultSet>(MakeResultSet()));
 
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
@@ -761,7 +761,7 @@ public:
     }
 
     void SuccessfullyReplies() {
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
 
@@ -871,8 +871,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
@@ -1037,7 +1036,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
 
@@ -1200,7 +1199,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
 
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
@@ -1347,7 +1346,7 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
+        GetMockPQMetaCache().SetDescribeTopicsByNameAnswer(MakeResultSet());
 
         PrepareBalancer(topic1, MakeTabletID(false, 100), {{1, MakeTabletID(false, 101)}});
         PreparePQTablet(topic1, MakeTabletID(false, 101), {0});
@@ -1422,7 +1421,7 @@ public:
             UNIT_ASSERT(resp->Record.GetMetaResponse().HasCmdGetReadSessionsInfoResult());
             auto perTopicResults = resp->Record.GetMetaResponse().GetCmdGetReadSessionsInfoResult().GetTopicResult();
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
-            Cerr << "RESPONSE " << resp->Record.DebugString() << "\n"; 
+            Cerr << "RESPONSE " << resp->Record.DebugString() << "\n";
 
             {
                 const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);

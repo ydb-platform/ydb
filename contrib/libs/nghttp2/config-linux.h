@@ -40,6 +40,10 @@
    don't. */
 #define HAVE_DECL_INITGROUPS 1
 
+/* Define to 1 if you have the declaration of 'LIBRESSL_VERSION_NUMBER', and
+   to 0 if you don't. */
+#define HAVE_DECL_LIBRESSL_VERSION_NUMBER 0
+
 /* Define to 1 if you have the declaration of 'strerror_r', and to 0 if you
    don't. */
 #define HAVE_DECL_STRERROR_R 1
@@ -82,6 +86,9 @@
 
 /* Define to 1 if you have `libngtcp2_crypto_boringssl` library. */
 /* #undef HAVE_LIBNGTCP2_CRYPTO_BORINGSSL */
+
+/* Define to 1 if you have `libngtcp2_crypto_libressl` library. */
+/* #undef HAVE_LIBNGTCP2_CRYPTO_LIBRESSL */
 
 /* Define to 1 if you have `libngtcp2_crypto_ossl` library. */
 /* #undef HAVE_LIBNGTCP2_CRYPTO_OSSL */
@@ -273,7 +280,7 @@
 #define PACKAGE_NAME "nghttp2"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "nghttp2 1.66.0"
+#define PACKAGE_STRING "nghttp2 1.67.1"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "nghttp2"
@@ -282,7 +289,7 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.66.0"
+#define PACKAGE_VERSION "1.67.1"
 
 /* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
@@ -385,7 +392,7 @@
 
 
 /* Version number of package */
-#define VERSION "1.66.0"
+#define VERSION "1.67.1"
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */

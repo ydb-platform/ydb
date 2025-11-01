@@ -27,6 +27,7 @@ private:
     const bool Reverse;
     const std::vector<std::string> VersionColumnNames;
     std::optional<TCursor> MaxVersion;
+    std::optional<TCursor> MinUncommittedVersion;
     ui32 ControlPoints = 0;
 
     TSortingHeap<TBatchIterator> SortHeap;
@@ -53,9 +54,10 @@ private:
         const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
 
         if (MaxVersion) {
+            AFL_VERIFY(MinUncommittedVersion.has_value());
             bool skippedPk = false;
             while (SortHeap.Size() && !SortHeap.Current().IsControlPoint() &&
-                   SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater && !skippedPk) {
+                   SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater && SortHeap.Current().GetVersionColumns().Compare(*MinUncommittedVersion) == std::partial_ordering::less && !skippedPk) {
                 if (builder) {
                     builder->SkipRecord(SortHeap.Current());
                 }
@@ -123,19 +125,21 @@ private:
 
 public:
     TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse,
-        const std::vector<std::string>& versionColumnNames, const std::optional<TCursor>& maxVersion)
+        const std::vector<std::string>& versionColumnNames, const std::optional<TCursor>& maxVersion, const std::optional<TCursor>& minUncommittedVersion)
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)
         , Reverse(reverse)
         , VersionColumnNames(versionColumnNames)
-        , MaxVersion(maxVersion) {
+        , MaxVersion(maxVersion)
+        , MinUncommittedVersion(minUncommittedVersion) {
+        AFL_VERIFY(maxVersion.has_value() == minUncommittedVersion.has_value());
         Y_ABORT_UNLESS(SortSchema);
         Y_ABORT_UNLESS(SortSchema->num_fields());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
     }
 
     void PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy);
-    void SkipToBound(const TSortableBatchPosition& pos, const bool lower);
+    ui64 SkipToBound(const TSortableBatchPosition& pos, const bool lower);
 
     void SetPossibleSameVersion(const bool value) {
         PossibleSameVersionFlag = value;

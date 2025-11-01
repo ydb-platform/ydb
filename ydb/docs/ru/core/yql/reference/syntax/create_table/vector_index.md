@@ -1,21 +1,5 @@
 # Векторный индекс
 
-{% if backend_name == "YDB" and oss == true %}
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
-{% endif %}
-
-{% note warning %}
-
-Создание пустой таблицы с векторным индексом в настоящее время не имеет практического смысла, так как модификация данных в таблицах с векторными индексами пока не поддерживается.
-
-Следует использовать {% if feature_secondary_index %}[команду](../alter_table/indexes.md){% else %}команду{% endif %} `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.
-
-{% endnote %}
-
 {% if backend_name == 'YDB' %}[Векторный индекс](../../../../concepts/glossary.md#vector-index){% else %}векторный индекс{% endif %} в {% if backend_name == 'YDB' %}[строковых](../../../../concepts/datamodel/table.md#row-oriented-tables){% else %}строковых{% endif %} таблицах создаётся с помощью того же синтаксиса, что и [вторичные индексы](secondary_index.md), при указании `vector_kmeans_tree` в качестве типа индекса. Подмножество доступного для векторных индексов синтаксиса:
 
 ```yql
@@ -44,9 +28,11 @@ CREATE TABLE `<table_name>` (
 
 {% note warning %}
 
-Векторные индексы с `vector_type=bit` в настоящее время не поддерживаются.
+{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
 
 {% endnote %}
+
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Пример
 

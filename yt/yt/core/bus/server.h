@@ -39,6 +39,8 @@ struct IBusServer
      *  e.g. the server socket is closed.
      */
     virtual TFuture<void> Stop() = 0;
+
+    virtual NYTree::IYPathServicePtr GetOrchidService() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IBusServer)

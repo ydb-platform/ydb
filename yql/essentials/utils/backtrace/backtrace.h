@@ -29,6 +29,6 @@ void SetModulesMapping(const THashMap<TString, TString>& mapping);
 
 TString Symbolize(const TString& input, const THashMap<TString, TString>& mapping);
 
-} /* namespace Backtrace */
+} // namespace NBacktrace
 
 } /* namespace NYql */

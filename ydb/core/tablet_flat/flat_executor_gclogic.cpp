@@ -497,7 +497,7 @@ TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
         if (!PendingRetry && TryCounter < GcMaxErrors) {
             ++TryCounter;
             PendingRetry = true;
-            return TDuration::MilliSeconds(BackoffTimer.NextBackoffMs());
+            return BackoffTimer.Next();
         }
     }
     return TDuration{};

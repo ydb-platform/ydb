@@ -8,6 +8,7 @@
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -21,7 +22,6 @@
 #include <yql/essentials/utils/mem_limit.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 #include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
-
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -101,64 +101,23 @@ static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node)
 }
 
 bool TestFormat(
-    const NSQLTranslation::TTranslators& translators,
     const TString& query,
     const NSQLTranslation::TTranslationSettings& settings,
-    const TString& queryFile,
-    const NYql::TAstParseResult& parseRes,
     const TString& outFileName,
-    const bool checkDoubleFormatting
-) {
-    TStringStream yqlProgram;
-    parseRes.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
-
-    TString frmQuery;
+    const bool checkDoubleFormatting)
+{
     NYql::TIssues issues;
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-    auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-    if (!formatter->Format(query, frmQuery, issues)) {
-        Cerr << "Failed to format query: " << issues.ToString() << Endl;
-        return false;
-    }
-    NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(translators, frmQuery, settings);
-    if (!frmParseRes.Issues.Empty()) {
-        frmParseRes.Issues.PrintWithProgramTo(Cerr, queryFile, frmQuery);
-        if (AnyOf(frmParseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;})) {
-            return false;
-        }
-    }
-    if (!frmParseRes.IsOk()) {
-        Cerr << "No error reported, but no yql compiled result!" << Endl << Endl;
-        return false;
-    }
-    TStringStream frmYqlProgram;
-    frmParseRes.Root->PrettyPrintTo(frmYqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
-    if (yqlProgram.Str() != frmYqlProgram.Str()) {
-        Cerr << "source query's AST and formatted query's AST are not same\n";
-        return false;
-    }
-
-    TString frmQuery2;
-    if (!formatter->Format(frmQuery, frmQuery2, issues)) {
-        Cerr << "Failed to format already formatted query: " << issues.ToString() << Endl;
-        return false;
-    }
-
-    if (checkDoubleFormatting && frmQuery != frmQuery2) {
-        Cerr << "Formatting an already formatted query yielded a different resut" << Endl
-             << "Add /* skip double format */ to suppress" << Endl;
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, settings, issues, checkDoubleFormatting);
+    if (!formatted) {
+        Cerr << issues.ToString() << Endl;
         return false;
     }
 
     if (!outFileName.empty()) {
         TFixedBufferFileOutput out{outFileName};
-        out << frmQuery;
+        out << *formatted;
     }
+
     return true;
 }
 
@@ -204,7 +163,6 @@ private:
     char Delim_;
 };
 
-
 void ParseProtoConfig(const TString& cfgFile, google::protobuf::Message* config) {
     TString configData = TFileInput(cfgFile).ReadAll();
 
@@ -220,7 +178,6 @@ static THolder<TMessage> ParseProtoConfig(const TString& cfgFile) {
     ParseProtoConfig(cfgFile, config.Get());
     return config;
 }
-
 
 int BuildAST(int argc, char* argv[]) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
@@ -273,27 +230,26 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
     opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("test-complete", "check completion engine").NoArgument();
+    opts.AddLongOption("test-syntax-ambiguity", "test syntax ambiguity").NoArgument();
+    opts.AddLongOption("debug-syntax-ambiguity", "debug syntax ambiguity").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>(langVerHandler);
     opts.AddLongOption("mem-limit", "Set memory limit in megabytes").Handler1T<ui32>(0, NYql::SetAddressSpaceLimit);
-    opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([&gatewaysConfig, &clusterMapping](const TString& file) {
-            gatewaysConfig = ParseProtoConfig<NYql::TGatewaysConfig>(file);
-            GetClusterMappingFromGateways(*gatewaysConfig, clusterMapping);
-        });
-    opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE")
-        .Handler1T<TString>([](const TString& file) {
-
-            auto pgExtConfig = ParseProtoConfig<NYql::NProto::TPgExtensions>(file);
-            if (!pgExtConfig) {
-                throw yexception() << "Bad format of config file " << file;
-            }
-            TVector<NYql::NPg::TExtensionDesc> extensions;
-            NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
-            NYql::NPg::RegisterExtensions(extensions, true,
-                *NSQLTranslationPG::CreateExtensionSqlParser(),
-                NKikimr::NMiniKQL::CreateExtensionLoader().get());
-        });
+    opts.AddLongOption("gateways-cfg", "Gateways configuration file").Optional().RequiredArgument("FILE").Handler1T<TString>([&gatewaysConfig, &clusterMapping](const TString& file) {
+        gatewaysConfig = ParseProtoConfig<NYql::TGatewaysConfig>(file);
+        GetClusterMappingFromGateways(*gatewaysConfig, clusterMapping);
+    });
+    opts.AddLongOption("pg-ext", "Pg extensions config file").Optional().RequiredArgument("FILE").Handler1T<TString>([](const TString& file) {
+        auto pgExtConfig = ParseProtoConfig<NYql::NProto::TPgExtensions>(file);
+        if (!pgExtConfig) {
+            throw yexception() << "Bad format of config file " << file;
+        }
+        TVector<NYql::NPg::TExtensionDesc> extensions;
+        NYql::PgExtensionsFromProto(*pgExtConfig, extensions);
+        NYql::NPg::RegisterExtensions(extensions, true,
+                                      *NSQLTranslationPG::CreateExtensionSqlParser(),
+                                      NKikimr::NMiniKQL::CreateExtensionLoader().get());
+    });
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
 
@@ -321,14 +277,17 @@ int BuildAST(int argc, char* argv[]) {
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+        res.Has("test-syntax-ambiguity"),
+        res.Has("debug-syntax-ambiguity"));
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+        res.Has("test-syntax-ambiguity"),
+        res.Has("debug-syntax-ambiguity"));
 
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator()
-    );
+        NSQLTranslationPG::MakeTranslator());
 
     TVector<TString> queries;
     int errors = 0;
@@ -365,7 +324,7 @@ int BuildAST(int argc, char* argv[]) {
             queries.push_back(queryString);
         }
 
-        for (const auto& query: queries) {
+        for (const auto& query : queries) {
             if (query.empty()) {
                 continue;
             }
@@ -400,7 +359,7 @@ int BuildAST(int argc, char* argv[]) {
                     issues.PrintTo(Cerr);
                 }
 
-                bool hasError = AnyOf(issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;});
+                bool hasError = AnyOf(issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR; });
                 if (hasError) {
                     ++errors;
                 }
@@ -413,7 +372,7 @@ int BuildAST(int argc, char* argv[]) {
             } else {
                 if (res.Has("tree") || res.Has("diff") || res.Has("dump")) {
                     google::protobuf::Message* ast(NSQLTranslation::SqlAST(translators, query, queryFile, parseRes.Issues,
-                        NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings));
+                                                                           NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings));
                     if (ast) {
                         if (res.Has("tree")) {
                             out << ast->DebugString() << Endl;
@@ -430,7 +389,7 @@ int BuildAST(int argc, char* argv[]) {
                         NSQLTranslation::TSQLHints hints;
                         auto lexer = SqlLexer(translators, query, parseRes.Issues, settings);
                         if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues,
-                            settings.MaxErrors, settings.Antlr4Parser)) {
+                                                     settings.MaxErrors, settings.Antlr4Parser)) {
                             parseRes = NSQLTranslation::SqlASTToYql(translators, query, *ast, hints, settings);
                         }
                     }
@@ -455,7 +414,7 @@ int BuildAST(int argc, char* argv[]) {
 
             bool hasError = false;
             if (!parseRes.Issues.Empty()) {
-                hasError = AnyOf(parseRes.Issues, [](const auto& issue) { return issue.GetSeverity() == NYql::TSeverityIds::S_ERROR;});
+                hasError = AnyOf(parseRes.Issues, [](const auto& issue) { return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR; });
 
                 if (hasError || !noDebug) {
                     parseRes.Issues.PrintWithProgramTo(Cerr, queryFile, query);
@@ -467,8 +426,13 @@ int BuildAST(int argc, char* argv[]) {
                 Cerr << "No error reported, but no yql compiled result!" << Endl << Endl;
             }
 
+            if (parseRes.IsOk() && hasError && flags.contains("StrictWarningAsError")) {
+                hasError = true;
+                Cerr << "Errors reported, but yql compiled result!" << Endl << Endl;
+            }
+
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
-                hasError = !TestFormat(translators, query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
+                hasError = !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
             }
 
             if (res.Has("test-lexers") && syntaxVersion == 1 && !hasError && parseRes.Root) {

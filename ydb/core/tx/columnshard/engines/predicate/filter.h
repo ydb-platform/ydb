@@ -86,20 +86,8 @@ public:
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
     static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
 
-    template <class TProto>
-    static TConclusion<TPKRangesFilter> BuildFromProto(const TProto& proto, const std::vector<TNameTypeInfo>& ydbPk) {
-        TPKRangesFilter result;
-        for (auto& protoRange : proto.GetRanges()) {
-            auto fromPredicate = std::make_shared<TPredicate>();
-            auto toPredicate = std::make_shared<TPredicate>();
-            std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{ protoRange }, ydbPk);
-            auto status = result.Add(fromPredicate, toPredicate, NArrow::TStatusValidator::GetValid(NArrow::MakeArrowSchema(ydbPk)));
-            if (status.IsFail()) {
-                return status;
-            }
-        }
-        return result;
-    }
+    static TConclusion<TPKRangesFilter> BuildFromProto(
+        const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
 };
 
 class ICursorEntity {

@@ -19,6 +19,8 @@ items:
   href: host_configs.md
 - name: hosts
   href: hosts.md
+- name: kafka_proxy_config
+  href: kafka.md
 - name: log_config
   href: log_config.md
 - name: memory_controller_config
@@ -31,3 +33,5 @@ items:
   href: security_config.md
 - name: tls
   href: tls.md
+- name: table_service_config
+  href: table_service_config.md

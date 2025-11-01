@@ -419,6 +419,7 @@ namespace NKikimr::NStorage {
             bool IsDistconfDisabledQuorum = false;
             std::optional<NKikimrBlobStorage::TStorageConfig> PropositionBase;
             std::optional<NKikimrBlobStorage::TStorageConfig> ConfigToPropose;
+            bool AutomaticBootstrap = false;
         };
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
             std::optional<TStringBuf> selfAssemblyUUID);
@@ -468,7 +469,11 @@ namespace NKikimr::NStorage {
         bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig
             , std::unordered_set<ui32>& usedNodes
-            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {});
+            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {}
+            , ui32 overrideReplicasInRingCount = 0
+            , ui32 overrideRingsCount = 0
+            , ui32 replicasSpecificVolume = 200
+        );
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge ops
@@ -519,6 +524,8 @@ namespace NKikimr::NStorage {
             TActorId ActorId; // originating actor id or empty if this was triggered by system
         };
         std::deque<TInvokeOperation> InvokeQ; // operations queue; first is always the being executed one
+        std::deque<TInvokeOperation> InvokePending; // collected while in ERROR_TIMEOUT state
+        std::deque<TEvNodeConfigInvokeOnRoot::TPtr> InvokeOnRootPending;
         bool DeadActorWaitingForProposition = false;
 
         class TInvokeRequestHandlerActor;
@@ -527,7 +534,7 @@ namespace NKikimr::NStorage {
 
         ui64 InvokePipelineGeneration = 1;
 
-        void Handle(TEvNodeConfigInvokeOnRoot::TPtr ev);
+        void HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev);
         void Invoke(TInvokeQuery&& query);
         void HandleQueryFinished(STFUNC_SIG);
 

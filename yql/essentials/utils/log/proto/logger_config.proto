@@ -73,6 +73,8 @@ message TLoggingConfig {
             TLegacyFormat LegacyFormat = 1;
             TJsonFormat JsonFormat = 2;
         };
+
+        optional bool IsStrict = 3 [default = true];
     }
 
     repeated TLogDestination LogDest = 2; // If none is passed InitLogger sets default STDERR backend

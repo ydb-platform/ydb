@@ -77,6 +77,27 @@ sudo useradd ydb -g ydb
 sudo usermod -aG disk ydb
 ```
 
+## Настройте лимиты файловых дескрипторов {#file-descriptors}
+
+Для корректной работы {{ ydb-short-name }}, особенно при использовании [спиллинга](../../../concepts/spilling.md) в многоузловых кластерах, рекомендуется увеличить лимит на количество одновременно открытых файловых дескрипторов.
+
+Для изменения лимита файловых дескрипторов добавьте следующие строки в файл `/etc/security/limits.conf`:
+
+```bash
+ydb soft nofile 10000
+ydb hard nofile 10000
+```
+
+Где `ydb` — имя пользователя, под которым запускается `ydbd`.
+
+После изменения файла необходимо перезагрузить систему или заново залогиниться для применения новых лимитов.
+
+{% note info %}
+
+Для получения дополнительной информации о конфигурации спиллинга и его связи с файловыми дескрипторами см. раздел [«Конфигурация спиллинга»](../../../reference/configuration/table_service_config.md#file-system-requirements).
+
+{% endnote %}
+
 ## Установите программное обеспечение {{ ydb-short-name }} на каждом сервере {#install-binaries}
 
 1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
@@ -167,6 +188,7 @@ vdb    252:16   0   186G  0 disk
     * [block-4-2](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/block-4-2.yaml) - для однодатацентрового кластера.
     * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml) - для cross-DC кластера из 9 нод.
     * [mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 3 нод.
+    * [bridge-mirror-3dc-3nodes](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/bridge-mirror-3dc-3-nodes.yaml) - для cross-DC кластера из 6 нод в режиме bridge.
 
 1. В секции `host_configs` укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
 
@@ -187,19 +209,19 @@ vdb    252:16   0   186G  0 disk
     hosts:
     - host: node1.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 1
         data_center: 'zone-a'
         rack: '1'
     - host: node2.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 2
         data_center: 'zone-b'
         rack: '1'
     - host: node3.ydb.tech
       host_config_id: 1
-      walle_location:
+      location:
         body: 3
         data_center: 'zone-c'
         rack: '1'
@@ -207,11 +229,17 @@ vdb    252:16   0   186G  0 disk
 
 1. Включите аутентификацию пользователей (опционально).
 
-    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию `security_config` со следующими параметрами:
+    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию `security_config`.
+
+    {% note warning %}
+
+    Для первоначальной установки кластера обязательно установите параметр `enforce_user_token_requirement` в значение `false`. Включение защищенного режима будет произведено на последующих шагах, после инициализации кластера.
+
+    {% endnote %}
 
     ```yaml
     security_config:
-      enforce_user_token_requirement: true
+      enforce_user_token_requirement: false
       monitoring_allowed_sids:
       - "root"
       - "ADMINS"
@@ -338,44 +366,16 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 Для инициализации кластера потребуется файл сертификата центра регистрации `ca.crt`, путь к которому должен быть указан при выполнении соответствующих команд. Перед выполнением соответствующих команд скопируйте файл `ca.crt` на сервер, на котором эти команды будут выполняться.
 
-Порядок действий по инициализации кластера зависят от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
+Инициализация кластера всегда производится в режиме с отключенной обязательной проверкой аутентификации. Убедитесь, что в конфигурационном файле установлен параметр `enforce_user_token_requirement: false`, как описано в разделе [«Подготовьте конфигурационные файлы»](#config). Включение обязательной аутентификации выполняется на последующих шагах, после завершения инициализации кластера и создания базы данных.
 
-{% list tabs group=authentication %}
+На одном из серверов хранения в составе кластера выполните команды:
 
-- Аутентификация включена
-
-  Для выполнения административных команд (включая инициализацию кластера, создание баз данных, управление дисками и другие) в кластере со включённым режимом аутентификации пользователей необходимо предварительно получить аутентификационный токен с использованием клиента {{ ydb-short-name }} CLI версии 2.0.0 или выше. Клиент {{ ydb-short-name }} CLI следует установить на любом компьютере, имеющем сетевой доступ к узлам кластера (например, на одном из узлов кластера), в соответствии с [инструкцией по установке](../../../reference/ydb-cli/install.md).
-
-  При первоначальной установке кластера в нём существует единственная учётная запись `root` с пустым паролем, поэтому команда получения токена выглядит следующим образом:
-
-  ```bash
-  ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
-       --user root --no-password auth get-token --force > token-file
-  ```
-
-  В качестве сервера для подключения (параметр `-e` или `--endpoint`) может быть указан любой из серверов хранения в составе кластера.
-
-  При успешном выполнении указанной выше команды аутентификационный токен будет записан в файл `token-file`. Файл токена необходимо скопировать на один из серверов хранения в составе кластера, а затем на выбранном сервере выполнить команды:
-
-  ```bash
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  ydb --token-file token-file --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
-      admin cluster bootstrap --uuid <строка>
-  echo $?
-  ```
-
-- Аутентификация выключена
-
-  На одном из серверов хранения в составе кластера выполните команды:
-
-  ```bash
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
-      admin cluster bootstrap --uuid <строка>
-  echo $?
-  ```
-
-{% endlist %}
+```bash
+export LD_LIBRARY_PATH=/opt/ydb/lib
+ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
+    admin cluster bootstrap --uuid <строка>
+echo $?
+```
 
 При успешном выполнении инициализации кластера выведенный на экран код завершения команды инициализации кластера должен быть нулевым.
 
@@ -387,35 +387,14 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 При создании базы данных устанавливается первоначальное количество используемых групп хранения, определяющее доступную пропускную способность ввода-вывода и максимальную емкость хранения. Количество групп хранения может быть при необходимости увеличено после создания базы данных.
 
-Порядок действий по созданию базы данных зависит от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
+На одном из серверов хранения в составе кластера выполните команды:
 
-{% list tabs group=authentication %}
-
-- Аутентификация включена
-
-  Необходимо получить аутентификационный токен. Может использоваться файл с токеном аутентификации, полученный при выполнении [инициализации кластера](#initialize-cluster), либо подготовлен новый токен.
-
-  Файл токена необходимо скопировать на один из серверов хранения в составе кластера, а затем на выбранном сервере выполнить команды:
-
-  ```bash
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
-      admin database /Root/testdb create ssd:1
-  echo $?
-  ```
-
-- Аутентификация выключена
-
-  На одном из серверов хранения в составе кластера выполните команды:
-
-  ```bash
-  export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
-      admin database /Root/testdb create ssd:1
-  echo $?
-  ```
-
-{% endlist %}
+```bash
+export LD_LIBRARY_PATH=/opt/ydb/lib
+/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+    admin database /Root/testdb create ssd:1
+echo $?
+```
 
 При успешном создании базы данных, выведенный на экран код завершения команды должен быть нулевым.
 
@@ -501,6 +480,12 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
   В примере файла выше `<ydbN>` - FQDN трех любых серверов, на которых запущены статические узлы кластера.
 
+  {% note info %}
+
+  При использовании [режима bridge](../../../concepts/bridge.md) добавьте параметр `--bridge-pile-name <pile_name>` в команду запуска.
+
+  {% endnote %}
+  
   Запустите динамический узел {{ ydb-short-name }} для базы `/Root/testdb`:
 
   ```bash
@@ -511,20 +496,55 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
 Запустите дополнительные динамические узлы на других серверах для масштабирования и обеспечения отказоустойчивости базы данных.
 
-## Первоначальная настройка учетных записей {#security-setup}
+## Включение аутентификации и настройка учетных записей {#security-setup}
 
-Если в файле настроек кластера включен режим аутентификации, то перед началом работы с кластером {{ ydb-short-name }} необходимо выполнить первоначальную настройку учетных записей.
+После инициализации кластера и создания базы данных, кластер работает в режиме, разрешающем доступ без аутентификации (`enforce_user_token_requirement: false`). Для производственных инсталляций рекомендуется включить обязательную проверку аутентификации и настроить учетные записи.
 
 При первоначальной установке кластера {{ ydb-short-name }} автоматически создается учетная запись `root` с пустым паролем, а также стандартный набор групп пользователей, описанный в разделе [{#T}](../../../security/builtin-security.md).
 
-Для выполнения первоначальной настройки учетных записей в созданном кластере {{ ydb-short-name }} выполните следующие операции:
+### Включение обязательной аутентификации
 
-1. Установите {{ ydb-short-name }} CLI, как описано в [документации](../../../reference/ydb-cli/install.md).
-
-1. Выполните установку пароля учетной записи `root`:
+1. Получите аутентификационный токен для встроенной учетной записи `root`. На данном этапе пароль еще не задан:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --no-password \
+    ydb --ca-file ca.crt -e grpcs://<node1.ydb.tech>:2135 -d /Root \
+            --user root --no-password auth get-token --force > token-file
+    ```
+
+1. Получите текущую конфигурацию из кластера и сохраните ее в файл `secure_config.yaml`:
+
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file  \
+        admin cluster config fetch > secure_config.yaml
+    ```
+
+   Откройте файл `secure_config.yaml` и измените в нем значение флага `enforce_user_token_requirement` на `true`:
+
+    ```yaml
+    security_config:
+        enforce_user_token_requirement: true
+        ...
+    ```
+
+1. Примените новую конфигурацию в кластер с помощью команды `replace`, используя полученный ранее токен:
+
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file \
+        admin cluster config replace -f secure_config.yaml
+    ```
+
+1. Перезапустите узлы кластера для применения конфигурации.
+
+    Параметр `enforce_user_token_requirement` вступает в силу только после перезапуска узлов. Выполните процедуру [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) для всех статических узлов кластера.
+
+### Первоначальная настройка учетных записей
+
+Теперь, когда кластер работает в режиме с обязательной аутентификацией, настройте учетные записи.
+
+1. Установите пароль для учетной записи `root`, используя полученный ранее токен:
+
+    ```bash
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --token-file token-file \
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 
@@ -567,7 +587,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 
     ```bash
     ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-        yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
+        yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
     ```
 
 {% endlist %}

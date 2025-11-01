@@ -18,12 +18,12 @@ bool ConvertInputArrowType(TType* blockType, arrow::ValueDescr& descr) {
     return ConvertArrowType(asBlockType->GetItemType(), descr.type);
 }
 
-class TOutputTypeVisitor : public arrow::TypeVisitor
-{
+class TOutputTypeVisitor: public arrow::TypeVisitor {
 public:
     TOutputTypeVisitor(TTypeEnvironment& env)
         : Env_(env)
-    {}
+    {
+    }
 
     arrow::Status Visit(const arrow::BooleanType&) {
         SetDataType(NUdf::EDataSlot::Bool);
@@ -85,7 +85,7 @@ private:
 };
 
 bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std::vector<arrow::ValueDescr>& values,
-    bool optional, TType*& outputType, TTypeEnvironment& env) {
+                            bool optional, TType*& outputType, TTypeEnvironment& env) {
     arrow::ValueDescr::Shape shape;
     std::shared_ptr<arrow::DataType> dataType;
 
@@ -111,14 +111,14 @@ bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std
     }
 
     switch (shape) {
-    case arrow::ValueDescr::SCALAR:
-        outputType = TBlockType::Create(itemType, TBlockType::EShape::Scalar, env);
-        return true;
-    case arrow::ValueDescr::ARRAY:
-        outputType = TBlockType::Create(itemType, TBlockType::EShape::Many, env);
-        return true;
-    default:
-        return false;
+        case arrow::ValueDescr::SCALAR:
+            outputType = TBlockType::Create(itemType, TBlockType::EShape::Scalar, env);
+            return true;
+        case arrow::ValueDescr::ARRAY:
+            outputType = TBlockType::Create(itemType, TBlockType::EShape::Many, env);
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -187,4 +187,4 @@ bool HasArrowCast(TType* from, TType* to) {
     return arrow::compute::CanCast(*fromArrowType, *toArrowType);
 }
 
-}
+} // namespace NKikimr::NMiniKQL

@@ -98,7 +98,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             exportSettings->clear_items();
             for (const auto& [sourcePath, info] : ExportItems) {
                 auto* item = exportSettings->add_items();
-                item->set_source_path(sourcePath.substr(CommonSourcePath.size() + 1));
+                item->set_source_path(sourcePath);
                 item->set_destination_prefix(info.Destination);
             }
         }
@@ -294,6 +294,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         // Skip children that we don't want to export
                         if (child.Name.StartsWith("~")
                             || child.Name.StartsWith(".sys")
+                            || child.Name.StartsWith(".tmp")
                             || child.Name.StartsWith(".metadata")
                             || child.Name.StartsWith("export-"))
                         {

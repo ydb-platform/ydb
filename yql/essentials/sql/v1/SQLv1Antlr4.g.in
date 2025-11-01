@@ -80,6 +80,12 @@ sql_stmt_core:
   | drop_transfer_stmt
   | alter_database_stmt
   | show_create_table_stmt
+  | create_streaming_query_stmt
+  | alter_streaming_query_stmt
+  | drop_streaming_query_stmt
+  | create_secret_stmt
+  | alter_secret_stmt
+  | drop_secret_stmt
 ;
 
 expr:
@@ -167,7 +173,6 @@ in_atom_expr:
   | cast_expr
   | case_expr
   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
-  | LPAREN select_stmt RPAREN
 // TODO: resolve ANTLR error: rule in_atom_expr has non-LL(*) decision due to recursive rule invocations reachable from alts 3,8
 //  | LPAREN values_stmt RPAREN
   | value_constructor
@@ -227,8 +232,19 @@ json_query: JSON_QUERY LPAREN
   (json_query_handler ON ERROR)?
 RPAREN;
 
-// struct, tuple or named list
-smart_parenthesis: LPAREN named_expr_list? COMMA? RPAREN;
+select_subexpr:
+  select_subexpr_intersect (union_op select_subexpr_intersect)*
+;
+
+select_subexpr_intersect:
+  select_or_expr (intersect_op select_or_expr)*
+;
+
+select_or_expr: select_kind_partial | tuple_or_expr;
+
+tuple_or_expr: expr (AS an_id_or_type)? (COMMA named_expr)* COMMA?;
+
+smart_parenthesis: LPAREN (select_subexpr | COMMA?) RPAREN;
 
 expr_list: expr (COMMA expr)*;
 
@@ -310,6 +326,8 @@ type_name_enum: ENUM LESS type_name_tag (COMMA type_name_tag)* COMMA? GREATER;
 type_name_resource: RESOURCE LESS type_name_tag GREATER;
 type_name_tagged: TAGGED LESS type_name_or_bind COMMA type_name_tag GREATER;
 type_name_callable: CALLABLE LESS LPAREN callable_arg_list? COMMA? (LBRACE_SQUARE callable_arg_list RBRACE_SQUARE)? RPAREN ARROW type_name_or_bind GREATER;
+type_name_linear: LINEAR LESS type_name_or_bind GREATER;
+type_name_dynamiclinear: DYNAMICLINEAR LESS type_name_or_bind GREATER;
 
 type_name_composite:
   ( type_name_optional
@@ -325,6 +343,8 @@ type_name_composite:
   | type_name_resource
   | type_name_tagged
   | type_name_callable
+  | type_name_linear
+  | type_name_dynamiclinear
   ) QUESTION*;
 
 type_name:
@@ -594,8 +614,6 @@ values_source: values_stmt | select_stmt;
 values_source_row_list: values_source_row (COMMA values_source_row)*;
 values_source_row: LPAREN expr_list RPAREN;
 
-simple_values_source: expr_list | select_stmt;
-
 create_external_data_source_stmt: CREATE (OR REPLACE)? EXTERNAL DATA SOURCE (IF NOT EXISTS)? object_ref
     with_table_settings
 ;
@@ -612,9 +630,36 @@ alter_external_data_source_action:
 
 drop_external_data_source_stmt: DROP EXTERNAL DATA SOURCE (IF EXISTS)? object_ref;
 
+create_streaming_query_stmt: CREATE (OR REPLACE)? STREAMING QUERY (IF NOT EXISTS)? object_ref
+    create_streaming_query_features?
+    streaming_query_definition
+;
+create_streaming_query_features: WITH streaming_query_settings;
+
+alter_streaming_query_stmt: ALTER STREAMING QUERY (IF EXISTS)? object_ref
+    alter_streaming_query_action
+;
+alter_streaming_query_action:
+    alter_streaming_query_set_settings
+  | alter_streaming_query_set_settings? streaming_query_definition
+;
+alter_streaming_query_set_settings: SET streaming_query_settings;
+
+streaming_query_settings: LPAREN streaming_query_setting (COMMA streaming_query_setting)* COMMA? RPAREN;
+streaming_query_setting: an_id_or_type EQUALS streaming_query_setting_value;
+streaming_query_setting_value:
+    id_or_type
+  | STRING_VALUE
+  | bool_value
+;
+
+streaming_query_definition: AS DO inline_action;
+
+drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? object_ref;
+
 create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
-    AS select_stmt
+    AS (select_stmt | DO BEGIN define_action_or_subquery_body END DO)
 ;
 
 drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;
@@ -769,9 +814,22 @@ alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 
-column_schema: an_id_schema type_name_or_bind family_relation? opt_column_constraints;
+column_schema: an_id_schema type_name_or_bind column_option_list;
+
+column_option_list: column_option_list_space | column_option_list_comma;
+column_option_list_space: (column_option)*;
+column_option_list_comma: LPAREN column_option (COMMA column_option)* RPAREN;
+
+column_option:
+    family_relation
+    | nullability
+    | default_value
+    ;
+
 family_relation: FAMILY an_id;
-opt_column_constraints: (NOT? NULL)? (DEFAULT expr)?;
+nullability: NOT? NULL;
+default_value: DEFAULT expr;
+
 column_order_by_specification: an_id (ASC | DESC)?;
 
 table_constraint:
@@ -995,7 +1053,7 @@ set_clause_choice: set_clause_list | multiple_column_assignment;
 set_clause_list: set_clause (COMMA set_clause)*;
 set_clause: set_target EQUALS expr;
 set_target: column_name;
-multiple_column_assignment: set_target_list EQUALS LPAREN simple_values_source RPAREN;
+multiple_column_assignment: set_target_list EQUALS smart_parenthesis;
 set_target_list: LPAREN set_target (COMMA set_target)* RPAREN;
 
 // topics
@@ -1099,11 +1157,9 @@ window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXC
 // EXTRAS
 use_stmt: USE cluster_expr;
 
-subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
-
 // TODO: [fatal] rule named_nodes_stmt has non-LL(*) decision due to recursive rule invocations reachable from alts 1,3
 // named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt | values_stmt | LPAREN values_stmt RPAREN);
-named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
+named_nodes_stmt: bind_parameter_list EQUALS (expr | select_unparenthesized_stmt);
 
 commit_stmt: COMMIT;
 
@@ -1122,6 +1178,23 @@ alter_sequence_action:
 ;
 
 show_create_table_stmt: SHOW CREATE (TABLE | VIEW) simple_table_ref;
+
+create_secret_stmt: CREATE SECRET object_ref
+    with_secret_settings
+;
+with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
+secret_setting_entry: an_id EQUALS secret_setting_value;
+secret_setting_value:
+      STRING_VALUE
+    | bool_value
+    | bind_parameter
+;
+
+alter_secret_stmt: ALTER SECRET object_ref
+    with_secret_settings
+;
+
+drop_secret_stmt: DROP SECRET object_ref;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1370,6 +1443,7 @@ keyword_as_compat:
   | DESCRIBE
   | DETACH
   | DIRECTORY
+  | DYNAMICLINEAR
   | DISABLE
   | DISCARD
   // | DO
@@ -1428,6 +1502,7 @@ keyword_as_compat:
   // | LEFT
   | LEGACY
   | LIKE
+  | LINEAR
   | LOCAL
   | LOGIN
   | MANAGE
@@ -1501,6 +1576,7 @@ keyword_as_compat:
   // | SAMPLE
   | SAVEPOINT
   | SECONDS
+  | SECRET
   | SEEK
   // | SEMI
   | SETS
@@ -1509,6 +1585,7 @@ keyword_as_compat:
   | SEQUENCE
   | SOURCE
   | START
+  | STREAMING
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1600,6 +1677,7 @@ keyword_compat: (
   | DESCRIBE
   | DETACH
   | DIRECTORY
+  | DYNAMICLINEAR
   | DISABLE
   | DISCARD
   | DO
@@ -1658,6 +1736,7 @@ keyword_compat: (
   | LEFT
   | LEGACY
   | LIKE
+  | LINEAR
   | LOCAL
   | LOGIN
   | MANAGE
@@ -1736,9 +1815,11 @@ keyword_compat: (
   | SETS
   | SHOW
   | TSKIP
+  | SECRET
   | SEQUENCE
   | SOURCE
   | START
+  | STREAMING
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1945,6 +2026,7 @@ DESCRIBE: D E S C R I B E;
 DETACH: D E T A C H;
 DICT: D I C T;
 DIRECTORY: D I R E C T O R Y;
+DYNAMICLINEAR: D Y N A M I C L I N E A R;
 DISABLE: D I S A B L E;
 DISCARD: D I S C A R D;
 DISTINCT: D I S T I N C T;
@@ -2022,6 +2104,7 @@ LEFT: L E F T;
 LEGACY: L E G A C Y;
 LIKE: L I K E;
 LIMIT: L I M I T;
+LINEAR: L I N E A R;
 LIST: L I S T;
 LOCAL: L O C A L;
 LOGIN: L O G I N;
@@ -2116,10 +2199,12 @@ SET: S E T;
 SETS: S E T S;
 SHOW: S H O W;
 TSKIP: S K I P;
+SECRET: S E C R E T;
 SEQUENCE: S E Q U E N C E;
 SOURCE: S O U R C E;
 START: S T A R T;
 STREAM: S T R E A M;
+STREAMING: S T R E A M I N G;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SUBSET: S U B S E T;

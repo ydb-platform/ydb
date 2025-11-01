@@ -681,7 +681,7 @@ public:
     }
 
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         TRunResult res;
         auto nodePos = ctx.GetPosition(node->Pos());
 
@@ -1145,6 +1145,12 @@ public:
     }
 
     void AddCluster(const TYtClusterConfig&) override {
+    }
+
+    TFuture<TDumpResult> Dump(TDumpOptions&& /*options*/) override {
+        TDumpResult res;
+        res.SetSuccess();
+        return MakeFuture(res);
     }
 
 private:
@@ -1613,13 +1619,18 @@ private:
         return res;
     }
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) const override {
         return TClusterConnectionResult();
     }
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
         return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
     }
+
+    NThreading::TFuture<IYtGateway::TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&&) override {
+        return MakeFuture<IYtGateway::TLayersSnapshotResult>();
+    }
+
 
 private:
     TYtFileServices::TPtr Services_;

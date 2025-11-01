@@ -38,6 +38,8 @@ THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TP
 THolder<TExecutionUnit> CreatePrepareWriteTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreatePrepareDistributedEraseTxInRSUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateLoadInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateBlockFailPointUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteWriteUnit(TDataShard& dataShard, TPipeline& pipeline);
 THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard& dataShard, TPipeline& pipeline);

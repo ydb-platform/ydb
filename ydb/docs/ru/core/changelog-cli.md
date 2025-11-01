@@ -1,5 +1,44 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.26.0 {#2-26-0}
+
+Дата выхода 25 сентября 2025. Для обновления до версии **2.26.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлены опции `--no-merge` и `--no-cache` в [команду](./reference/ydb-cli/commands/monitoring-healthcheck.md) `{{ ydb-cli }} monitoring healthcheck`.
+* Добавлена статистика времени компиляции запроса в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+* Добавлена опция `--retries` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, позваляющая задать количество повторных попыток для каждого запроса загрузки данных.
+* **_(Требуется сервер v25.4+)_** Добавлена опция `--replace-sys-acl` в [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`, которая задаёт, нужно ли заменять ACL для системных объектов.
+
+## Версия 2.25.0 {#2-25-0}
+
+Дата выхода 1 сентября 2025. Для обновления до версии **2.25.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена финальная статистика выполнения в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+* Добавлена опция `--start-offset` в [команду](./reference/ydb-cli/topic-read.md) `{{ ydb-cli }} topic read`, которая задаёт начальную позицию для чтения из выбранной партиции.
+* **_(Требуется сервер v25.3+)_** Добавлен новый способ указания путей в [командах](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3` и `{{ ydb-cli }} import s3` с новой опцией `--include` вместо опции `--item`.
+* **_(Требуется сервер v25.3+)_** Добавлена поддержка функций шифрования в [командах](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3` и `{{ ydb-cli }} import s3`.
+* **_(Требуется сервер v25.3+)_** **_(Экспериментально)_** Добавлены [команды](./reference/ydb-cli/commands/bridge/index.md) `{{ ydb-cli }} admin cluster bridge` для управления кластером в [режиме bridge](./concepts/bridge.md): `list`, `switchover`, `failover`, `takedown`, `rejoin`.
+
+### Улучшения
+
+* Опции аутентификации по имени пользователя и паролю теперь обрабатываются независимо, что позволяет получать их из разных источников приоритета. Например, имя пользователя можно указать с помощью опции `--user`, а пароль получить из переменной окружения `YDB_PASSWORD`.
+* Изменён уровень логирования по умолчанию с `EMERGENCY` на `WARN` для команд, поддерживающих несколько уровней логирования.
+
+### Изменения с потерей обратной совместимости
+
+* Удалена опция `--float-mode` из [команд](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload tpch run` и `{{ ydb-cli }} workload tpcds run`. Режим работы с вещественными числами теперь определяется автоматически из схемы таблицы, созданной во время фазы `init`.
+
+### Исправления ошибок
+
+* Исправлена ошибка, при которой [команда](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file csv` с опцией `--newline-delimited` могла зависать при некорректных входных данных.
+* Исправлена ошибка с отображением прогресс-бара в [команде](./reference/ydb-cli/workload-click-bench.md) `{{ ydb-cli }} workload clickbench import files` — неправильное процентное значение и избыточные переносы строк, приводящие к дублированию строк прогресса.
+* Исправлена ошибка, при которой [команда](./reference/ydb-cli/topic-write.md) `{{ ydb-cli }} workload topic write` могла завершаться аварийно с ошибкой `Unknown AckedMessageId` из-за внутреннего состояния гонки.
+* Исправлено сравнение десятичных типов в [командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+
 ## Версия 2.24.1 {#2-24-1}
 
 Дата выхода 28 июля 2025. Для обновления до версии **2.24.1** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -118,7 +157,7 @@
 
 ### Функциональность
 
-* Добавлена поддержка [топиков](./concepts/topic.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
+* Добавлена поддержка [топиков](./concepts/datamodel/topic.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * Добавлена поддержка [узлов координации](./concepts/datamodel/coordination-node.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * Добавлена новая команда `{{ ydb-cli }} workload log import generator`.
 * Добавлены новые глобальные опции для пользовательских сертификатов при соединении через SSL/TLS:

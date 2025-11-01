@@ -29,6 +29,9 @@ public:
 
     NThreading::TFuture<void> Delete(TKey key) override;
 
+    void ReportAlloc(ui64 bytes) override;
+    void ReportFree(ui64 bytes) override;
+
 private:
     NThreading::TFuture<std::optional<TChunkedBuffer>> GetInternal(TKey key, bool removeBlobAfterRead);
 

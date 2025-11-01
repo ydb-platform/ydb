@@ -441,6 +441,16 @@ def pass_none(func):
     return wrapper
 
 
+def none_as(value, replacement=None):
+    """
+    >>> none_as(None, 'foo')
+    'foo'
+    >>> none_as('bar', 'foo')
+    'bar'
+    """
+    return replacement if value is None else value
+
+
 def assign_params(func, namespace):
     """
     Assign parameters from namespace where func solicits.

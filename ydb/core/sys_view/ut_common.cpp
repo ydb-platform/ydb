@@ -1,9 +1,58 @@
 #include "ut_common.h"
+
+#include <ydb/core/base/backtrace.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 namespace NKikimr {
 namespace NSysView {
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
+namespace {
+
+void CreateTable(auto& session, const TString& name, ui64 partitionCount = 1) {
+    auto desc = TTableBuilder()
+        .AddNullableColumn("Key", EPrimitiveType::Uint64)
+        .AddNullableColumn("Value", EPrimitiveType::String)
+        .SetPrimaryKeyColumns({"Key"})
+        .Build();
+
+    auto settings = TCreateTableSettings();
+    settings.PartitioningPolicy(TPartitioningPolicy().UniformPartitions(partitionCount));
+
+    session.CreateTable(name, std::move(desc), std::move(settings)).GetValueSync();
+}
+
+void CreateTables(TTestEnv& env, ui64 partitionCount = 1) {
+    TTableClient client(env.GetDriver());
+    auto session = client.CreateSession().GetValueSync().GetSession();
+
+    CreateTable(session, "Root/Table0", partitionCount);
+    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+        REPLACE INTO `Root/Table0` (Key, Value) VALUES
+            (0u, "Z");
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+    CreateTable(session, "Root/Tenant1/Table1", partitionCount);
+    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+        REPLACE INTO `Root/Tenant1/Table1` (Key, Value) VALUES
+            (1u, "A"),
+            (2u, "B"),
+            (3u, "C");
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+    CreateTable(session, "Root/Tenant2/Table2", partitionCount);
+    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
+        REPLACE INTO `Root/Tenant2/Table2` (Key, Value) VALUES
+            (4u, "D"),
+            (5u, "E");
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+}
+
+} // namespace
 
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(const TString &name, const TStoragePools &pools) {
     NKikimrSubDomains::TSubDomainSettings subdomain;
@@ -28,6 +77,8 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
 }
 
 TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& settings) {
+    EnableYDBBacktraceFormat();
+
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -37,6 +88,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     authConfig.SetUseBuiltinDomain(true);
     Settings = new Tests::TServerSettings(mbusPort, authConfig);
     Settings->SetDomainName("Root");
+    Settings->SetGrpcPort(grpcPort);
     Settings->SetNodeCount(staticNodes);
     Settings->SetDynamicNodeCount(dynamicNodes);
     Settings->SetKqpSettings(kqpSettings);
@@ -51,6 +103,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableExternalDataSources(true);
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+    featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
+    featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
     if (settings.EnableRealSystemViewPaths) {
         featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
     }
@@ -67,7 +121,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
     appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
     appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
-    appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
+
+    auto& tableServiceConfig = *appConfig.MutableTableServiceConfig();
+    tableServiceConfig = settings.TableServiceConfig;
+    tableServiceConfig.SetEnableTempTablesForUser(true);
+
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {
@@ -76,6 +134,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     }
 
     Settings->AppConfig->MutableHiveConfig()->AddBalancerIgnoreTabletTypes(NKikimrTabletBase::TTabletTypes::SysViewProcessor);
+
+    if (settings.DataShardStatsReportIntervalSeconds) {
+        Settings->AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(*settings.DataShardStatsReportIntervalSeconds);
+    }
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
@@ -132,6 +195,41 @@ TStoragePools TTestEnv::CreatePoolsForTenant(const TString& tenant) {
         result.emplace_back(Client->CreateStoragePool(poolKind, tenant), poolKind);
     }
     return result;
+}
+
+void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard, ui64 nodesCount) {
+    auto subdomain = GetSubDomainDeclareSettings(tenantName);
+    if (extSchemeShard) {
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateExtSubdomain("/Root", subdomain));
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().CreateSubdomain("/Root", subdomain));
+    }
+
+    env.GetTenants().Run("/Root/" + tenantName, nodesCount);
+
+    auto subdomainSettings = GetSubDomainDefaultSettings(tenantName, env.GetPools());
+    subdomainSettings.SetExternalSysViewProcessor(true);
+
+    if (extSchemeShard) {
+        subdomainSettings.SetExternalSchemeShard(true);
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterSubdomain("/Root", subdomainSettings));
+    }
+}
+
+void CreateTenants(TTestEnv& env, bool extSchemeShard) {
+    CreateTenant(env, "Tenant1", extSchemeShard);
+    CreateTenant(env, "Tenant2", extSchemeShard);
+}
+
+void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard, ui64 partitionCount) {
+    CreateTenants(env, extSchemeShard);
+    CreateTables(env, partitionCount);
 }
 
 } // NSysView

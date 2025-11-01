@@ -9,7 +9,11 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(
+            extra_feature_flags=[
+                "enable_topic_compactification_by_key",
+            ],
+        )
 
     def test(self):
         yatest.common.execute([

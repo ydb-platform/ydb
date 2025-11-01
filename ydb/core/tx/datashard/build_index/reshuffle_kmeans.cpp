@@ -50,8 +50,8 @@ class TReshuffleKMeansScan: public TActor<TReshuffleKMeansScan>, public IActorEx
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;
 
-    NTableIndex::TClusterId Parent = 0;
-    NTableIndex::TClusterId Child = 0;
+    NTableIndex::NKMeans::TClusterId Parent = 0;
+    NTableIndex::NKMeans::TClusterId Child = 0;
 
     EState UploadState;
 
@@ -105,7 +105,7 @@ public:
         , Lead(std::move(lead))
         , TabletId(tabletId)
         , BuildId(request.GetId())
-        , Uploader(request.GetScanSettings())
+        , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , ScanSettings(request.GetScanSettings())
         , ResponseActorId(responseActorId)

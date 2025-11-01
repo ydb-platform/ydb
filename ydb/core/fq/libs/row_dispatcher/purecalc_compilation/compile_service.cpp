@@ -3,7 +3,6 @@
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -110,7 +109,7 @@ class TPurecalcCompileService : public NActors::TActor<TPurecalcCompileService> 
     };
 
 public:
-    TPurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters)
+    TPurecalcCompileService(const TRowDispatcherSettings::TCompileServiceSettings& config, NMonitoring::TDynamicCounterPtr counters)
         : TBase(&TPurecalcCompileService::StateFunc)
         , Config(config)
         , InFlightLimit(Config.GetParallelCompilationLimit() ? Config.GetParallelCompilationLimit() : 1)
@@ -188,12 +187,11 @@ private:
         }
         auto options = NYql::NPureCalc::TProgramFactoryOptions();
         options.SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF");
-        options.UseAntlr4 = true;
         return ProgramFactories.emplace(settings, NYql::NPureCalc::MakeProgramFactory(options)).first->second;
     }
 
 private:
-    const NConfig::TCompileServiceConfig Config;
+    const TRowDispatcherSettings::TCompileServiceSettings Config;
     const ui64 InFlightLimit;
     const TString LogPrefix;
 
@@ -208,7 +206,7 @@ private:
 
 }  // anonymous namespace
 
-NActors::IActor* CreatePurecalcCompileService(const NConfig::TCompileServiceConfig& config, NMonitoring::TDynamicCounterPtr counters) {
+NActors::IActor* CreatePurecalcCompileService(const TRowDispatcherSettings::TCompileServiceSettings& config, NMonitoring::TDynamicCounterPtr counters) {
     return new TPurecalcCompileService(config, counters);
 }
 

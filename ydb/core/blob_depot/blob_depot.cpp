@@ -31,7 +31,7 @@ namespace NKikimr::NBlobDepot {
     {}
 
     void TBlobDepot::HandleFromAgent(STATEFN_SIG) {
-        switch (const ui32 type = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
             hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
             hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);

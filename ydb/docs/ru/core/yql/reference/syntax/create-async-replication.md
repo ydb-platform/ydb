@@ -23,14 +23,7 @@ WITH (option = value [, ...])
 * `CA_CERT` — [корневой сертификат для TLS](../../../concepts/connect.md#tls-cert). Необязательный параметр. Может быть указан, если база-источник поддерживает режим обмена данными с шифрованием (`CONNECTION_STRING` начинается с `grpcs://`).
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
 
-  * С помощью [токена](../../../recipes/ydb-sdk/auth-access-token.md):
-
-    * `TOKEN_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего токен.
-
-  * С помощью [логина и пароля](../../../recipes/ydb-sdk/auth-static.md):
-
-    * `USER` — имя пользователя.
-    * `PASSWORD_SECRET_NAME` — имя [секрета](../../../concepts/datamodel/secrets.md), содержащего пароль.
+  {% include [x](_includes/async_replication_authentification.md) %}
 
 * `CONSISTENCY_LEVEL` — [уровень согласованности реплицируемых данных](../../../concepts/async-replication.md#consistency-levels):
   * `ROW` — [согласованность данных уровня строки](../../../concepts/async-replication.md#consistency-level-row). Режим по умолчанию.
@@ -39,11 +32,7 @@ WITH (option = value [, ...])
 
 ## Примеры {#examples}
 
-{% note tip %}
-
-Перед созданием экземпляра асинхронной репликации [создайте](create-object-type-secret.md) секрет с аутентификационными данными для подключения или убедитесь в его существовании и наличии доступа к нему.
-
-{% endnote %}
+{% include [x](../_includes/secret_tip.md) %}
 
 Создание экземпляра асинхронной репликации для таблицы `original_table` из базы `/Root/another_database` в текущую базу в таблицу `replica_table`:
 

@@ -1,8 +1,6 @@
 #include "tpcds.h"
 #include "data_generator.h"
 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
-
 #include <library/cpp/resource/resource.h>
 #include <util/stream/file.h>
 
@@ -17,20 +15,20 @@ TString TTpcdsWorkloadGenerator::GetTablesYaml() const {
     return NResource::Find("tpcds_schema.yaml");
 }
 
+std::pair<TString, TString> TTpcdsWorkloadGenerator::GetTableAndColumnForDetectFloatMode() const {
+    return std::make_pair("call_center", "cc_gmt_offset");
+}
+
 TWorkloadGeneratorBase::TSpecialDataTypes TTpcdsWorkloadGenerator::GetSpecialDataTypes() const {
     TString decimalType_5_2, decimalType_7_2, decimalType_15_2;
     switch (Params.GetFloatMode()) {
-    case TTpcBaseWorkloadParams::EFloatMode::FLOAT:
+    case TTpcBaseWorkloadParams::EFloatMode::DOUBLE:
         decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Double";
         break;
     case TTpcBaseWorkloadParams::EFloatMode::DECIMAL:
         decimalType_5_2 = "Decimal(5,2)";
         decimalType_7_2 = "Decimal(7,2)";
         decimalType_15_2 = "Decimal(15,2)";
-        break;
-    case TTpcBaseWorkloadParams::EFloatMode::DECIMAL_YDB:
-        decimalType_5_2 = decimalType_7_2 = decimalType_15_2 = "Decimal(" + ::ToString(NKikimr::NScheme::DECIMAL_PRECISION)
-                     + "," + ::ToString(NKikimr::NScheme::DECIMAL_SCALE) + ")";
         break;
     }
     return {

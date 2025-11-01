@@ -48,11 +48,6 @@ public:
 
     const std::vector<std::pair<TDynamicTagPtr, TTagIndex>>& DynamicTags() const;
 
-    template <class TFn>
-    void Range(
-        const TTagIdList& tags,
-        TFn fn) const;
-
     void Resize(int size);
     void SetEnabled(bool enabled);
 
@@ -96,6 +91,21 @@ public:
 
 private:
     TTagList Tags_;
+};
+
+class TTagIdSet
+    : public TProjectionSet
+{
+public:
+    TTagIdSet(const TProjectionSet& projections, const TTagIdList& tagIds);
+
+    template <class TFn>
+    void Range(TFn fn) const;
+
+    void SetTagId(TTagIndex tagIndex, TTagId tag);
+
+private:
+    TTagIdList TagIds_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

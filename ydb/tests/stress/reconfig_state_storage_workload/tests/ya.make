@@ -9,7 +9,7 @@ TEST_SRCS(
     test_state_storage_workload.py
 )
 
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32 cpu:4)
 
 SIZE(MEDIUM)
 

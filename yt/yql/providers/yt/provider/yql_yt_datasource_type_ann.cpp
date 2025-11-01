@@ -32,6 +32,7 @@ public:
         : TVisitorTransformerBase(true)
         , State_(state)
     {
+        AddHandler({TStringBuf("Result"), TStringBuf("Pull")}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleResOrPull));
         AddHandler({TEpoch::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleAux<TEpochInfo>));
         AddHandler({TYtMeta::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleAux<TYtTableMetaInfo>));
         AddHandler({TYtStat::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleAux<TYtTableStatInfo>));
@@ -56,6 +57,11 @@ public:
         AddHandler({TYtTableIndex::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Uint32>));
         AddHandler({TYtIsKeySwitch::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Bool>));
         AddHandler({TYtTableName::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableName));
+    }
+
+    TStatus HandleResOrPull(TExprBase input, TExprContext& ctx) {
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+        return TStatus::Ok;
     }
 
     TStatus HandleUnit(TExprBase input, TExprContext& ctx) {
@@ -297,36 +303,43 @@ public:
         return HandleUnit(input, ctx);
     }
 
-    TStatus HandlePath(TExprBase input, TExprContext& ctx) {
-        if (!TYtPathInfo::Validate(input.Ref(), ctx)) {
+    TStatus HandlePath(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        // Compatibility with previous version (different fields).
+        if (TYtPathInfo::RewriteWithQLFilter(input, output, ctx)) {
+            return TStatus::Repeat;
+        }
+
+        if (!TYtPathInfo::Validate(*input, ctx)) {
             return TStatus::Error;
         }
 
         TYtPathInfo pathInfo(input);
         if (pathInfo.Table->Meta && !pathInfo.Table->Meta->DoesExist) {
             if (NYql::HasSetting(pathInfo.Table->Settings.Ref(), EYtSettingType::Anonymous)) {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                     << "Anonymous table " << pathInfo.Table->Name.Quote() << " must be materialized. Use COMMIT before reading from it."));
             }
             else {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                     << "Table " <<  pathInfo.Table->Name.Quote() << " does not exist").SetCode(TIssuesIds::YT_TABLE_NOT_FOUND, TSeverityIds::S_ERROR));
             }
             return IGraphTransformer::TStatus::Error;
         }
 
+        output = input;
+
         const TTypeAnnotationNode* itemType = nullptr;
         TExprNode::TPtr newFields;
-        auto status = pathInfo.GetType(itemType, newFields, ctx, input.Pos());
+        auto status = pathInfo.GetType(itemType, newFields, ctx, input->Pos());
         if (newFields) {
-            input.Ptr()->ChildRef(TYtPath::idx_Columns) = newFields;
+            output->ChildRef(TYtPath::idx_Columns) = newFields;
         }
         if (status.Level != TStatus::Ok) {
             return status;
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
-        if (auto columnOrder = State_->Types->LookupColumnOrder(input.Ref().Head())) {
+        output->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
+        if (auto columnOrder = State_->Types->LookupColumnOrder(input->Head())) {
             if (pathInfo.Columns) {
                 auto& renames = pathInfo.Columns->GetRenames();
                 if (renames) {
@@ -352,7 +365,7 @@ public:
                 columnOrder->AddColumn(TString(col));
             }
 
-            return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, *columnOrder, ctx);
         }
 
         return TStatus::Ok;
@@ -999,9 +1012,16 @@ public:
             return TStatus::Error;
         }
 
-        auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            return status;
+        if (NNodes::TCoDependsOnBase::Match(&input->Head())) {
+            if (!State_->Types->DirectRowDependsOn) {
+                output = ctx.ChangeChild(*input, 0, input->Head().HeadPtr());
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TDataExprType>(Type));

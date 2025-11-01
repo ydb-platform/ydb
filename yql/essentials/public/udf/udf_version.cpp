@@ -2,7 +2,6 @@
 
 #include <util/string/builder.h>
 
-
 namespace NYql {
 namespace NUdf {
 

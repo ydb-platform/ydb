@@ -9,7 +9,7 @@ def post_install(self):
 boost_mp11 = NixSourceProject(
     nixattr="boost_mp11",
     arcdir="contrib/restricted/boost/mp11",
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

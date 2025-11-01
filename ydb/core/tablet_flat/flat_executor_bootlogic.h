@@ -78,6 +78,7 @@ private:
     TAutoPtr<NBoot::TRoot> Steps;
     TActorId LeaseWaiter;
 
+    const ui64 BootAttempt;
     TMonotonic BootTimestamp;
 
     const TIntrusiveConstPtr<TTabletStorageInfo> Info;
@@ -106,7 +107,7 @@ private:
     inline NBoot::TBack& State() const noexcept { return *State_; }
 
 public:
-    TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly);
+    TExecutorBootLogic(IOps*, const TActorId&, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly);
     ~TExecutorBootLogic();
 
     void Describe(IOutputStream&) const;

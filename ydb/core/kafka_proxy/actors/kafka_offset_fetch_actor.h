@@ -3,6 +3,8 @@
 #include "../kqp_helper.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
+#include <ydb/core/kafka_proxy/actors/control_plane_common.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
 #include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
@@ -44,17 +46,6 @@ struct TTopicGroupRequest {
     TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics TopicRequest;
     TString GroupId;
 };
-
-struct TTopicGroupIdAndPath {
-    TString GroupId;
-    TString TopicPath;
-
-    bool operator==(const TTopicGroupIdAndPath& topicGroupIdAndPath) const {
-        return GroupId == topicGroupIdAndPath.GroupId && TopicPath == topicGroupIdAndPath.TopicPath;
-    }
-};
-
-struct TStructHash { size_t operator()(const TTopicGroupIdAndPath& alterTopicRequest) const { return CombineHashes(std::hash<TString>()(alterTopicRequest.GroupId), std::hash<TString>()(alterTopicRequest.TopicPath)); } };
 
 
 class TKafkaOffsetFetchActor: public NActors::TActorBootstrapped<TKafkaOffsetFetchActor> {
@@ -122,7 +113,7 @@ private:
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
     std::unordered_map<TString, std::vector<TTopicGroupRequest>> GroupRequests;
     std::unordered_map<TActorId, TString> CreateTopicActorIdToName;
-    std::unordered_set<TTopicGroupIdAndPath, TStructHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     std::unordered_set<TString> TopicCreateRequestAttempts;
     std::unordered_set<TActorId> DependantActors;
     std::unique_ptr<NKafka::TKqpTxHelper> Kqp;

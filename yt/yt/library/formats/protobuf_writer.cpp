@@ -119,7 +119,7 @@ public:
             /* enableRaw */ true)
     {
         for (int tableIndex = 0; tableIndex < description->GetTableCount(); ++tableIndex) {
-            if (auto fieldDescription = description->FindOtherColumnsField(tableIndex)) {
+            if (description->FindOtherColumnsField(tableIndex)) {
                 TableIndexToConverter_[tableIndex].emplace(
                     nameTable,
                     schemas[tableIndex],

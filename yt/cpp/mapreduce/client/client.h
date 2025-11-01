@@ -271,7 +271,8 @@ private:
         const TRichYPath& path,
         const TTableReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
-        const NSkiff::TSkiffSchemaPtr& schema) override;
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) override;
 
     ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
         const TString& cookie,
@@ -286,7 +287,8 @@ private:
         const TString& cookie,
         const TTablePartitionReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
-        const NSkiff::TSkiffSchemaPtr& schema) override;
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) override;
 
     ::TIntrusivePtr<INodeWriterImpl> CreateNodeWriter(
         const TRichYPath& path, const TTableWriterOptions& options) override;
@@ -477,8 +479,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = TGetJobStderrOptions()) override;
 
-    std::vector<TJobTraceEvent> GetJobTrace(
+    IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = TGetJobTraceOptions()) override;
 
     TNode::TListType SkyShareTable(
@@ -495,6 +498,8 @@ public:
         const TYPath& path,
         const TVector<int>& tabletIndexes,
         const TGetTabletInfosOptions& options) override;
+
+    const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile) override;
 
     void SuspendOperation(
         const TOperationId& operationId,
@@ -525,6 +530,10 @@ private:
     std::atomic<bool> Shutdown_ = false;
     TMutex Lock_;
     std::unique_ptr<TYtPoller> YtPoller_;
+
+    // Cached cluster configuration to be returned from |GetClusterConfig|.
+    TMutex ClusterConfigLock_;
+    std::optional<TNode::TMapType> ClusterConfig_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

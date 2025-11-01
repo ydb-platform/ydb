@@ -31,6 +31,12 @@ message TEvLoadTestRequest {
         optional double Weight = 3;
     }
     message TStorageLoad {
+        message TContentType {
+            enum E {
+                Random = 1;
+                Validated = 2;
+            }
+        }
         message TInitialBlobAllocation {
             oneof DataSize {
                 uint64 TotalSize = 1;
@@ -89,6 +95,9 @@ message TEvLoadTestRequest {
 
             optional uint32 TracingThrottlerRate = 18 [default = 0];
             optional uint32 TracingThrottlerBurst = 19 [default = 0];
+
+            optional uint32 NumberOfRandomGroupsToPick = 20 [default = 0];
+            optional TContentType.E ContentType = 21;
         };
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;
@@ -260,6 +269,22 @@ message TEvLoadTestRequest {
         optional uint64 IntervalUs = 4;
     }
 
+    message TInterconnectLoad {
+        optional uint64 Tag = 1;
+        optional string Name = 2;
+        optional uint32 Channel = 3;
+        repeated uint32 NodeHops = 4;
+        optional uint32 SizeMin = 5;
+        optional uint32 SizeMax = 6;
+        optional uint32 InFlyMax = 7;
+        optional uint32 IntervalMinUs = 8;
+        optional uint32 IntervalMaxUs = 9;
+        optional bool SoftLoad = 10;
+        optional uint32 DurationSeconds = 11;
+        optional bool UseProtobufWithPayload = 12;
+        optional uint32 RdmaMode = 13;
+    }
+
     optional uint64 Cookie = 1;
     oneof Command {
         TStop Stop = 3;
@@ -272,6 +297,7 @@ message TEvLoadTestRequest {
         TKqpLoad KqpLoad = 9;
         TMemoryLoad MemoryLoad = 10;
         NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
+        TInterconnectLoad InterconnectLoad = 15;
     }
     optional uint64 Tag = 12;
     optional string Uuid = 13;

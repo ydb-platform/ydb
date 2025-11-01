@@ -83,5 +83,5 @@ THolder<TFilesBox> CreateFilesBox(const TFsPath& baseDir) {
     return MakeHolder<TFilesBox>(std::move(path), std::move(randGuid));
 }
 
-}
-}
+} // namespace NCommon
+} // namespace NYql

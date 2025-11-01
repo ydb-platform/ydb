@@ -86,11 +86,6 @@ using IARetryPolicy = std::conditional_t<UseMigrationProtocol,
     NYdb::NTopic::IRetryPolicy>;
 
 template <bool UseMigrationProtocol>
-using IAExecutor = std::conditional_t<UseMigrationProtocol,
-    NYdb::NPersQueue::IExecutor,
-    NYdb::NTopic::IExecutor>;
-
-template <bool UseMigrationProtocol>
 using TAReadSessionSettings = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TReadSessionSettings,
     NYdb::NTopic::TReadSessionSettings>;
@@ -151,7 +146,7 @@ public:
     void DeferCallback(std::function<void()> callback);
 
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
-    void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task);
+    void DeferStartExecutorTask(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& task);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, EStatus statusCode, NYdb::NIssue::TIssues&& issues);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, EStatus statusCode, const std::string& message);
@@ -201,7 +196,7 @@ private:
     } DirectReadActions;
 
     // Executor tasks.
-    std::vector<std::pair<typename IAExecutor<UseMigrationProtocol>::TPtr, typename IAExecutor<UseMigrationProtocol>::TFunction>> ExecutorsTasks;
+    std::vector<std::pair<typename IExecutor::TPtr, typename IExecutor::TFunction>> ExecutorsTasks;
 
     // Abort session.
     std::optional<TASessionClosedEvent<UseMigrationProtocol>> SessionClosedEvent;
@@ -234,7 +229,7 @@ public:
     );
     ~TDataDecompressionInfo();
 
-    i64 StartDecompressionTasks(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor,
+    i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
                                 i64 availableMemory,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
     void PlanDecompressionTasks(double averageCompressionRatio,
@@ -365,7 +360,7 @@ private:
     std::vector<TMessageMetaPtrVector> MessagesMeta;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
     bool DoDecompress;
-    i64 ServerBytesSize = 0;
+    std::atomic<i64> ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
     std::deque<TReadyMessageThreshold> ReadyThresholds;
@@ -843,12 +838,12 @@ template <bool UseMigrationProtocol>
 class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSettings<UseMigrationProtocol>,
                                                               typename TAReadSessionEvent<UseMigrationProtocol>::TEvent,
                                                               TASessionClosedEvent<UseMigrationProtocol>,
-                                                              IAExecutor<UseMigrationProtocol>,
+                                                              IExecutor,
                                                               TReadSessionEventInfo<UseMigrationProtocol>> {
     using TParent = TBaseSessionEventsQueue<TAReadSessionSettings<UseMigrationProtocol>,
                                             typename TAReadSessionEvent<UseMigrationProtocol>::TEvent,
                                             TASessionClosedEvent<UseMigrationProtocol>,
-                                            IAExecutor<UseMigrationProtocol>,
+                                            IExecutor,
                                             TReadSessionEventInfo<UseMigrationProtocol>>;
 
 public:
@@ -1065,7 +1060,7 @@ private:
             return std::visit(*this, TParent::TBaseHandlersVisitor::Event);
         }
 
-        void Post(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& f) override {
+        void Post(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& f) override {
             Deferred.DeferStartExecutorTask(executor, std::move(f));
         }
 

@@ -1845,6 +1845,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
+                tableInfo->IsExternalBlobsEnabled = PartitionConfigHasExternalBlobsEnabled(tableInfo->PartitionConfig());
+
                 TString alterTabletFull = std::get<4>(rec);
                 TString alterTabletDiff = std::get<5>(rec);
                 if (alterTabletFull) {
@@ -2008,7 +2010,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Resorce Pool
+        // Resource Pool
         {
             auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
             if (!rowset.IsReady()) {
@@ -2046,6 +2048,29 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& backupCollection = Self->BackupCollections[pathId] = new TBackupCollectionInfo();
                 backupCollection->AlterVersion = rowset.GetValue<Schema::BackupCollection::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD backupCollection->Description.ParseFromString(rowset.GetValue<Schema::BackupCollection::Description>());
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read streaming queries
+        {
+            auto rowset = db.Table<Schema::StreamingQueryState>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TOwnerId ownerPathId = rowset.GetValue<Schema::StreamingQueryState::OwnerPathId>();
+                const TLocalPathId localPathId = rowset.GetValue<Schema::StreamingQueryState::LocalPathId>();
+                const TPathId pathId(ownerPathId, localPathId);
+
+                auto& streamingQuery = Self->StreamingQueries[pathId] = new TStreamingQueryInfo();
+                streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
+                Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
                 Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
@@ -2361,6 +2386,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             TPathId prevTableId;
 
+            TInstant now = AppData()->TimeProvider->Now();
             while (!rowSet.EndOfSet()) {
                 const TPathId tableId = TPathId(
                     rowSet.GetValue<Schema::TablePartitionStats::TableOwnerId>(),
@@ -2437,7 +2463,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.RangeReads = rowSet.GetValue<Schema::TablePartitionStats::RangeReads>();
                 stats.RangeReadRows = rowSet.GetValue<Schema::TablePartitionStats::RangeReadRows>();
 
-                TInstant now = AppData(ctx)->TimeProvider->Now();
                 stats.SetCurrentRawCpuUsage(rowSet.GetValue<Schema::TablePartitionStats::CPU>(), now);
                 stats.Memory = rowSet.GetValue<Schema::TablePartitionStats::Memory>();
                 stats.Network = rowSet.GetValue<Schema::TablePartitionStats::Network>();
@@ -2455,7 +2480,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.LocksWholeShard = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksWholeShard>();
                 stats.LocksBroken = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksBroken>();
 
-                tableInfo->UpdateShardStats(shardIdx, stats);
+                TDiskSpaceUsageDelta unusedDelta;
+                tableInfo->UpdateShardStats(&unusedDelta, shardIdx, stats, now);
 
                 // note that we don't update shard metrics here, because we will always update
                 // the shard metrics in TSchemeShard::SetPartitioning
@@ -4338,7 +4364,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         for (auto& item : Self->TxInFlight) {
             const TTxState& txState = item.second;
 
-            ui32 inFlightCounter = TTxState::TxTypeInFlightCounter(txState.TxType);
+            ui32 inFlightCounter = TxTypeInFlightCounter(txState.TxType);
             Self->TabletCounters->Simple()[inFlightCounter].Add(1);
         }
 
@@ -4401,6 +4427,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::Exports::UserSID>()) {
                         exportInfo->UserSID = rowset.GetValue<Schema::Exports::UserSID>();
                     }
+                    exportInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Exports::SanitizedToken>();
 
                     ui32 items = rowset.GetValue<Schema::Exports::Items>();
                     exportInfo->Items.resize(items);
@@ -4510,6 +4537,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {
                         importInfo->UserSID = rowset.GetValue<Schema::Imports::UserSID>();
                     }
+                    importInfo->SanitizedToken = rowset.GetValueOrDefault<Schema::Imports::SanitizedToken>();
 
                     ui32 items = rowset.GetValue<Schema::Imports::Items>();
                     importInfo->Items.resize(items);
@@ -4715,7 +4743,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::State>(),
                             rowset.GetValue<Schema::KMeansTreeProgress::TableSize>(),
-                            rowset.GetValue<Schema::KMeansTreeProgress::Round>()
+                            rowset.GetValue<Schema::KMeansTreeProgress::Round>(),
+                            rowset.GetValue<Schema::KMeansTreeProgress::IsEmpty>()
                         );
                         buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
                         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Recompute) {
@@ -5276,6 +5305,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TOperationId opId(txId, 0);
                 Self->LongIncrementalRestoreOps[opId] = op;
 
+                // Load involved shards into IncrementalRestoreState if it exists
+                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
+                    auto& state = Self->IncrementalRestoreStates[ui64(txId)];
+                    for (const auto& shardIdValue : op.GetInvolvedShards()) {
+                        TShardIdx shardIdx = TShardIdx(Self->TabletID(), TLocalShardIdx(shardIdValue));
+                        state.InvolvedShards.insert(shardIdx);
+                    }
+                    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                 "TTxInit loaded " << op.GetInvolvedShards().size()
+                                 << " involved shards for incremental restore operation " << txId);
+                }
+
                 // Restore table path states based on the operation
                 if (op.HasBackupCollectionPathId()) {
                     TPathId backupCollectionPathId = TPathId(
@@ -5362,19 +5403,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
                 TTxId txId = opId.GetTxId();
                 bool controlOperationExists = false;
-                
+
                 for (const auto& [txOpId, txState] : Self->TxInFlight) {
                     if (txOpId.GetTxId() == txId) {
                         controlOperationExists = true;
                         break;
                     }
                 }
-                
+
                 if (!controlOperationExists) {
                     TPathId backupCollectionPathId;
                     backupCollectionPathId.OwnerId = op.GetBackupCollectionPathId().GetOwnerId();
                     backupCollectionPathId.LocalPathId = op.GetBackupCollectionPathId().GetLocalId();
-                    
+
                     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "TTxInit detected orphaned incremental restore operation during recovery"
                             << ", operationId: " << opId
@@ -5382,7 +5423,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             << ", backupCollectionPathId: " << backupCollectionPathId
                             << ", scheduling TTxProgress to continue operation"
                             << ", at schemeshard: " << Self->TabletID());
-                    
+
                     OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
                 }
             }
@@ -5447,6 +5488,53 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (!rowset.Next()) {
                         return false;
                     }
+                }
+            }
+        }
+
+        { // Read secrets
+            auto rowset = db.Table<Schema::Secrets>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::Secrets::PathId>());
+                const ui64 version = rowset.GetValue<Schema::Secrets::AlterVersion>();
+                NKikimrSchemeOp::TSecretDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::Secrets::Description>()));
+
+                TSecretInfo::TPtr secretInfo = new TSecretInfo(version, std::move(description));
+                Self->Secrets[pathId] = secretInfo;
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read secrets alters
+        {
+            auto rowset = db.Table<Schema::SecretsAlterData>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::SecretsAlterData::PathId>());
+                const ui64 version = rowset.GetValue<Schema::SecretsAlterData::AlterVersion>();
+                NKikimrSchemeOp::TSecretDescription description;
+                Y_ABORT_UNLESS(description.ParseFromString(rowset.GetValue<Schema::SecretsAlterData::Description>()));
+
+                TSecretInfo::TPtr alterData = new TSecretInfo(version, std::move(description));
+                Y_VERIFY_S(Self->Secrets.contains(pathId), "Cannot load alter for secret " << pathId);
+
+                auto secretInfo = Self->Secrets.at(pathId);
+                secretInfo->AlterData = alterData;
+
+                if (!rowset.Next()) {
+                    return false;
                 }
             }
         }

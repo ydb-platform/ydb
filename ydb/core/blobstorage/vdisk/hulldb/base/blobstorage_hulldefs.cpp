@@ -65,12 +65,11 @@ namespace NKikimr {
                                                size_t size) {
         const char *pos = data;
         const char *end = data + size;
-        if (size_t(end - pos) < 24)
+        if (size_t(end - pos) < sizeof(TLogoBlobID))
             return false;
 
-        const ui64 *raw = (const ui64 *)pos;
-        Id = TLogoBlobID(raw[0], raw[1], raw[2]);
-        pos += 24;
+        Id = ReadUnaligned<TLogoBlobID>(pos);
+        pos += sizeof(TLogoBlobID);
 
         IssueKeepFlag = false;
 
@@ -111,7 +110,7 @@ namespace NKikimr {
     THullCtx::THullCtx(TVDiskContextPtr vctx, const TIntrusivePtr<TVDiskConfig> vcfg, ui32 chunkSize, ui32 compWorthReadSize,
             bool freshCompaction, bool gcOnlySynced, bool allowKeepFlags, bool barrierValidation, ui32 hullSstSizeInChunksFresh,
             ui32 hullSstSizeInChunksLevel, double hullCompFreeSpaceThreshold, double hullCompReadBatchEfficiencyThreshold,
-            TDuration hullCompStorageRatioCalcPeriod, TDuration hullCompStorageRatioMaxCalcDuration, bool addHeader,
+            TDuration hullCompStorageRatioCalcPeriod, TDuration hullCompStorageRatioMaxCalcDuration,
             ui32 hullCompLevel0MaxSstsAtOnce, ui32 hullCompSortedPartsNum)
         : VCtx(std::move(vctx))
         , VCfg(vcfg)
@@ -128,7 +127,6 @@ namespace NKikimr {
         , HullCompReadBatchEfficiencyThreshold(hullCompReadBatchEfficiencyThreshold)
         , HullCompStorageRatioCalcPeriod(hullCompStorageRatioCalcPeriod)
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
-        , AddHeader(addHeader)
         , HullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce)
         , HullCompSortedPartsNum(hullCompSortedPartsNum)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")

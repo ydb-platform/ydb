@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
         # 'TX_PROXY': LogLevels.DEBUG,
-    }
+    },
+    extra_feature_flags=[
+        "enable_schema_secrets",
+    ],
 )
 DATABASE = "/Root/test"
 TABLE_NAME = "table"
@@ -28,6 +31,10 @@ READ_TOPIC_GRANTS = []
 ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 CREATE_TOPIC_GRANTS = ['ydb.granular.create_queue']
 DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema']
+
+CREATE_SECRET_GRANTS = ['ydb.granular.create_table']
+ALTER_SECRET_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+DROP_SECRET_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
 
 
 def run_query(config, query):
@@ -294,6 +301,59 @@ def test_pq_grants(ydb_cluster):
         drop_topic_query,
         DATABASE,
         DROP_TOPIC_GRANTS,
+        "Access denied",
+    )
+
+    ydb_cluster.remove_database(DATABASE)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def test_secret_grants(ydb_cluster):
+    ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
+    database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
+    ydb_cluster.wait_tenant_up(DATABASE)
+
+    tenant_admin_config = ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+    )
+
+    # CREATE SECRET
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
+    secret_name = f"{DATABASE}/secret"
+    create_secret_query = f"CREATE SECRET `{secret_name}` WITH (value = \"one\");"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        create_secret_query,
+        DATABASE,
+        CREATE_SECRET_GRANTS,
+        "Access denied",
+    )
+
+    # ALTER SECRET
+    user2_config = create_user(ydb_cluster, tenant_admin_config, "user2")
+    alter_secret_query = f"ALTER SECRET `{secret_name}` WITH (value = \"two\");"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        alter_secret_query,
+        secret_name,
+        ALTER_SECRET_GRANTS,
+        "Access denied",
+    )
+
+    # DROP SECRET
+    drop_secret_query = f"DROP SECRET `{secret_name}`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_secret_query,
+        secret_name,
+        DROP_SECRET_GRANTS,
         "Access denied",
     )
 

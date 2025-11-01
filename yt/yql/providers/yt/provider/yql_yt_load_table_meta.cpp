@@ -171,7 +171,9 @@ public:
             return TStatus::Error;
         }
 
-        ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+        ctx.Step
+            .Repeat(TExprStep::ExpandApplyForLambdas)
+            .Repeat(TExprStep::ExpandSeq);
         THashMap<std::pair<TString, TString>, TYtTableDescription*> tableDescrs;
         for (size_t i = 0 ; i < LoadCtx->Result.Data.size(); ++i) {
             tableDescrs.emplace(LoadCtx->Tables[i]);

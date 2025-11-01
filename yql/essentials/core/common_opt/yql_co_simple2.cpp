@@ -191,7 +191,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
 
                     auto settings = self.Settings();
                     auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
-                    if (hoppingSetting) {
+                    if (hoppingSetting && "HoppingTraits" == hoppingSetting->Child(1)->Content()) { // has legacy hopping window
                         structObj
                             .List(targetIndex++)
                                 .Atom(0, "_yql_time", TNodeFlags::Default)
@@ -334,6 +334,54 @@ TExprNode::TPtr SimplifySync(const TExprNode::TPtr& node, TExprContext& ctx) {
 
         YQL_CLOG(DEBUG, Core) << "Simplify " << node->Content();
         return ctx.NewCallable(node->Pos(), SyncName, std::move(ordered));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr SimplifySeq(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (node->ChildrenSize() == 1) {
+        YQL_CLOG(DEBUG, Core) << "Simplify " << node->Content();
+        return node->HeadPtr();
+    }
+
+    if (node->ChildrenSize() == 2) {
+        YQL_CLOG(DEBUG, Core) << "Expand " << node->Content() << " with single lambda";
+        const auto lambda = node->TailPtr();
+        return ctx.ReplaceNode(lambda->TailPtr(), lambda->Head().Head(), node->HeadPtr());
+    }
+
+    if (std::any_of(node->Children().begin() + 1, node->Children().end(),
+        [](const TExprNode::TPtr& lambda) { return &lambda->Head().Head() == &lambda->Tail(); }))
+    {
+        TExprNode::TListType children;
+        children.push_back(node->HeadPtr());
+        for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+            // Keep non trivial lambdas only
+            if (&node->Child(i)->Head().Head() != &node->Child(i)->Tail()) {
+                children.push_back(node->ChildPtr(i));
+            }
+        }
+        YQL_CLOG(DEBUG, Core) << "Omit trivial lambdas in " << node->Content();
+        return ctx.ChangeChildren(*node, std::move(children));
+    }
+
+    for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+        // Lambda with no dependency on arg
+        if (node->Child(i)->Tail().GetDependencyScope()->second != node->Child(i)) {
+            TExprNode::TListType syncChildren;
+            if (1 == i) {
+                syncChildren.push_back(node->HeadPtr());
+            } else {
+                syncChildren.push_back(ctx.NewCallable(node->Pos(), SeqName, TExprNode::TListType{node->Children().begin(), node->Children().begin() + i}));
+            }
+            TExprNode::TListType seqChildren;
+            seqChildren.push_back(node->Child(i)->TailPtr());
+            seqChildren.insert(seqChildren.end(), node->Children().begin() + i + 1, node->Children().end());
+            syncChildren.push_back(ctx.NewCallable(node->Pos(), SeqName, std::move(seqChildren)));
+            YQL_CLOG(DEBUG, Core) << "Split " << node->Content() << " with independent lambdas";
+            return ctx.NewCallable(node->Pos(), SyncName, std::move(syncChildren));
+        }
     }
 
     return node;
@@ -780,7 +828,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
         };
         TExprNodeList newChildren;
         bool changed = false;
-        for (auto& group : groups) {
+        for (const auto& group : groups) {
             YQL_ENSURE(!group.empty());
             if (group.size() == 1) {
                 newChildren.push_back(children[group.front()]);
@@ -818,14 +866,13 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
                     auto childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
                     EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
-                    if (!preds.empty()) {
-                        newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
+                    if (preds.empty()) {
+                        preds.emplace_back(MakeBool<true>(childAnd->Pos(), ctx));
                     }
+                    newGroup.emplace_back(ctx.ChangeChildren(*childAnd, std::move(preds)));
                 }
-                if (!newGroup.empty()) {
-                    auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
-                    commonPreds.push_back(restPreds);
-                }
+                auto restPreds = ctx.NewCallable(node->Pos(), "Or", std::move(newGroup));
+                commonPreds.push_back(restPreds);
                 newChildren.push_back(ctx.NewCallable(node->Pos(), "And", std::move(commonPreds)));
             } else {
                 for (auto& idx : group) {
@@ -910,7 +957,7 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             branches.emplace(node->Child(++i));
         }
 
-        if (predicates.size() < width) {
+        if (!node->HasSideEffects() && predicates.size() < width) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with identical predicates.";
             auto children = node->ChildrenList();
             for (auto i = 0U; i < children.size() - 1U;) {
@@ -921,7 +968,7 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }
-        if (branches.size() < width) {
+        if (!node->HasSideEffects() && branches.size() < width) {
             for (auto i = 1U; i < node->ChildrenSize() - 2U; ++++i) {
                 if (node->Child(i) ==  node->Child(i + 2U)) {
                     YQL_CLOG(DEBUG, Core) << node->Content() << " with identical branches.";
@@ -952,6 +999,7 @@ TExprNode::TPtr CheckCompareSame(const TExprNode::TPtr& node, TExprContext& ctx,
         YQL_CLOG(DEBUG, Core) << (Equal ? "Equal" : "Unequal") << " '" << node->Content() << "' with same args";
         auto res = MakeBool<Equal>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, *optCtx.Types);
+        res = KeepSideEffects(res, node->HeadPtr(), ctx);
         return res;
     }
 
@@ -982,6 +1030,8 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
 
     map[SyncName] = std::bind(&SimplifySync, _1, _2);
+
+    map[SeqName] = std::bind(&SimplifySeq, _1, _2);
 
     map[IfName] = std::bind(&CheckIfWorldWithSame, _1, _2);
 

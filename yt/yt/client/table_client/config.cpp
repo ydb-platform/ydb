@@ -154,7 +154,7 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .Default(0.0001);
 
     registrar.Parameter("use_original_data_weight_in_samples", &TThis::UseOriginalDataWeightInSamples)
-        .Default(false);
+        .Default(true);
 
     registrar.Parameter("chunk_indexes", &TThis::ChunkIndexes)
         .DefaultNew();
@@ -175,6 +175,11 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_large_columnar_statistics", &TThis::EnableLargeColumnarStatistics)
         .Default(false);
+
+    registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
+        .Optional();
+    registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -464,6 +469,8 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("cast_any_to_composite", &TThis::CastAnyToCompositeNode)
         .Default();
+    registrar.Parameter("cast_composite_to_any", &TThis::CastCompositeToAny)
+        .Default(false);
     registrar.Parameter("single_column_group_by_default", &TThis::SingleColumnGroupByDefault)
         .Default();
     registrar.Parameter("enable_columnar_value_statistics", &TThis::EnableColumnarValueStatistics)

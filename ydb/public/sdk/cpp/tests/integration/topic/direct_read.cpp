@@ -8,6 +8,10 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/executor/executor_impl.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
@@ -801,7 +805,7 @@ IExecutor::TPtr TDirectReadSessionImplTestSetup::GetDefaultExecutor() {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = std::make_shared<TThreadPoolExecutor>(ThreadPool);
     }
     return DefaultExecutor;
 }
@@ -956,7 +960,7 @@ TEST_F(DirectReadWithClient, ManyMessages) {
     auto killer = std::thread([&]() {
         while (work.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(5));
-            // setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
+            // setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());  // TODO(qyryq) Uncomment!
         }
     });
 

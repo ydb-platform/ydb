@@ -5,12 +5,16 @@ items:
   href: auth_config.md
 - name: blob_storage_config
   href: blob_storage_config.md
+- name: bridge_config
+  href: bridge_config.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
 - name: domains_config
   href: domains_config.md
 - name: feature_flags
   href: feature_flags.md
+- name: query_service_config
+  href: query_service_config.md
 - name: healthcheck_config
   href: healthcheck_config.md
 - name: hive_config
@@ -19,6 +23,8 @@ items:
   href: host_configs.md
 - name: hosts
   href: hosts.md
+- name: kafka_proxy_config
+  href: kafka.md
 - name: log_config
   href: log_config.md
 - name: memory_controller_config
@@ -31,3 +37,5 @@ items:
   href: security_config.md
 - name: tls
   href: tls.md
+- name: table_service_config
+  href: table_service_config.md

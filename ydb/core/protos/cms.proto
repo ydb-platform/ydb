@@ -109,6 +109,8 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DRAIN_NODE = 11;
+    CORDON_NODE = 12;
   }
 
   message TIssue {
@@ -134,6 +136,7 @@ message TAction {
   // If specified will be expanded to list of hosts.
   optional string Tenant = 6;
   optional TIssue Issue = 7;
+  optional string MaintenanceTaskContext = 8;
 }
 
 enum ETenantPolicy {
@@ -429,13 +432,16 @@ message TCmsConfig {
 
     message TSentinelConfig {
         message TStateStorageSelfHealConfig {
-            optional bool Enable = 1 [default = true];
+            optional bool Enable = 1 [default = false];
             optional uint32 NodeGoodStateLimit = 2 [default = 10];
             optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
             optional uint32 NodeBadStateLimit = 4 [default = 10];
             optional uint32 WaitForConfigStep = 5 [default = 60000000];
             optional uint32 RelaxTime = 6 [default = 600000000];
             optional bool PileupReplicas = 7 [default = false];
+            optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
+            optional uint32 OverrideRingsCount = 9 [default = 0];
+            optional uint32 ReplicasSpecificVolume = 10 [default = 200]; // 1 additional replica in ring per ReplicasSpecificVolume nodes in cluster
         }
 
         message TStateLimit {
@@ -508,6 +514,7 @@ message TCmsConfig {
     optional uint64 InfoCollectionTimeout = 6 [default = 15000000];
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
+    optional bool Enable = 9 [default = true];
 }
 
 message TPDiskID {
@@ -716,9 +723,15 @@ message TConfigUpdaterState {
 }
 
 message TGetSentinelStateResponse {
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+    }
+
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
     optional TStateUpdaterState StateUpdater = 4;
     optional TConfigUpdaterState ConfigUpdater = 5;
+    repeated TNodeState NodesState = 6;
 }

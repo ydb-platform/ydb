@@ -49,7 +49,7 @@ public:
     virtual TString GetPeer() const;
     virtual bool SslServer() const { return false; }
     virtual bool IsStreamCall() const { return false; }
+    virtual TString GetRpcMethodName() const;
 };
 
 } // namespace NKikimr::NPublicHttp
-

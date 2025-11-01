@@ -1,8 +1,17 @@
 #pragma once
-#include "arrow_helpers.h"
+
 #include <ydb/core/formats/factory.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/library/conclusion/status.h>
+
+namespace NYql::NUdf {
+class TUnboxedValue;
+}
+
+namespace NKikimr::NMiniKQL {
+class TType;
+}
 
 namespace NKikimr::NArrow {
 
@@ -169,6 +178,7 @@ public:
     void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override;
     void AddRow(const TConstArrayRef<TCell>& key, const TConstArrayRef<TCell>& value);
     void AddRow(const TConstArrayRef<TCell>& row);
+    void AddRow(const NYql::NUdf::TUnboxedValue& row, size_t membersCount, const TVector<ui32>* columnOrder);
 
     // You have to call it before Start()
     void Reserve(size_t numRows) {
@@ -183,19 +193,29 @@ public:
     }
 
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+    arrow::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& columns);
+    // TODO: deduplicate ydbColumns and schema
+    arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema);
+
     std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 
 protected:
     void AppendCell(const TCell& cell, ui32 colNum);
+    void AppendValue(const NYql::NUdf::TUnboxedValue& value, ui32 colNum);
 
     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& GetYdbSchema() const {
         return YdbSchema;
     }
 
+    const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& GetYqlSchema() const {
+        return YqlSchema;
+    }
+
 private:
     arrow::ipc::IpcWriteOptions WriteOptions;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+    std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>> YqlSchema;
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
     std::shared_ptr<arrow::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};

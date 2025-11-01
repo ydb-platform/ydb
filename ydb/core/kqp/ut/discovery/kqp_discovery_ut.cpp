@@ -19,6 +19,17 @@ auto UnpackDiscoveryData(const TString& data) {
     return leResult;
 }
 
+void ValidateDiscovererResponse(TTestActorRuntime& runtime, TActorId edge) {
+    auto discoveryDataEvent = runtime.GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(edge)->Release();
+    UNIT_ASSERT(discoveryDataEvent);
+
+    auto discoveryData = UnpackDiscoveryData(discoveryDataEvent->CachedMessage);
+    auto discoverySslData = UnpackDiscoveryData(discoveryDataEvent->CachedMessageSsl);
+
+    UNIT_ASSERT_EQUAL(discoveryData.endpoints_size(), 1);
+    UNIT_ASSERT_EQUAL(discoverySslData.endpoints_size(), 0);
+}
+
 Y_UNIT_TEST_SUITE(Discovery) {
     Y_UNIT_TEST(DelayedNameserviceResponse) {
         TKikimrRunner kikimr(TKikimrSettings{});
@@ -28,7 +39,7 @@ Y_UNIT_TEST_SUITE(Discovery) {
         auto edge = runtime.AllocateEdgeActor();
  
         auto cache = runtime.Register(CreateDiscoveryCache({}, edge));
-        auto discoverer = runtime.Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", edge, cache));
+        auto discoverer = runtime.Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", true, edge, cache));
         Y_UNUSED(discoverer);
 
         auto getNodeEvent = runtime.GrabEdgeEvent<TEvInterconnect::TEvGetNode>(edge)->Release();
@@ -37,18 +48,44 @@ Y_UNIT_TEST_SUITE(Discovery) {
 
         auto nodeInfoEvent = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeInfo>(edge)->Release();
 
-        Sleep(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(1));
 
         runtime.Send(cache, edge, nodeInfoEvent.Release());
 
-        auto discoveryDataEvent = runtime.GrabEdgeEvent<TEvDiscovery::TEvDiscoveryData>(edge)->Release();
-        UNIT_ASSERT(discoveryDataEvent);
+        ValidateDiscovererResponse(runtime, edge);
+    }
 
-        auto discoveryData = UnpackDiscoveryData(discoveryDataEvent->CachedMessageData->CachedMessage);
-        auto discoverySslData = UnpackDiscoveryData(discoveryDataEvent->CachedMessageData->CachedMessageSsl);
+    Y_UNIT_TEST(SecondDiscovererRequestBeforeNameserviceResponse) {
+        TKikimrRunner kikimr(TKikimrSettings{});
 
-        UNIT_ASSERT_EQUAL(discoveryData.endpoints_size(), 1);
-        UNIT_ASSERT_EQUAL(discoverySslData.endpoints_size(), 0);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        auto edge = runtime.AllocateEdgeActor();
+
+        auto discovererEdge1 = runtime.AllocateEdgeActor();
+        auto discovererEdge2 = runtime.AllocateEdgeActor();
+
+        auto cache = runtime.Register(CreateDiscoveryCache({}, edge));
+        auto discoverer1 = runtime.Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", true, discovererEdge1, cache));
+        Y_UNUSED(discoverer1);
+
+        auto getNodeEvent = runtime.GrabEdgeEvent<TEvInterconnect::TEvGetNode>(edge)->Release();
+
+        runtime.Send(GetNameserviceActorId(), edge, getNodeEvent.Release());
+
+        auto nodeInfoEvent = runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeInfo>(edge)->Release();
+
+        Sleep(TDuration::Seconds(1));
+
+        auto discoverer2 = runtime.Register(CreateDiscoverer(&MakeEndpointsBoardPath, "/Root", true, discovererEdge2, cache));
+        Y_UNUSED(discoverer2);
+
+        Sleep(TDuration::Seconds(1));
+
+        runtime.Send(cache, edge, nodeInfoEvent.Release());
+
+        ValidateDiscovererResponse(runtime, discovererEdge1);
+        ValidateDiscovererResponse(runtime, discovererEdge2);
     }
 }
 

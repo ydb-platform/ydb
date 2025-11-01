@@ -9,8 +9,8 @@ SIZE(MEDIUM)
 NO_CHECK_IMPORTS()
 
 DEPENDS(
-    yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun
+    yql/essentials/tools/astdiff
     yql/essentials/udfs/test/test_import
 )
 

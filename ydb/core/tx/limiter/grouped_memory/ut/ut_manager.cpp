@@ -14,14 +14,17 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     using namespace NKikimr;
 
     class TAllocation: public NOlap::NGroupedMemoryManager::IAllocation, public TObjectCounter<TAllocation> {
+    public:
+        std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard> Guard;
     private:
         using TBase = NOlap::NGroupedMemoryManager::IAllocation;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
             AFL_VERIFY(false)("error", errorMessage);
         }
 
-        virtual bool DoOnAllocated(std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard>&& /*guard*/,
+        virtual bool DoOnAllocated(std::shared_ptr<NOlap::NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NOlap::NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
+            Guard = std::move(guard);
             return true;
         }
 
@@ -37,7 +40,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
-            AFL_VERIFY(config.DeserializeFromProto(protoConfig));
+            UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -50,18 +53,19 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->RegisterProcessScope(0, 0);
             manager->RegisterGroup(0, 0, 1);
             manager->RegisterAllocation(0, 0, 1, alloc1, {});
-            AFL_VERIFY(alloc1->IsAllocated());
+            UNIT_ASSERT(alloc1->IsAllocated());
             auto alloc1_1 = std::make_shared<TAllocation>(50);
             manager->RegisterAllocation(0, 0, 1, alloc1_1, {});
-            AFL_VERIFY(alloc1_1->IsAllocated());
+            UNIT_ASSERT(alloc1_1->IsAllocated());
 
             manager->RegisterGroup(0, 0, 2);
             auto alloc2 = std::make_shared<TAllocation>(50);
             manager->RegisterAllocation(0, 0, 2, alloc2, {});
-            AFL_VERIFY(!alloc2->IsAllocated());
-
+            UNIT_ASSERT(!alloc2->IsAllocated());
+            alloc1->Guard.reset();
             manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
-            AFL_VERIFY(alloc2->IsAllocated());
+
+            UNIT_ASSERT(alloc2->IsAllocated());
             manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
             manager->UnregisterAllocation(0, 0, alloc1_1->GetIdentifier());
             manager->UnregisterGroup(0, 0, 1);
@@ -69,9 +73,9 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->UnregisterProcessScope(0, 0);
             manager->UnregisterProcess(0);
         }
-        AFL_VERIFY(!stage->GetUsage().Val());
-        AFL_VERIFY(manager->IsEmpty());
-        AFL_VERIFY(!TObjectCounter<TAllocation>::ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
     Y_UNIT_TEST(Simple) {
@@ -80,7 +84,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
-            AFL_VERIFY(config.DeserializeFromProto(protoConfig));
+            UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
         auto groupedMemoryLimiterCounters = std::make_shared<NKikimr::NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "Scan");
@@ -92,39 +96,40 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             auto alloc1 = std::make_shared<TAllocation>(10);
             manager->RegisterGroup(0, 0, 1);
             manager->RegisterAllocation(0, 0, 1, alloc1, {});
-            AFL_VERIFY(alloc1->IsAllocated());
+            UNIT_ASSERT(alloc1->IsAllocated());
             auto alloc2 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 0, 2);
             manager->RegisterAllocation(0, 0, 2, alloc2, {});
-            AFL_VERIFY(!alloc2->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
             auto alloc3 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 0, 3);
             manager->RegisterAllocation(0, 0, 3, alloc3, {});
-            AFL_VERIFY(alloc1->IsAllocated());
-            AFL_VERIFY(!alloc2->IsAllocated());
-            AFL_VERIFY(!alloc3->IsAllocated());
+            UNIT_ASSERT(alloc1->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
+            UNIT_ASSERT(!alloc3->IsAllocated());
             auto alloc1_1 = std::make_shared<TAllocation>(1000);
             manager->RegisterAllocation(0, 0, 1, alloc1_1, {});
-            AFL_VERIFY(alloc1_1->IsAllocated());
-            AFL_VERIFY(!alloc2->IsAllocated());
+            UNIT_ASSERT(alloc1_1->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
+            alloc1_1->ResetAllocation();
             manager->UnregisterAllocation(0, 0, alloc1_1->GetIdentifier());
-            AFL_VERIFY(!alloc2->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
             manager->UnregisterGroup(0, 0, 1);
-            AFL_VERIFY(alloc2->IsAllocated());
+            UNIT_ASSERT(alloc2->IsAllocated());
 
             manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
-            AFL_VERIFY(!alloc3->IsAllocated());
+            UNIT_ASSERT(!alloc3->IsAllocated());
             manager->UnregisterGroup(0, 0, 2);
             manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
-            AFL_VERIFY(alloc3->IsAllocated());
+            UNIT_ASSERT(alloc3->IsAllocated());
             manager->UnregisterGroup(0, 0, 3);
             manager->UnregisterAllocation(0, 0, alloc3->GetIdentifier());
             manager->UnregisterProcessScope(0, 0);
             manager->UnregisterProcess(0);
         }
-        AFL_VERIFY(!stage->GetUsage().Val());
-        AFL_VERIFY(manager->IsEmpty());
-        AFL_VERIFY(!TObjectCounter<TAllocation>::ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
     Y_UNIT_TEST(CommonUsage) {
@@ -133,7 +138,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
-            AFL_VERIFY(config.DeserializeFromProto(protoConfig));
+            UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -148,44 +153,44 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->RegisterAllocation(0, 0, 1, alloc0, {});
             auto alloc1 = std::make_shared<TAllocation>(1000);
             manager->RegisterAllocation(0, 0, 1, alloc1, {});
-            AFL_VERIFY(alloc0->IsAllocated());
-            AFL_VERIFY(alloc1->IsAllocated());
+            UNIT_ASSERT(alloc0->IsAllocated());
+            UNIT_ASSERT(alloc1->IsAllocated());
 
             manager->RegisterGroup(0, 0, 2);
             auto alloc2 = std::make_shared<TAllocation>(1000);
             manager->RegisterAllocation(0, 0, 2, alloc0, {});
             manager->RegisterAllocation(0, 0, 2, alloc2, {});
-            AFL_VERIFY(alloc0->IsAllocated());
-            AFL_VERIFY(!alloc2->IsAllocated());
+            UNIT_ASSERT(alloc0->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
 
             auto alloc3 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 0, 3);
             manager->RegisterAllocation(0, 0, 3, alloc0, {});
             manager->RegisterAllocation(0, 0, 3, alloc3, {});
-            AFL_VERIFY(alloc0->IsAllocated());
-            AFL_VERIFY(alloc1->IsAllocated());
-            AFL_VERIFY(!alloc2->IsAllocated());
-            AFL_VERIFY(!alloc3->IsAllocated());
+            UNIT_ASSERT(alloc0->IsAllocated());
+            UNIT_ASSERT(alloc1->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
+            UNIT_ASSERT(!alloc3->IsAllocated());
 
             manager->UnregisterGroup(0, 0, 1);
             manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
 
-            AFL_VERIFY(alloc0->IsAllocated());
-            AFL_VERIFY(alloc2->IsAllocated());
-            AFL_VERIFY(!alloc3->IsAllocated());
+            UNIT_ASSERT(alloc0->IsAllocated());
+            UNIT_ASSERT(alloc2->IsAllocated());
+            UNIT_ASSERT(!alloc3->IsAllocated());
             manager->UnregisterGroup(0, 0, 2);
             manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
-            AFL_VERIFY(alloc0->IsAllocated());
-            AFL_VERIFY(alloc3->IsAllocated());
+            UNIT_ASSERT(alloc0->IsAllocated());
+            UNIT_ASSERT(alloc3->IsAllocated());
 
             manager->UnregisterGroup(0, 0, 3);
             manager->UnregisterAllocation(0, 0, alloc3->GetIdentifier());
             manager->UnregisterAllocation(0, 0, alloc0->GetIdentifier());
             manager->UnregisterProcess(0);
         }
-        AFL_VERIFY(!stage->GetUsage().Val());
-        AFL_VERIFY(manager->IsEmpty());
-        AFL_VERIFY(!TObjectCounter<TAllocation>::ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
     Y_UNIT_TEST(Update) {
@@ -194,7 +199,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         {
             NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
             protoConfig.SetMemoryLimit(100);
-            AFL_VERIFY(config.DeserializeFromProto(protoConfig));
+            UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         }
         std::unique_ptr<NActors::IActor> actor(
             NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(config, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -207,14 +212,15 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             auto alloc1 = std::make_shared<TAllocation>(1000);
             manager->RegisterGroup(0, 0, 1);
             manager->RegisterAllocation(0, 0, 1, alloc1, {});
-            AFL_VERIFY(alloc1->IsAllocated());
+            UNIT_ASSERT(alloc1->IsAllocated());
             auto alloc2 = std::make_shared<TAllocation>(10);
             manager->RegisterGroup(0, 0, 3);
             manager->RegisterAllocation(0, 0, 3, alloc2, {});
-            AFL_VERIFY(!alloc2->IsAllocated());
+            UNIT_ASSERT(!alloc2->IsAllocated());
 
+            alloc1->Guard->Update(10);
             manager->AllocationUpdated(0, 0, alloc1->GetIdentifier());
-            AFL_VERIFY(alloc2->IsAllocated());
+            UNIT_ASSERT(alloc2->IsAllocated());
 
             manager->UnregisterGroup(0, 0, 3);
             manager->UnregisterAllocation(0, 0, alloc2->GetIdentifier());
@@ -223,8 +229,8 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             manager->UnregisterAllocation(0, 0, alloc1->GetIdentifier());
             manager->UnregisterProcess(0);
         }
-        AFL_VERIFY(!stage->GetUsage().Val());
-        AFL_VERIFY(manager->IsEmpty());
-        AFL_VERIFY(!TObjectCounter<TAllocation>::ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 };

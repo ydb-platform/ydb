@@ -4,6 +4,7 @@ SRCS(
     kqp_arrow_memory_pool.cpp
     kqp_compute.cpp
     kqp_effects.cpp
+    kqp_fulltext_analyze.cpp
     kqp_output_stream.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
@@ -14,6 +15,7 @@ SRCS(
     kqp_sequencer_actor.cpp
     kqp_sequencer_factory.cpp
     kqp_scan_data_meta.cpp
+    kqp_stream_lookup_join_helpers.cpp
     kqp_stream_lookup_actor.cpp
     kqp_stream_lookup_actor.h
     kqp_stream_lookup_factory.cpp
@@ -54,6 +56,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()

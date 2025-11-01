@@ -31,6 +31,12 @@ public:
         const TClusterConnection& clusterConnection,
         const TYtWriterSettings& settings = TYtWriterSettings()
     ) = 0;
+
+    virtual void Create(
+        const TYtTableRef& ytTable,
+        const TClusterConnection& clusterConnection,
+        const NYT::TNode& attributes
+    ) = 0;
 };
 
 } // namespace NYql::NFmr

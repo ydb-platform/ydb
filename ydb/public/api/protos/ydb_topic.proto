@@ -7,6 +7,7 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Topic;
@@ -155,7 +156,7 @@ message StreamWriteMessage {
             // Message sequence number, provided by client for deduplication.
             // Starts at 1
             int64 seq_no = 1;
-            // Creation timestamp
+            // Creation timestamp.
             google.protobuf.Timestamp created_at = 2;
             // Compressed client message body.
             bytes data = 3;
@@ -475,6 +476,9 @@ message StreamReadMessage {
 
         // Write timestamp of next message written to this partition will be no less than write_time_high_watermark.
         google.protobuf.Timestamp write_time_high_watermark = 4;
+
+        // Messages with offsets up to and including (read_offset - 1) was read.
+        int64 read_offset = 5;
     }
 
     // Command from server to create and start a partition session.
@@ -819,6 +823,9 @@ message Consumer {
         // Bytes read statistics.
         MultipleWindowsStat bytes_read = 4;
     }
+
+    // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
+    optional google.protobuf.Duration availability_period = 8;
 }
 
 // Consumer alter description.
@@ -841,6 +848,12 @@ message AlterConsumer {
     // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 6;
+
+    // Change message lifetime if consumer is important.
+    oneof availability_period_action {
+        google.protobuf.Duration set_availability_period = 7;
+        google.protobuf.Empty reset_availability_period = 8;
+    }
 }
 
 enum AutoPartitioningStrategy {
@@ -989,6 +1002,9 @@ message CreateTopicRequest {
 
     // Metering mode for the topic in a serverless database.
     MeteringMode metering_mode = 12;
+
+    // Metrics level. If the level is unset, use database setting.
+    optional uint32 metrics_level = 13;
 }
 
 // Create topic response sent from server to client.
@@ -1122,6 +1138,9 @@ message DescribeTopicResult {
         // How much bytes were written statistics.
         MultipleWindowsStat bytes_written = 4;
     }
+
+    // Metrics level.
+    optional uint32 metrics_level = 16;
 }
 
 // Describe partition request sent from client to server.
@@ -1249,7 +1268,6 @@ message PartitionStats {
     int32 partition_node_id = 8 [deprecated=true]; //Use PartitionLocation
 }
 
-
 // Update existing topic request sent from client to server.
 message AlterTopicRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -1294,6 +1312,12 @@ message AlterTopicRequest {
 
     // Set metering mode for topic in serverless database.
     MeteringMode set_metering_mode = 14;
+
+    // Set or reset metrics level.
+    oneof metrics_level {
+        uint32 set_metrics_level = 15;
+        google.protobuf.Empty reset_metrics_level = 16;
+    }
 }
 
 // Update topic response sent from server to client.

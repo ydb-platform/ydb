@@ -117,7 +117,7 @@ struct TCookiesBuilder : TCookies {
 };
 
 struct THeaders {
-    TMap<TStringBuf, TStringBuf, TLessNoCase> Headers;
+    TMultiMap<TStringBuf, TStringBuf, TLessNoCase> Headers;
 
     THeaders() = default;
     THeaders(TStringBuf headers);
@@ -139,6 +139,7 @@ struct THeadersBuilder : THeaders {
     THeadersBuilder(const THeadersBuilder& builder);
     THeadersBuilder(std::initializer_list<std::pair<TString, TString>> headers);
     void Set(TStringBuf name, TStringBuf data);
+    void Add(TStringBuf name, TStringBuf data);
     void Erase(TStringBuf name);
 };
 
@@ -1047,6 +1048,7 @@ public:
     static THttpOutgoingRequestPtr CreateRequest(TStringBuf method, TStringBuf url, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     static THttpOutgoingRequestPtr CreateHttpRequest(TStringBuf method, TStringBuf host, TStringBuf uri, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     THttpOutgoingRequestPtr Duplicate();
+    THttpIncomingRequestPtr Reverse();
 
     bool IsConnectionClose() const {
         return TEqNoCase()(Connection, "close");
@@ -1140,6 +1142,7 @@ public:
     }
 
     THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
+    THttpIncomingResponsePtr Reverse(THttpOutgoingRequestPtr request);
     THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
     THttpOutgoingDataChunkPtr CreateIncompleteDataChunk(); // to construct it later
 

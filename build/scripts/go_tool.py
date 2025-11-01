@@ -9,15 +9,14 @@ import sys
 import tarfile
 import tempfile
 import threading
-import traceback
 from contextlib import contextmanager
 from functools import reduce
 
 # Explicitly enable local imports
 # Don't forget to add imported scripts to inputs of the calling command!
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-import process_command_files as pcf
-import process_whole_archive_option as pwa
+import process_command_files as pcf  # noqa: E402
+import process_whole_archive_option as pwa  # noqa: E402
 
 arc_project_prefix = 'a.yandex-team.ru/'
 # FIXME: make version-independent
@@ -33,9 +32,10 @@ IGNORED_FLAGS = ('-fprofile-instr-generate', '-fcoverage-mapping', '-fcoverage-m
 
 
 def get_sanitizer_libs(peers):
-    MSAN='{}/{}'.format(std_lib_prefix, 'msan').replace('//', '/')
-    ASAN='{}/{}'.format(std_lib_prefix, 'asan').replace('//', '/')
+    MSAN = '{}/{}'.format(std_lib_prefix, 'msan').replace('//', '/')
+    ASAN = '{}/{}'.format(std_lib_prefix, 'asan').replace('//', '/')
     return filter(lambda it: it.startswith(MSAN) or it.startswith(ASAN), peers)
+
 
 def get_trimpath_args(args):
     return ['-trimpath', args.trimpath] if args.trimpath else []
@@ -431,7 +431,7 @@ class VetThread(threading.Thread):
     def run(self):
         try:
             super(VetThread, self).run()
-        except:
+        except Exception:
             self.exc_info = sys.exc_info()
 
     def join_with_exception(self, reraise_exception):
@@ -858,8 +858,25 @@ def do_link_test(args):
     do_link_exe(test_args)
 
 
+def reorder(args):
+    for x in args:
+        if 'build-cow' in x:
+            bc = x
+        elif 'libyutil' in x:
+            yield bc
+            yield x
+        else:
+            yield x
+
+
 if __name__ == '__main__':
     args = pcf.get_args(sys.argv[1:])
+
+    if 'build-cow' in str(args) and 'libyutil' in str(args):
+        try:
+            args = list(reorder(args))
+        except UnboundLocalError:
+            pass
 
     parser = argparse.ArgumentParser(prefix_chars='+')
     parser.add_argument('++mode', choices=['dll', 'exe', 'lib', 'test'], required=True)
@@ -878,7 +895,7 @@ if __name__ == '__main__':
     parser.add_argument('++toolchain-root', required=True)
     parser.add_argument('++host-os', choices=['linux', 'darwin', 'windows'], required=True)
     parser.add_argument('++host-arch', choices=['amd64', 'arm64'], required=True)
-    parser.add_argument('++targ-os', choices=['linux', 'darwin', 'windows'], required=True)
+    parser.add_argument('++targ-os', choices=['linux', 'darwin', 'windows', 'android'], required=True)
     parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64', 'armv6', 'armv7'], required=True)
     parser.add_argument('++peers', nargs='*')
     parser.add_argument('++non-local-peers', nargs='*')

@@ -1,4 +1,5 @@
 pragma SeqMode;
+pragma config.flags("DisableEarlyExpandSeq");
 select 1;
 select 2;
 

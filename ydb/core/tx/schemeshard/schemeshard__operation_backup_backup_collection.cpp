@@ -66,6 +66,10 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
+    bool omitIndexes = bc->Description.HasOmitIndexes() 
+        ? bc->Description.GetOmitIndexes()
+        : false;
+
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
@@ -77,7 +81,15 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         }
         auto& relativeItemPath = paths.second;
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
-        desc.SetOmitIndexes(true);
+        
+        // For incremental backups, always omit indexes from table copy (backed up separately via CDC)
+        // For full backups, respect the OmitIndexes configuration
+        if (incrBackupEnabled) {
+            desc.SetOmitIndexes(true);
+        } else {
+            desc.SetOmitIndexes(omitIndexes);
+        }
+        
         desc.SetOmitFollowers(true);
         desc.SetAllowUnderSameOperation(true);
 
@@ -86,10 +98,24 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
             streamDescription.SetName(streamName);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            {
+                auto checks = sPath.Check();
+                checks
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsTable();
+                
+                if (!checks) {
+                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                    return result;
+                }
+            }
+            
             NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, sPath, false, false);
 
             desc.MutableCreateSrcCdcStream()->CopyFrom(createCdcStreamOp);
@@ -106,10 +132,24 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             createCdcStreamOp.SetTableName(item.GetPath());
             auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
             streamDescription.SetName(streamName);
-            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeNewImage);
+            streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
             streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
 
             const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
+            
+            {
+                auto checks = sPath.Check();
+                checks
+                    .IsResolved()
+                    .NotDeleted()
+                    .IsTable();
+                
+                if (!checks) {
+                    result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                    return result;
+                }
+            }
+            
             auto table = context.SS->Tables.at(sPath.Base()->PathId);
 
             TVector<TString> boundaries;

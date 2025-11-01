@@ -16,8 +16,9 @@ TUint128 GetDivider(ui8 scale) {
     }
 
     TUint128 d(1U);
-    while (scale--)
+    while (scale--) {
         d *= Ten;
+    }
     return d;
 }
 
@@ -46,12 +47,15 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
         return nullptr;
     }
 
-    if (val == Inf())
+    if (val == Inf()) {
         return "inf";
-    if (val == -Inf())
+    }
+    if (val == -Inf()) {
         return "-inf";
-    if (val == Nan())
+    }
+    if (val == Nan()) {
         return "nan";
+    }
 
     if (!IsNormal(val)) {
         return nullptr;
@@ -76,7 +80,6 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
         if (!precision--) {
             return nullptr;
         }
-
 
         const auto digit = ui8(v % Ten);
         if (digit || !scale || s != end) {
@@ -112,25 +115,26 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
 }
 
 namespace {
-    bool IsNan(const char* s) {
-        return (s[0] == 'N' || s[0] == 'n') && (s[1] == 'A' || s[1] == 'a') && (s[2] == 'N' || s[2] == 'n');
-    }
-
-    bool IsInf(const char* s) {
-        return (s[0] == 'I' || s[0] == 'i') && (s[1] == 'N' || s[1] == 'n') && (s[2] == 'F' || s[2] == 'f');
-    }
+bool IsNan(const char* s) {
+    return (s[0] == 'N' || s[0] == 'n') && (s[1] == 'A' || s[1] == 'a') && (s[2] == 'N' || s[2] == 'n');
 }
 
+bool IsInf(const char* s) {
+    return (s[0] == 'I' || s[0] == 'i') && (s[1] == 'N' || s[1] == 'n') && (s[2] == 'F' || s[2] == 'f');
+}
+} // namespace
 
 TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
-    if (scale > precision)
+    if (scale > precision) {
         return Err();
+    }
 
     auto s = str.data();
     auto l = str.size();
 
-    if (!s || !l)
+    if (!s || !l) {
         return Err();
+    }
 
     const bool neg = '-' == *s;
     if (neg || '+' == *s) {
@@ -139,10 +143,12 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
     }
 
     if (3U == l) {
-        if (IsInf(s))
+        if (IsInf(s)) {
             return neg ? -Inf() : Inf();
-        if (IsNan(s))
+        }
+        if (IsNan(s)) {
             return Nan();
+        }
     }
 
     TUint128 v = 0U;
@@ -150,8 +156,9 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
 
     for (bool dot = false; l; --l) {
         if (*s == '.') {
-            if (dot)
+            if (dot) {
                 return Err();
+            }
 
             ++s;
             dot = true;
@@ -159,15 +166,17 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
         }
 
         if (dot) {
-            if (scale)
+            if (scale) {
                 --scale;
-            else
+            } else {
                 break;
+            }
         }
 
         const char c = *s++;
-        if (!std::isdigit(c))
+        if (!std::isdigit(c)) {
             return Err();
+        }
 
         v *= Ten;
         v += c - '0';
@@ -179,64 +188,73 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
 
     if (l--) {
         const char c = *s++;
-        if (!std::isdigit(c))
+        if (!std::isdigit(c)) {
             return Err();
+        }
 
         bool plus = c > '5';
         if (!plus && c == '5') {
             for (plus = v & 1; !plus && l; --l) {
                 const char c = *s++;
-                if (!std::isdigit(c))
+                if (!std::isdigit(c)) {
                     return Err();
+                }
 
                 plus = c != '0';
             }
         }
 
-        while (l--)
-            if (!std::isdigit(*s++))
+        while (l--) {
+            if (!std::isdigit(*s++)) {
                 return Err();
+            }
+        }
 
-        if (plus)
-            if (++v >= GetDivider(precision))
+        if (plus) {
+            if (++v >= GetDivider(precision)) {
                 v = Inf();
+            }
+        }
     }
 
-    while (scale--)
+    while (scale--) {
         v *= Ten;
+    }
 
     return neg ? -v : v;
 }
 
 TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
-    if (scale > precision)
+    if (scale > precision) {
         return Err();
+    }
 
     const auto s = str.data();
 
     for (auto ptr = s + str.size() - 1U; ptr > s; --ptr) {
         if (*ptr == 'E' || *ptr == 'e') {
             const auto len = ptr - s;
-            if (!len)
+            if (!len) {
                 return Err();
+            }
 
             ++ptr;
             if (ptr != s + str.size() && *ptr == '+') {
                 ++ptr;
-                if (ptr != s + str.size() && *ptr == '-')
+                if (ptr != s + str.size() && *ptr == '-') {
                     return Err();
+                }
             }
 
             int exp;
             auto [finish, ec] = std::from_chars(ptr, s + str.size(), exp);
-            if (ec != std::errc() || finish != s + str.size())
+            if (ec != std::errc() || finish != s + str.size()) {
                 return Err();
+            }
 
             const int p = precision, s = int(scale) + exp;
 
-            const auto r = exp > 0 ?
-                FromString(str.Head(len), precision, std::min(s, p)):
-                FromString(str.Head(len), std::min(p - exp, int(MaxPrecision)), std::max(s, 0));
+            const auto r = exp > 0 ? FromString(str.Head(len), precision, std::min(s, p)) : FromString(str.Head(len), std::min(p - exp, int(MaxPrecision)), std::max(s, 0));
 
             if (IsError(r) || IsNan(r)) {
                 return Err();
@@ -244,21 +262,25 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
 
             if (IsInf(r)) {
                 auto p = str.data();
-                if (*p == '+' || *p == '-')
+                if (*p == '+' || *p == '-') {
                     ++p;
+                }
 
-                if (!std::isdigit(*p))
+                if (!std::isdigit(*p)) {
                     return Err();
+                }
 
                 return r;
             }
 
             if (const auto e = exp > 0 ? std::max(0, s - p) : std::min(0, s)) {
                 if (r) {
-                    if (exp > 0)
+                    if (exp > 0) {
                         return Mul(r, GetDivider(+e));
-                    if (exp < 0)
+                    }
+                    if (exp < 0) {
                         return Div(r, GetDivider(-e));
+                    }
                 }
             }
 
@@ -273,8 +295,9 @@ bool IsValid(const TStringBuf& str) {
     auto s = str.data();
     auto l = str.size();
 
-    if (!s || !l)
+    if (!s || !l) {
         return false;
+    }
 
     if ('-' == *s || '+' == *s) {
         ++s;
@@ -288,57 +311,67 @@ bool IsValid(const TStringBuf& str) {
     for (bool dot = false; l--;) {
         const char c = *s++;
         if (c == '.') {
-            if (dot)
+            if (dot) {
                 return false;
+            }
 
             dot = true;
             continue;
         }
 
-        if (!std::isdigit(c))
+        if (!std::isdigit(c)) {
             return false;
+        }
     }
 
     return true;
 }
 
 TInt128 Mod(TInt128 a, TInt128 b) {
-    if (!b || !(IsNormal(a) && IsNormal(b)))
+    if (!b || !(IsNormal(a) && IsNormal(b))) {
         return Nan();
+    }
 
     return a % b;
 }
 
 TInt128 Div(TInt128 a, TInt128 b) {
-    if (IsNan(a) || IsNan(b))
+    if (IsNan(a) || IsNan(b)) {
         return Nan();
+    }
 
     if (!b) {
-        if (a > 0)
+        if (a > 0) {
             return Inf();
-        else if (a < 0)
+        } else if (a < 0) {
             return -Inf();
-        else
+        } else {
             return Nan();
+        }
     } else if (IsInf(b)) {
         return IsInf(a) ? Nan() : TInt128(0);
     } else if (IsInf(a)) {
         return b > 0 ? a : -a;
     }
 
-    if (b & 1)
+    if (b & 1) {
         a = TUint128(a) << 1U;
-    else
+    } else {
         b >>= 1;
+    }
 
     auto d = a / b;
 
     if (d & 1) {
         if (const auto m = a % b) {
-            if (m > 0) ++d;
+            if (m > 0) {
+                ++d;
+            }
             // else --d;
         } else {
-            if (d & 2) ++d;
+            if (d & 2) {
+                ++d;
+            }
         }
     }
 
@@ -352,10 +385,12 @@ using TInt256 = TWide<TInt128, TInt128, TUint128>;
 TInt128 Normalize(const TInt256& v) {
     static const TInt256 PInf256(+Inf()), NInf256(-Inf());
 
-    if (v > PInf256)
+    if (v > PInf256) {
         return +Inf();
-    if (v < NInf256)
+    }
+    if (v < NInf256) {
         return -Inf();
+    }
     return *reinterpret_cast<const TInt128*>(&v);
 }
 
@@ -390,53 +425,63 @@ TInt256 WidenMul(const TInt128& lhs, const TInt128& rhs) {
     return nl == nr ? +combine : -combine;
 }
 
-template<bool MayOddDivider>
+template <bool MayOddDivider>
 TInt256 Div(TInt256&& a, TInt256&& b) {
-    if (MayOddDivider && b & 1)
+    if (MayOddDivider && b & 1) {
         a <<= 1;
-    else
+    } else {
         b >>= 1;
+    }
 
     auto d = a / b;
 
     if (d & 1) {
         if (const auto m = a % b) {
-            if (m > 0) ++d;
+            if (m > 0) {
+                ++d;
+            }
             // else --d;
         } else {
-            if (d & 2) ++d;
+            if (d & 2) {
+                ++d;
+            }
         }
     }
 
     return d >>= 1;
 }
 
-}
+} // namespace
 
 TInt128 Mul(TInt128 a, TInt128 b) {
-    if (IsNan(a) || IsNan(b))
+    if (IsNan(a) || IsNan(b)) {
         return Nan();
+    }
 
-    if (IsInf(a))
+    if (IsInf(a)) {
         return !b ? Nan() : (b > 0 ? a : -a);
+    }
 
-    if (IsInf(b))
+    if (IsInf(b)) {
         return !a ? Nan() : (a > 0 ? b : -b);
+    }
 
     return Normalize(WidenMul(a, b));
 }
 
 TInt128 MulAndDivNormalMultiplier(TInt128 a, TInt128 b, TInt128 c) {
-    if (IsNan(a) || IsNan(c))
+    if (IsNan(a) || IsNan(c)) {
         return Nan();
+    }
 
     if (!c) {
-        if (a > 0)
+        if (a > 0) {
             return Inf();
-        else if (a < 0)
+        } else if (a < 0) {
             return -Inf();
-        else
+        } else {
             return Nan();
+        }
     } else if (IsInf(c)) {
         return IsInf(a) ? Nan() : TInt128(0);
     } else if (IsInf(a)) {
@@ -447,17 +492,20 @@ TInt128 MulAndDivNormalMultiplier(TInt128 a, TInt128 b, TInt128 c) {
 }
 
 TInt128 MulAndDivNormalDivider(TInt128 a, TInt128 b, TInt128 c) {
-    if (IsNan(a) || IsNan(b))
+    if (IsNan(a) || IsNan(b)) {
         return Nan();
+    }
 
-    if (IsInf(a))
+    if (IsInf(a)) {
         return !b ? Nan() : (b > 0 ? a : -a);
+    }
 
-    if (IsInf(b))
+    if (IsInf(b)) {
         return !a ? Nan() : (a > 0 ? b : -b);
+    }
 
     return Normalize(Div<false>(WidenMul(a, b), TInt256(c)));
 }
 
-}
-}
+} // namespace NDecimal
+} // namespace NYql

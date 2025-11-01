@@ -20,8 +20,6 @@ namespace NKikimr::NStorage {
         }
 
         if (config->HasClusterStateDetails()) {
-            auto *details = config->MutableClusterStateDetails();
-
             Y_DEBUG_ABORT_UNLESS(config->HasClusterState());
             auto *clusterState = config->MutableClusterState();
 
@@ -31,49 +29,6 @@ namespace NKikimr::NStorage {
                         ConnectedUnsyncedPiles.contains(TBridgePileId::FromPileIndex(i))) {
                     clusterState->SetPerPileState(i, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
                     changes = true;
-
-                    auto *state = details->AddPileSyncState();
-                    TBridgePileId::FromPileIndex(i).CopyToProto(state, &std::decay_t<decltype(*state)>::SetBridgePileId);
-                    state->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
-                    state->SetUnsyncedBSC(true);
-
-                    // spin generations for all static groups and update this pile's state to BLOCKS
-                    auto *ss = config->MutableBlobStorageConfig()->MutableServiceSet();
-                    THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
-                    for (auto& group : *ss->MutableGroups()) {
-                        groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
-                    }
-                    THashSet<TGroupId> changedGroupIds;
-                    for (const auto& [groupId, group] : groupMap) {
-                        if (!group->HasBridgeGroupState()) {
-                            continue;
-                        }
-                        auto *state = group->MutableBridgeGroupState();
-                        Y_ABORT_UNLESS(i < state->PileSize());
-                        auto *pile = state->MutablePile(i);
-                        pile->ClearStage();
-                        pile->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
-                        group->SetGroupGeneration(group->GetGroupGeneration() + 1);
-                        for (auto& pile : *state->MutablePile()) {
-                            const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                            auto *refGroup = groupMap[refGroupId];
-                            Y_ABORT_UNLESS(refGroup);
-                            Y_ABORT_UNLESS(refGroup->GetGroupGeneration() == pile.GetGroupGeneration());
-                            refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
-                            pile.SetGroupGeneration(refGroup->GetGroupGeneration());
-                            changedGroupIds.insert(refGroupId);
-                        }
-                    }
-                    for (auto& vdisk : *ss->MutableVDisks()) {
-                        auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                        if (!changedGroupIds.contains(vdiskId.GroupID)) {
-                            continue;
-                        }
-                        auto *group = groupMap[vdiskId.GroupID];
-                        Y_ABORT_UNLESS(group);
-                        vdiskId.GroupGeneration = group->GetGroupGeneration();
-                        VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-                    }
                 }
             }
         }
@@ -236,15 +191,16 @@ namespace NKikimr::NStorage {
                         } else {
                             switch (clusterState.GetPerPileState(pileId.GetPileIndex())) {
                                 case NKikimrBridge::TClusterState::DISCONNECTED:
+                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                                     state = T::DISCONNECTED;
                                     break;
 
-                                case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
                                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
                                     state = T::NOT_SYNCHRONIZED;
                                     break;
 
                                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
+                                case NKikimrBridge::TClusterState::SUSPENDED:
                                     state = T::SYNCHRONIZED;
                                     break;
 

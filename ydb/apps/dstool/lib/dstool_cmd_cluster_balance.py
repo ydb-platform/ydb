@@ -33,6 +33,8 @@ def add_options(p):
     common.add_group_ids_option(g)
     p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     p.add_argument('--allow-same-node', action='store_true', help='Allow to relocate vdisks from one group to the same node')
+    p.add_argument('--prefer-less-occupied-rack', action='store_true', help='Take into account racks\' free slots picking pdisk from rack with more free slots first')
+    p.add_argument('--with-attention-to-replication', action='store_true', help='Take into account replicating vdisks picking node and pdisk with less amount of them')
     p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait when there are no vdisks to reassign')
     p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
     common.add_basic_format_options(p)
@@ -42,7 +44,6 @@ class ClusterInfo:
     def __init__(self):
         self.base_config = None
         self.storage_pools = None
-        self.node_mon_map = None
         self.vslot_map = None
         self.pdisk_map = None
         self.pdisk_usage = None
@@ -57,7 +58,6 @@ class ClusterInfo:
         info = ClusterInfo()
         info.base_config = common.fetch_base_config()
         info.storage_pools = common.fetch_storage_pools()
-        info.node_mon_map = common.fetch_node_mon_map({vslot.VSlotId.NodeId for vslot in info.base_config.VSlot})
         info.vslot_map = common.build_vslot_map(info.base_config)
         info.pdisk_map = common.build_pdisk_map(info.base_config)
         info.pdisk_usage = common.build_pdisk_usage_map(info.base_config, count_donors=False)
@@ -97,7 +97,7 @@ class GroupsInfo:
     def collect_groups_info(cluster_info):
         groups_info = GroupsInfo()
         groups_info.all_groups = common.select_groups(cluster_info.base_config)
-        groups_info.healthy_groups = common.filter_healthy_groups(groups_info.all_groups, cluster_info.node_mon_map, cluster_info.base_config, cluster_info.vslot_map)
+        groups_info.healthy_groups = common.filter_healthy_groups(groups_info.all_groups, cluster_info.base_config, cluster_info.vslot_map)
         groups_info.unhealthy_groups = groups_info.all_groups - groups_info.healthy_groups
         groups_info.healthy_vslots = [
             vslot
@@ -240,6 +240,8 @@ class BalancingStrategy(IBalancingStrategy):
         cmd.FailRealmIdx = vslot.FailRealmIdx
         cmd.FailDomainIdx = vslot.FailDomainIdx
         cmd.VDiskIdx = vslot.VDiskIdx
+        cmd.PreferLessOccupiedRack = self.args.prefer_less_occupied_rack
+        cmd.WithAttentionToReplication = self.args.with_attention_to_replication
 
     def reassign_vslot(self, vslot, try_blocking):
         pdisk_id = common.get_pdisk_id(vslot.VSlotId)
@@ -448,6 +450,8 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         cmd.FailRealmIdx = vslot.FailRealmIdx
         cmd.FailDomainIdx = vslot.FailDomainIdx
         cmd.VDiskIdx = 0
+        cmd.PreferLessOccupiedRack = self.args.prefer_less_occupied_rack
+        cmd.WithAttentionToReplication = self.args.with_attention_to_replication
         target = cmd.TargetPDiskId
         target.NodeId = target_pdisk_id[0]
         target.PDiskId = target_pdisk_id[1]

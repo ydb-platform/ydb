@@ -80,15 +80,9 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
         if (const auto& maybeYdbReadTable = TMaybeNode<TYdbReadTable>(read)) {
             const auto& ydbReadTable = maybeYdbReadTable.Cast();
-
-            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
-                ctx.AddError(TIssue(ctx.GetPosition(ydbReadTable.Pos()), "Cannot use watermarks in YDB"));
-                return {};
-            }
-
             YQL_ENSURE(ydbReadTable.Ref().GetTypeAnn(), "No type annotation for node " << ydbReadTable.Ref().Content());
             const auto& clusterName = ydbReadTable.DataSource().Cluster().Value();
             const auto token = "cluster:default_" + TString(clusterName);

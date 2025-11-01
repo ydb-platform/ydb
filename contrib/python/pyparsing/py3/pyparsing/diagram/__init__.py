@@ -112,9 +112,14 @@ T = TypeVar("T")
 class EachItem(railroad.Group):
     """
     Custom railroad item to compose a:
-    - Group containing a
-      - OneOrMore containing a
-        - Choice of the elements in the Each
+
+    - :class:`railroad.Group` containing a
+
+      - :class:`railroad.OneOrMore` containing a
+
+        - :class:`railroad.Choice` of the elements in the
+          :class:`railroad.Each`
+
     with the group label indicating that all must be matched
     """
 
@@ -152,8 +157,9 @@ class EditablePartial(Generic[T]):
     @classmethod
     def from_call(cls, func: Callable[..., T], *args, **kwargs) -> EditablePartial[T]:
         """
-        If you call this function in the same way that you would call the constructor, it will store the arguments
-        as you expect. For example EditablePartial.from_call(Fraction, 1, 3)() == Fraction(1, 3)
+        If you call this function in the same way that you would call the constructor,
+        it will store the arguments as you expect. For example
+        ``EditablePartial.from_call(Fraction, 1, 3)() == Fraction(1, 3)``
         """
         return EditablePartial(func=func, args=list(args), kwargs=kwargs)
 
@@ -179,7 +185,9 @@ class EditablePartial(Generic[T]):
 
 def railroad_to_html(diagrams: list[NamedDiagram], embed=False, **kwargs) -> str:
     """
-    Given a list of NamedDiagram, produce a single HTML string that visualises those diagrams
+    Given a list of :class:`NamedDiagram`, produce a single HTML string
+    that visualises those diagrams.
+
     :params kwargs: kwargs to be passed in to the template
     """
     data = []
@@ -231,16 +239,22 @@ def to_railroad(
     """
     Convert a pyparsing element tree into a list of diagrams. This is the recommended entrypoint to diagram
     creation if you want to access the Railroad tree before it is converted to HTML
+
     :param element: base element of the parser being diagrammed
-    :param diagram_kwargs: kwargs to pass to the Diagram() constructor
-    :param vertical: (optional) - int - limit at which number of alternatives should be
-       shown vertically instead of horizontally
-    :param show_results_names - bool to indicate whether results name annotations should be
-       included in the diagram
-    :param show_groups - bool to indicate whether groups should be highlighted with an unlabeled
-       surrounding box
-    :param show_hidden - bool to indicate whether internal elements that are typically hidden
-       should be shown
+
+    :param diagram_kwargs: kwargs to pass to the :meth:`Diagram` constructor
+
+    :param vertical: (optional) int - limit at which number of alternatives
+        should be shown vertically instead of horizontally
+
+    :param show_results_names: bool to indicate whether results name
+        annotations should be included in the diagram
+
+    :param show_groups: bool to indicate whether groups should be highlighted
+        with an unlabeled surrounding box
+
+    :param show_hidden: bool to indicate whether internal elements that are
+        typically hidden should be shown
     """
     # Convert the whole tree underneath the root
     lookup = ConverterState(diagram_kwargs=diagram_kwargs or {})

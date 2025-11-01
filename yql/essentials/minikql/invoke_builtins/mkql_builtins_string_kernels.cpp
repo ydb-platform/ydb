@@ -1,5 +1,5 @@
 #include "mkql_builtins_string_kernels.h"
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -7,17 +7,22 @@ namespace NMiniKQL {
 namespace {
 
 template <typename Return, typename... Args>
-constexpr auto GetArgumentsCount(Return(*)(Args...)) noexcept
-{
+constexpr auto GetArgumentsCount(Return (*)(Args...)) noexcept {
     return sizeof...(Args);
 }
 
-using TUntypedStringBinaryScalarFuncPtr = void(*)(std::string_view, std::string_view, void*);
-using TUntypedStringBinaryArrayFuncPtr = void(*)(const void* stringOffsets1, const void* data1, const void* stringOffsets2, const void* data2, void* resPtr, int64_t length, int64_t offset1, int64_t offset2);
+template <typename TOutput>
+using TTypedStringBinaryScalarFuncPtr = void (*)(std::string_view, std::string_view, TOutput*);
 
+template <typename TOffset1, typename TOffset2, typename TOutput>
+using TTypedStringBinaryArrayFuncPtr = void (*)(const TOffset1* stringOffsets1, const char* data1,
+                                                const TOffset2* stringOffsets2, const char* data2,
+                                                TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2);
+
+template <typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringScalarScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
-    TUntypedStringBinaryScalarFuncPtr func) {
+                                                     TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+                                                     TTypedStringBinaryScalarFuncPtr<TOutput> func) {
     const auto& arg1 = batch.values[0];
     const auto& arg2 = batch.values[1];
     if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
@@ -27,15 +32,16 @@ Y_NO_INLINE arrow::Status ExecStringScalarScalarImpl(const arrow::compute::ExecB
         const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
         const auto val1 = GetStringScalarValue(*arg1.scalar());
         const auto val2 = GetStringScalarValue(*arg2.scalar());
-        func(val1, val2, resPtr);
+        func(val1, val2, reinterpret_cast<TOutput*>(resPtr));
         *res = resDatum.scalar();
     }
 
     return arrow::Status::OK();
 }
 
+template <typename TOffset1, typename TOffset2, typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringScalarArrayImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TUntypedStringBinaryArrayFuncPtr func) {
+                                                    TTypedStringBinaryArrayFuncPtr<TOffset1, TOffset2, TOutput> func) {
     const auto& arg1 = batch.values[0];
     const auto& arg2 = batch.values[1];
     auto& resArr = *res->array();
@@ -47,14 +53,17 @@ Y_NO_INLINE arrow::Status ExecStringScalarArrayImpl(const arrow::compute::ExecBa
         const size_t val1Size = val1.size();
         const auto offsets2 = arr2.buffers[1]->data();
         const auto data2 = arr2.buffers[2]->data();
-        func(&val1Size, val1.data(), offsets2, data2, resPtr, length, 0, arr2.offset);
+        func(reinterpret_cast<const TOffset1*>(&val1Size), val1.data(),
+             reinterpret_cast<const TOffset2*>(offsets2), reinterpret_cast<const char*>(data2),
+             reinterpret_cast<TOutput*>(resPtr), length, 0, arr2.offset);
     }
 
     return arrow::Status::OK();
 }
 
+template <typename TOffset1, typename TOffset2, typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringArrayScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TUntypedStringBinaryArrayFuncPtr func) {
+                                                    TTypedStringBinaryArrayFuncPtr<TOffset1, TOffset2, TOutput> func) {
     const auto& arg1 = batch.values[0];
     const auto& arg2 = batch.values[1];
     auto& resArr = *res->array();
@@ -66,14 +75,17 @@ Y_NO_INLINE arrow::Status ExecStringArrayScalarImpl(const arrow::compute::ExecBa
         const size_t val2Size = val2.size();
         const auto offsets1 = arr1.buffers[1]->data();
         const auto data1 = arr1.buffers[2]->data();
-        func(offsets1, data1, &val2Size, val2.data(), resPtr, length, arr1.offset, 0);
+        func(reinterpret_cast<const TOffset1*>(offsets1), reinterpret_cast<const char*>(data1),
+             reinterpret_cast<const TOffset2*>(&val2Size), val2.data(),
+             reinterpret_cast<TOutput*>(resPtr), length, arr1.offset, 0);
     }
 
     return arrow::Status::OK();
 }
 
+template <typename TOffset1, typename TOffset2, typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringArrayArrayImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TUntypedStringBinaryArrayFuncPtr func) {
+                                                   TTypedStringBinaryArrayFuncPtr<TOffset1, TOffset2, TOutput> func) {
     const auto& arg1 = batch.values[0];
     const auto& arg2 = batch.values[1];
     const auto& arr1 = *arg1.array();
@@ -87,52 +99,56 @@ Y_NO_INLINE arrow::Status ExecStringArrayArrayImpl(const arrow::compute::ExecBat
     const auto offsets2 = arr2.buffers[1]->data();
     const auto data1 = arr1.buffers[2]->data();
     const auto data2 = arr2.buffers[2]->data();
-    func(offsets1, data1, offsets2, data2, resPtr, length, arr1.offset, arr2.offset);
+    func(reinterpret_cast<const TOffset1*>(offsets1), reinterpret_cast<const char*>(data1),
+         reinterpret_cast<const TOffset2*>(offsets2), reinterpret_cast<const char*>(data2),
+         reinterpret_cast<TOutput*>(resPtr), length, arr1.offset, arr2.offset);
     return arrow::Status::OK();
 }
 
+template <typename TOffset1, typename TOffset2, typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringBinaryImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
-    TUntypedStringBinaryScalarFuncPtr scalarScalarFunc,
-    TUntypedStringBinaryArrayFuncPtr scalarArrayFunc,
-    TUntypedStringBinaryArrayFuncPtr arrayScalarFunc,
-    TUntypedStringBinaryArrayFuncPtr arrayArrayFunc) {
+                                               TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+                                               TTypedStringBinaryScalarFuncPtr<TOutput> scalarScalarFunc,
+                                               TTypedStringBinaryArrayFuncPtr<TOffset1, TOffset2, TOutput> scalarArrayFunc,
+                                               TTypedStringBinaryArrayFuncPtr<TOffset1, TOffset2, TOutput> arrayScalarFunc,
+                                               TTypedStringBinaryArrayFuncPtr<TOffset1, TOffset2, TOutput> arrayArrayFunc) {
     MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
     const auto& arg1 = batch.values[0];
     const auto& arg2 = batch.values[1];
     if (arg1.is_scalar()) {
         if (arg2.is_scalar()) {
-            return ExecStringScalarScalarImpl(batch, res, typeGetter, scalarGetter, scalarScalarFunc);
+            return ExecStringScalarScalarImpl<TOutput>(batch, res, typeGetter, scalarGetter, scalarScalarFunc);
         } else {
-            return ExecStringScalarArrayImpl(batch, res, scalarArrayFunc);
+            return ExecStringScalarArrayImpl<TOffset1, TOffset2, TOutput>(batch, res, scalarArrayFunc);
         }
     } else {
         if (arg2.is_scalar()) {
-            return ExecStringArrayScalarImpl(batch, res, arrayScalarFunc);
+            return ExecStringArrayScalarImpl<TOffset1, TOffset2, TOutput>(batch, res, arrayScalarFunc);
         } else {
-            return ExecStringArrayArrayImpl(batch, res, arrayArrayFunc);
+            return ExecStringArrayArrayImpl<TOffset1, TOffset2, TOutput>(batch, res, arrayArrayFunc);
         }
     }
 }
 
-template<typename TInput1, typename TInput2, typename TOutput, class TOp>
-struct TBinaryStringExecs
-{
+template <typename TInput1, typename TInput2, typename TOutput, class TOp>
+struct TBinaryStringExecs {
     using TOffset1 = typename TPrimitiveDataType<TInput1>::TResult::offset_type;
     using TOffset2 = typename TPrimitiveDataType<TInput2>::TResult::offset_type;
 
-    using TTypedStringBinaryScalarFuncPtr = void(*)(std::string_view, std::string_view, TOutput*);
-    using TTypedStringBinaryArrayFuncPtr = void(*)(const TOffset1* stringOffsets1, const char* data1,
-        const TOffset2* stringOffsets2, const char* data2, TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2);
+    using TTypedStringBinaryScalarFuncPtr = void (*)(std::string_view, std::string_view, TOutput*);
+    using TTypedStringBinaryArrayFuncPtr = void (*)(const TOffset1* stringOffsets1, const char* data1,
+                                                    const TOffset2* stringOffsets2, const char* data2,
+                                                    TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2);
 
     static void ScalarScalarCore(std::string_view arg1, std::string_view arg2, TOutput* resPtr) {
         *resPtr = TOp::Do(arg1, arg2);
     }
 
     static void ScalarArrayCore(const TOffset1* stringOffsets1, const char* data1,
-        const TOffset2* stringOffsets2, const char* data2, TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2) {
+                                const TOffset2* stringOffsets2, const char* data2, TOutput* resPtr,
+                                int64_t length, int64_t offset1, int64_t offset2) {
         Y_UNUSED(offset1);
-        const auto val1 = std::string_view(data1, *(const size_t*)stringOffsets1);
+        const auto val1 = std::string_view(data1, *reinterpret_cast<const size_t*>(stringOffsets1));
         stringOffsets2 += offset2;
         if (val1.empty()) {
             if constexpr (GetArgumentsCount(TOp::DoWithEmptyLeft) == 0) {
@@ -151,9 +167,10 @@ struct TBinaryStringExecs
     }
 
     static void ArrayScalarCore(const TOffset1* stringOffsets1, const char* data1,
-        const TOffset2* stringOffsets2, const char* data2, TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2) {
+                                const TOffset2* stringOffsets2, const char* data2,
+                                TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2) {
         Y_UNUSED(offset2);
-        const auto val2 = std::string_view(data2, *(const size_t*)stringOffsets2);
+        const auto val2 = std::string_view(data2, *reinterpret_cast<const size_t*>(stringOffsets2));
         stringOffsets1 += offset1;
         if (val2.empty()) {
             if constexpr (GetArgumentsCount(TOp::DoWithEmptyRight) == 0) {
@@ -172,7 +189,8 @@ struct TBinaryStringExecs
     }
 
     static void ArrayArrayCore(const TOffset1* stringOffsets1, const char* data1,
-        const TOffset2* stringOffsets2, const char* data2, TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2) {
+                               const TOffset2* stringOffsets2, const char* data2,
+                               TOutput* resPtr, int64_t length, int64_t offset1, int64_t offset2) {
         stringOffsets1 += offset1;
         stringOffsets2 += offset2;
         for (int64_t i = 0; i < length; ++i, ++stringOffsets1, ++stringOffsets2, ++resPtr) {
@@ -188,21 +206,26 @@ struct TBinaryStringExecs
         TTypedStringBinaryArrayFuncPtr scalarArrayFunc = &ScalarArrayCore;
         TTypedStringBinaryArrayFuncPtr arrayScalarFunc = &ArrayScalarCore;
         TTypedStringBinaryArrayFuncPtr arrayArrayFunc = &ArrayArrayCore;
-        return ExecStringBinaryImpl(batch, res, &GetPrimitiveDataType<TOutput>,
-            &MakeDefaultScalarDatum<TOutput>, 
-            (TUntypedStringBinaryScalarFuncPtr)scalarScalarFunc,
-            (TUntypedStringBinaryArrayFuncPtr)scalarArrayFunc,
-            (TUntypedStringBinaryArrayFuncPtr)arrayScalarFunc,
-            (TUntypedStringBinaryArrayFuncPtr)arrayArrayFunc);
+        return ExecStringBinaryImpl<TOffset1, TOffset2, TOutput>(batch, res, &GetPrimitiveDataType<TOutput>,
+                                                                 &MakeDefaultScalarDatum<TOutput>,
+                                                                 scalarScalarFunc,
+                                                                 scalarArrayFunc,
+                                                                 arrayScalarFunc,
+                                                                 arrayArrayFunc);
     }
 };
 
-using TUntypedStringUnaryScalarFuncPtr = void(*)(std::string_view, void*);
-using TUntypedStringUnaryArrayFuncPtr = void(*)(const void* stringOffsets, const void* data, void* resPtr, int64_t length, int64_t offset);
+template <typename TOutput>
+using TTypedStringUnaryScalarFuncPtr = void (*)(std::string_view, TOutput*);
 
+template <typename TOffset, typename TOutput>
+using TTypedStringUnaryArrayFuncPtr = void (*)(const TOffset* stringOffsets, const char* data,
+                                               TOutput* resPtr, int64_t length, int64_t offset);
+
+template <typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringScalarImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, 
-    TUntypedStringUnaryScalarFuncPtr func) {
+                                               TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+                                               TTypedStringUnaryScalarFuncPtr<TOutput> func) {
     const auto& arg = batch.values[0];
     if (!arg.scalar()->is_valid) {
         *res = arrow::MakeNullScalar(typeGetter());
@@ -210,15 +233,15 @@ Y_NO_INLINE arrow::Status ExecStringScalarImpl(const arrow::compute::ExecBatch& 
         auto resDatum = scalarGetter();
         const auto resPtr = GetPrimitiveScalarValueMutablePtr(*resDatum.scalar());
         const auto val = GetStringScalarValue(*arg.scalar());
-        func(val, resPtr);
+        func(val, reinterpret_cast<TOutput*>(resPtr));
         *res = resDatum.scalar();
     }
     return arrow::Status::OK();
 }
 
+template <typename TOffset, typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringArrayImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TUntypedStringUnaryArrayFuncPtr func) {
-
+                                              TTypedStringUnaryArrayFuncPtr<TOffset, TOutput> func) {
     const auto& arg = batch.values[0];
     auto& resArr = *res->array();
 
@@ -228,30 +251,32 @@ Y_NO_INLINE arrow::Status ExecStringArrayImpl(const arrow::compute::ExecBatch& b
 
     const auto offsets = arr.buffers[1]->data();
     const auto data = arr.buffers[2]->data();
-    func(offsets, data, resValues, length, arr.offset);
+    func(reinterpret_cast<const TOffset*>(offsets), reinterpret_cast<const char*>(data),
+         reinterpret_cast<TOutput*>(resValues), length, arr.offset);
     return arrow::Status::OK();
 }
 
+template <typename TOffset, typename TOutput>
 Y_NO_INLINE arrow::Status ExecStringUnaryImpl(const arrow::compute::ExecBatch& batch, arrow::Datum* res,
-    TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter, 
-    TUntypedStringUnaryScalarFuncPtr scalarFunc,
-    TUntypedStringUnaryArrayFuncPtr arrayFunc) {
+                                              TPrimitiveDataTypeGetter typeGetter, TPrimitiveDataScalarGetter scalarGetter,
+                                              TTypedStringUnaryScalarFuncPtr<TOutput> scalarFunc,
+                                              TTypedStringUnaryArrayFuncPtr<TOffset, TOutput> arrayFunc) {
     MKQL_ENSURE(batch.values.size() == 1, "Expected single argument");
     const auto& arg = batch.values[0];
     if (arg.is_scalar()) {
-        return ExecStringScalarImpl(batch, res, typeGetter, scalarGetter, scalarFunc);
+        return ExecStringScalarImpl<TOutput>(batch, res, typeGetter, scalarGetter, scalarFunc);
     } else {
-        return ExecStringArrayImpl(batch, res, arrayFunc);
+        return ExecStringArrayImpl<TOffset, TOutput>(batch, res, arrayFunc);
     }
 }
 
-template<typename TInput, typename TOutput, class TOp>
-struct TUnaryStringExecs
-{
+template <typename TInput, typename TOutput, class TOp>
+struct TUnaryStringExecs {
     using TOffset = typename TPrimitiveDataType<TInput>::TResult::offset_type;
 
-    using TTypedStringUnaryScalarFuncPtr = void(*)(std::string_view, TOutput* resPtr);
-    using TTypedStringUnaryArrayFuncPtr = void(*)(const TOffset* offsets, const char* data, TOutput* resPtr, int64_t length, int64_t offset);
+    using TTypedStringUnaryScalarFuncPtr = void (*)(std::string_view, TOutput* resPtr);
+    using TTypedStringUnaryArrayFuncPtr = void (*)(const TOffset* offsets, const char* data,
+                                                   TOutput* resPtr, int64_t length, int64_t offset);
 
     static void ScalarCore(std::string_view arg, TOutput* resPtr) {
         *resPtr = TOp::Do(arg);
@@ -268,9 +293,11 @@ struct TUnaryStringExecs
     static arrow::Status Exec(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
         TTypedStringUnaryScalarFuncPtr scalarFunc = &ScalarCore;
         TTypedStringUnaryArrayFuncPtr arrayFunc = &ArrayCore;
-        return ExecStringUnaryImpl(batch, res, &GetPrimitiveDataType<TOutput>, &MakeDefaultScalarDatum<TOutput>,
-            (TUntypedStringUnaryScalarFuncPtr)scalarFunc,
-            (TUntypedStringUnaryArrayFuncPtr)arrayFunc);
+        return ExecStringUnaryImpl<TOffset, TOutput>(batch, res,
+                                                     &GetPrimitiveDataType<TOutput>,
+                                                     &MakeDefaultScalarDatum<TOutput>,
+                                                     scalarFunc,
+                                                     arrayFunc);
     }
 };
 
@@ -405,66 +432,69 @@ struct TStrContainsOp {
 };
 
 Y_NO_INLINE void AddCompareStringKernelImpl(TKernelFamilyBase& kernelFamily, NUdf::TDataTypeId type1, NUdf::TDataTypeId type2,
-    const arrow::compute::ArrayKernelExec& exec, arrow::compute::InputType&& inputType1, arrow::compute::InputType&& inputType2,
-    arrow::compute::OutputType&& outputType) {
-    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+                                            const arrow::compute::ArrayKernelExec& exec, arrow::compute::InputType&& inputType1,
+                                            arrow::compute::InputType&& inputType2,
+                                            arrow::compute::OutputType&& outputType) {
+    std::vector<NUdf::TDataTypeId> argTypes({type1, type2});
     NUdf::TDataTypeId returnType = NUdf::TDataType<bool>::Id;
 
     auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
-        inputType1, inputType2
-    }, outputType, exec);
+                                                                inputType1, inputType2}, outputType, exec);
     k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, std::move(k), TKernel::ENullMode::Default));
+    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType,
+                                                                            std::move(k), TKernel::ENullMode::Default));
 }
 
-template<typename TInput1, typename TInput2, typename TOp>
+template <typename TInput1, typename TInput2, typename TOp>
 void AddCompareStringKernel(TKernelFamilyBase& kernelFamily) {
     // ui8 type is used as bool replacement
     using TOutput = ui8;
     using TExecs = TBinaryStringExecs<TInput1, TInput2, TOutput, TOp>;
     AddCompareStringKernelImpl(kernelFamily, NUdf::TDataType<TInput1>::Id, NUdf::TDataType<TInput2>::Id, &TExecs::Exec,
-        GetPrimitiveInputArrowType<TInput1>(), GetPrimitiveInputArrowType<TInput2>(), GetPrimitiveOutputArrowType<TOutput>()
-    );
+                               GetPrimitiveInputArrowType<TInput1>(),
+                               GetPrimitiveInputArrowType<TInput2>(),
+                               GetPrimitiveOutputArrowType<TOutput>());
 }
 
-template<typename TOp>
+template <typename TOp>
 void AddCompareStringKernels(TKernelFamilyBase& kernelFamily) {
-    AddCompareStringKernel<char*,       char*,       TOp>(kernelFamily);
-    AddCompareStringKernel<char*,       NUdf::TUtf8, TOp>(kernelFamily);
-    AddCompareStringKernel<NUdf::TUtf8, char*,       TOp>(kernelFamily);
+    AddCompareStringKernel<char*, char*, TOp>(kernelFamily);
+    AddCompareStringKernel<char*, NUdf::TUtf8, TOp>(kernelFamily);
+    AddCompareStringKernel<NUdf::TUtf8, char*, TOp>(kernelFamily);
     AddCompareStringKernel<NUdf::TUtf8, NUdf::TUtf8, TOp>(kernelFamily);
 }
-
 
 // -------------------------------------------------------------------------------------
 // String size
 // -------------------------------------------------------------------------------------
-template<typename TOutput>
+template <typename TOutput>
 struct TStrSizeOp {
     static inline TOutput Do(std::string_view input) {
         return static_cast<TOutput>(input.size());
     }
 };
 
-
 Y_NO_INLINE void AddSizeStringKernelImpl(TKernelFamilyBase& kernelFamily, NUdf::TDataTypeId type1, NUdf::TDataTypeId returnType,
-    const arrow::compute::ArrayKernelExec& exec, arrow::compute::InputType&& inputType1, arrow::compute::OutputType&& outputType) {
-    std::vector<NUdf::TDataTypeId> argTypes({ type1 });
+                                         const arrow::compute::ArrayKernelExec& exec, arrow::compute::InputType&& inputType1,
+                                         arrow::compute::OutputType&& outputType) {
+    std::vector<NUdf::TDataTypeId> argTypes({type1});
 
     auto k = std::make_unique<arrow::compute::ScalarKernel>(std::vector<arrow::compute::InputType>{
-         inputType1
-    }, outputType, exec);
+                                                                inputType1}, outputType, exec);
     k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, std::move(k), TKernel::ENullMode::Default));
+    kernelFamily.Adopt(argTypes, returnType, std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType,
+                                                                            std::move(k), TKernel::ENullMode::Default));
 }
 
-template<typename TInput>
+template <typename TInput>
 void AddSizeStringKernel(TKernelFamilyBase& kernelFamily) {
     using TOutput = ui32;
     using TOp = TStrSizeOp<TOutput>;
     using TExecs = TUnaryStringExecs<TInput, TOutput, TOp>;
-    AddSizeStringKernelImpl(kernelFamily, NUdf::TDataType<TInput>::Id, NUdf::TDataType<TOutput>::Id, &TExecs::Exec,
-        GetPrimitiveInputArrowType<TInput>(), GetPrimitiveOutputArrowType<TOutput>());
+    AddSizeStringKernelImpl(kernelFamily, NUdf::TDataType<TInput>::Id, NUdf::TDataType<TOutput>::Id,
+                            &TExecs::Exec,
+                            GetPrimitiveInputArrowType<TInput>(),
+                            GetPrimitiveOutputArrowType<TOutput>());
 }
 
 } // namespace
@@ -532,5 +562,5 @@ void RegisterWith(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["StringContains"] = std::move(family);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

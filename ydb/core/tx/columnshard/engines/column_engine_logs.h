@@ -65,6 +65,9 @@ private:
     TVersionedPresetSchemas VersionedSchemas;
 
 public:
+    NMonitoring::TDynamicCounters::TCounterPtr GetBadPortionsCounter() const {
+        return SignalCounters.BadPortionsCount;
+    }
 
     const TVersionedPresetSchemas& GetVersionedSchemas() const {
         return VersionedSchemas;
@@ -148,7 +151,7 @@ public:
     }
     ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept override;
-    std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
+    std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
     std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept override;

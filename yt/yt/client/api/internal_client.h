@@ -104,6 +104,19 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
     NTransactionClient::TTimestamp Timestamp;
 };
 
+class TSerializableGetOrderedTabletSafeTrimRowCountRequest
+    : public TGetOrderedTabletSafeTrimRowCountRequest
+    , public NYTree::TYsonStruct
+{
+public:
+    REGISTER_YSON_STRUCT(TSerializableGetOrderedTabletSafeTrimRowCountRequest);
+
+    static void Register(TRegistrar registrar);
+};
+
+using TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr =
+    TIntrusivePtr<TSerializableGetOrderedTabletSafeTrimRowCountRequest>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TRegisterShuffleChunksOptions

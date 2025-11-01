@@ -977,11 +977,11 @@ private:
         pool->ExcessTime += duration * pool->InverseWeight;
         bucket->ExcessTime += duration;
 
-        if (auto* positionInHeap = pool->GetPositionInHeap()) {
+        if (pool->GetPositionInHeap()) {
             ActivePoolsHeap_.AdjustDown(pool);
         }
 
-        if (auto* positionInHeap = bucket->GetPositionInHeap()) {
+        if (bucket->GetPositionInHeap()) {
             pool->ActiveBucketsHeap.AdjustDown(bucket);
         }
 

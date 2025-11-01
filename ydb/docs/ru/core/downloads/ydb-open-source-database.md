@@ -8,7 +8,10 @@
 
 #|
 || Версия |  Дата выпуска | Скачать | Список изменений ||
+|| **v25.2** | > | > | > ||
+|| v.25.2.1.10-rc   | 21.09.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||
+|| v.25.1.4.7   | 15.09.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.1.4.7/ydbd-25.1.4.7-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-1-4-7) ||
 || v.25.1.2.7-rc   | 14.07.25 | [Бинарный файл](https://binaries.ydb.tech/release/25.1.2.7-rc/ydbd-25.1.2.7-rc-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
 || v.24.4.4.12  | 03.06.25 | [Бинарный файл](https://binaries.ydb.tech/release/24.4.4.12/ydbd-24.4.4.12-linux-amd64.tar.gz) | [См. список](../changelog-server.md#24-4-4-12) ||
@@ -33,8 +36,11 @@
 ## Docker
 
 #|
-|| Версия |  Дата выпуска | Скачать | Список изменений ||
+|| Версия |  Дата выпуска | Docker `registry/image:tag` | Список изменений ||
+|| **v25.2** | > | > | > ||
+|| v.25.2.1.10-rc  | 21.09.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.10-rc` | [См. список](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||
+|| v.25.1.4.7  | 15.09.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.4.7` | [См. список](../changelog-server.md#25-1-4-7) ||
 || v.25.1.2.7-rc  | 14.07.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.2.7-rc` | [См. список](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
 || v.24.4.4.12  | 03.06.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.12` | [См. список](../changelog-server.md#24-4-4-12) ||
@@ -60,7 +66,10 @@
 
 #|
 || Версия |  Дата выпуска | Ссылка | Список изменений ||
+|| **v25.2** | > | > | > ||
+|| v.25.2.1.10-rc  | 21.09.25 | [https://github.com/ydb-platform/ydb/tree/25.2.1.10-rc](https://github.com/ydb-platform/ydb/tree/25.2.1.10-rc) | [См. список](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||
+|| v.25.1.4.7  | 15.09.25 | [https://github.com/ydb-platform/ydb/tree/25.1.4.7](https://github.com/ydb-platform/ydb/tree/25.1.4.7) | [См. список](../changelog-server.md#25-1-4-7) ||
 || v.25.1.2.7-rc  | 14.07.25 | [https://github.com/ydb-platform/ydb/tree/25.1.2.7-rc](https://github.com/ydb-platform/ydb/tree/25.1.2.7-rc) | [См. список](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
 || v.24.4.4.12  | 03.06.25 | [https://github.com/ydb-platform/ydb/tree/24.4.4.12](https://github.com/ydb-platform/ydb/tree/24.4.4.12) | [См. список](../changelog-server.md#24-4-4-12) ||

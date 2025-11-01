@@ -1078,6 +1078,33 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
     }
 }
 
+void TTable::LockRowTx(ELockMode mode, TRawVals key, ui64 txId)
+{
+    auto& memTable = MemTable();
+    bool hadTxDataRef = memTable.GetTxIdStats().contains(txId);
+
+    if (ErasedKeysCache) {
+        const TCelled cells(key, *Scheme->Keys, true);
+        auto res = ErasedKeysCache->FindKey(cells);
+        if (res.second) {
+            ErasedKeysCache->InvalidateKey(res.first, cells);
+        }
+    }
+
+    MemTable().LockRow(mode, key, txId);
+
+    if (!hadTxDataRef) {
+        Y_DEBUG_ABORT_UNLESS(memTable.GetTxIdStats().contains(txId));
+        AddTxDataRef(txId);
+    } else {
+        Y_DEBUG_ABORT_UNLESS(TxDataRefs[txId] > 0);
+    }
+
+    if (TableObserver) {
+        TableObserver->OnLockRowTx(mode, key, txId);
+    }
+}
+
 void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
 {
     // TODO: track suspicious transactions (not open at commit time)
@@ -1478,13 +1505,29 @@ TSelectRowVersionResult TTable::SelectRowVersion(
 
     auto committed = TMergedTransactionMap::Create(visible, CommittedTransactions);
 
+    ELockMode lockMode = ELockMode::None;
+    ui64 lockTxId = 0;
+
+    auto augment = [&](const auto& value) {
+        TSelectRowVersionResult result(value);
+        if (lockMode != ELockMode::None) {
+            ITransactionMapSimplePtr c = committed;
+            // Lock is only valid as long as it's not committed or removed
+            if (!c.Find(lockTxId) && !RemovedTransactions.Contains(lockTxId)) {
+                result.LockMode = lockMode;
+                result.LockTxId = lockTxId;
+            }
+        }
+        return result;
+    };
+
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
-                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                    return *rowVersion;
+                if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                    return augment(*rowVersion);
                 }
             }
         }
@@ -1498,8 +1541,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = MutableBackup->Epoch;
             if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                        return *rowVersion;
+                    if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(*rowVersion);
                     }
                 }
             }
@@ -1512,8 +1555,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = memTable->Epoch;
             if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                        return *rowVersion;
+                    if (auto rowVersion = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(*rowVersion);
                     }
                 }
             }
@@ -1533,8 +1576,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
                     if (res == EReady::Data && ready) {
                         Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
-                        if (auto rowVersion = it.SkipToCommitted(committed, observer)) {
-                            return *rowVersion;
+                        if (auto rowVersion = it.SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                            return augment(*rowVersion);
                         }
                     }
                     ready = ready && bool(res);
@@ -1543,7 +1586,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         }
     }
 
-    return ready ? EReady::Gone : EReady::Page;
+    return augment(ready ? EReady::Gone : EReady::Page);
 }
 
 void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegistry& reg) const

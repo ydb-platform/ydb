@@ -58,7 +58,6 @@ namespace NBoot {
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Y_ENSURE(msg.Cookie == 0);
                 Loader->Save(std::move(msg.Pages));
 
                 TryFinalize();

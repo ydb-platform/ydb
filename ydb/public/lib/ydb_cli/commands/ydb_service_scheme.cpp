@@ -9,6 +9,7 @@
 
 #include <google/protobuf/port_def.inc>
 
+#include <util/stream/format.h>
 #include <util/string/join.h>
 
 namespace NYdb {
@@ -121,6 +122,39 @@ namespace {
             Cout << "none" << Endl;
         }
     }
+
+    struct TPrettyDurationFormatParameters {
+        double EntitiesPerSecond;
+        TStringBuf EntityName;
+        TStringBuf ZeroString;
+        TStringBuf MaxString;
+        int MaxPrecision;
+    };
+
+    constexpr TPrettyDurationFormatParameters PRETTY_HOURS_DEFAULT{
+        .EntitiesPerSecond = 3600,
+        .EntityName = "hours",
+        .ZeroString = "0 hours",
+        .MaxString = "+infinity",
+        .MaxPrecision = 3,
+    };
+
+    constexpr TPrettyDurationFormatParameters PRETTY_HOURS_NON_ZERO{
+        .EntitiesPerSecond = 3600,
+        .EntityName = "hours",
+        .ZeroString = "",
+        .MaxString = "+infinity",
+        .MaxPrecision = 3,
+    };
+
+    TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatParameters& paramerters) {
+        if (duration == TDuration::Zero()) {
+            return ToString(paramerters.ZeroString);
+        } else if (duration == TDuration::Max()) {
+            return ToString(paramerters.MaxString);
+        }
+        return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
+    }
 }
 
 void PrintAllPermissions(
@@ -139,6 +173,9 @@ int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& 
     const NYdb::NTopic::TConsumer& consumer = description.GetConsumer();
     Cout << "Consumer " << consumer.GetConsumerName() << ": " << Endl;
     Cout << "Important: " << (consumer.GetImportant() ? "Yes" : "No") << Endl;
+    if (const auto availabilityPeriodStr = PrettyDurationString(consumer.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO)) {
+        Cout << "Availability period: " << availabilityPeriodStr << Endl;
+    }
     if (const TInstant& readFrom = consumer.GetReadFrom()) {
         Cout << "Read from: " << readFrom.ToRfc822StringLocal() << Endl;
     } else {
@@ -315,13 +352,14 @@ namespace {
         if (consumers.empty()) {
             return;
         }
-        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important" });
+        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important", "Availability period", });
         for (const auto& c: consumers) {
             table.AddRow()
                 .Column(0, c.GetConsumerName())
                 .Column(1, FormatCodecs(c.GetSupportedCodecs()))
                 .Column(2, c.GetReadFrom().ToRfc822StringLocal())
-                .Column(3, c.GetImportant() ? "Yes" : "No");
+                .Column(3, c.GetImportant() ? "Yes" : "No")
+                .Column(4, PrettyDurationString(c.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO));
 //                .Column(4, rule.ServiceType())
 //                .Column(5, rule.Version());
         }
@@ -345,7 +383,7 @@ namespace {
 
     void PrintMain(const NTopic::TTopicDescription& topicDescription) {
         Cout << Endl << "Main:";
-        Cout << Endl << "RetentionPeriod: " << topicDescription.GetRetentionPeriod().Hours() << " hours";
+        Cout << Endl << "RetentionPeriod: " << PrettyDurationString(topicDescription.GetRetentionPeriod(), PRETTY_HOURS_DEFAULT);
         if (topicDescription.GetRetentionStorageMb().has_value()) {
             Cout << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
         }
@@ -801,7 +839,8 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
+        const auto externalDataChannelsCount = settings.GetExternalDataChannelsCount();
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value() && !externalDataChannelsCount.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
@@ -817,6 +856,9 @@ namespace {
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
                 << (storeExternalBlobs.value() ? "true" : "false") << Endl;
+        }
+        if (externalDataChannelsCount) {
+            Cout << "External data channels: " << externalDataChannelsCount.value() << Endl;
         }
     }
 

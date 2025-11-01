@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -29,7 +29,8 @@ const std::string TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305
 namespace {
 
 std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {
-    std::vector<TExportItemProgress> result(proto.size());
+    std::vector<TExportItemProgress> result;
+    result.reserve(proto.size());
 
     for (const auto& protoItem : proto) {
         auto& item = result.emplace_back();

@@ -4,8 +4,7 @@
 
 namespace NYql {
 
-struct TPgState : public TThrRefBase
-{
+struct TPgState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TPgState>;
 
     TTypeAnnotationContext* Types = nullptr;

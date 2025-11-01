@@ -8,5 +8,5 @@ TComputationNodeFactory GetBuiltinFactory();
 
 TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

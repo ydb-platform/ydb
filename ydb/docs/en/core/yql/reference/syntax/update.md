@@ -1,5 +1,7 @@
 # UPDATE
 
+{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 Updates the data in the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %} After the `SET` keyword, enter the columns where you want to update values and the new values themselves. The list of rows is defined by the `WHERE` clause. If `WHERE` is omitted, the updates are applied to all the rows of the table.
 
 `UPDATE` can't change the value of the primary key columns.
@@ -28,6 +30,30 @@ $to_update = (
 
 UPDATE my_table ON
 SELECT * FROM $to_update;
+```
+
+## UPDATE ... RETURNING {update-returning}
+
+Updates rows and returns their new values in a single operation. It allows to retrieve information about the updated rows in one query, eliminating the need for an additional SELECT statement.
+
+### Examples
+
+* Return all values of modified rows
+
+```yql
+UPDATE orders
+SET status = 'shipped'
+WHERE order_date < '2023-01-01'
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+UPDATE products
+SET price = price * 0.9 
+WHERE category = 'Electronics'
+RETURNING product_id, name, price AS new_price;
 ```
 
 {% if feature_batch_operations %}

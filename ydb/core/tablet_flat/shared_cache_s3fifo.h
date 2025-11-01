@@ -1,7 +1,6 @@
 #pragma once
 #include "defs.h"
 #include "util_fmt_abort.h"
-#include <ydb/core/util/cache_cache_iface.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -59,13 +58,13 @@ public:
     }
 
 private:
-    // Note: only hashes are stored, all the collisions just ignored
+    // Note: only hashes are stored, all collisions are simply ignored
     THashSet<size_t> GhostsSet;
     TDeque<size_t> GhostsQueue;
 };
 
 template <typename TPage, typename TPageTraits>
-class TS3FIFOCache : public ICacheCache<TPage> {
+class TS3FIFOCache {
     using TPageKey = typename TPageTraits::TPageKey;
 
     static const ui32 MaxMainQueueReinserts = 20;
@@ -100,42 +99,37 @@ public:
         , MainQueue(ES3FIFOPageLocation::MainQueue)
     {}
 
-    TIntrusiveList<TPage> EvictNext() override {
+    // returns evicted element
+    TPage* EvictNext() Y_WARN_UNUSED_RESULT {
         if (SmallQueue.Queue.Empty() && MainQueue.Queue.Empty()) {
-            return {};
+            return nullptr;
         }
 
         // TODO: account passive pages inside the cache
         TLimit savedLimit = std::exchange(Limit, TLimit(SmallQueue.Size + MainQueue.Size - 1));
 
-        TIntrusiveList<TPage> evictedList;
-        if (TPage* evictedPage = EvictOneIfFull()) {
-            evictedList.PushBack(evictedPage);
-        } else {
-            Y_DEBUG_ABORT("Unexpected empty eviction");
-        }
+        TPage* evictedPage = EvictOneIfFull();
+        Y_ASSERT(evictedPage);
         
         Limit = savedLimit;
 
-        return evictedList;
+        return evictedPage;
     }
 
-    TIntrusiveList<TPage> Touch(TPage* page) override {
-        const ES3FIFOPageLocation location = TPageTraits::GetLocation(page);
-        switch (location) {
-            case ES3FIFOPageLocation::SmallQueue:
-            case ES3FIFOPageLocation::MainQueue: {
-                TouchFast(page);
-                return {};
-            }
-            case ES3FIFOPageLocation::None:
-                return Insert(page);
-            default:
-                Y_TABLET_ERROR("Unknown page location");
-        }
+    // returns evicted elements as list
+    TIntrusiveList<TPage> Insert(TPage* page) Y_WARN_UNUSED_RESULT {
+        auto& queue = IsGhost(page)
+            ? MainQueue 
+            : SmallQueue;
+
+        return Insert(queue, page);
     }
 
-    void Erase(TPage* page) override {
+    TIntrusiveList<TPage> InsertUntouched(TPage* page) Y_WARN_UNUSED_RESULT {
+        return Insert(SmallQueue, page);
+    }
+
+    void Erase(TPage* page) {
         const ES3FIFOPageLocation location = TPageTraits::GetLocation(page);
         switch (location) {
             case ES3FIFOPageLocation::None:
@@ -153,19 +147,29 @@ public:
         TPageTraits::SetFrequency(page, 0);
     }
 
-    void UpdateLimit(ui64 limit) override {
+    // WARN: does not evict items
+    void UpdateLimit(ui64 limit) {
         Limit = limit;
+    }
+
+    TIntrusiveList<TPage> EnsureLimits() Y_WARN_UNUSED_RESULT {
+        TIntrusiveList<TPage> evictedList;
+        while (TPage* evictedPage = EvictOneIfFull()) {
+            evictedList.PushBack(evictedPage);
+        }
+
+        return evictedList;
     }
 
     ui64 GetLimit() const {
         return Limit.TotalLimit;
     }
 
-    ui64 GetSize() const override {
+    ui64 GetSize() const {
         return SmallQueue.Size + MainQueue.Size;
     }
 
-    TString Dump() const override {
+    TString Dump() const {
         TStringBuilder result;
 
         auto dump = [&](const TQueue& queue) {
@@ -193,28 +197,32 @@ public:
     }
 
 private:
+    TIntrusiveList<TPage> Insert(TQueue& queue, TPage* page) Y_WARN_UNUSED_RESULT {
+        Push(queue, page);
+        TPageTraits::SetFrequency(page, 0);
+
+        return EnsureLimits();
+    }
+
     TPage* EvictOneIfFull() {
         ui32 mainQueueReinserts = 0;
 
         while (GetSize() > Limit.TotalLimit) {
             if (SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
-                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 1) { // load inserts, first read touches, second read touches
+                if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
                     TPageTraits::SetFrequency(page, 0);
                     Push(MainQueue, page);
-                } else {
-                    if (frequency) { // the page is used only once
-                        TPageTraits::SetFrequency(page, 0);
-                    }
+                } else { // frequency = 0
                     AddGhost(page);
                     return page;
                 }
             } else {
                 TPage* page = Pop(MainQueue);
                 if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0 && mainQueueReinserts < MaxMainQueueReinserts) {
-                    mainQueueReinserts++;
                     TPageTraits::SetFrequency(page, frequency - 1);
                     Push(MainQueue, page);
+                    mainQueueReinserts++;
                 } else {
                     if (frequency) { // reinserts limit exceeded
                         TPageTraits::SetFrequency(page, 0);
@@ -225,29 +233,6 @@ private:
         }
         
         return nullptr;
-    }
-
-    void TouchFast(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) != ES3FIFOPageLocation::None);
-
-        ui32 frequency = TPageTraits::GetFrequency(page);
-        if (frequency < 3) {
-            TPageTraits::SetFrequency(page, frequency + 1);
-        }
-    }
-
-    TIntrusiveList<TPage> Insert(TPage* page) {
-        Y_DEBUG_ABORT_UNLESS(TPageTraits::GetLocation(page) == ES3FIFOPageLocation::None);
-
-        Push(IsGhost(page) ? MainQueue : SmallQueue, page);
-        TPageTraits::SetFrequency(page, 0);
-
-        TIntrusiveList<TPage> evictedList;
-        while (TPage* evictedPage = EvictOneIfFull()) {
-            evictedList.PushBack(evictedPage);
-        }
-
-        return evictedList;
     }
 
     TPage* Pop(TQueue& queue) {

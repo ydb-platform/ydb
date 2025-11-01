@@ -41,11 +41,7 @@ namespace NKikimr {
         }
 
         ui32 partOffs = data.Offset;
-        if (data.Size == TDiskBlob::HeaderSize + blobSize) { // skip the header, if it is present
-            partOffs += TDiskBlob::HeaderSize;
-        } else {
-            Y_VERIFY_S(blobSize == data.Size, Ctx->VCtx->VDiskLogPrefix);
-        }
+        TDiskBlob::DeriveBlobHeaderMode(blobSize, data.Size, &partOffs);
 
         for (ui8 i : parts) {
             const TLogoBlobID partId(CurID, i + 1);

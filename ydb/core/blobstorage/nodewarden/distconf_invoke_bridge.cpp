@@ -61,6 +61,10 @@ namespace NKikimr::NStorage {
                         case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
                             throw TExError() << "Can't switch to NOT_SYNCHRONIZED_2 directly";
 
+                        case NKikimrBridge::TClusterState::SUSPENDED:
+                            // explicit SUSPENDED request is allowed
+                            break;
+
                         case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                         case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                             Y_ABORT();
@@ -89,17 +93,9 @@ namespace NKikimr::NStorage {
         if (changedPileIndex != Max<size_t>()) {
             auto *details = config.MutableClusterStateDetails();
 
-            for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
-                const auto& state = details->GetPileSyncState(i);
-                const auto bridgePileId = TBridgePileId::FromProto(&state, &std::decay_t<decltype(state)>::GetBridgePileId);
-                if (bridgePileId.GetPileIndex() == changedPileIndex) {
-                    details->MutablePileSyncState()->DeleteSubrange(i, 1);
-                    break;
-                }
-            }
-
             switch (clusterState->GetPerPileState(changedPileIndex)) {
                 case NKikimrBridge::TClusterState::DISCONNECTED:
+                case NKikimrBridge::TClusterState::SUSPENDED:
                     // this pile is not disconnected, there is no reason to synchronize it anymore
                     for (size_t i = 0; i < details->PileSyncStateSize(); ++i) {
                         const auto& item = details->GetPileSyncState(i);
@@ -109,6 +105,52 @@ namespace NKikimr::NStorage {
                         }
                         details->MutablePileSyncState()->DeleteSubrange(i, 1);
                         break;
+                    }
+                    {
+                        // mark pile unsynced
+                        auto *state = details->AddPileSyncState();
+                        TBridgePileId::FromPileIndex(changedPileIndex).CopyToProto(state,
+                            &std::decay_t<decltype(*state)>::SetBridgePileId);
+                        state->SetBecameUnsyncedGeneration(clusterState->GetGeneration());
+                        state->SetUnsyncedBSC(true);
+
+                        // spin generations for all static groups and update this pile's state to BLOCKS
+                        auto *ss = config.MutableBlobStorageConfig()->MutableServiceSet();
+                        THashMap<TGroupId, NKikimrBlobStorage::TGroupInfo*> groupMap;
+                        for (auto& group : *ss->MutableGroups()) {
+                            groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
+                        }
+                        THashSet<TGroupId> changedGroupIds;
+                        for (const auto& [groupId, group] : groupMap) {
+                            if (!group->HasBridgeGroupState()) {
+                                continue;
+                            }
+                            auto *state = group->MutableBridgeGroupState();
+                            Y_ABORT_UNLESS(changedPileIndex < state->PileSize());
+                            auto *pile = state->MutablePile(changedPileIndex);
+                            pile->ClearStage();
+                            pile->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
+                            group->SetGroupGeneration(group->GetGroupGeneration() + 1);
+                            for (auto& pile : *state->MutablePile()) {
+                                const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                                auto *refGroup = groupMap[refGroupId];
+                                Y_ABORT_UNLESS(refGroup);
+                                Y_ABORT_UNLESS(refGroup->GetGroupGeneration() == pile.GetGroupGeneration());
+                                refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
+                                pile.SetGroupGeneration(refGroup->GetGroupGeneration());
+                                changedGroupIds.insert(refGroupId);
+                            }
+                        }
+                        for (auto& vdisk : *ss->MutableVDisks()) {
+                            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+                            if (!changedGroupIds.contains(vdiskId.GroupID)) {
+                                continue;
+                            }
+                            auto *group = groupMap[vdiskId.GroupID];
+                            Y_ABORT_UNLESS(group);
+                            vdiskId.GroupGeneration = group->GetGroupGeneration();
+                            VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
+                        }
                     }
                     break;
 
@@ -227,6 +269,32 @@ namespace NKikimr::NStorage {
         }
 
         StartProposition(&config);
+    }
+
+    void TInvokeRequestHandlerActor::NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd) {
+        RunCommonChecks();
+
+        const auto pileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSuspended::GetPileId);
+
+        if (!Self->Cfg->BridgeConfig) {
+            throw TExError() << "Bridge mode is not enabled";
+        } else if (Self->Cfg->BridgeConfig->PilesSize() <= pileId.GetPileIndex()) {
+            throw TExError() << "BridgePileId out of bounds";
+        } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
+            throw TExError() << "Generation mismatch";
+        }
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        auto* clusterState = config.MutableClusterState();
+
+        const bool wasSuspended = clusterState->GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED;
+
+        if (!wasSuspended) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
+        clusterState->SetPerPileState(pileId.GetPileIndex(), NKikimrBridge::TClusterState::DISCONNECTED);
+        StartProposition(&config, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ false, /*mindPrev=*/ false);
     }
 
 } // NKikimr::NStorage

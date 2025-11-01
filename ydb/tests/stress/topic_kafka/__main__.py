@@ -2,7 +2,7 @@
 import argparse
 import logging
 import dataclasses
-from ydb.tests.stress.topic_kafka.workload.workload_topic import YdbTopicWorkload, WriteProfile, parse_write_profile
+from ydb.tests.stress.topic_kafka.workload import YdbTopicWorkload, WriteProfile, parse_write_profile
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

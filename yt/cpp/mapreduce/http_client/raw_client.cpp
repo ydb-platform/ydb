@@ -425,7 +425,7 @@ void THttpRawClient::UpdateOperationParameters(
     TMutationId mutationId;
     THttpHeader header("POST", "update_op_parameters");
     header.MergeParameters(NRawClient::SerializeParamsForUpdateOperationParameters(operationId, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 NYson::TYsonString THttpRawClient::GetJob(
@@ -541,25 +541,18 @@ TJobTraceEvent ParseJobTraceEvent(const TNode& node)
     return result;
 }
 
-std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
+IFileReaderPtr THttpRawClient::GetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
     TMutationId mutationId;
     THttpHeader header("GET", "get_job_trace");
-    header.MergeParameters(NRawClient::SerializeParamsForGetJobTrace(operationId, options));
-    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    auto resultNode = NodeFromYsonString(responseInfo->GetResponse());
-
-    const auto& traceEventNodesList = resultNode.AsList();
-
-    std::vector<TJobTraceEvent> result;
-    result.reserve(traceEventNodesList.size());
-    for (const auto& traceEventNode : traceEventNodesList) {
-        result.push_back(ParseJobTraceEvent(traceEventNode));
-    }
-
-    return result;
+    header.MergeParameters(NRawClient::SerializeParamsForGetJobTrace(operationId, jobId, options));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadFile(
@@ -748,6 +741,15 @@ TNode::TListType THttpRawClient::SelectRows(
     return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
 }
 
+std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options)
+{
+    return NRawClient::WriteTable(Context_, transactionId, path, format, options);
+}
+
 std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
@@ -767,46 +769,12 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
-struct THttpRequestStream
-    : public IOutputStream
-{
-public:
-    THttpRequestStream(NHttpClient::IHttpRequestPtr request)
-        : Request_(std::move(request))
-        , Underlying_(Request_->GetStream())
-    { }
-
-private:
-    void DoWrite(const void* buf, size_t len) override
-    {
-        Underlying_->Write(buf, len);
-    }
-
-    void DoFinish() override
-    {
-        Underlying_->Finish();
-        Request_->Finish()->GetResponse();
-    }
-
-private:
-    NHttpClient::IHttpRequestPtr Request_;
-    IOutputStream* Underlying_;
-};
-
 std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
     const TTransactionId& transactionId,
     const TRichYPath& path,
     const TFileWriterOptions& options)
 {
-    THttpHeader header("PUT", GetWriteFileCommand(Context_.Config->ApiVersion));
-    header.AddTransactionId(transactionId);
-    header.SetRequestCompression(ToString(Context_.Config->ContentEncoding));
-    header.MergeParameters(FormIORequestParameters(path, options));
-
-    TRequestConfig config;
-    config.IsHeavy = true;
-    auto request = StartRequestWithoutRetry(Context_, header, config);
-    return std::make_unique<THttpRequestStream>(std::move(request));
+    return NRawClient::WriteFile(Context_, transactionId, path, options);
 }
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(

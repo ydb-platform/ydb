@@ -68,6 +68,7 @@ namespace NKikimrConfig {
     class TDomainsConfig;
     class TBootstrap;
     class TAwsCompatibilityConfig;
+    class TAwsClientConfig;
     class TS3ProxyResolverConfig;
     class TBackgroundCleaningConfig;
     class TDataErasureConfig;
@@ -79,6 +80,8 @@ namespace NKikimrConfig {
     class TWorkloadManagerConfig;
     class TQueryServiceConfig;
     class TBridgeConfig;
+    class TStatisticsConfig;
+    class TSystemTabletBackupConfig;
 }
 
 namespace NKikimrReplication {
@@ -106,7 +109,9 @@ namespace NKikimr {
     struct TDomainsInfo;
     class TResourceProfiles;
     class TControlBoard;
+    class TDynamicControlBoard;
     class TFeatureFlags;
+    class TMetricsConfig;
 }
 
 namespace NKikimr {
@@ -221,6 +226,7 @@ struct TAppData {
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
+    TIntrusivePtr<NKikimr::TDynamicControlBoard> Dcb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
     TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 
@@ -249,6 +255,7 @@ struct TAppData {
     NKikimrConfig::TDomainsConfig& DomainsConfig;
     NKikimrConfig::TBootstrap& BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig& AwsCompatibilityConfig;
+    NKikimrConfig::TAwsClientConfig& AwsClientConfig;
     NKikimrConfig::TS3ProxyResolverConfig& S3ProxyResolverConfig;
     NKikimrConfig::TBackgroundCleaningConfig& BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig& GraphConfig;
@@ -262,6 +269,9 @@ struct TAppData {
     NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
     NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     NKikimrConfig::TBridgeConfig& BridgeConfig;
+    NKikimrConfig::TStatisticsConfig& StatisticsConfig;
+    TMetricsConfig& MetricsConfig;
+    NKikimrConfig::TSystemTabletBackupConfig& SystemTabletBackupConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request
@@ -271,12 +281,13 @@ struct TAppData {
     bool UsePartitionStatsCollectorForTests = false;
     bool DisableCdcAutoSwitchingToReadyStateForTests = false;
     bool BridgeModeEnabled = false;
+    bool SuppressBridgeModeBootstrapperLogic = false; // for tests
 
     TVector<TString> AdministrationAllowedSIDs; // use IsAdministrator method to check whether a user or a group is allowed to perform administrative tasks
     TVector<TString> RegisterDynamicNodeAllowedSIDs;
     TVector<TString> BootstrapAllowedSIDs;
     TVector<TString> DefaultUserSIDs;
-    TString AllAuthenticatedUsers = "all-users@well-known";
+    TString AllAuthenticatedUsers = "all-users@well-known"; // it's only here to avoid many unit-tests problems
 
     TString TenantName;
     TString NodeName;

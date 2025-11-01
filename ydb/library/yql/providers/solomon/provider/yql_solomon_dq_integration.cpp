@@ -23,6 +23,11 @@ using namespace NNodes;
 
 namespace {
 
+TString GetLastName(const TString& fullName) {
+    auto n = fullName.find_last_of('/');
+    return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
+}
+
 bool ExtractSettingValue(const TExprNode& value, TStringBuf settingName, TExprContext& ctx, TStringBuf& settingValue) {
     if (value.IsAtom()) {
         settingValue = value.Content();
@@ -104,15 +109,9 @@ public:
         return Nothing();
     }
 
-    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& wrSettings) override {
+    TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
         if (const auto& maybeSoReadObject = TMaybeNode<TSoReadObject>(read)) {
             const auto& soReadObject = maybeSoReadObject.Cast();
-
-            if (wrSettings.WatermarksMode.GetOrElse("") == "default") {
-                ctx.AddError(TIssue(ctx.GetPosition(soReadObject.Pos()), "Cannot use watermarks in Solomon"));
-                return {};
-            }
-
             YQL_ENSURE(soReadObject.Ref().GetTypeAnn(), "No type annotation for node " << soReadObject.Ref().Content());
 
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
@@ -122,7 +121,7 @@ public:
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
-            TInstant from = TInstant::Now() - TDuration::Hours(1);
+            TInstant from = TInstant::Zero();
             TInstant to = TInstant::Now();
             TString program;
             TString selectors;
@@ -137,10 +136,12 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TInstant::TryParseIso8601(value, from)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
+                    TInstant userFrom;
+                    if (!TInstant::TryParseIso8601(value, userFrom)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
+                    from = std::min(TInstant::Now(), userFrom);
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("to"sv)) {
@@ -148,10 +149,12 @@ public:
                     if (!ExtractSettingValue(settingsRef.Child(i)->Tail(), settingsRef.Child(i)->Head().Content(), ctx, value)) {
                         return {};
                     }
-                    if (!TInstant::TryParseIso8601(value, to)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
+                    TInstant userTo;
+                    if (!TInstant::TryParseIso8601(value, userTo)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
+                    to = std::min(TInstant::Now(), userTo);
                     continue;
                 }
                 if (settingsRef.Child(i)->Head().IsAtom("program"sv)) {
@@ -277,7 +280,26 @@ public:
     }
 
     TMaybe<bool> CanWrite(const TExprNode& write, TExprContext&) override {
-        return TSoWrite::Match(&write);
+        if (!State_->WriteThroughDqIntegration) {
+            return TSoWrite::Match(&write);
+        }
+
+        return TSoWriteToShard::Match(&write);
+    }
+
+    TExprNode::TPtr WrapWrite(const TExprNode::TPtr& writeNode, TExprContext& ctx) override {
+        if (!State_->WriteThroughDqIntegration) {
+            return writeNode;
+        }
+
+        const auto write = TMaybeNode<TSoWriteToShard>(writeNode).Cast();
+        return Build<TSoInsert>(ctx, write.Pos())
+            .World(write.World())
+            .DataSink(write.DataSink())
+            .Shard(write.Shard())
+            .Input(write.Input())
+            .Done()
+            .Ptr();
     }
 
     void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t maxTasksPerStage, TExprContext&) override {
@@ -299,11 +321,11 @@ public:
 
         auto selectors = settings.Selectors().StringValue();
         if (!selectors.empty()) {
-            std::map<TString, TString> selectorValues;
+            NSo::TSelectors selectorValues;
             if (auto error = NSo::BuildSelectorValues(source, selectors, selectorValues)) {
                 throw yexception() << *error;
             }
-            source.MutableSelectors()->insert(selectorValues.begin(), selectorValues.end());
+            NSo::SelectorsToProto(selectorValues, *source.MutableSelectors());
         }
 
         auto program = settings.Program().StringValue();
@@ -346,28 +368,23 @@ public:
             source.AddRequiredLabelNames(labelAsString);
         }
 
-        auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
-
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
 
-        auto metricsQueuePageSize = solomonConfig->MetricsQueuePageSize.Get().OrElse(2000);
-        sourceSettings.insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
-
-        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(4000);
-        sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
-
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(10);
+        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
-        auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
-        sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
+        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(false);
+        sourceSettings.insert({"enableSolomonClientPostApi", ToString(enableSolomonClientPostApi)});
 
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
         auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
         sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
+
+        auto maxListingPageSize = solomonConfig->_MaxListingPageSize.Get().OrElse(20000);
+        sourceSettings.insert({"maxListingPageSize", ToString(maxListingPageSize)});
 
         auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
         sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
@@ -441,6 +458,50 @@ public:
 
         protoSettings.PackFrom(shardDesc);
         sinkType = "SolomonSink";
+    }
+
+    bool FillSourcePlanProperties(const NNodes::TExprBase& node, TMap<TString, NJson::TJsonValue>& properties) override {
+        if (!node.Maybe<TDqSource>()) {
+            return false;
+        }
+
+        auto source = node.Cast<TDqSource>();
+        const auto maybeSettings = source.Settings().Maybe<TSoSourceSettings>();
+        if (!maybeSettings) {
+            return false;
+        }
+
+        const auto settings = maybeSettings.Cast();
+        const auto& cluster = source.DataSource().Cast<TSoDataSource>().Cluster().StringValue();
+        const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
+
+        properties["ExternalDataSource"] = GetLastName(cluster);
+        properties["ClusterType"] = clusterDesc->GetClusterType() == TSolomonClusterConfig::SCT_SOLOMON ? "solomon" : "monitoring";
+
+        properties["From"] = settings.From().StringValue();
+        properties["To"] = settings.To().StringValue();
+
+        auto selectors = settings.Selectors().StringValue();
+        if (!selectors.empty()) {
+            properties["Selectors"] = selectors;
+        }
+
+        auto program = settings.Program().StringValue();
+        if (!program.empty()) {
+            properties["Program"] = program;
+        }
+        
+        const bool isDisabled = FromString<bool>(settings.DownsamplingDisabled().Literal().Value());
+        if (!isDisabled) {
+            properties["DownsamplingDisabled"] = "false";
+            properties["DownsamplingAggregation"] = settings.DownsamplingAggregation().StringValue();
+            properties["DownsamplingFill"] = settings.DownsamplingFill().StringValue();
+            properties["DownsamplingGridInterval"] = settings.DownsamplingGridSec().Literal().Value();
+        } else {
+            properties["DownsamplingDisabled"] = "true";
+        }
+
+        return true;
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {

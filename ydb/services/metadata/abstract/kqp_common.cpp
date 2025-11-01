@@ -34,4 +34,12 @@ TString IClassBehaviour::GetInternalStorageHistoryTablePath() const {
     return GetInternalStorageTablePath() + "_history";
 }
 
+TString IClassBehaviour::FormPathToResourceTable(const TString& resourceDatabasePath) const {
+    return "/" + resourceDatabasePath + "/.metadata/" + GetInternalStorageTablePath();
+}
+
+std::shared_ptr<NModifications::IOptimizationManager> IClassBehaviour::ConstructOptimizationManager() const {
+    return nullptr;
+}
+
 }

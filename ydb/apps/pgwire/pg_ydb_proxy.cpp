@@ -5,7 +5,7 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 
 namespace NPGW {
 
@@ -72,7 +72,7 @@ public:
         NYdb::TDbDriverStatePtr driverState = Connections->GetDriverState(database, {}, {}, {}, {});
 
         NYdb::TRpcRequestSettings rpcSettings;
-        rpcSettings.ClientTimeout = TDuration::Seconds(60);
+        rpcSettings.Deadline = NYdb::TDeadline::AfterDuration(std::chrono::seconds(60));
 
         NYdb::TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
             driverState,

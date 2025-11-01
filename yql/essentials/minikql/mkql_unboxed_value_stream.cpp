@@ -7,7 +7,8 @@ namespace NMiniKQL {
 
 TUnboxedValueStream::TUnboxedValueStream()
     : Value_(NUdf::TUnboxedValuePod::Zero())
-{}
+{
+}
 
 NUdf::TUnboxedValuePod TUnboxedValueStream::Value() {
     return Value_.Release();
@@ -17,5 +18,5 @@ void TUnboxedValueStream::DoWrite(const void* buf, size_t len) {
     Value_ = AppendString(Value_.Release(), NUdf::TStringRef(static_cast<const char*>(buf), len));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

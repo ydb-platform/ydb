@@ -461,6 +461,20 @@ BELONGS ya.make
         include/boost/math/tools/detail/rational_horner2_19.hpp [2:4]
         include/boost/math/tools/detail/rational_horner2_20.hpp [2:4]
 
+KEEP     BSL-1.0              28783ce78aa7795268cb8a387bdcb460
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0.
+        // (See accompanying file LICENSE_1_0.txt or
+        //  copy at http ://www.boost.org/LICENSE_1_0.txt).
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/math/special_functions/lambert_w.hpp [5:7]
+
 KEEP     BSL-1.0              2c7a3fa82e66676005cd4ee2608fd7d2
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -569,20 +583,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/cstdfloat/cstdfloat_cmath.hpp [5:7]
         include/boost/math/cstdfloat/cstdfloat_complex_std.hpp [5:7]
-
-KEEP     BSL-1.0              74c3bede88a5f37b8b153f47f71ca744
-BELONGS ya.make
-    License text:
-        // Distributed under the Boost Software License, Version 1.0.
-        // (See accompanying file LICENSE_1_0.txt or
-        //  copy at http ://www.boost.org/LICENSE_1_0.txt).
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        include/boost/math/special_functions/lambert_w.hpp [5:7]
 
 KEEP     BSL-1.0              88b58de1d7149f0278b4887961d64fc8
 BELONGS ya.make

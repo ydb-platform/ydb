@@ -14,6 +14,8 @@ from clickhouse_connect.json_impl import any_to_json
 
 SHARED_DATA_TYPE: ClickHouseType
 STRING_DATA_TYPE: ClickHouseType
+_JSON_NULL = b'null'
+_JSON_NULL_STR = 'null'
 
 json_serialization_format = 0x1
 
@@ -129,13 +131,22 @@ def json_sample_size(_, sample: Collection) -> int:
 
 
 def write_json(ch_type: ClickHouseType, column: Sequence, dest: bytearray, ctx: InsertContext):
+    if ch_type.nullable:
+        dest += bytearray(1 if v is None else 0 for v in column)
+
     first = first_value(column, ch_type.nullable)
     write_col = column
     encoding = ctx.encoding or ch_type.encoding
     if not isinstance(first, str) and ch_type.write_format(ctx) != 'string':
         to_json = any_to_json
-        write_col = [to_json(v) for v in column]
+        if ch_type.nullable:
+            write_col = [_JSON_NULL if v is None else to_json(v) for v in column]
+        else:
+            write_col = [to_json(v) for v in column]
         encoding = None
+    else:
+        write_col = [_JSON_NULL_STR if v is None else v for v in column]
+
     handle_error(data_conv.write_str_col(write_col, ch_type.nullable, encoding, dest), ctx)
 
 

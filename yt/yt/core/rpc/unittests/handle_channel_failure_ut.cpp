@@ -20,6 +20,7 @@ public:
         return TImpl::CreateTestServerHost(
             std::move(port),
             std::move(services),
+            New<TServerConfig>(),
             std::move(memoryUsageTracker));
     }
 

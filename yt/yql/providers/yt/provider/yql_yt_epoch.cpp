@@ -44,17 +44,35 @@ public:
         }
 
         TNodeMap<THashSet<TString>> tableWritesBeforeCommit;
-        status = status.Combine(AssignWriteEpochs(output, output, ctx, commitEpochs, tableWritesBeforeCommit));
+        TNodeOnNodeOwnedMap worldMap;
+        status = status.Combine(AssignWriteEpochs(output, output, ctx, commitEpochs, tableWritesBeforeCommit, worldMap));
         if (status.Level == TStatus::Error) {
             return status;
         }
 
-        status = status.Combine(AssignUseEpochs(output, output, ctx, commitEpochs, tableWritesBeforeCommit));
+        status = status.Combine(AssignUseEpochs(output, output, ctx, commitEpochs, tableWritesBeforeCommit, worldMap));
         if (status.Level == TStatus::Error) {
             return status;
         }
 
-        return status.Combine(TYtDependencyUpdater().ReorderGraph(output, output, ctx));
+        if (State_->Types->EarlyExpandSeq) {
+            status = status.Combine(TYtDependencyUpdater().ReorderGraph(output, output, ctx));
+        } else {
+            TOptimizeExprSettings settings(nullptr);
+            settings.VisitChanges = true;
+
+            // Rename Configure! nodes
+            status = status.Combine(OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                // Don't use TCoConfigure().DataSource() - result provider uses DataSink here
+                if (TCoConfigure::Match(node.Get()) && node->Child(TCoConfigure::idx_DataSource)->Child(0)->Content() == YtProviderName) {
+                    return ctx.RenameNode(*node, TYtConfigure::CallableName());
+                }
+                return node;
+            }, ctx, settings));
+
+        }
+
+        return status;
     }
 
 private:
@@ -105,23 +123,20 @@ private:
                 auto settings = NCommon::ParseCommitSettings(commit, ctx);
                 if (settings.Epoch) {
                     commitEpochs[node.Get()] = FromString<ui32>(settings.Epoch.Cast().Value());
-                    return node;
+                } else {
+                    const ui32 commitEpoch = State_->NextEpochId++;
+                    settings.Epoch = Build<TCoAtom>(ctx, commit.Pos())
+                        .Value(ToString(commitEpoch))
+                        .Done();
+                    if (node->ChildrenSize() > TCoCommit::idx_Settings) {
+                        node->ChildRef(TCoCommit::idx_Settings) = settings.BuildNode(ctx).Ptr();
+                    } else {
+                        auto children = node->ChildrenList();
+                        children.push_back(settings.BuildNode(ctx).Ptr());
+                        node->ChangeChildrenInplace(std::move(children));
+                    }
+                    commitEpochs[node.Get()] = commitEpoch;
                 }
-
-                const ui32 commitEpoch = State_->NextEpochId++;
-                settings.Epoch = Build<TCoAtom>(ctx, commit.Pos())
-                    .Value(ToString(commitEpoch))
-                    .Done();
-
-                auto ret = Build<TCoCommit>(ctx, commit.Pos())
-                    .World(commit.World())
-                    .DataSink(commit.DataSink())
-                    .Settings(settings.BuildNode(ctx))
-                    .Done();
-
-                commitEpochs[ret.Raw()] = commitEpoch;
-
-                return ret.Ptr();
             }
             return node;
         }, ctx, settings);
@@ -133,7 +148,7 @@ private:
         return status;
     }
 
-    TVector<TYtWrite> FindWritesBeforeCommit(const TCoCommit& commit) const {
+    TVector<TYtWrite> FindWritesBeforeCommit(const TCoCommit& commit, TNodeOnNodeOwnedMap& worldMap) const {
         auto cluster = commit.DataSink().Cast<TYtDSink>().Cluster().Value();
 
         TVector<TYtWrite> writes;
@@ -150,13 +165,14 @@ private:
                 }
             }
             return true;
-        });
+        }, worldMap);
 
         return writes;
     }
 
     TStatus AssignWriteEpochs(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
-        const TNodeMap<ui32>& commitEpochs, TNodeMap<THashSet<TString>>& tableWritesBeforeCommit)
+        const TNodeMap<ui32>& commitEpochs, TNodeMap<THashSet<TString>>& tableWritesBeforeCommit,
+        TNodeOnNodeOwnedMap& worldMap)
     {
         if (commitEpochs.empty()) {
             return TStatus::Ok;
@@ -168,7 +184,7 @@ private:
                 commits.push_back(node);
             }
             return true;
-        });
+        }, worldMap);
 
         TNodeMap<ui32> writeCommitEpochs;
         // Find all writes before commits
@@ -178,7 +194,7 @@ private:
             YQL_ENSURE(it != commitEpochs.end());
             const ui32 commitEpoch = it->second;
 
-            TVector<TYtWrite> writes = FindWritesBeforeCommit(commit);
+            TVector<TYtWrite> writes = FindWritesBeforeCommit(commit, worldMap);
             THashMap<TString, TVector<TExprNode::TPtr>> writesByTable;
             THashSet<TString> tableNames;
             for (auto write: writes) {
@@ -234,7 +250,7 @@ private:
     }
 
     TVector<const TExprNode*> FindCommitsBeforeNode(const TExprNode& startNode, TStringBuf cluster,
-        const TNodeMap<THashSet<TString>>& tableWritesBeforeCommit)
+        const TNodeMap<THashSet<TString>>& tableWritesBeforeCommit, TNodeOnNodeOwnedMap& worldMap)
     {
         TVector<const TExprNode*> commits;
         VisitExprByFirst(startNode, [&](const TExprNode& node) {
@@ -244,12 +260,13 @@ private:
                 }
             }
             return true;
-        });
+        }, worldMap);
         return commits;
     }
 
     TStatus AssignUseEpochs(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
-        const TNodeMap<ui32>& commitEpochs, const TNodeMap<THashSet<TString>>& tableWritesBeforeCommit)
+        const TNodeMap<ui32>& commitEpochs, const TNodeMap<THashSet<TString>>& tableWritesBeforeCommit,
+        TNodeOnNodeOwnedMap& worldMap)
     {
         TNodeMap<TNodeMap<ui32>> ioEpochs;
         VisitExpr(input, [&](const TExprNode::TPtr& node) {
@@ -258,7 +275,7 @@ private:
                     return true;
                 }
                 auto clusterName = ds.Cast().Cluster().Value();
-                auto commitDeps = FindCommitsBeforeNode(*node, clusterName, tableWritesBeforeCommit);
+                auto commitDeps = FindCommitsBeforeNode(*node, clusterName, tableWritesBeforeCommit, worldMap);
                 if (commitDeps.empty()) {
                     return true;
                 }
@@ -305,7 +322,7 @@ private:
                     return true;
                 }
                 auto clusterName = ds.Cast().Cluster().Value();
-                auto commitDeps = FindCommitsBeforeNode(*node, clusterName, tableWritesBeforeCommit);
+                auto commitDeps = FindCommitsBeforeNode(*node, clusterName, tableWritesBeforeCommit, worldMap);
                 if (commitDeps.empty()) {
                     return true;
                 }
@@ -366,6 +383,13 @@ private:
             else if (auto maybeDrop = TMaybeNode<TYtDropTable>(node)) {
                 auto cluster = TString{maybeDrop.Cast().DataSink().Cluster().Value()};
                 auto table = maybeDrop.Cast().Table();
+                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
+                    State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
+                }
+            }
+            else if (auto maybeCreate = TMaybeNode<TYtCreateTable>(node)) {
+                auto cluster = TString{maybeCreate.Cast().DataSink().Cluster().Value()};
+                auto table = maybeCreate.Cast().Table();
                 if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
                     State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
                 }

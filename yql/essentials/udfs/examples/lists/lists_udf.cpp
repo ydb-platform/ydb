@@ -15,8 +15,7 @@ namespace {
 //////////////////////////////////////////////////////////////////////////////
 // TNumbersList
 //////////////////////////////////////////////////////////////////////////////
-class TNumbers: public TBoxedValue
-{
+class TNumbers: public TBoxedValue {
 public:
     static TStringRef Name() {
         static auto name = TStringRef::Of("Numbers");
@@ -25,9 +24,8 @@ public:
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         const auto appendPrepend = args[0].AsStringRef();
         const auto count = args[1].Get<ui32>();
         std::vector<TUnboxedValue> list(count);
@@ -36,8 +34,7 @@ private:
             for (auto it = list.begin(); list.end() != it; ++it) {
                 *it = TUnboxedValuePod(i++);
             }
-        }
-        else if (TStringRef::Of("Prepend") == appendPrepend) {
+        } else if (TStringRef::Of("Prepend") == appendPrepend) {
             for (auto it = list.rbegin(); list.rend() != it; ++it) {
                 *it = TUnboxedValuePod(i++);
             }
@@ -50,8 +47,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TExtend
 //////////////////////////////////////////////////////////////////////////////
-class TExtend: public TBoxedValue
-{
+class TExtend: public TBoxedValue {
 public:
     static TStringRef Name() {
         static auto name = TStringRef::Of("Extend");
@@ -60,9 +56,8 @@ public:
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         std::array<TUnboxedValue, 2U> list = {{TUnboxedValuePod(args[0]), TUnboxedValuePod(args[1])}};
         return valueBuilder->NewList(list.data(), list.size());
     }
@@ -71,14 +66,14 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TListsModule
 //////////////////////////////////////////////////////////////////////////////
-class TListsModule: public IUdfModule
-{
+class TListsModule: public IUdfModule {
 public:
     TStringRef Name() const {
         return TStringRef::Of("Lists");
     }
 
-    void CleanupOnTerminate() const final {}
+    void CleanupOnTerminate() const final {
+    }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TNumbers::Name());
@@ -86,12 +81,11 @@ public:
     }
 
     void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
         try {
             Y_UNUSED(userType);
             Y_UNUSED(typeConfig);
@@ -107,14 +101,16 @@ public:
                 if (!typesOnly) {
                     builder.Implementation(new TNumbers);
                 }
-            }
-            else if (TExtend::Name() == name) {
+            } else if (TExtend::Name() == name) {
                 // function signature:
                 //    List<ui32> Numbers(List<ui32>, List<ui32>)
                 // runConfig: void
                 auto listType = builder.List()->Item<ui32>().Build();
                 builder.Returns(listType)
-                        .Args()->Add(listType).Add(listType).Done();
+                    .Args()
+                    ->Add(listType)
+                    .Add(listType)
+                    .Done();
 
                 if (!typesOnly) {
                     builder.Implementation(new TExtend);

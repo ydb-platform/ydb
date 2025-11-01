@@ -182,6 +182,10 @@ bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambda
     return allowOlapApply;
 }
 
+bool CanBePushedAsBlockKernel(const TExprBase &node) {
+    return !node.Maybe<TCoSize>();
+}
+
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TPushdownOptions& options) {
     if (options.AllowOlapApply) {
         if (node.Maybe<TCoJust>() || node.Maybe<TCoCoalesce>()) {
@@ -210,6 +214,10 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     }
 
     if (const auto op = node.Maybe<TCoUnaryArithmetic>()) {
+        if (!options.AllowOlapApply && !CanBePushedAsBlockKernel(node)) {
+            return false;
+        }
+
         return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, options) &&
                IsGoodTypeForUnaryArithmeticPushdown(*op.Cast().Ref().GetTypeAnn(), options.AllowOlapApply);
     } else if (const auto op = node.Maybe<TCoBinaryArithmetic>()) {
@@ -305,6 +313,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     if (!IsGoodTypesForPushdownCompare(*compare.Left().Ref().GetTypeAnn(), *compare.Right().Ref().GetTypeAnn(), options)) {
         return false;
     }
+
 
     const auto leftList = GetComparisonNodes(compare.Left());
     const auto rightList = GetComparisonNodes(compare.Right());
@@ -458,7 +467,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
             CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, {true, options.PushdownSubstring});    
         }
         if (!predicateTree.CanBePushedApply) {
-            predicateTree.CanBePushedApply =  AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
+            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, lambdaArg, options.PushdownSubstring);
         }
     }
 }

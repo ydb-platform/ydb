@@ -22,6 +22,7 @@ using TFetchResultPtr = TIntrusivePtr<IFetchResult>;
 THttpURL ParseURL(const TStringBuf addr);
 IRetryPolicy<unsigned>::TPtr GetDefaultPolicy();
 ERetryErrorClass DefaultClassifyHttpCode(unsigned code);
+THttpURL AppendUrlPath(const THttpURL& url, const TString& part);
 TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders = {}, const TDuration& timeout = TDuration::Max(), size_t redirects = 10, const IRetryPolicy<unsigned>::TPtr& policy = nullptr);
 
-} // NYql
+} // namespace NYql

@@ -1,3 +1,3 @@
 # named\_value
 
-Библиотека предоставляет набор функций для удобной (но не самой эффективной) работы с `NTableClient::TUnversionedValue`.
+The library provides a set of functions for convenient (but not the most efficient) interaction with `NTableClient::TUnversionedValue`.

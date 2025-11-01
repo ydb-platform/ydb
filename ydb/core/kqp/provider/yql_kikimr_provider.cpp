@@ -2,7 +2,7 @@
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -86,6 +86,9 @@ struct TKikimrData {
         DataSinkNames.insert(TKiBackup::CallableName());
         DataSinkNames.insert(TKiBackupIncremental::CallableName());
         DataSinkNames.insert(TKiRestore::CallableName());
+        DataSinkNames.insert(TKiCreateSecret::CallableName());
+        DataSinkNames.insert(TKiAlterSecret::CallableName());
+        DataSinkNames.insert(TKiDropSecret::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -142,7 +145,10 @@ struct TKikimrData {
             TYdbOperation::DropBackupCollection |
             TYdbOperation::Backup |
             TYdbOperation::BackupIncremental |
-            TYdbOperation::Restore;
+            TYdbOperation::Restore |
+            TYdbOperation::CreateSecret |
+            TYdbOperation::AlterSecret |
+            TYdbOperation::DropSecret;
 
         SystemColumns = {
             {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
@@ -227,16 +233,13 @@ bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStrin
     auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
     if (mainTableImpl) {
         for (const auto& index: mainTableImpl->Metadata->Indexes) {
-            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                continue;
-            }
-            if (index.KeyColumns.size() > 1) {
-                // prefixed index update is not supported yet
-                return true;
-            }
-            auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NTableVectorKmeansTreeIndex::LevelTable;
-            if (path == levelTablePath) {
-                return true;
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                const auto levelTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::LevelTable;
+                const auto postingTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PostingTable;
+                const auto prefixTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable;
+                if (path == levelTablePath || path == postingTablePath || path == prefixTablePath) {
+                    return true;
+                }
             }
         }
     }
@@ -270,7 +273,7 @@ std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& tab
     auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
 
     if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
     }
     return std::nullopt;
 }
@@ -510,6 +513,14 @@ bool TKikimrKey::Extract(const TExprNode& key) {
     } else if (tagName == "databasePath") {
         KeyType = Type::Database;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "secret") {
+        KeyType = Type::Secret;
+        const TExprNode* nameNode = key.Child(0)->Child(1);
+        if (!nameNode->IsCallable("String")) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "Expected String as secret key."));
+            return false;
+        }
+        Target = nameNode->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
@@ -840,11 +851,12 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
             protoValue.set_uint64_value(FromString<ui64>(value));
             break;
         case EDataSlot::String:
-        case EDataSlot::DyNumber:
             protoValue.set_bytes_value(value.data(), value.size());
             break;
         case EDataSlot::Utf8:
         case EDataSlot::Json:
+        case EDataSlot::DyNumber:
+        case EDataSlot::JsonDocument:
             protoValue.set_text_value(ToString(value));
             break;
         case EDataSlot::Double:
@@ -927,39 +939,6 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
     TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
-
-Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance) {
-    if (distance == "cosine")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
-    else if (distance == "manhattan")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
-    else if (distance == "euclidean")
-        return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
-    else
-        YQL_ENSURE(false, "Wrong index setting distance: " << distance);
-};
-
-Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity) {
-    if (similarity == "cosine")
-        return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
-    else if (similarity == "inner_product")
-        return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
-    else
-        YQL_ENSURE(false, "Wrong index setting similarity: " << similarity);
-};
-
-Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType) {
-    if (vectorType == "float")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
-    else if (vectorType == "uint8")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
-    else if (vectorType == "int8")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
-    else if (vectorType == "bit")
-        return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
-    else
-        YQL_ENSURE(false, "Wrong index setting vector_type: " << vectorType);
-};
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;

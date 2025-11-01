@@ -819,22 +819,22 @@ namespace Aws
         {
             inline namespace string_view_literals
             {
-                inline basic_string_view<char> operator"" _sv(const char *s, size_t length) noexcept
+                inline basic_string_view<char> operator""_sv(const char *s, size_t length) noexcept
                 {
                     return basic_string_view<char>(s, length);
                 }
 
-                inline basic_string_view<wchar_t> operator"" _sv(const wchar_t *s, size_t length) noexcept
+                inline basic_string_view<wchar_t> operator""_sv(const wchar_t *s, size_t length) noexcept
                 {
                     return basic_string_view<wchar_t>(s, length);
                 }
 
-                inline basic_string_view<char16_t> operator"" _sv(const char16_t *s, size_t length) noexcept
+                inline basic_string_view<char16_t> operator""_sv(const char16_t *s, size_t length) noexcept
                 {
                     return basic_string_view<char16_t>(s, length);
                 }
 
-                inline basic_string_view<char32_t> operator"" _sv(const char32_t *s, size_t length) noexcept
+                inline basic_string_view<char32_t> operator""_sv(const char32_t *s, size_t length) noexcept
                 {
                     return basic_string_view<char32_t>(s, length);
                 }

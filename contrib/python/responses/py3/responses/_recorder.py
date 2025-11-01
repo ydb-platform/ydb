@@ -23,6 +23,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 import yaml
 
+from responses import _UNSET
 from responses import RequestsMock
 from responses import Response
 from responses import _real_send
@@ -153,6 +154,7 @@ class Recorder(RequestsMock):
             status=requests_response.status_code,
             body=requests_response.text,
             headers=headers_values,
+            content_type=requests_response.headers.get("Content-Type", _UNSET),
         )
         self._registry.add(responses_response)
         return requests_response

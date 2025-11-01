@@ -13,20 +13,6 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
-{
-    TVector<TExprBase> columns;
-    for (const auto& name : table.Metadata->KeyColumnNames) {
-        columns.emplace_back(Build<TCoAtom>(ctx, pos)
-            .Value(name)
-            .Done());
-    }
-
-    return Build<TCoAtomList>(ctx, pos)
-        .Add(columns)
-        .Done();
-}
-
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
         const TStringBuf mode, const bool isIndexImplTable, const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
@@ -250,9 +236,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto stage = dqUnion.Output().Stage();
-    auto program = stage.Program();
-    auto input = program.Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -369,7 +352,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
@@ -397,7 +379,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto input = dqUnion.Output().Stage().Program().Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -535,7 +516,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 ++order;
             }
 
-            if (input) {
+            if (input && !sinkEffect) {
                 inputArgs.push_back(inputArg);
                 inputs.push_back(input.Cast());
             }
@@ -544,20 +525,14 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
             TKqlExternalEffect externalEffect = maybeExt.Cast();
             TExprBase input = externalEffect.Input();
             auto maybeStage = input.Maybe<TDqStageBase>();
-            if (!maybeStage) {
-                return false;
-            }
+            YQL_ENSURE(maybeStage, "External effect should be a DQ stage");
             auto stage = maybeStage.Cast();
             const auto outputsList = stage.Outputs();
-            if (!outputsList) {
-                return false;
-            }
+            YQL_ENSURE(outputsList, "External effect DQ stage should have at least one output");
             TDqStageOutputsList outputs = outputsList.Cast();
             YQL_ENSURE(outputs.Size() == 1, "Multiple sinks are not supported yet");
             TDqOutputAnnotationBase output = outputs.Item(0);
-            if (!output.Maybe<TDqSink>()) {
-                return false;
-            }
+            YQL_ENSURE(TDqSink::Match(output.Raw()), "External effect DQ stage should have DQ sink as first output");
             newEffect = Build<TKqpSinkEffect>(ctx, effect.Pos())
                 .Stage(maybeStage.Cast().Ptr())
                 .SinkIndex().Build("0")

@@ -30,8 +30,8 @@ class Server(abc.ABC):
 
     @abc.abstractmethod
     def add_generic_rpc_handlers(
-            self,
-            generic_rpc_handlers: Sequence[grpc.GenericRpcHandler]) -> None:
+        self, generic_rpc_handlers: Sequence[grpc.GenericRpcHandler]
+    ) -> None:
         """Registers GenericRpcHandlers with this Server.
 
         This method is only safe to call before the server is started.
@@ -59,8 +59,9 @@ class Server(abc.ABC):
         """
 
     @abc.abstractmethod
-    def add_secure_port(self, address: str,
-                        server_credentials: grpc.ServerCredentials) -> int:
+    def add_secure_port(
+        self, address: str, server_credentials: grpc.ServerCredentials
+    ) -> int:
         """Opens a secure port for accepting RPCs.
 
         A port is a communication endpoint that used by networking protocols,
@@ -92,11 +93,12 @@ class Server(abc.ABC):
         This method immediately stops the server from servicing new RPCs in
         all cases.
 
-        If a grace period is specified, this method returns immediately and all
-        RPCs active at the end of the grace period are aborted. If a grace
-        period is not specified (by passing None for grace), all existing RPCs
-        are aborted immediately and this method blocks until the last RPC
-        handler terminates.
+        If a grace period is specified, this method waits until all active
+        RPCs are finished or until the grace period is reached. RPCs that haven't
+        been terminated within the grace period are aborted.
+        If a grace period is not specified (by passing None for grace), all
+        existing RPCs are aborted immediately and this method blocks until
+        the last RPC handler terminates.
 
         This method is idempotent and may be called at any time. Passing a
         smaller grace value in a subsequent call will have the effect of
@@ -110,8 +112,9 @@ class Server(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def wait_for_termination(self,
-                                   timeout: Optional[float] = None) -> bool:
+    async def wait_for_termination(
+        self, timeout: Optional[float] = None
+    ) -> bool:
         """Continues current coroutine once the server stops.
 
         This is an EXPERIMENTAL API.
@@ -162,8 +165,9 @@ class ServicerContext(Generic[RequestType, ResponseType], abc.ABC):
         """
 
     @abc.abstractmethod
-    async def send_initial_metadata(self,
-                                    initial_metadata: MetadataType) -> None:
+    async def send_initial_metadata(
+        self, initial_metadata: MetadataType
+    ) -> None:
         """Sends the initial metadata value to the client.
 
         This method need not be called by implementations if they have no
@@ -177,8 +181,9 @@ class ServicerContext(Generic[RequestType, ResponseType], abc.ABC):
     async def abort(
         self,
         code: grpc.StatusCode,
-        details: str = '',
-        trailing_metadata: MetadataType = tuple()) -> NoReturn:
+        details: str = "",
+        trailing_metadata: MetadataType = tuple(),
+    ) -> NoReturn:
         """Raises an exception to terminate the RPC with a non-OK status.
 
         The code and details passed as arguments will supercede any existing

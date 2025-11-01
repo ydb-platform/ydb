@@ -148,4 +148,4 @@ TEST(IAsyncZeroCopyInputStreamTest, NoStackOverflow)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT:::NConcurrency
+} // namespace NYT::NConcurrency

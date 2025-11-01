@@ -9,6 +9,7 @@
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
+#include "tx__set_down.cpp"
 
 namespace NKikimr {
 namespace NHive {
@@ -1697,6 +1698,12 @@ public:
                                    </div>
                                </div>
                                <div class='row'>
+                                 <div class='col-md-12'>
+                                   <input id='reassign_async' type='checkbox' name='Async'>
+                                   <label for='reassign_async'>Async</label>
+                                 </div>
+                               </div>
+                               <div class='row'>
                                    <div class='col-md-12'>
                                        <hr>
                                    </div>
@@ -1936,8 +1943,9 @@ function continueReassign() {
         $.ajax({
             url: 'app?TabletID=' + hiveId
                 + '&page=ReassignTablet&tablet=' + tablet.tabletId
-                + '&channels=' + tablet.channels
-                + '&wait=1',
+                + '&channel=' + tablet.channels
+                + '&wait=1'
+                + '&async=' + ($('#reassign_async')[0].checked ? '1' : '0'),
             success: function() {
 
             },
@@ -2585,29 +2593,20 @@ public:
     }
 };
 
-class TTxMonEvent_SetDown : public TTransactionBase<THive>, public TLoggedMonTransaction {
+class TTxMonEvent_SetDown : public TTxSetDown, public TLoggedMonTransaction {
 public:
-    const TActorId Source;
-    const TNodeId NodeId;
-    const bool Down;
     TString Response;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
-        : TBase(hive)
+        : TTxSetDown(nodeId, down, hive, source)
         , TLoggedMonTransaction(ev, hive)
-        , Source(source)
-        , NodeId(nodeId)
-        , Down(down)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_SET_DOWN; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        TNodeInfo* node = Self->FindNode(NodeId);
-        if (node != nullptr) {
-            node->SetDown(Down);
-            db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(Down, false);
+        if (SetDown(db)) {
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;
@@ -2936,6 +2935,7 @@ public:
     int TabletPercent = 100;
     TString Error;
     bool Wait = true;
+    bool Async = false;
 
     TTxMonEvent_ReassignTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -2950,6 +2950,7 @@ public:
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));
         TabletPercent = std::min(std::abs(TabletPercent), 100);
         Wait = FromStringWithDefault(Event->Cgi().Get("wait"), Wait);
+        Async = FromStringWithDefault(Event->Cgi().Get("async"), Async);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REASSIGN_TABLET; }
@@ -2962,6 +2963,9 @@ public:
                         TabletChannels.begin(),
                         TabletChannels.end(),
                         channel.Channel) != TabletChannels.end()) {
+                if (tablet->ChannelProfileNewGroup.test(channel.Channel)) {
+                    return TInstant::Max();
+                }
                 const auto* latest = channel.LatestEntry();
                 if (latest != nullptr && latest->Timestamp > max) {
                     max = latest->Timestamp;
@@ -2974,6 +2978,10 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (!ForcedGroupIds.empty() && ForcedGroupIds.size() != TabletChannels.size()) {
             Error = "forcedGroup size should be equal to channel size";
+            return true;
+        }
+        if (!ForcedGroupIds.empty() && Async) {
+            Error = "cannot provide force groups in async mode";
             return true;
         }
         TVector<TLeaderTabletInfo*> tablets;
@@ -3036,7 +3044,7 @@ public:
             if (Wait) {
                 tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
             }
-            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
+            operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds, Async));
         }
         if (Wait) {
             waitActor->TabletsTotal = operations.size();
@@ -3123,6 +3131,7 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         if (Self->AreWeRootHive()) {
             Error = "Cannot migrate to root hive";
+            return true;
         }
         TActorId waitActorId;
         TInitMigrationWaitActor* waitActor = nullptr;
@@ -3131,8 +3140,21 @@ public:
             waitActorId = ctx.RegisterWithSameMailbox(waitActor);
             Self->SubActors.emplace_back(waitActor);
         }
-        // TODO: pass arguments as post data json
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
+        auto ev = std::make_unique<TEvHive::TEvInitMigration>();
+        if (Event->ExtendedQuery && Event->ExtendedQuery->HasPostContent()) {
+            NJson::TJsonValue params;
+            if (!NJson::ReadJsonTree(Event->ExtendedQuery->GetPostContent(), &params)) {
+                Error = "Invalid json in body";
+                return true;
+            }
+            try {
+                NProtobufJson::Json2Proto(params, ev->Record);
+            } catch (yexception e) {
+                Error = "Bad request";
+                return true;
+            }
+        }
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, ev.release()));
         return true;
     }
 

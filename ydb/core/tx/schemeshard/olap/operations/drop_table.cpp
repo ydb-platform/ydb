@@ -283,7 +283,7 @@ private:
             }
         }
 
-        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
+        context.SS->PersistColumnTableRemove(db, txState->TargetPathId, context.Ctx);
 
         if (isStandalone) {
             for (auto& shard : txState->Shards) {

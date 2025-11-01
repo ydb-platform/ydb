@@ -7,11 +7,11 @@
 #include <util/generic/yexception.h>
 #include <util/string/join.h>
 
-#include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -584,7 +584,7 @@ void TControlPlaneStorageBase::FillDescribeQueryResult(
 
     // decompress plan
     if (internal.plan_compressed().data()) { // todo: remove this if after migration
-        TCompressor compressor(internal.plan_compressed().method());
+        NKikimr::NKqp::TCompressor compressor(internal.plan_compressed().method());
         result.mutable_query()->mutable_plan()->set_json(compressor.Decompress(internal.plan_compressed().data()));
         if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
             if (result.query().plan().json().size() > 1000) {
@@ -604,7 +604,7 @@ void TControlPlaneStorageBase::FillDescribeQueryResult(
     } else {
         // decompress AST
         if (internal.ast_compressed().data()) { // todo: remove this if after migration
-            TCompressor compressor(internal.ast_compressed().method());
+            NKikimr::NKqp::TCompressor compressor(internal.ast_compressed().method());
             result.mutable_query()->mutable_ast()->set_data(compressor.Decompress(internal.ast_compressed().data()));
         }
         if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
@@ -783,7 +783,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
     success.Apply([=](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
+            LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, future.GetValue());
         });
 }
 

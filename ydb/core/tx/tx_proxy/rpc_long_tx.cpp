@@ -1,6 +1,7 @@
 #include "global.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -14,6 +15,25 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 namespace NKikimr {
+
+namespace {
+
+ui64 GetMemoryInFlightLimit() {
+    static std::atomic_uint64_t DEFAULT_MEMORY_IN_FLIGHT_LIMIT{0};
+
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit()) {
+        return AppDataVerified().ColumnShardConfig.GetProxyMemoryInFlightLimit();
+    }
+
+    if (DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load() == 0) {
+        uint64_t oldValue = 0;
+        const uint64_t newValue = NKqp::TStagePredictor::GetUsableThreads() * 10_MB;
+        DEFAULT_MEMORY_IN_FLIGHT_LIMIT.compare_exchange_strong(oldValue, newValue);
+    }
+    return DEFAULT_MEMORY_IN_FLIGHT_LIMIT.load();
+}
+
+}
 
 namespace NTxProxy {
 using namespace NActors;
@@ -70,12 +90,12 @@ protected:
         AFL_VERIFY(!InFlightSize);
         InFlightSize = accessor->GetSize();
         const i64 sizeInFlight = MemoryInFlight.Add(InFlightSize);
-        if (TLimits::MemoryInFlightWriting < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
+        if (GetMemoryInFlightLimit() < (ui64)sizeInFlight && sizeInFlight != InFlightSize) {
             return ReplyError(Ydb::StatusIds::OVERLOADED, "a lot of memory in flight");
         }
         if (NCSIndex::TServiceOperator::IsEnabled()) {
             TBase::Send(
-                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), Path,
+                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), DatabaseName, Path,
                                                                        std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
         } else {
             IndexReady = true;

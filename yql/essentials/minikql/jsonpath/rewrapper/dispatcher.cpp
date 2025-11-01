@@ -32,7 +32,7 @@ void AddLibrary(ui32 id, TCompiler compiler, TDeserializer deserializer) {
     GetModules()->at(id - 1) = TLib{id, compiler, deserializer};
 }
 
-}
+} // namespace NRegistrator
 
 namespace NDispatcher {
 
@@ -60,7 +60,7 @@ IRePtr Deserialize(const TStringBuf& serializedRegex) {
         proto.SetHyperscan(str);
     }
 
-    ui64 id = (ui64)proto.GetDataCase();;
+    ui64 id = (ui64)proto.GetDataCase();
     ThrowOnOutOfRange(id);
     return NRegistrator::GetModules()->at(id - 1).Deserializer(proto);
 }
@@ -70,6 +70,6 @@ IRePtr Compile(const TStringBuf& regex, unsigned int flags, ui32 id) {
     return NRegistrator::GetModules()->at(id - 1).Compiler(regex, flags);
 }
 
-}
+} // namespace NDispatcher
 
-}
+} // namespace NReWrapper

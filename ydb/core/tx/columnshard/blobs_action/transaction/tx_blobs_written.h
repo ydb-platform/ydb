@@ -84,7 +84,7 @@ private:
 
 public:
     TTxBlobsWritingFailed(TColumnShard* self, TInsertedPortions&& pack)
-        : TBase(self)
+        : TBase(self, "blobs_writing_failed")
         , Pack(std::move(pack)) {
     }
 

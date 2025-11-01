@@ -1,6 +1,6 @@
 #include "mkql_chopper.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
 
@@ -13,17 +13,18 @@ namespace {
 
 using namespace std::placeholders;
 
-class TWideChopperWrapper : public TStatefulWideFlowCodegeneratorNode<TWideChopperWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideChopperWrapper>;
+class TWideChopperWrapper: public TStatefulWideFlowCodegeneratorNode<TWideChopperWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideChopperWrapper>;
+
 public:
-    enum class EState : ui64 {
+    enum class EState: ui64 {
         Work,
         Chop,
         Next,
         Skip
     };
 
-    TWideChopperWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,  TComputationExternalNodePtrVector&& itemArgs, TComputationNodePtrVector&& keys, TComputationExternalNodePtrVector&& keyArgs, IComputationNode* chop, IComputationWideFlowProxyNode* input, IComputationWideFlowNode* output)
+    TWideChopperWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& itemArgs, TComputationNodePtrVector&& keys, TComputationExternalNodePtrVector&& keyArgs, IComputationNode* chop, IComputationWideFlowProxyNode* input, IComputationWideFlowNode* output)
         : TBaseComputation(mutables, flow, EValueRepresentation::Any)
         , Flow(flow)
         , ItemArgs(std::move(itemArgs))
@@ -40,31 +41,39 @@ public:
         Input->SetFetcher(std::bind(&TWideChopperWrapper::DoCalculateInput, this, std::bind(&TWideChopperWrapper::RefState, this, _1), _1, _2));
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         if (state.IsInvalid()) {
-            for (auto i = 0U; i < ItemArgs.size(); ++i)
+            for (auto i = 0U; i < ItemArgs.size(); ++i) {
                 fields[i] = &ItemArgs[i]->RefValue(ctx);
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+            }
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
+            }
 
-            for (ui32 i = 0U; i < Keys.size(); ++i)
-                if (KeyArgs[i]->GetDependencesCount() > 0U)
+            for (ui32 i = 0U; i < Keys.size(); ++i) {
+                if (KeyArgs[i]->GetDependencesCount() > 0U) {
                     KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
+                }
+            }
             state = NUdf::TUnboxedValuePod(ui64(EState::Next));
         } else if (EState::Skip == EState(state.Get<ui64>())) {
             do {
-                for (auto i = 0U; i < ItemArgs.size(); ++i)
+                for (auto i = 0U; i < ItemArgs.size(); ++i) {
                     fields[i] = &ItemArgs[i]->RefValue(ctx);
-                if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+                }
+                if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
                     return result;
+                }
 
             } while (!Chop->GetValue(ctx).Get<bool>());
 
-            for (ui32 i = 0U; i < Keys.size(); ++i)
-                if (KeyArgs[i]->GetDependencesCount() > 0U)
+            for (ui32 i = 0U; i < Keys.size(); ++i) {
+                if (KeyArgs[i]->GetDependencesCount() > 0U) {
                     KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
+                }
+            }
             state = NUdf::TUnboxedValuePod(ui64(EState::Next));
         }
 
@@ -75,8 +84,9 @@ public:
                     case EState::Work:
                     case EState::Next:
                         do {
-                            for (auto i = 0U; i < ItemArgs.size(); ++i)
+                            for (auto i = 0U; i < ItemArgs.size(); ++i) {
                                 fields[i] = &ItemArgs[i]->RefValue(ctx);
+                            }
                             switch (const auto next = Flow->FetchValues(ctx, fields)) {
                                 case EFetchResult::Yield:
                                     state = NUdf::TUnboxedValuePod(ui64(EState::Skip));
@@ -87,38 +97,48 @@ public:
                             }
                         } while (!Chop->GetValue(ctx).Get<bool>());
                     case EState::Chop:
-                        for (ui32 i = 0U; i < Keys.size(); ++i)
-                            if (KeyArgs[i]->GetDependencesCount() > 0U)
+                        for (ui32 i = 0U; i < Keys.size(); ++i) {
+                            if (KeyArgs[i]->GetDependencesCount() > 0U) {
                                 KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
+                            }
+                        }
                         state = NUdf::TUnboxedValuePod(ui64(EState::Next));
                     default:
                         continue;
                 }
-            } else
+            } else {
                 return result;
+            }
         }
     }
+
 private:
-    EFetchResult DoCalculateInput(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculateInput(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (EState::Next == EState(state.Get<ui64>())) {
             state = NUdf::TUnboxedValuePod(ui64(EState::Work));
-            for (auto i = 0U; i < ItemArgs.size(); ++i)
-                if (const auto out = output[i])
+            for (auto i = 0U; i < ItemArgs.size(); ++i) {
+                if (const auto out = output[i]) {
                     *out = ItemArgs[i]->GetValue(ctx);
+                }
+            }
             return EFetchResult::One;
         }
 
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-        for (auto i = 0U; i < ItemArgs.size(); ++i)
+        for (auto i = 0U; i < ItemArgs.size(); ++i) {
             fields[i] = &ItemArgs[i]->RefValue(ctx);
+        }
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
+        }
 
-        for (auto i = 0U; i < ItemArgs.size(); ++i)
-            if (const auto out = output[i])
+        for (auto i = 0U; i < ItemArgs.size(); ++i) {
+            if (const auto out = output[i]) {
                 *out = *fields[i];
+            }
+        }
 
         if (Chop->GetValue(ctx).Get<bool>()) {
             state = NUdf::TUnboxedValuePod(ui64(EState::Chop));
@@ -185,10 +205,11 @@ private:
         ICodegeneratorInlineWideNode::TGettersList getters;
         getters.reserve(ItemArgs.size());
         std::transform(ItemArgs.cbegin(), ItemArgs.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
-            return [node](const TCodegenContext& ctx, BasicBlock*& block){ return GetNodeValue(node, ctx, block); };
+            return [node](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
         });
         return {result, std::move(getters)};
     }
+
 public:
     TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         EnsureDynamicCast<IWideFlowProxyCodegeneratorNode*>(Input)->SetGenerator(std::bind(&TWideChopperWrapper::DoGenGetValuesInput, this, _1, _2));
@@ -208,7 +229,6 @@ public:
         const auto enter = SwitchInst::Create(first, loop, 2U, block);
         enter->addCase(GetInvalid(context), init);
         enter->addCase(GetConstant(ui64(EState::Skip), context), pass);
-
 
         {
             const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -319,16 +339,16 @@ private:
         }
     }
 
-    IComputationWideFlowNode *const Flow;
+    IComputationWideFlowNode* const Flow;
 
     const TComputationExternalNodePtrVector ItemArgs;
     const TComputationNodePtrVector Keys;
     const TComputationExternalNodePtrVector KeyArgs;
 
-    IComputationNode *const Chop;
+    IComputationNode* const Chop;
 
-    IComputationWideFlowProxyNode *const Input;
-    IComputationWideFlowNode *const Output;
+    IComputationWideFlowProxyNode* const Input;
+    IComputationWideFlowNode* const Output;
 
     const TPasstroughtMap ItemsOnKeys, KeysOnItems;
 
@@ -337,7 +357,7 @@ private:
     const ui32 WideFieldsIndex;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 4U, "Expected at least four args.");
@@ -350,7 +370,7 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     TComputationNodePtrVector keys;
     keys.reserve(keysSize);
     auto index = width;
-    std::generate_n(std::back_inserter(keys), keysSize, [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(keys), keysSize, [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
     index += keysSize;
 
@@ -361,11 +381,11 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     TComputationExternalNodePtrVector itemArgs, keyArgs;
     itemArgs.reserve(width);
     index = 0U;
-    std::generate_n(std::back_inserter(itemArgs), width, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(itemArgs), width, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     index += keysSize;
     keyArgs.reserve(keysSize);
-    std::generate_n(std::back_inserter(keyArgs), keysSize, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(keyArgs), keysSize, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         return new TWideChopperWrapper(ctx.Mutables, wide, std::move(itemArgs), std::move(keys), std::move(keyArgs), switchResult,
@@ -376,5 +396,5 @@ IComputationNode* WrapWideChopper(TCallable& callable, const TComputationNodeFac
     THROW yexception() << "Expected wide flow.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

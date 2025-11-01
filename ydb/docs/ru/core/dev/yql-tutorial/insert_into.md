@@ -1,5 +1,7 @@
 # Вставка данных с помощью INSERT
 
+{% include [column-and-row-tables-in-read-only-tx](../../yql/reference/_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 Добавьте данные в таблицу с помощью конструкции [INSERT INTO](../../yql/reference/syntax/insert_into.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}

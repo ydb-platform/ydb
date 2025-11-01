@@ -129,7 +129,7 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
         if (it == Accessors.end()) {
             result.AddScalar(GetConstantScalarVerified(i));
         } else {
-            result.AddArray(it->second.GetData());
+            result.AddArray(it->second.GetData(), i);
         }
     }
     result.StartRead(concatenate);

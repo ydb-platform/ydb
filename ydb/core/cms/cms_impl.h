@@ -23,6 +23,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/queue.h>
 #include <util/generic/stack.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 
 namespace NKikimr::NCms {
 
@@ -222,6 +223,17 @@ private:
         }
     }
 
+    #define HFuncChecked(TEvType, HandleFunc) \
+        case TEvType::EventType: { \
+            typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+            if (State->Config.Enable) { \
+                HandleFunc(*x, this->ActorContext()); \
+            } else { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
+            } \
+            break; \
+        } Y_SEMICOLON_GUARD
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
@@ -233,9 +245,9 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
-            HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
-            HFunc(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvNotification, CheckAndEnqueueRequest);
@@ -264,6 +276,7 @@ private:
             FFunc(TEvCms::EvGetClusterInfoRequest, EnqueueRequest);
             HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
+            HFunc(NKikimr::TEvNodeWardenStorageConfig, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
@@ -435,6 +448,7 @@ private:
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
+    void Handle(NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
 

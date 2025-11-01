@@ -1,6 +1,12 @@
 #include "future.h"
 #include "invoker_util.h"
 
+#ifdef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
+#include <yt/yt/core/misc/backtrace.h>
+
+#include <library/cpp/yt/backtrace/backtrace.h>
+#endif
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -251,7 +257,17 @@ void TFutureState<void>::OnLastPromiseRefLost()
     }
 
     // Slow path: notify the subscribers in a dedicated thread.
-    GetFinalizerInvoker()->Invoke(BIND_NO_PROPAGATE([this, error = std::move(cancelationError)] {
+    GetFinalizerInvoker()->Invoke(BIND_NO_PROPAGATE([
+#ifdef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
+        backtrace = NYT::CaptureBacktrace(),
+#endif
+        this,
+        error = std::move(cancelationError)
+    ] () mutable {
+#ifdef YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE
+        // NB: Backtrace symbolization can take a quite and thus is being offloaded to Finalizer thread.
+        error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
+#endif
         // Set the promise if the value is still missing.
         TrySetError(std::move(error));
         // Kill the fake weak reference.
@@ -260,6 +276,20 @@ void TFutureState<void>::OnLastPromiseRefLost()
 }
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::atomic<bool> ContextSwitchInFutureHandlerForbidden;
+
+void ForbidContextSwitchInFutureHandler()
+{
+    ContextSwitchInFutureHandlerForbidden.store(true, std::memory_order::release);
+}
+
+bool IsContextSwitchInFutureHandlerForbidden()
+{
+    return ContextSwitchInFutureHandlerForbidden.load(std::memory_order::acquire);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/partition.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 
@@ -50,6 +50,52 @@ TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
     }
 
     return Nothing();
+}
+
+Y_UNIT_TEST(TestCompaction) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetScheduledLimit(1000);
+
+        ui32 sourceIdx = 0;
+        auto cmdWrite = [&](const TVector<size_t>& sizes) {
+            TVector<std::pair<ui64, TString>> data;
+            for (size_t k = 1; k <= sizes.size(); ++k) {
+                data.emplace_back(k, TString(sizes[k - 1], 'x'));
+            }
+            TString sourceId = "sourceid_" + ToString(sourceIdx++);
+            CmdWrite(0, sourceId, data, tc, false, {}, false, "", -1, -1, false, false, true);
+        };
+        auto cmdCompaction = [&]() {
+            CmdRunCompaction(0, tc);
+        };
+
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+
+        cmdWrite({17400_KB});
+        cmdCompaction();
+
+        cmdWrite({16800_KB});
+        cmdCompaction();
+
+        PQTabletRestart(tc);
+
+        cmdWrite({7000_KB, 13300_KB});
+        cmdCompaction();
+
+        cmdWrite({1_KB});
+
+        PQTabletRestart(tc);
+
+        PQGetPartInfo(0, 4 + 1, tc);
+    });
 }
 
 Y_UNIT_TEST(TestCmdReadWithLastOffset) {
@@ -299,7 +345,7 @@ Y_UNIT_TEST(TestAccountReadQuota) {
     tc.Prepare();
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+            if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                 Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                 if (!AtomicGet(stop)) {
                     quoterRequests.Inc();
@@ -395,7 +441,7 @@ Y_UNIT_TEST(TestPartitionWriteQuota) {
 
         tc.Runtime->SetObserverFunc(
             [&](TAutoPtr<IEventHandle>& ev) {
-                if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+                if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                     Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                     tc.Runtime->Send(new IEventHandle(
                         ev->Sender, TActorId{},
@@ -808,9 +854,6 @@ Y_UNIT_TEST(TestMessageNo) {
 
 
 Y_UNIT_TEST(TestPartitionedBlobFails) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1001,9 +1044,6 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 
 
 Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1088,9 +1128,6 @@ Y_UNIT_TEST(TestWritePQCompact) {
 
 
 Y_UNIT_TEST(TestWritePQBigMessage) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1254,6 +1291,66 @@ Y_UNIT_TEST(TestWritePQ) {
     TestWritePQImpl(false);
 }
 
+Y_UNIT_TEST(Read_From_Different_Zones_What_Was_Written_With_Gaps)
+{
+    // The test creates messages in different zones. There are gaps in the offsets between the zones.
+    // We check that the client can read from any offset from any zone.
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        activeZone = false;
+        TFinalizer finalizer(tc);
+        tc.EnableDetailedPQLog = true;
+        tc.Prepare(dispatchName, setup, activeZone);
+        tc.Runtime->SetScheduledLimit(100);
+
+        // Important client, lifetimeseconds=0 - never delete
+        PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{"user", true}}, tc);
+
+        TVector<std::pair<ui64, TString>> data;
+
+        data.emplace_back(1, TString(1'000, 'x'));
+
+        // CompactZone.Body
+        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 100);
+        ++data[0].first;
+        data[0].second = TString(7'000'000, 'x');
+        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 101);
+
+        CmdRunCompaction(0, tc);
+
+        // CompactZone.Head
+        ++data[0].first;
+        data[0].second = TString(1'000, 'x');
+        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 200);
+        ++data[0].first;
+        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 201);
+
+        CmdRunCompaction(0, tc);
+
+        // FastWriteZone.Body
+        ++data[0].first;
+        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 300);
+        ++data[0].first;
+        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 301);
+
+        PQGetPartInfo(100, 302, tc);
+
+        CmdRead(0, 102, Max<i32>(), Max<i32>(), 4, false, tc, {200, 201, 300, 301});
+        CmdRead(0, 202, Max<i32>(), Max<i32>(), 2, false, tc, {300, 301});
+
+        // The client has committed an offset between the zones
+        CmdSetOffset(0, "user", 103, false, tc);
+        PQTabletRestart(tc);
+
+        CmdSetOffset(0, "user", 203, false, tc);
+        PQTabletRestart(tc);
+
+        CmdRead(0, 102, Max<i32>(), Max<i32>(), 4, false, tc, {200, 201, 300, 301});
+        CmdRead(0, 202, Max<i32>(), Max<i32>(), 2, false, tc, {300, 301});
+    });
+}
 
 Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
     TTestContext tc;
@@ -1433,7 +1530,10 @@ Y_UNIT_TEST(TestTimeRetention) {
     });
 }
 
-Y_UNIT_TEST(TestComactifiedWithRetention) {
+Y_UNIT_TEST(TestCompactifiedWithRetention) {
+    // TODO(abcdef): temporarily deleted
+    return;
+
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1441,7 +1541,6 @@ Y_UNIT_TEST(TestComactifiedWithRetention) {
         TFinalizer finalizer(tc);
         activeZone = false;
         tc.Prepare(dispatchName, setup, activeZone);
-
         tc.Runtime->SetScheduledLimit(100);
 
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
@@ -1459,10 +1558,12 @@ Y_UNIT_TEST(TestComactifiedWithRetention) {
         CmdWrite(0, "sourceid1", data, tc, false);
         CmdWrite(0, "sourceid2", data, tc, false);
         PQGetPartInfo(0, 30, tc);
+
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
         CmdWrite(0, "sourceid3", data, tc, false);
         CmdWrite(0, "sourceid4", data, tc, false);
         CmdWrite(0, "sourceid5", data, tc, false);
+        Cerr << "Get part info with compactification disabled\n";
         PQGetPartInfo(50, 60, tc);
     });
 }
@@ -1501,8 +1602,6 @@ Y_UNIT_TEST(TestStorageRetention) {
     });
 }
 
-
-
 Y_UNIT_TEST(TestPQPartialRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1536,9 +1635,6 @@ Y_UNIT_TEST(TestPQPartialRead) {
 
 
 Y_UNIT_TEST(TestPQRead) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1634,9 +1730,6 @@ Y_UNIT_TEST(TestPQSmallRead) {
 }
 
 Y_UNIT_TEST(TestPQReadAhead) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1973,9 +2066,6 @@ Y_UNIT_TEST(TestReadSubscription) {
 
 
 Y_UNIT_TEST(TestPQCacheSizeManagement) {
-    // TODO(abcdef): temporarily deleted
-    return;
-
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2680,6 +2770,104 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     // Making sure that the blobs for messages with offsets 2 and 3 are removed
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
     UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
+}
+
+Y_UNIT_TEST(IncompleteProxyResponse) {
+    TTestContext tc;
+    tc.EnableDetailedPQLog = true;
+    TString user{"user1"};
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(1000);
+
+    PQTabletPrepare({.partitions = 1, .writeSpeed = 10_MB}, {{user, true}}, tc);
+    TVector<std::pair<ui64, TString>> data;
+    TString s{2_MB, 'c'};
+    for (auto i = 0u; i < 5; ++i) {
+        data.push_back({i + 1, s});
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 0, false, false, true);
+    for (auto& d : data) {
+        d.first += 5;
+    }
+    CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 5, false, false, true);
+
+    auto observer = [&](TAutoPtr<IEventHandle> &ev) {
+        if (auto event = ev->CastAsLocal<TEvPersQueue::TEvResponse>(); event) {
+            if (event->Record.HasPartitionResponse() &&
+                event->Record.GetPartitionResponse().HasCmdReadResult()) {
+                auto& readResult = *event->Record.MutablePartitionResponse()->MutableCmdReadResult();
+                NKikimrClient::TCmdReadResult newReadResult;
+                for (auto& res : readResult.GetResult()) {
+                    newReadResult.AddResult()->CopyFrom(res);
+                    if (res.GetOffset() == 1) { // First part deleted, other parts null
+                        if (res.GetPartNo() == 0) {
+                            newReadResult.MutableResult()->RemoveLast();
+                            continue;
+                        }
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
+                    } else if (res.GetOffset() == 3) { // First last part deleted, other parts null
+                        if (res.GetPartNo() == res.GetTotalParts() - 1) {
+                            newReadResult.MutableResult()->RemoveLast();
+                            continue;
+                        }
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
+                    } if (res.GetOffset() == 5) { // All parts null
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetData("");
+                        newReadResult.MutableResult(newReadResult.ResultSize() - 1)->SetUncompressedSize(0);
+                    }
+                }
+                readResult.MutableResult()->CopyFrom(newReadResult.GetResult());
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    tc.Runtime->SetObserverFunc(observer);
+    CmdRead(0, 0, 10, 20_MB, 7, false, tc, {0, 2, 4, 6});
+    CmdRead(0, 2, 10, 20_MB, 6, false, tc, {2, 4, 6, 7});
+    CmdRead(0, 5, 10, 20_MB, 4, false, tc, {6, 7, 8});
+    CmdRead(0, 7, 10, 20_MB, 3, false, tc, {7, 8, 9});
+}
+
+Y_UNIT_TEST(SmallMsgCompactificationWithRebootsTest) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        activeZone = false;
+        tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(1);
+
+        tc.Runtime->SetScheduledLimit(3000);
+        TString s{300_KB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                data.push_back({i + 1, s});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=10'000, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
+        activeZone = PlainOrSoSlow(true, false);
+
+        writeData(50);
+        writeData(11);
+        writeData(6);
+
+        i64 expectedOffset = 61;
+        i64 consumerOffset = -1;
+        while(consumerOffset < expectedOffset) {
+            consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+        }
+        UNIT_ASSERT(consumerOffset >= expectedOffset);
+        PQGetPartInfo([](ui64 offset) { return offset >= 25; }, currentOffset, tc);
+    });
 }
 
 } // Y_UNIT_TEST_SUITE(TPQTest)

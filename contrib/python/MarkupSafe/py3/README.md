@@ -1,3 +1,5 @@
+<div align="center"><img src="https://raw.githubusercontent.com/pallets/markupsafe/refs/heads/stable/docs/_static/markupsafe-name.svg" alt="" height="150"></div>
+
 # MarkupSafe
 
 MarkupSafe implements a text object that escapes characters so it is
@@ -38,3 +40,11 @@ users, and allow the maintainers to devote more time to the projects,
 [please donate today][].
 
 [please donate today]: https://palletsprojects.com/donate
+
+## Contributing
+
+See our [detailed contributing documentation][contrib] for many ways to
+contribute, including reporting issues, requesting features, asking or answering
+questions, and making PRs.
+
+[contrib]: https://palletsprojects.com/contributing/

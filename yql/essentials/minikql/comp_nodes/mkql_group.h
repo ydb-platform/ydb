@@ -7,5 +7,5 @@ namespace NMiniKQL {
 
 IComputationNode* WrapGroupingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

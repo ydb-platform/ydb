@@ -542,16 +542,17 @@ namespace NKikimr {
                     TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
+                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
                     PopulateGroupMapper();
                 }
+                TPDiskSlotTracker& pdiskSlotTracker= Mapper->GetPDiskSlotTracker();
                 TStackVec<TPDiskId, 32> removeQ;
                 if (addExistingDisks) {
                     for (const auto& realm : group) {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, pdiskSlotTracker, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -560,14 +561,14 @@ namespace NKikimr {
                     }
                 }
                 struct TUnregister {
-                    TGroupMapper& Mapper;
+                    TBlobStorageController::TGroupFitter& Self;
                     TStackVec<TPDiskId, 32>& RemoveQ;
                     ~TUnregister() {
                         for (const TPDiskId pdiskId : RemoveQ) {
-                            Mapper.UnregisterPDisk(pdiskId);
+                            Self.UnregisterPDisk(pdiskId);
                         }
                     }
-                } unregister{*Mapper, removeQ};
+                } unregister{*this, removeQ};
                 return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks,
                     std::move(forbid), groupSizeInUnits, requiredSpace, bridgePileId);
             }
@@ -591,6 +592,22 @@ namespace NKikimr {
             void PopulateGroupMapper() {
                 const TBoxId boxId = std::get<0>(StoragePoolId);
 
+                TPDiskSlotTracker pdiskSlotTracker;
+
+                bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (populateSlotTracker) {
+                    State.VSlots.ForEach([&](const TVSlotId& id, const TVSlotInfo& info) {
+                        if (info.IsBeingDeleted()) {
+                            return; // ignore slots being deleted
+                        }
+                        if (info.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                            TPDiskId pdiskId = id.ComprisingPDiskId();
+                            pdiskSlotTracker.AddReplicatingVSlot(pdiskId);
+                        }
+                    });
+                }
+
                 State.PDisks.ForEach([&](const TPDiskId& id, const TPDiskInfo& info) {
                     if (info.BoxId != boxId) {
                         return; // ignore disks not from desired box
@@ -602,15 +619,17 @@ namespace NKikimr {
 
                     for (const auto& filter : StoragePool.PDiskFilters) {
                         if (filter.MatchPDisk(info)) {
-                            const bool inserted = RegisterPDisk(id, info, true);
+                            const bool inserted = RegisterPDisk(id, info, true, pdiskSlotTracker);
                             Y_ABORT_UNLESS(inserted);
                             break;
                         }
                     }
                 });
+
+                Mapper->SetPDiskSlotTracker(std::move(pdiskSlotTracker));
             }
 
-            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TString whyUnusable = {}) {
+            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TPDiskSlotTracker& pdiskSlotTracker, TString whyUnusable = {}) {
                 // calculate number of used slots on this PDisk, also counting the static ones
                 ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
 
@@ -678,10 +697,12 @@ namespace NKikimr {
                 ui32 slotSizeInUnits = 0;
                 info.ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
 
+                auto location = State.HostRecords->GetLocation(id.NodeId);
+
                 // register PDisk in the mapper
-                return Mapper->RegisterPDisk({
+                bool registered = Mapper->RegisterPDisk({
                     .PDiskId = id,
-                    .Location = State.HostRecords->GetLocation(id.NodeId),
+                    .Location = location,
                     .Usable = usable,
                     .NumSlots = numSlots,
                     .MaxSlots = maxSlots,
@@ -693,6 +714,26 @@ namespace NKikimr {
                     .WhyUnusable = std::move(whyUnusable),
                     .BridgePileId = bridgePileId,
                 });
+
+                bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (registered && populateSlotTracker) {
+                    i32 freeSlots = i32(maxSlots) - numSlots;
+                    pdiskSlotTracker.AddFreeSlotsForRack(location.GetRackId(), freeSlots);
+                }
+
+                return registered;
+            }
+
+            void UnregisterPDisk(TPDiskId id) {
+                TGroupMapper::TPDiskRecord rec = Mapper->UnregisterPDisk(id);
+
+                bool populatedSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (populatedSlotTracker) {
+                    i32 freeSlots = i32(rec.MaxSlots) - rec.NumSlots;
+                    Mapper->GetPDiskSlotTracker().AddFreeSlotsForRack(rec.Location.GetRackId(), -freeSlots);
+                }
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

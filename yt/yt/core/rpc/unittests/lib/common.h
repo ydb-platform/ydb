@@ -80,6 +80,20 @@ public:
         MemoryUsageTracker_ = New<TTestNodeMemoryTracker>(32_MB);
         TestService_ = CreateTestService(WorkerPool_->GetInvoker(), TImpl::Secure, {}, MemoryUsageTracker_);
 
+        auto serverConfig = ConvertTo<TServerConfigPtr>(NYson::TYsonString(TStringBuf(R"({
+            services = {
+                TestService = {
+                    methods = {
+                        DelayedCall = {
+                            testing = {
+                                random_delay = 1000;
+                            }
+                        }
+                    }
+                }
+            }
+        })")));
+
         auto services = std::vector<IServicePtr>{
             TestService_,
             CreateNoBaggageService(WorkerPool_->GetInvoker()),
@@ -88,6 +102,7 @@ public:
         Host_ = TImpl::CreateTestServerHost(
             NTesting::GetFreePort(),
             std::move(services),
+            std::move(serverConfig),
             MemoryUsageTracker_);
 
         // Make sure local bypass is globally enabled.
@@ -175,10 +190,12 @@ public:
     static TTestServerHostPtr CreateTestServerHost(
         NTesting::TPortHolder port,
         std::vector<IServicePtr> services,
+        TServerConfigPtr serverConfig,
         TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
         auto busServer = CreateBusServer(port, memoryUsageTracker);
         auto server = NRpc::NBus::CreateBusServer(busServer);
+        server->Configure(serverConfig);
 
         return New<TTestServerHost>(
             std::move(port),
@@ -411,6 +428,7 @@ public:
     static TTestServerHostPtr CreateTestServerHost(
         NTesting::TPortHolder port,
         std::vector<IServicePtr> services,
+        TServerConfigPtr serverConfig,
         TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
         auto serverAddressConfig = New<NGrpc::TServerAddressConfig>();
@@ -431,10 +449,11 @@ public:
             serverAddressConfig->Address = Format("localhost:%v", port);
         }
 
-        auto serverConfig = New<NGrpc::TServerConfig>();
-        serverConfig->Addresses.push_back(serverAddressConfig);
+        auto grpcServerConfig = New<NGrpc::TServerConfig>();
+        grpcServerConfig->Addresses.push_back(serverAddressConfig);
 
-        auto server = NGrpc::CreateServer(serverConfig);
+        auto server = NGrpc::CreateServer(grpcServerConfig);
+        server->Configure(serverConfig);
         return New<TTestServerHost>(
             std::move(port),
             std::move(server),
@@ -511,6 +530,7 @@ public:
     static TTestServerHostPtr CreateTestServerHost(
         NTesting::TPortHolder port,
         std::vector<IServicePtr> services,
+        TServerConfigPtr serverConfig,
         TTestNodeMemoryTrackerPtr memoryUsageTracker)
     {
         auto config = New<NHttps::TServerConfig>();
@@ -531,6 +551,7 @@ public:
         }
 
         auto httpRpcServer = NYT::NRpc::NHttp::CreateServer(httpServer);
+        httpRpcServer->Configure(serverConfig);
         return New<TTestServerHost>(
             std::move(port),
             httpRpcServer,

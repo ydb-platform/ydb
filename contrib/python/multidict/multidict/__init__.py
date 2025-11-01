@@ -1,4 +1,5 @@
-"""Multidict implementation.
+"""
+Multidict implementation.
 
 HTTP Headers and URL query string require specific data structure:
 multidict. It behaves mostly like a dict but it can have
@@ -11,18 +12,18 @@ from ._abc import MultiMapping, MutableMultiMapping
 from ._compat import USE_EXTENSIONS
 
 __all__ = (
-    "MultiMapping",
-    "MutableMultiMapping",
-    "MultiDictProxy",
+    "CIMultiDict",
     "CIMultiDictProxy",
     "MultiDict",
-    "CIMultiDict",
-    "upstr",
-    "istr",
+    "MultiDictProxy",
+    "MultiMapping",
+    "MutableMultiMapping",
     "getversion",
+    "istr",
+    "upstr",
 )
 
-__version__ = "6.6.3"
+__version__ = "6.7.0"
 
 
 if TYPE_CHECKING or not USE_EXTENSIONS:

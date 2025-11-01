@@ -151,6 +151,10 @@ struct TChunkWriterConfig
 
     bool EnableLargeColumnarStatistics;
 
+    std::optional<bool> EnableSegmentMetaInBlocks;
+    //! This takes precedence over TChunkWriterOptions::EnableColumnMetaInChunkMeta
+    std::optional<bool> EnableColumnMetaInChunkMeta;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
@@ -411,6 +415,7 @@ struct TChunkWriterOptions
     bool EnableSkynetSharing;
     bool ReturnBoundaryKeys;
     bool CastAnyToComposite = false;
+    bool CastCompositeToAny;
     bool SingleColumnGroupByDefault = false;
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;

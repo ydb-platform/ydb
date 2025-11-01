@@ -356,7 +356,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
     if (RandomNumber(1, 100) <= 60) {
         TString lastName = GetNonUniformRandomLastNameForRun();
 
-        auto customersFuture = GetCustomersByLastName(session, tx, context, warehouseID, districtID, lastName);
+        auto customersFuture = GetCustomersByLastName(session, tx, context, customerWarehouseID, customerDistrictID, lastName);
         auto customersResult = co_await TSuspendWithFuture(customersFuture, context.TaskQueue, context.TerminalID);
         if (!customersResult.IsSuccess()) {
             if (ShouldExit(customersResult)) {
@@ -375,7 +375,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         auto selectedCustomer = SelectCustomerFromResultSet(customersResult.GetResultSet(0));
         if (!selectedCustomer) {
             LOG_E("Terminal " << context.TerminalID << " no customer found by name: "
-                << warehouseID << ", " << districtID << ", " << lastName << ", session: " << session.GetId());
+                << customerWarehouseID << ", " << customerDistrictID << ", " << lastName << ", session: " << session.GetId());
             RequestStop();
             co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
@@ -383,7 +383,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
     } else {
         int customerID = GetRandomCustomerID();
 
-        auto customerFuture = GetCustomerById(session, tx, context, warehouseID, districtID, customerID);
+        auto customerFuture = GetCustomerById(session, tx, context, customerWarehouseID, customerDistrictID, customerID);
         auto customerResult = co_await TSuspendWithFuture(customerFuture, context.TaskQueue, context.TerminalID);
         if (!customerResult.IsSuccess()) {
             if (ShouldExit(customerResult)) {
@@ -400,7 +400,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         TResultSetParser customerParser(customerResult.GetResultSet(0));
         if (!customerParser.TryNextRow()) {
             LOG_E("Terminal " << context.TerminalID << " no customer found by id: "
-                << warehouseID << ", " << districtID << ", " << customerID << ", session: " << session.GetId());
+                << customerWarehouseID << ", " << customerDistrictID << ", " << customerID << ", session: " << session.GetId());
         }
         customer = ParseCustomerFromResult(customerParser);
         customer.c_id = customerID;

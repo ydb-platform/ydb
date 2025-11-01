@@ -18,6 +18,7 @@ struct TParseRecordSettings {
     ui64 UploadReadBlockSize = 1024 * 1024;
     ui64 DonwloadReadBlockCount = 1;
     ui64 DonwloadReadBlockSize = 1024 * 1024; // TODO - remove download
+    ui64 MaxQueueSize = 100;
 };
 
 struct TFmrJobSettings {

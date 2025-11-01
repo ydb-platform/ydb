@@ -3,6 +3,7 @@
 #include "keyvalue_storage_read_request.h"
 #include "keyvalue_storage_request.h"
 #include "keyvalue_trash_key_arbitrary.h"
+#include "keyvalue_utils.h"
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
@@ -564,7 +565,7 @@ void TKeyValueState::InitExecute(ui64 tabletId, TActorId keyValueActorId, ui32 e
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-        icb->RegisterSharedControl(ReadRequestsInFlightLimit_Base, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
+        TControlBoard::RegisterSharedControl(ReadRequestsInFlightLimit_Base, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
         ReadRequestsInFlightLimit.ResetControl(ReadRequestsInFlightLimit_Base);
     }
 
@@ -2817,21 +2818,6 @@ TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransacti
         intermediate->ExecuteTransactionResponse.set_status(NKikimrKeyValue::Statuses::RSTATUS_OK);
     }
     return {};
-}
-
-NKikimrKeyValue::Statuses::ReplyStatus ConvertStatus(NMsgBusProxy::EResponseStatus status) {
-    switch (status) {
-    case NMsgBusProxy::MSTATUS_ERROR:
-        return NKikimrKeyValue::Statuses::RSTATUS_ERROR;
-    case NMsgBusProxy::MSTATUS_TIMEOUT:
-        return NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT;
-    case NMsgBusProxy::MSTATUS_REJECTED:
-        return NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION;
-    case NMsgBusProxy::MSTATUS_INTERNALERROR:
-        return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
-    default:
-        return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
-    };
 }
 
 void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription,

@@ -4,11 +4,13 @@
 #include "sql_query.h"
 #include "sql_values.h"
 #include "sql_select.h"
+#include "object_processing.h"
 #include "source.h"
 #include "antlr_token.h"
 
 #include <yql/essentials/sql/settings/partitioning.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
+#include <yql/essentials/utils/yql_paths.h>
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
@@ -77,7 +79,8 @@ public:
     TModeGuard(ESqlMode& mode, ESqlMode newMode)
         : Mode_(mode)
         , OriginalMode_(std::exchange(mode, newMode))
-    {}
+    {
+    }
 
     ~TModeGuard() {
         Mode_ = OriginalMode_;
@@ -97,15 +100,13 @@ TNodePtr BuildViewSelect(const TRule_select_stmt& selectStatement, TContext& con
         source,
         false, /* write result */
         false, /* in subquery */
-        context.Scoped
-    );
+        context.Scoped);
 }
 
-}
+} // namespace
 
 namespace NSQLTranslationV1 {
 
-using NALPDefault::SQLv1LexerTokens;
 using NALPDefaultAntlr4::SQLv1Antlr4Lexer;
 
 using namespace NSQLv1Generated;
@@ -139,7 +140,7 @@ TIdentifier GetKeywordId(TTranslation& ctx, const TRule_keyword& node) {
         case TRule_keyword::kAltKeyword8:
             return GetIdentifier(ctx, node.GetAlt_keyword8().GetRule_keyword_hint_uncompat1());
         case TRule_keyword::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -151,7 +152,7 @@ TString Id(const TRule_id& node, TTranslation& ctx) {
         case TRule_id::kAltId2:
             return GetKeyword(ctx, node.GetAlt_id2().GetRule_keyword1());
         case TRule_id::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -162,7 +163,7 @@ TString Id(const TRule_id_or_type& node, TTranslation& ctx) {
         case TRule_id_or_type::kAltIdOrType2:
             return ctx.Identifier(node.GetAlt_id_or_type2().GetRule_type_id1().GetToken1());
         case TRule_id_or_type::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -173,7 +174,7 @@ TString Id(const TRule_id_as_compat& node, TTranslation& ctx) {
         case TRule_id_as_compat::kAltIdAsCompat2:
             return ctx.Token(node.GetAlt_id_as_compat2().GetRule_keyword_as_compat1().GetToken1());
         case TRule_id_as_compat::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -184,21 +185,21 @@ TString Id(const TRule_an_id_as_compat& node, TTranslation& ctx) {
         case TRule_an_id_as_compat::kAltAnIdAsCompat2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_as_compat2().GetToken1()));
         case TRule_an_id_as_compat::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 TString Id(const TRule_id_schema& node, TTranslation& ctx) {
-    //id_schema:
-    //    identifier
-    //  | keyword_compat
-    //  | keyword_expr_uncompat
-    // //  | keyword_table_uncompat
-    //  | keyword_select_uncompat
-    // //  | keyword_alter_uncompat
-    //  | keyword_in_uncompat
-    //  | keyword_window_uncompat
-    //  | keyword_hint_uncompat
+    // id_schema:
+    //     identifier
+    //   | keyword_compat
+    //   | keyword_expr_uncompat
+    //  //  | keyword_table_uncompat
+    //   | keyword_select_uncompat
+    //  //  | keyword_alter_uncompat
+    //   | keyword_in_uncompat
+    //   | keyword_window_uncompat
+    //   | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_schema::kAltIdSchema1:
@@ -216,7 +217,7 @@ TString Id(const TRule_id_schema& node, TTranslation& ctx) {
         case TRule_id_schema::kAltIdSchema7:
             return GetKeyword(ctx, node.GetAlt_id_schema7().GetRule_keyword_hint_uncompat1());
         case TRule_id_schema::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -228,26 +229,26 @@ TString Id(const TRule_an_id_or_type& node, TTranslation& ctx) {
         case TRule_an_id_or_type::kAltAnIdOrType2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_or_type2().GetToken1()));
         case TRule_an_id_or_type::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 std::pair<bool, TString> Id(const TRule_id_or_at& node, TTranslation& ctx) {
     bool hasAt = node.HasBlock1();
-    return std::make_pair(hasAt, Id(node.GetRule_an_id_or_type2(), ctx) );
+    return std::make_pair(hasAt, Id(node.GetRule_an_id_or_type2(), ctx));
 }
 
 TString Id(const TRule_id_table& node, TTranslation& ctx) {
-    //id_table:
-    //    identifier
-    //  | keyword_compat
-    //  | keyword_expr_uncompat
-    // //  | keyword_table_uncompat
-    //  | keyword_select_uncompat
-    // //  | keyword_alter_uncompat
-    //  | keyword_in_uncompat
-    //  | keyword_window_uncompat
-    //  | keyword_hint_uncompat
+    // id_table:
+    //     identifier
+    //   | keyword_compat
+    //   | keyword_expr_uncompat
+    //  //  | keyword_table_uncompat
+    //   | keyword_select_uncompat
+    //  //  | keyword_alter_uncompat
+    //   | keyword_in_uncompat
+    //   | keyword_window_uncompat
+    //   | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_table::kAltIdTable1:
@@ -265,7 +266,7 @@ TString Id(const TRule_id_table& node, TTranslation& ctx) {
         case TRule_id_table::kAltIdTable7:
             return GetKeyword(ctx, node.GetAlt_id_table7().GetRule_keyword_hint_uncompat1());
         case TRule_id_table::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -277,7 +278,7 @@ TString Id(const TRule_an_id_table& node, TTranslation& ctx) {
         case TRule_an_id_table::kAltAnIdTable2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_table2().GetToken1()));
         case TRule_an_id_table::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -288,21 +289,21 @@ TString Id(const TRule_id_table_or_type& node, TTranslation& ctx) {
         case TRule_id_table_or_type::kAltIdTableOrType2:
             return ctx.Identifier(node.GetAlt_id_table_or_type2().GetRule_type_id1().GetToken1());
         case TRule_id_table_or_type::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 TString Id(const TRule_id_expr& node, TTranslation& ctx) {
-    //id_expr:
-    //    identifier
-    //  | keyword_compat
-    // //  | keyword_expr_uncompat
-    // //  | keyword_table_uncompat
-    // //  | keyword_select_uncompat
-    //  | keyword_alter_uncompat
-    //  | keyword_in_uncompat
-    //  | keyword_window_uncompat
-    //  | keyword_hint_uncompat
+    // id_expr:
+    //     identifier
+    //   | keyword_compat
+    //  //  | keyword_expr_uncompat
+    //  //  | keyword_table_uncompat
+    //  //  | keyword_select_uncompat
+    //   | keyword_alter_uncompat
+    //   | keyword_in_uncompat
+    //   | keyword_window_uncompat
+    //   | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_expr::kAltIdExpr1:
@@ -318,7 +319,7 @@ TString Id(const TRule_id_expr& node, TTranslation& ctx) {
         case TRule_id_expr::kAltIdExpr6:
             return GetKeyword(ctx, node.GetAlt_id_expr6().GetRule_keyword_hint_uncompat1());
         case TRule_id_expr::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -332,16 +333,16 @@ bool IsQuotedId(const TRule_id_expr& node, TTranslation& ctx) {
 }
 
 TString Id(const TRule_id_expr_in& node, TTranslation& ctx) {
-    //id_expr_in:
-    //    identifier
-    //  | keyword_compat
-    // //  | keyword_expr_uncompat
-    // //  | keyword_table_uncompat
-    // //  | keyword_select_uncompat
-    //  | keyword_alter_uncompat
-    // //  | keyword_in_uncompat
-    //  | keyword_window_uncompat
-    //  | keyword_hint_uncompat
+    // id_expr_in:
+    //     identifier
+    //   | keyword_compat
+    //  //  | keyword_expr_uncompat
+    //  //  | keyword_table_uncompat
+    //  //  | keyword_select_uncompat
+    //   | keyword_alter_uncompat
+    //  //  | keyword_in_uncompat
+    //   | keyword_window_uncompat
+    //   | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_expr_in::kAltIdExprIn1:
@@ -355,21 +356,21 @@ TString Id(const TRule_id_expr_in& node, TTranslation& ctx) {
         case TRule_id_expr_in::kAltIdExprIn5:
             return GetKeyword(ctx, node.GetAlt_id_expr_in5().GetRule_keyword_hint_uncompat1());
         case TRule_id_expr_in::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 TString Id(const TRule_id_window& node, TTranslation& ctx) {
-    //id_window:
-    //    identifier
-    //  | keyword_compat
-    //  | keyword_expr_uncompat
-    //  | keyword_table_uncompat
-    //  | keyword_select_uncompat
-    //  | keyword_alter_uncompat
-    //  | keyword_in_uncompat
-    // //  | keyword_window_uncompat
-    //  | keyword_hint_uncompat
+    // id_window:
+    //     identifier
+    //   | keyword_compat
+    //   | keyword_expr_uncompat
+    //   | keyword_table_uncompat
+    //   | keyword_select_uncompat
+    //   | keyword_alter_uncompat
+    //   | keyword_in_uncompat
+    //  //  | keyword_window_uncompat
+    //   | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_window::kAltIdWindow1:
@@ -389,21 +390,21 @@ TString Id(const TRule_id_window& node, TTranslation& ctx) {
         case TRule_id_window::kAltIdWindow8:
             return GetKeyword(ctx, node.GetAlt_id_window8().GetRule_keyword_hint_uncompat1());
         case TRule_id_window::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 TString Id(const TRule_id_without& node, TTranslation& ctx) {
-    //id_without:
-    //    identifier
-    //  | keyword_compat
-    // //  | keyword_expr_uncompat
-    //  | keyword_table_uncompat
-    // //  | keyword_select_uncompat
-    //  | keyword_alter_uncompat
-    //  | keyword_in_uncompat
-    //  | keyword_window_uncompat
-    //  | keyword_hint_uncompat
+    // id_without:
+    //     identifier
+    //   | keyword_compat
+    //  //  | keyword_expr_uncompat
+    //   | keyword_table_uncompat
+    //  //  | keyword_select_uncompat
+    //   | keyword_alter_uncompat
+    //   | keyword_in_uncompat
+    //   | keyword_window_uncompat
+    //   | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_without::kAltIdWithout1:
@@ -421,21 +422,21 @@ TString Id(const TRule_id_without& node, TTranslation& ctx) {
         case TRule_id_without::kAltIdWithout7:
             return GetKeyword(ctx, node.GetAlt_id_without7().GetRule_keyword_hint_uncompat1());
         case TRule_id_without::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 TString Id(const TRule_id_hint& node, TTranslation& ctx) {
-    //id_hint:
-    //    identifier
-    //  | keyword_compat
-    //  | keyword_expr_uncompat
-    //  | keyword_table_uncompat
-    //  | keyword_select_uncompat
-    //  | keyword_alter_uncompat
-    //  | keyword_in_uncompat
-    //  | keyword_window_uncompat
-    // //  | keyword_hint_uncompat
+    // id_hint:
+    //     identifier
+    //   | keyword_compat
+    //   | keyword_expr_uncompat
+    //   | keyword_table_uncompat
+    //   | keyword_select_uncompat
+    //   | keyword_alter_uncompat
+    //   | keyword_in_uncompat
+    //   | keyword_window_uncompat
+    //  //  | keyword_hint_uncompat
     //;
     switch (node.Alt_case()) {
         case TRule_id_hint::kAltIdHint1:
@@ -455,7 +456,7 @@ TString Id(const TRule_id_hint& node, TTranslation& ctx) {
         case TRule_id_hint::kAltIdHint8:
             return GetKeyword(ctx, node.GetAlt_id_hint8().GetRule_keyword_window_uncompat1());
         case TRule_id_hint::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -467,7 +468,7 @@ TString Id(const TRule_an_id& node, TTranslation& ctx) {
         case TRule_an_id::kAltAnId2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id2().GetToken1()));
         case TRule_an_id::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -479,7 +480,7 @@ TString Id(const TRule_an_id_schema& node, TTranslation& ctx) {
         case TRule_an_id_schema::kAltAnIdSchema2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_schema2().GetToken1()));
         case TRule_an_id_schema::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -491,7 +492,7 @@ TString Id(const TRule_an_id_expr& node, TTranslation& ctx) {
         case TRule_an_id_expr::kAltAnIdExpr2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_expr2().GetToken1()));
         case TRule_an_id_expr::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -503,7 +504,7 @@ TString Id(const TRule_an_id_window& node, TTranslation& ctx) {
         case TRule_an_id_window::kAltAnIdWindow2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_window2().GetToken1()));
         case TRule_an_id_window::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -515,7 +516,7 @@ TString Id(const TRule_an_id_without& node, TTranslation& ctx) {
         case TRule_an_id_without::kAltAnIdWithout2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_without2().GetToken1()));
         case TRule_an_id_without::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -527,7 +528,7 @@ TString Id(const TRule_an_id_hint& node, TTranslation& ctx) {
         case TRule_an_id_hint::kAltAnIdHint2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_hint2().GetToken1()));
         case TRule_an_id_hint::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -539,7 +540,7 @@ TString Id(const TRule_an_id_pure& node, TTranslation& ctx) {
         case TRule_an_id_pure::kAltAnIdPure2:
             return IdContentFromString(ctx.Context(), ctx.Token(node.GetAlt_an_id_pure2().GetToken1()));
         case TRule_an_id_pure::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -550,7 +551,7 @@ TViewDescription Id(const TRule_view_name& node, TTranslation& ctx) {
         case TRule_view_name::kAltViewName2:
             return {"", true};
         case TRule_view_name::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -568,7 +569,7 @@ bool NamedNodeImpl(const TRule_bind_parameter& node, TString& name, TTranslation
             id = ctx.Token(node.GetBlock2().GetAlt3().GetToken1());
             break;
         case TRule_bind_parameter::TBlock2::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     auto dollar = ctx.Token(node.GetToken1());
     if (id.empty()) {
@@ -596,7 +597,7 @@ TString OptIdPrefixAsStr(const TRule_opt_id_prefix_or_type& node, TTranslation& 
 
 void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& ctx, TVector<TString>& outList) {
     outList.push_back(Id(node.GetRule_an_id2(), ctx));
-    for (auto& block: node.GetBlock3()) {
+    for (auto& block : node.GetBlock3()) {
         outList.push_back(Id(block.GetRule_an_id2(), ctx));
     }
 }
@@ -613,23 +614,23 @@ bool NamedNodeImpl(const TRule_opt_bind_parameter& node, TString& name, bool& is
 
 TDeferredAtom PureColumnOrNamed(const TRule_pure_column_or_named& node, TTranslation& ctx) {
     switch (node.Alt_case()) {
-    case TRule_pure_column_or_named::kAltPureColumnOrNamed1: {
-        TString named;
-        if (!NamedNodeImpl(node.GetAlt_pure_column_or_named1().GetRule_bind_parameter1(), named, ctx)) {
-            return {};
-        }
-        auto namedNode = ctx.GetNamedNode(named);
-        if (!namedNode) {
-            return {};
+        case TRule_pure_column_or_named::kAltPureColumnOrNamed1: {
+            TString named;
+            if (!NamedNodeImpl(node.GetAlt_pure_column_or_named1().GetRule_bind_parameter1(), named, ctx)) {
+                return {};
+            }
+            auto namedNode = ctx.GetNamedNode(named);
+            if (!namedNode) {
+                return {};
+            }
+
+            return TDeferredAtom(namedNode, ctx.Context());
         }
 
-        return TDeferredAtom(namedNode, ctx.Context());
-    }
-
-    case TRule_pure_column_or_named::kAltPureColumnOrNamed2:
-        return TDeferredAtom(ctx.Context().Pos(), Id(node.GetAlt_pure_column_or_named2().GetRule_an_id1(), ctx));
-    case TRule_pure_column_or_named::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case TRule_pure_column_or_named::kAltPureColumnOrNamed2:
+            return TDeferredAtom(ctx.Context().Pos(), Id(node.GetAlt_pure_column_or_named2().GetRule_an_id1(), ctx));
+        case TRule_pure_column_or_named::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 
@@ -669,7 +670,7 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
                 } else if (token == "async") {
                     sync = false;
                 } else {
-                    Y_ABORT("You should change implementation according to grammar changes");
+                    Y_UNREACHABLE();
                 }
             }
             if (sync) {
@@ -685,25 +686,30 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
                 }
                 indexes.back().Type = TIndexDescription::EType::GlobalAsync;
             }
-        }
-        break;
+        } break;
         // "LOCAL"
         case TRule_table_index_type_TBlock1::kAlt2:
             AltNotImplemented("local", indexType);
             return false;
         case TRule_table_index_type_TBlock1::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     if (node.GetRule_table_index_type3().HasBlock2()) {
-        const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name) ;
-        if (subType == "VECTOR_KMEANS_TREE") {
+        const TString subType = to_upper(IdEx(node.GetRule_table_index_type3().GetBlock2().GetRule_index_subtype2().GetRule_an_id1(), *this).Name);
+        if (subType == "VECTOR_KMEANS_TREE" || subType == "FULLTEXT") {
             if (indexes.back().Type != TIndexDescription::EType::GlobalSync) {
                 Ctx_.Error() << subType << " index can only be GLOBAL [SYNC]";
                 return false;
             }
 
-            indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            if (subType == "VECTOR_KMEANS_TREE") {
+                indexes.back().Type = TIndexDescription::EType::GlobalVectorKmeansTree;
+            } else if (subType == "FULLTEXT") {
+                indexes.back().Type = TIndexDescription::EType::GlobalFulltext;
+            } else {
+                Y_ABORT("Unreachable");
+            }
         } else {
             Ctx_.Error() << subType << " index subtype is not supported";
             return false;
@@ -712,17 +718,12 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
 
     // WITH
     if (node.HasBlock10()) {
-        //const auto& with = node.GetBlock4();
+        // const auto& with = node.GetBlock4();
         auto& index = indexes.back();
-        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree) {
-            auto& vectorSettings = index.IndexSettings.emplace<TVectorIndexSettings>();
-            if (!CreateIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.Type, index.IndexSettings)) {
+        if (index.Type == TIndexDescription::EType::GlobalVectorKmeansTree || index.Type == TIndexDescription::EType::GlobalFulltext) {
+            if (!FillIndexSettings(node.GetBlock10().GetRule_with_index_settings1(), index.IndexSettings)) {
                 return false;
             }
-            if (!vectorSettings.Validate(Ctx_)) {
-                return false;
-            }
-
         } else {
             AltNotImplemented("with", indexType);
             return false;
@@ -805,11 +806,11 @@ TNodePtr ParseDatabaseSettingValue(TContext& ctx, const TRule_database_setting_v
             return nullptr;
         }
         case TRule_database_setting_value::ALT_NOT_SET:
-            YQL_ENSURE(false, "You should change implementation according to grammar changes.");
+            Y_UNREACHABLE();
     }
 }
 
-}
+} // namespace
 
 bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THashMap<TString, TNodePtr>& out) {
     const auto setting = to_upper(Id(in.GetRule_an_id1(), *this));
@@ -827,132 +828,58 @@ bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THa
     return true;
 }
 
-bool TSqlTranslation::CreateIndexSettings(const TRule_with_index_settings& settingsNode,
-        TIndexDescription::EType indexType,
-        TIndexDescription::TIndexSettings& indexSettings) {
+bool TSqlTranslation::FillIndexSettings(const TRule_with_index_settings& settingsNode,
+                                        TIndexDescription::TIndexSettings& indexSettings) {
     const auto& firstEntry = settingsNode.GetRule_index_setting_entry3();
-    if (!CreateIndexSettingEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+    if (!AddIndexSetting(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_index_setting_value3(), indexSettings)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
         const auto& entry = block.GetRule_index_setting_entry2();
-        if (!CreateIndexSettingEntry(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexType, indexSettings)) {
+        if (!AddIndexSetting(IdEx(entry.GetRule_an_id1(), *this), entry.GetRule_index_setting_value3(), indexSettings)) {
             return false;
         }
     }
     return true;
 }
 
-template<typename T>
-std::tuple<bool, T, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    T value{};
-    // id_or_type
-    if (node.HasAlt_index_setting_value1()) {
-        const TString stringValue = to_lower(IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name);
-        if (!TryFromString<T>(stringValue, value)) {
-            return {false, value, stringValue};
+TString TSqlTranslation::GetIndexSettingStringValue(const TRule_index_setting_value& node) {
+    switch (node.GetAltCase()) {
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue1: // id_or_type
+            return IdEx(node.GetAlt_index_setting_value1().GetRule_id_or_type1(), *this).Name;
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue2: { // STRING_VALUE
+            const TString stringValue = Token(node.GetAlt_index_setting_value2().GetToken1());
+            const auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
+            return unescaped ? unescaped->Content : "";
         }
-        return {true, value, stringValue};
-    }
-    // STRING_VALUE
-    else if (node.HasAlt_index_setting_value2()) {
-        const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value2().GetToken1()));
-        const auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
-        if (!unescaped) {
-            return {false, value, stringValue};
-        }
-        if (!TryFromString<T>(unescaped->Content, value)) {
-            return {false, value, stringValue};
-        }
-        return {true, value, unescaped->Content};
-    } else {
-        Y_ABORT("You should change implementation according to grammar changes");
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue3: // integer
+            return Token(node.GetAlt_index_setting_value3().GetRule_integer1().GetToken1());
+        case NSQLv1Generated::TRule_index_setting_value::kAltIndexSettingValue4: // bool_value
+            return Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1());
+        case NSQLv1Generated::TRule_index_setting_value::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 
-template<>
-std::tuple<bool, ui64, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    const auto& intNode = node.GetAlt_index_setting_value3().GetRule_integer1();
-    const TString stringValue = Token(intNode.GetToken1());
-    ui64 value = 0;
-    TString suffix;
-    if (!ParseNumbers(Ctx_, stringValue, value, suffix)) {
-        return {false, value, stringValue};
-    }
-    return {true, value, stringValue};
-}
+bool TSqlTranslation::AddIndexSetting(const TIdentifier& id,
+                                      const TRule_index_setting_value& node,
+                                      TIndexDescription::TIndexSettings& indexSettings) {
+    // TODO: remove to_lower transformation after the next release to keep backward compatibility
+    const auto name = to_lower(id.Name);
+    const auto value = to_lower(GetIndexSettingStringValue(node));
 
-template<>
-std::tuple<bool, bool, TString> TSqlTranslation::GetIndexSettingValue(const TRule_index_setting_value& node) {
-    bool value = false;
-    const TString stringValue = to_lower(Token(node.GetAlt_index_setting_value4().GetRule_bool_value1().GetToken1()));;
-    if (!TryFromString<bool>(stringValue, value)) {
-        return {false, value, stringValue};
-    }
-    return {true, value, stringValue};
-}
+    TIndexDescription::TIndexSetting indexSetting{
+        .Name = name,
+        .NamePosition = id.Pos,
+        .Value = value,
+        .ValuePosition = Ctx_.Pos()};
 
-bool TSqlTranslation::CreateIndexSettingEntry(const TIdentifier &id,
-        const TRule_index_setting_value& node,
-        TIndexDescription::EType indexType,
-        TIndexDescription::TIndexSettings& indexSettings) {
-
-
-    if (indexType == TIndexDescription::EType::GlobalVectorKmeansTree) {
-        TVectorIndexSettings &vectorIndexSettings = std::get<TVectorIndexSettings>(indexSettings);
-
-        if (to_lower(id.Name) == "distance") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EDistance>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid distance: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Distance = value;
-        } else if (to_lower(id.Name) == "similarity") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::ESimilarity>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid similarity: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Similarity = value;
-        } else if (to_lower(id.Name) == "vector_type") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<TVectorIndexSettings::EVectorType>(node);
-            if (!success) {
-                Ctx_.Error() << "Invalid vector_type: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.VectorType = value;
-        } else if (to_lower(id.Name) == "vector_dimension") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
-            if (!success || value > Max<ui32>()) {
-                Ctx_.Error() << "Invalid vector_dimension: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.VectorDimension = value;
-        } else if (to_lower(id.Name) == "clusters") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
-            if (!success || value > Max<ui32>()) {
-                Ctx_.Error() << "Invalid clusters: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Clusters = value;
-        } else if (to_lower(id.Name) == "levels") {
-            const auto [success, value, stringValue] = GetIndexSettingValue<ui64>(node);
-            if (!success || value > Max<ui32>()) {
-                Ctx_.Error() << "Invalid levels: " << stringValue;
-                return false;
-            }
-            vectorIndexSettings.Levels = value;
-        } else {
-            Ctx_.Error() << "Unknown index setting: " << id.Name;
-            return false;
-        }
-    } else {
-        Ctx_.Error() << "Unknown index setting: " << id.Name;
+    if (!indexSettings.emplace(name, indexSetting).second) {
+        Ctx_.Error() << "Duplicated " << name;
         return false;
     }
-    return true;
 
+    return true;
 }
 
 std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TViewDescription view, TTranslation& ctx) {
@@ -1012,27 +939,37 @@ TTableHints GetTableFuncHints(TStringBuf funcName) {
     return res;
 }
 
-
-TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+TNodePtr TSqlTranslation::NamedExpr(
+    const TRule_expr& exprTree,
+    const TRule_an_id_or_type* nameTree,
+    EExpr exprMode)
+{
     TSqlExpression expr(Ctx_, Mode_);
     if (exprMode == EExpr::GroupBy) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::GroupBy);
     } else if (exprMode == EExpr::SqlLambdaParams) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::SqlLambdaParams);
     }
-    if (node.HasBlock2()) {
+    if (nameTree) {
         expr.MarkAsNamed();
     }
-    TNodePtr exprNode(expr.Build(node.GetRule_expr1()));
+    TNodePtr exprNode = expr.Build(exprTree);
     if (!exprNode) {
         Ctx_.IncrementMonCounter("sql_errors", "NamedExprInvalid");
         return nullptr;
     }
-    if (node.HasBlock2()) {
+    if (nameTree) {
         exprNode = SafeClone(exprNode);
-        exprNode->SetLabel(Id(node.GetBlock2().GetRule_an_id_or_type2(), *this));
+        exprNode->SetLabel(Id(*nameTree, *this));
     }
     return exprNode;
+}
+
+TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
+    return NamedExpr(
+        node.GetRule_expr1(),
+        (node.HasBlock2() ? &node.GetBlock2().GetRule_an_id_or_type2() : nullptr),
+        exprMode);
 }
 
 bool TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode) {
@@ -1040,7 +977,7 @@ bool TSqlTranslation::NamedExprList(const TRule_named_expr_list& node, TVector<T
     if (!exprs.back()) {
         return false;
     }
-    for (auto& b: node.GetBlock2()) {
+    for (auto& b : node.GetBlock2()) {
         exprs.emplace_back(NamedExpr(b.GetRule_named_expr2(), exprMode));
         if (!exprs.back()) {
             return false;
@@ -1058,7 +995,7 @@ bool TSqlTranslation::BindList(const TRule_bind_parameter_list& node, TVector<TS
     }
 
     bindNames.emplace_back(TSymbolNameWithPos{name, Ctx_.Pos()});
-    for (auto& b: node.GetBlock2()) {
+    for (auto& b : node.GetBlock2()) {
         if (!NamedNodeImpl(b.GetRule_bind_parameter2(), name, *this)) {
             return false;
         }
@@ -1083,7 +1020,7 @@ bool TSqlTranslation::ActionOrSubqueryArgs(const TRule_action_or_subquery_args& 
     }
     bindNames.emplace_back(TSymbolNameWithPos{name, Ctx_.Pos()});
 
-    for (auto& b: node.GetBlock2()) {
+    for (auto& b : node.GetBlock2()) {
         if (!NamedNodeImpl(b.GetRule_opt_bind_parameter2(), name, isOptional, *this)) {
             return false;
         }
@@ -1104,14 +1041,14 @@ bool TSqlTranslation::ModulePath(const TRule_module_path& node, TVector<TString>
         path.emplace_back(TString());
     }
     path.emplace_back(Id(node.GetRule_an_id2(), *this));
-    for (auto& b: node.GetBlock3()) {
+    for (auto& b : node.GetBlock3()) {
         path.emplace_back(Id(b.GetRule_an_id2(), *this));
     }
     return true;
 }
 
 bool TSqlTranslation::NamedBindList(const TRule_named_bind_parameter_list& node, TVector<TSymbolNameWithPos>& names,
-    TVector<TSymbolNameWithPos>& aliases)
+                                    TVector<TSymbolNameWithPos>& aliases)
 {
     names.clear();
     aliases.clear();
@@ -1124,7 +1061,7 @@ bool TSqlTranslation::NamedBindList(const TRule_named_bind_parameter_list& node,
     names.push_back(name);
     aliases.push_back(alias);
 
-    for (auto& b: node.GetBlock2()) {
+    for (auto& b : node.GetBlock2()) {
         if (!NamedBindParam(b.GetRule_named_bind_parameter2(), name, alias)) {
             return false;
         }
@@ -1179,7 +1116,7 @@ bool TSqlTranslation::ClusterExprOrBinding(const TRule_cluster_expr& node, TStri
 }
 
 bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service,
-    TDeferredAtom& cluster, bool& isBinding)
+                                  TDeferredAtom& cluster, bool& isBinding)
 {
     service = "";
     cluster = TDeferredAtom();
@@ -1196,76 +1133,80 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
     }
 
     switch (node.GetBlock2().Alt_case()) {
-    case TRule_cluster_expr::TBlock2::kAlt1: {
-        auto value = PureColumnOrNamed(node.GetBlock2().GetAlt1().GetRule_pure_column_or_named1(), *this);
-        if (value.Empty()) {
-            return false;
-        }
+        case TRule_cluster_expr::TBlock2::kAlt1: {
+            auto value = PureColumnOrNamed(node.GetBlock2().GetAlt1().GetRule_pure_column_or_named1(), *this);
+            if (value.Empty()) {
+                return false;
+            }
 
-        if (value.GetLiteral()) {
-            TString clusterName = *value.GetLiteral();
-            if (allowBinding && to_lower(clusterName) == "bindings") {
-                switch (Ctx_.Settings.BindingsMode) {
-                case NSQLTranslation::EBindingsMode::DISABLED:
-                    Ctx_.Error(Ctx_.Pos(), TIssuesIds::YQL_DISABLED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax has ended";
-                    Ctx_.IncrementMonCounter("sql_errors", "DisabledBinding");
+            if (value.GetLiteral()) {
+                TString clusterName = *value.GetLiteral();
+                if (allowBinding && to_lower(clusterName) == "bindings") {
+                    switch (Ctx_.Settings.BindingsMode) {
+                        case NSQLTranslation::EBindingsMode::DISABLED:
+                            Ctx_.Error(Ctx_.Pos(), TIssuesIds::YQL_DISABLED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax has ended";
+                            Ctx_.IncrementMonCounter("sql_errors", "DisabledBinding");
+                            return false;
+                        case NSQLTranslation::EBindingsMode::ENABLED:
+                            isBinding = true;
+                            break;
+                        case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
+                            if (!Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_BINDINGS, [](auto& out) {
+                                    out << "Please remove 'bindings.' from your query, "
+                                        << "the support for this syntax will be dropped soon";
+                                })) {
+                                return false;
+                            }
+                            Ctx_.IncrementMonCounter("sql_errors", "DeprecatedBinding");
+                            [[fallthrough]];
+                        case NSQLTranslation::EBindingsMode::DROP:
+                            service = Context().Scoped->CurrService;
+                            cluster = Context().Scoped->CurrCluster;
+                            break;
+                    }
+
+                    return true;
+                }
+                TString normalizedClusterName;
+                auto foundProvider = Ctx_.GetClusterProvider(clusterName, normalizedClusterName);
+                if (!foundProvider) {
+                    Ctx_.Error() << "Unknown cluster: " << clusterName;
                     return false;
-                case NSQLTranslation::EBindingsMode::ENABLED:
-                    isBinding = true;
-                    break;
-                case NSQLTranslation::EBindingsMode::DROP_WITH_WARNING:
-                    Ctx_.Warning(Ctx_.Pos(), TIssuesIds::YQL_DEPRECATED_BINDINGS) << "Please remove 'bindings.' from your query, the support for this syntax will be dropped soon";
-                    Ctx_.IncrementMonCounter("sql_errors", "DeprecatedBinding");
-                    [[fallthrough]];
-                case NSQLTranslation::EBindingsMode::DROP:
-                    service = Context().Scoped->CurrService;
-                    cluster = Context().Scoped->CurrCluster;
-                    break;
                 }
 
-                return true;
-            }
-            TString normalizedClusterName;
-            auto foundProvider = Ctx_.GetClusterProvider(clusterName, normalizedClusterName);
-            if (!foundProvider) {
-                Ctx_.Error() << "Unknown cluster: " << clusterName;
-                return false;
+                if (service && *foundProvider != service) {
+                    Ctx_.Error() << "Mismatch of cluster " << clusterName << " service, expected: "
+                                 << *foundProvider << ", got: " << service;
+                    return false;
+                }
+
+                if (!service) {
+                    service = *foundProvider;
+                }
+
+                value = TDeferredAtom(Ctx_.Pos(), normalizedClusterName);
+            } else {
+                if (!service) {
+                    Ctx_.Error() << "Cluster service is not set";
+                    return false;
+                }
             }
 
-            if (service && *foundProvider != service) {
-                Ctx_.Error() << "Mismatch of cluster " << clusterName << " service, expected: "
-                    << *foundProvider << ", got: " << service;
-                return false;
-            }
-
-            if (!service) {
-                service = *foundProvider;
-            }
-
-            value = TDeferredAtom(Ctx_.Pos(), normalizedClusterName);
-        } else {
-            if (!service) {
-                Ctx_.Error() << "Cluster service is not set";
-                return false;
-            }
+            cluster = value;
+            return true;
         }
+        case TRule_cluster_expr::TBlock2::kAlt2: {
+            if (!allowWildcard) {
+                Ctx_.Error() << "Cluster wildcards allowed only in USE statement";
+                return false;
+            }
 
-        cluster = value;
-        return true;
-    }
-    case TRule_cluster_expr::TBlock2::kAlt2: {
-        if (!allowWildcard) {
-            Ctx_.Error() << "Cluster wildcards allowed only in USE statement";
-            return false;
+            return true;
         }
-
-        return true;
-    }
-    case TRule_cluster_expr::TBlock2::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case TRule_cluster_expr::TBlock2::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
-
 
 bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints) {
     NSQLTranslation::TBindingInfo bindingInfo;
@@ -1277,10 +1218,10 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
     if (bindingInfo.Schema) {
         TNodePtr schema = BuildQuotedAtom(Ctx_.Pos(), bindingInfo.Schema);
 
-        TNodePtr type = new TCallNodeImpl(Ctx_.Pos(), "SqlTypeFromYson", { schema });
-        TNodePtr columns = new TCallNodeImpl(Ctx_.Pos(), "SqlColumnOrderFromYson", { schema });
+        TNodePtr type = new TCallNodeImpl(Ctx_.Pos(), "SqlTypeFromYson", {schema});
+        TNodePtr columns = new TCallNodeImpl(Ctx_.Pos(), "SqlColumnOrderFromYson", {schema});
 
-        hints["user_schema"] = { type, columns };
+        hints["user_schema"] = {type, columns};
     }
 
     for (auto& [key, values] : bindingInfo.Attributes) {
@@ -1316,8 +1257,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
     bool isBinding = false;
     if (node.HasBlock1()) {
         const auto& clusterExpr = node.GetBlock1().GetRule_cluster_expr1();
-        bool result = !hasAt ?
-            ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
+        bool result = !hasAt ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
         if (!result) {
             return false;
         }
@@ -1451,7 +1391,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
 
                 TNodePtr apply = new TAstListNodeImpl(Ctx_.Pos(), std::move(values));
                 if (unorderedSubquery && Ctx_.UnorderedSubqueries) {
-                    apply = new TCallNodeImpl(Ctx_.Pos(), "UnorderedSubquery", { apply });
+                    apply = new TCallNodeImpl(Ctx_.Pos(), "UnorderedSubquery", {apply});
                 }
                 result.Source = BuildNodeSource(Ctx_.Pos(), apply);
                 return true;
@@ -1464,8 +1404,8 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
                 auto view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
                 Ctx_.IncrementMonCounter("sql_features", "View");
                 bool result = view.PrimaryFlag
-                    ? ret->SetPrimaryView(Ctx_, Ctx_.Pos())
-                    : ret->SetViewName(Ctx_, Ctx_.Pos(), view.ViewName);
+                                  ? ret->SetPrimaryView(Ctx_, Ctx_.Pos())
+                                  : ret->SetViewName(Ctx_, Ctx_.Pos(), view.ViewName);
                 if (!result) {
                     return false;
                 }
@@ -1490,7 +1430,7 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
             return true;
         }
         case TRule_table_ref::TBlock3::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     MergeHints(hints, tableHints);
@@ -1522,9 +1462,15 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
 
     if (block.Alt_case() == TRule_table_ref::TBlock3::kAlt2) {
         auto& alt = block.GetAlt2();
-        TCiString func(Id(alt.GetRule_an_id_expr1(), *this));
 
-        if (func == "as_table") {
+        TString func = Id(alt.GetRule_an_id_expr1(), *this);
+        if (auto issue = NormalizeName(Ctx_.Pos(), func)) {
+            Error() << issue->GetMessage();
+            Ctx_.IncrementMonCounter("sql_errors", "NormalizeTableFunctionError");
+            return nullptr;
+        }
+
+        if (func == "astable") {
             if (node.HasBlock1()) {
                 Ctx_.Error() << "Cluster shouldn't be specified for AS_TABLE source";
                 return TMaybe<TSourcePtr>(nullptr);
@@ -1557,23 +1503,128 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
     return Nothing();
 }
 
-TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx) {
-    TNodePtr defaultExpr = nullptr;
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
+    TNodePtr defaultExpr;
     bool nullable = true;
+    TVector<TIdentifier> families;
 
-    auto constraintsNode = node.GetRule_opt_column_constraints4();
-    if (constraintsNode.HasBlock1()) {
-        nullable = !constraintsNode.GetBlock1().HasBlock1();
-    }
-    if (constraintsNode.HasBlock2()) {
-        TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
-        defaultExpr = expr.Build(constraintsNode.GetBlock2().GetRule_expr2());
-        if (!defaultExpr) {
-            return {};
+    const auto& optionsList = node.GetRule_column_option_list3();
+
+    enum class EOption {
+        Family,
+        NotNull,
+        DefaultValue
+    };
+
+    std::vector<TRule_column_option> columnOptions;
+    columnOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+    {
+        switch (optionsList.Alt_case()) {
+            case TRule_column_option_list::kAltColumnOptionList1: {
+                const auto& block = optionsList.GetAlt_column_option_list1().GetRule_column_option_list_space1().GetBlock1();
+                for (const auto& item : block) {
+                    const auto& rule = item.GetRule_column_option1();
+                    columnOptions.push_back(rule);
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::kAltColumnOptionList2: {
+                const auto& optionsNode = optionsList.GetAlt_column_option_list2().GetRule_column_option_list_comma1();
+                const auto& firstColumnOption = optionsNode.GetRule_column_option2();
+                columnOptions.push_back(firstColumnOption);
+
+                {
+                    auto block = optionsNode.GetBlock3();
+
+                    for (const auto& item : block) {
+                        const auto& rule = item.GetRule_column_option2();
+                        columnOptions.push_back(rule);
+                    }
+                }
+
+                break;
+            }
+
+            case TRule_column_option_list::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }
 
-    return TColumnConstraints(defaultExpr, nullable);
+    {
+        std::vector<EOption> usedOptions;
+        usedOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+
+        for (const auto& rule : columnOptions) {
+            switch (rule.Alt_case()) {
+                case TRule_column_option::kAltColumnOption1: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Family) != usedOptions.end()) {
+                        ctx.Context().Error() << "'FAMILY' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Family);
+
+                    const auto& familyRelation = rule.GetAlt_column_option1().GetRule_family_relation1();
+                    families.push_back(IdEx(familyRelation.GetRule_an_id2(), ctx));
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption2: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::NotNull) != usedOptions.end()) {
+                        ctx.Context().Error() << "'NOT NULL' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::NotNull);
+
+                    nullable = !rule.GetAlt_column_option2().GetRule_nullability1().HasBlock1();
+                    break;
+                }
+                case TRule_column_option::kAltColumnOption3: {
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::DefaultValue) != usedOptions.end()) {
+                        ctx.Context().Error() << "'DEFAULT' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::DefaultValue);
+
+                    TSqlExpression expr(ctx.Context(), ctx.Context().Settings.Mode);
+
+                    // TODO: We need to refact it
+                    auto legacyNotNullLastValue = ctx.Context().DisableLegacyNotNull;
+                    Y_DEFER {
+                        ctx.Context().DisableLegacyNotNull = legacyNotNullLastValue;
+                    };
+
+                    ctx.Context().DisableLegacyNotNull = true;
+
+                    defaultExpr = expr.Build(rule.GetAlt_column_option3().GetRule_default_value1().GetRule_expr2());
+
+                    if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
+                            return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
+                        })) {
+                        ctx.Context().Error() << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
+                                              << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
+                                              << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
+
+                        return {};
+                    }
+
+                    if (!defaultExpr) {
+                        return {};
+                    }
+
+                    break;
+                }
+                case TRule_column_option::ALT_NOT_SET:
+                    Y_UNREACHABLE();
+            }
+        }
+    }
+
+    return TColumnOptions{std::move(defaultExpr), nullable, std::move(families)};
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1582,10 +1633,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
     const bool serial = (type != nullptr);
 
-    const auto constraints = ColumnConstraints(node, *this);
-    if (!constraints){
+    auto columnOptions = ColumnOptions(node, *this);
+    if (!columnOptions) {
         return {};
     }
+
+    auto [defaultExpr, nullable, families] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1594,12 +1647,15 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     if (!type) {
         return {};
     }
-    TVector<TIdentifier> families;
-    if (node.HasBlock3()) {
-        const auto& familyRelation = node.GetBlock3().GetRule_family_relation1();
-        families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    }
-    return TColumnSchema(pos, name, type, constraints->Nullable, families, serial, constraints->DefaultExpr);
+
+    return TColumnSchema(
+        std::move(pos),
+        std::move(name),
+        std::move(type),
+        nullable,
+        std::move(families),
+        serial,
+        std::move(defaultExpr));
 }
 
 TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
@@ -1628,11 +1684,11 @@ TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
 
     const auto res = to_lower(name);
     if (res == "bigserial" || res == "serial8") {
-        return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Int64", TNodeFlags::Default) });
+        return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, "Int64", TNodeFlags::Default)});
     } else if (res == "serial" || res == "serial4") {
-        return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Int32", TNodeFlags::Default) });
+        return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, "Int32", TNodeFlags::Default)});
     } else if (res == "smallserial" || res == "serial2") {
-        return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Int16", TNodeFlags::Default) });
+        return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, "Int16", TNodeFlags::Default)});
     }
 
     return nullptr;
@@ -1691,6 +1747,11 @@ bool TSqlTranslation::FillFamilySettingsEntry(const TRule_family_settings_entry&
             Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
+    } else if (to_lower(id.Name) == "cache_mode") {
+        if (!StoreString(value, family.CacheMode, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be a string literal";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -1714,13 +1775,10 @@ bool TSqlTranslation::FillFamilySettings(const TRule_family_settings& settingsNo
     return true;
 }
 
-
-
 bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCreateTableParameters& params, const bool isCreateTableAs)
 {
     switch (node.Alt_case()) {
-        case TRule_create_table_entry::kAltCreateTableEntry1:
-        {
+        case TRule_create_table_entry::kAltCreateTableEntry1: {
             if (isCreateTableAs) {
                 Ctx_.Error() << "Column types are not supported for CREATE TABLE AS";
                 return false;
@@ -1737,8 +1795,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             params.Columns.push_back(*columnSchema);
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry2:
-        {
+        case TRule_create_table_entry::kAltCreateTableEntry2: {
             // table_constraint
             auto& constraint = node.GetAlt_create_table_entry2().GetRule_table_constraint1();
             switch (constraint.Alt_case()) {
@@ -1772,7 +1829,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                         return false;
                     }
                     auto& obConstraint = constraint.GetAlt_table_constraint3();
-                    auto extractDirection = [this] (const TRule_column_order_by_specification& spec, bool& desc) {
+                    auto extractDirection = [this](const TRule_column_order_by_specification& spec, bool& desc) {
                         desc = false;
                         if (!spec.HasBlock2()) {
                             return true;
@@ -1807,14 +1864,12 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                     }
                     break;
                 }
-                default:
-                    AltNotImplemented("table_constraint", constraint);
-                    return false;
+                case NSQLv1Generated::TRule_table_constraint::ALT_NOT_SET:
+                    Y_UNREACHABLE();
             }
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry3:
-        {
+        case TRule_create_table_entry::kAltCreateTableEntry3: {
             // table_index
             auto& table_index = node.GetAlt_create_table_entry3().GetRule_table_index1();
             if (!CreateTableIndex(table_index, params.Indexes)) {
@@ -1822,8 +1877,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             }
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry4:
-        {
+        case TRule_create_table_entry::kAltCreateTableEntry4: {
             if (isCreateTableAs) {
                 Ctx_.Error() << "Column families are not supported for CREATE TABLE AS";
                 return false;
@@ -1837,8 +1891,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             params.ColumnFamilies.push_back(family);
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry5:
-        {
+        case TRule_create_table_entry::kAltCreateTableEntry5: {
             // changefeed
             auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1();
             TSqlExpression expr(Ctx_, Mode_);
@@ -1847,8 +1900,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             }
             break;
         }
-        case TRule_create_table_entry::kAltCreateTableEntry6:
-        {
+        case TRule_create_table_entry::kAltCreateTableEntry6: {
             if (!isCreateTableAs) {
                 Ctx_.Error() << "Column requires a type";
                 return false;
@@ -1860,16 +1912,15 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             params.Columns.push_back(TColumnSchema(pos, name, nullptr, true, {}, false, nullptr));
             break;
         }
-        default:
-            AltNotImplemented("create_table_entry", node);
-            return false;
+        case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
     return true;
 }
 
 namespace {
-    bool StoreId(const TRule_table_setting_value& from, TMaybe<TIdentifier>& to, TTranslation& ctx) {
-        switch (from.Alt_case()) {
+bool StoreId(const TRule_table_setting_value& from, TMaybe<TIdentifier>& to, TTranslation& ctx) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue1: {
             // id
             to = IdEx(from.GetAlt_table_setting_value1().GetRule_id1(), ctx);
@@ -1877,12 +1928,12 @@ namespace {
         }
         default:
             return false;
-        }
-        return true;
     }
+    return true;
+}
 
-    bool StoreString(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx) {
-        switch (from.Alt_case()) {
+bool StoreString(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue2: {
             // STRING_VALUE
             const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
@@ -1891,12 +1942,12 @@ namespace {
         }
         default:
             return false;
-        }
-        return true;
     }
+    return true;
+}
 
-    bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
-        switch (from.Alt_case()) {
+bool StoreString(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue2: {
             // STRING_VALUE
             const TString stringValue(ctx.Token(from.GetAlt_table_setting_value2().GetToken1()));
@@ -1911,12 +1962,12 @@ namespace {
         default:
             ctx.Error() << errorPrefix << " value should be a string literal";
             return false;
-        }
-        return true;
     }
+    return true;
+}
 
-    bool StoreInt(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx) {
-        switch (from.Alt_case()) {
+bool StoreInt(const TRule_table_setting_value& from, TNodePtr& to, TContext& ctx) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue3: {
             // integer
             to = LiteralNumber(ctx, from.GetAlt_table_setting_value3().GetRule_integer1());
@@ -1924,12 +1975,12 @@ namespace {
         }
         default:
             return false;
-        }
-        return true;
     }
+    return true;
+}
 
-    bool StoreInt(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
-        switch (from.Alt_case()) {
+bool StoreInt(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx, const TString& errorPrefix = {}) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue3: {
             // integer
             to = TDeferredAtom(LiteralNumber(ctx, from.GetAlt_table_setting_value3().GetRule_integer1()), ctx);
@@ -1938,78 +1989,67 @@ namespace {
         default:
             ctx.Error() << errorPrefix << " value should be an integer";
             return false;
-        }
-        return true;
     }
+    return true;
+}
 
-    bool StoreSplitBoundary(const TRule_literal_value_list& boundary, TVector<TVector<TNodePtr>>& to,
-            TSqlExpression& expr, TContext& ctx) {
-        TVector<TNodePtr> boundaryKeys;
-        auto first_key = expr.LiteralExpr(boundary.GetRule_literal_value2());
-        if (!first_key) {
+bool StoreSplitBoundary(const TRule_literal_value_list& boundary, TVector<TVector<TNodePtr>>& to,
+                        TSqlExpression& expr, TContext& ctx) {
+    TVector<TNodePtr> boundaryKeys;
+    auto first_key = expr.LiteralExpr(boundary.GetRule_literal_value2());
+    if (!first_key) {
+        ctx.Error() << "Empty key in partition at keys";
+        return false;
+    }
+    if (!first_key->Expr) {
+        ctx.Error() << "Identifier is not expected in partition at keys";
+        return false;
+    }
+    boundaryKeys.emplace_back(first_key->Expr);
+    for (auto& key : boundary.GetBlock3()) {
+        auto keyExprOrIdent = expr.LiteralExpr(key.GetRule_literal_value2());
+        if (!keyExprOrIdent) {
             ctx.Error() << "Empty key in partition at keys";
             return false;
         }
-        if (!first_key->Expr) {
+        if (!keyExprOrIdent->Expr) {
             ctx.Error() << "Identifier is not expected in partition at keys";
             return false;
         }
-        boundaryKeys.emplace_back(first_key->Expr);
-        for (auto& key : boundary.GetBlock3()) {
-            auto keyExprOrIdent = expr.LiteralExpr(key.GetRule_literal_value2());
-            if (!keyExprOrIdent) {
-                ctx.Error() << "Empty key in partition at keys";
-                return false;
-            }
-            if (!keyExprOrIdent->Expr) {
-                ctx.Error() << "Identifier is not expected in partition at keys";
-                return false;
-            }
-            boundaryKeys.emplace_back(keyExprOrIdent->Expr);
-        }
-        to.push_back(boundaryKeys);
-        return true;
+        boundaryKeys.emplace_back(keyExprOrIdent->Expr);
     }
+    to.push_back(boundaryKeys);
+    return true;
+}
 
-    bool StoreSplitBoundaries(const TRule_table_setting_value& from, TVector<TVector<TNodePtr>>& to,
-            TSqlExpression& expr, TContext& ctx) {
-        switch (from.Alt_case()) {
+bool StoreSplitBoundaries(const TRule_table_setting_value& from, TVector<TVector<TNodePtr>>& to,
+                          TSqlExpression& expr, TContext& ctx) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue4: {
             // split_boundaries
             const auto& boundariesNode = from.GetAlt_table_setting_value4().GetRule_split_boundaries1();
             switch (boundariesNode.Alt_case()) {
-            case TRule_split_boundaries::kAltSplitBoundaries1: {
-                // literal_value_list (COMMA literal_value_list)*
-                auto& complexBoundaries = boundariesNode.GetAlt_split_boundaries1();
+                case TRule_split_boundaries::kAltSplitBoundaries1: {
+                    // literal_value_list (COMMA literal_value_list)*
+                    auto& complexBoundaries = boundariesNode.GetAlt_split_boundaries1();
 
-                auto& first_boundary = complexBoundaries.GetRule_literal_value_list2();
-                if (!StoreSplitBoundary(first_boundary, to, expr, ctx)) {
-                    return false;
-                }
-
-                for (auto& boundary : complexBoundaries.GetBlock3()) {
-                    if (!StoreSplitBoundary(boundary.GetRule_literal_value_list2(), to, expr, ctx)) {
+                    auto& first_boundary = complexBoundaries.GetRule_literal_value_list2();
+                    if (!StoreSplitBoundary(first_boundary, to, expr, ctx)) {
                         return false;
                     }
+
+                    for (auto& boundary : complexBoundaries.GetBlock3()) {
+                        if (!StoreSplitBoundary(boundary.GetRule_literal_value_list2(), to, expr, ctx)) {
+                            return false;
+                        }
+                    }
+                    break;
                 }
-                break;
-            }
-            case TRule_split_boundaries::kAltSplitBoundaries2: {
-                // literal_value_list
-                auto& simpleBoundaries = boundariesNode.GetAlt_split_boundaries2().GetRule_literal_value_list1();
-                auto first_key = expr.LiteralExpr(simpleBoundaries.GetRule_literal_value2());
-                if (!first_key) {
-                    ctx.Error() << "Empty key in partition at keys";
-                    return false;
-                }
-                if (!first_key->Expr) {
-                    ctx.Error() << "Identifier is not expected in partition at keys";
-                    return false;
-                }
-                to.push_back(TVector<TNodePtr>(1, first_key->Expr));
-                for (auto& key : simpleBoundaries.GetBlock3()) {
-                    auto keyExprOrIdent = expr.LiteralExpr(key.GetRule_literal_value2());
-                    if (!keyExprOrIdent) {
+                case TRule_split_boundaries::kAltSplitBoundaries2: {
+                    // literal_value_list
+                    auto& simpleBoundaries = boundariesNode.GetAlt_split_boundaries2().GetRule_literal_value_list1();
+                    auto first_key = expr.LiteralExpr(simpleBoundaries.GetRule_literal_value2());
+                    if (!first_key) {
                         ctx.Error() << "Empty key in partition at keys";
                         return false;
                     }
@@ -2017,55 +2057,65 @@ namespace {
                         ctx.Error() << "Identifier is not expected in partition at keys";
                         return false;
                     }
-                    to.push_back(
-                        TVector<TNodePtr>(1, keyExprOrIdent->Expr)
-                    );
+                    to.push_back(TVector<TNodePtr>(1, first_key->Expr));
+                    for (auto& key : simpleBoundaries.GetBlock3()) {
+                        auto keyExprOrIdent = expr.LiteralExpr(key.GetRule_literal_value2());
+                        if (!keyExprOrIdent) {
+                            ctx.Error() << "Empty key in partition at keys";
+                            return false;
+                        }
+                        if (!first_key->Expr) {
+                            ctx.Error() << "Identifier is not expected in partition at keys";
+                            return false;
+                        }
+                        to.push_back(
+                            TVector<TNodePtr>(1, keyExprOrIdent->Expr));
+                    }
+                    break;
                 }
-                break;
-            }
-            default:
-                return false;
+                default:
+                    return false;
             }
             break;
         }
         default:
             return false;
-        }
-        return true;
+    }
+    return true;
+}
+
+bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
+    auto exprNode = expr.Build(from);
+    if (!exprNode) {
+        return false;
     }
 
-    bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
-        auto exprNode = expr.Build(from);
-        if (!exprNode) {
-            return false;
-        }
-
-        if (exprNode->GetOpName() != "Interval") {
-            ctx.Error() << "Literal of Interval type is expected for TTL";
-            return false;
-        }
-
-        tieringInterval = exprNode;
-        return true;
+    if (exprNode->GetOpName() != "Interval") {
+        ctx.Error() << "Literal of Interval type is expected for TTL";
+        return false;
     }
 
-    bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
-        switch (from.GetAltCase()) {
-            case TRule_ttl_tier_action::kAltTtlTierAction1:
-                storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id5(), txc);
-                break;
-            case TRule_ttl_tier_action::kAltTtlTierAction2:
-                storageName.reset();
-                break;
-            case TRule_ttl_tier_action::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
-        }
-        return true;
-    }
+    tieringInterval = exprNode;
+    return true;
+}
 
-    bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to, TSqlExpression& expr, TContext& ctx,
-        TTranslation& txc) {
-        switch (from.Alt_case()) {
+bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
+    switch (from.GetAltCase()) {
+        case TRule_ttl_tier_action::kAltTtlTierAction1:
+            storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id5(), txc);
+            break;
+        case TRule_ttl_tier_action::kAltTtlTierAction2:
+            storageName.reset();
+            break;
+        case TRule_ttl_tier_action::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+    return true;
+}
+
+bool StoreTtlSettings(const TRule_table_setting_value& from, TResetableSetting<TTtlSettings, void>& to, TSqlExpression& expr, TContext& ctx,
+                      TTranslation& txc) {
+    switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue5: {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
             auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
@@ -2113,74 +2163,74 @@ namespace {
         }
         default:
             return false;
-        }
-        return true;
     }
-
-    template<typename TChar>
-    struct TPatternComponent {
-        TBasicString<TChar> Prefix;
-        TBasicString<TChar> Suffix;
-        bool IsSimple = true;
-
-        void AppendPlain(TChar c) {
-            if (IsSimple) {
-                Prefix.push_back(c);
-            }
-            Suffix.push_back(c);
-        }
-
-        void AppendAnyChar() {
-            IsSimple = false;
-            Suffix.clear();
-        }
-    };
-
-    template<typename TChar>
-    TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& pattern, TMaybe<char> escape, bool& inEscape) {
-        inEscape = false;
-        TVector<TPatternComponent<TChar>> result;
-        TPatternComponent<TChar> current;
-        bool prevIsPercentChar = false;
-        for (const TChar c : pattern) {
-            if (inEscape) {
-                current.AppendPlain(c);
-                inEscape = false;
-                prevIsPercentChar = false;
-            } else if (escape && c == static_cast<TChar>(*escape)) {
-                inEscape = true;
-            } else if (c == '%') {
-                if (!prevIsPercentChar) {
-                    result.push_back(std::move(current));
-                }
-                current = {};
-                prevIsPercentChar = true;
-            } else if (c == '_') {
-                current.AppendAnyChar();
-                prevIsPercentChar = false;
-            } else {
-                current.AppendPlain(c);
-                prevIsPercentChar = false;
-            }
-        }
-        result.push_back(std::move(current));
-        return result;
-    }
+    return true;
 }
 
+template <typename TChar>
+struct TPatternComponent {
+    TBasicString<TChar> Prefix;
+    TBasicString<TChar> Suffix;
+    bool IsSimple = true;
+
+    void AppendPlain(TChar c) {
+        if (IsSimple) {
+            Prefix.push_back(c);
+        }
+        Suffix.push_back(c);
+    }
+
+    void AppendAnyChar() {
+        IsSimple = false;
+        Suffix.clear();
+    }
+};
+
+template <typename TChar>
+TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& pattern, TMaybe<char> escape, bool& inEscape) {
+    inEscape = false;
+    TVector<TPatternComponent<TChar>> result;
+    TPatternComponent<TChar> current;
+    bool prevIsPercentChar = false;
+    for (const TChar c : pattern) {
+        if (inEscape) {
+            current.AppendPlain(c);
+            inEscape = false;
+            prevIsPercentChar = false;
+        } else if (escape && c == static_cast<TChar>(*escape)) {
+            inEscape = true;
+        } else if (c == '%') {
+            if (!prevIsPercentChar) {
+                result.push_back(std::move(current));
+            }
+            current = {};
+            prevIsPercentChar = true;
+        } else if (c == '_') {
+            current.AppendAnyChar();
+            prevIsPercentChar = false;
+        } else {
+            current.AppendPlain(c);
+            prevIsPercentChar = false;
+        }
+    }
+    result.push_back(std::move(current));
+    return result;
+}
+} // namespace
+
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
-        TTableSettings& settings, ETableType tableType, bool alter, bool reset) {
+                                              TTableSettings& settings, ETableType tableType, bool alter, bool reset) {
     switch (tableType) {
-    case ETableType::ExternalTable:
-        return StoreExternalTableSettingsEntry(id, value, settings, alter, reset);
-    case ETableType::Table:
-    case ETableType::TableStore:
-        return StoreTableSettingsEntry(id, value, settings, alter, reset);
+        case ETableType::ExternalTable:
+            return StoreExternalTableSettingsEntry(id, value, settings, alter, reset);
+        case ETableType::Table:
+        case ETableType::TableStore:
+            return StoreTableSettingsEntry(id, value, settings, alter, reset);
     }
 }
 
 bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
-        TTableSettings& settings, bool alter, bool reset) {
+                                                      TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
     YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "data_source") {
@@ -2236,7 +2286,7 @@ bool TSqlTranslation::ValidateTableSettings(const TTableSettings& settings) {
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
-        TTableSettings& settings, bool alter, bool reset) {
+                                              TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
     YQL_ENSURE(!reset || reset && alter);
     if (to_lower(id.Name) == "compaction_policy") {
@@ -2320,7 +2370,7 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         TSqlExpression expr(Ctx_, Mode_);
         if (!StoreSplitBoundaries(*value, settings.PartitionAtKeys, expr, Ctx_)) {
             Ctx_.Error() << to_upper(id.Name) << " value should be a list of keys. "
-                << "Example1: (10, 1000)  Example2: ((10), (1000, \"abc\"))";
+                         << "Example1: (10, 1000)  Example2: ((10), (1000, \"abc\"))";
             return false;
         }
     } else if (to_lower(id.Name) == "key_bloom_filter") {
@@ -2389,6 +2439,15 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             Ctx_.Error() << to_upper(id.Name) << " value should be an identifier";
             return false;
         }
+    } else if (to_lower(id.Name) == "external_data_channels_count") {
+        if (reset) {
+            Ctx_.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (!StoreInt(*value, settings.ExternalDataChannelsCount, Ctx_)) {
+            Ctx_.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx_.Error() << "Unknown table setting: " << id.Name;
         return false;
@@ -2398,7 +2457,7 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
-        TTableSettings& settings, ETableType tableType, bool alter) {
+                                              TTableSettings& settings, ETableType tableType, bool alter) {
     return StoreTableSettingsEntry(id, &value, settings, tableType, alter, false);
 }
 
@@ -2409,7 +2468,7 @@ bool TSqlTranslation::ResetTableSettingsEntry(const TIdentifier& id, TTableSetti
 bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& settingsNode, TCreateTableParameters& params) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreTableSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), firstEntry.GetRule_table_setting_value3(),
-            params.TableSettings, params.TableType)) {
+                                 params.TableSettings, params.TableType)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
@@ -2421,12 +2480,12 @@ bool TSqlTranslation::CreateTableSettings(const TRule_with_table_settings& setti
     return true;
 }
 
-bool StoreConsumerSettingsEntry(
-        const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
-        TTopicConsumerSettings& settings,
-        bool reset
-) {
+static bool StoreConsumerSettingsEntry(
+    const TIdentifier& id, const TRule_topic_consumer_setting_value* value, TSqlExpression& ctx,
+    TTopicConsumerSettings& settings,
+    bool reset, bool alter) {
     YQL_ENSURE(value || reset);
+    const TStringBuf statement = alter ? "ALTER CONSUMER"sv : "CONSUMER"sv;
     TNodePtr valueExprNode;
     if (value) {
         valueExprNode = ctx.Build(value->GetRule_expr1());
@@ -2437,7 +2496,7 @@ bool StoreConsumerSettingsEntry(
     }
     if (to_lower(id.Name) == "important") {
         if (settings.Important) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
@@ -2449,21 +2508,34 @@ bool StoreConsumerSettingsEntry(
             return false;
         }
         settings.Important = valueExprNode;
-
+    } else if (to_lower(id.Name) == "availability_period") {
+        if (settings.AvailabilityPeriod) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            settings.AvailabilityPeriod.Reset();
+        } else {
+            if (valueExprNode->GetOpName() != "Interval") {
+                ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+                return false;
+            }
+            settings.AvailabilityPeriod.Set(valueExprNode);
+        }
     } else if (to_lower(id.Name) == "read_from") {
         if (settings.ReadFromTs) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
             settings.ReadFromTs.Reset();
         } else {
-            //ToDo: !! validate
+            // ToDo: !! validate
             settings.ReadFromTs.Set(valueExprNode);
         }
     } else if (to_lower(id.Name) == "supported_codecs") {
         if (settings.SupportedCodecs) {
-            ctx.Error() << to_upper(id.Name) << " specified multiple times in ALTER CONSUMER statements for single consumer";
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
             return false;
         }
         if (reset) {
@@ -2487,15 +2559,14 @@ TIdentifier TSqlTranslation::GetTopicConsumerId(const TRule_topic_consumer_ref& 
 }
 
 bool TSqlTranslation::CreateConsumerSettings(
-        const TRule_topic_consumer_settings& node, TTopicConsumerSettings& settings
-) {
+    const TRule_topic_consumer_settings& node, TTopicConsumerSettings& settings) {
     const auto& firstEntry = node.GetRule_topic_consumer_settings_entry1();
     TSqlExpression expr(Ctx_, Mode_);
     if (!StoreConsumerSettingsEntry(
             IdEx(firstEntry.GetRule_an_id1(), *this),
             &firstEntry.GetRule_topic_consumer_setting_value3(),
-            expr, settings, false
-    )) {
+            expr, settings, false,
+            /* alter = */ false)) {
         return false;
     }
     for (auto& block : node.GetBlock2()) {
@@ -2503,8 +2574,8 @@ bool TSqlTranslation::CreateConsumerSettings(
         if (!StoreConsumerSettingsEntry(
                 IdEx(entry.GetRule_an_id1(), *this),
                 &entry.GetRule_topic_consumer_setting_value3(),
-                expr, settings, false
-        )) {
+                expr, settings, false,
+                /* alter = */ false)) {
             return false;
         }
     }
@@ -2512,9 +2583,8 @@ bool TSqlTranslation::CreateConsumerSettings(
 }
 
 bool TSqlTranslation::CreateTopicConsumer(
-        const TRule_topic_create_consumer_entry& node,
-        TVector<TTopicConsumerDescription>& consumers
-) {
+    const TRule_topic_create_consumer_entry& node,
+    TVector<TTopicConsumerDescription>& consumers) {
     consumers.emplace_back(IdEx(node.GetRule_an_id2(), *this));
 
     if (node.HasBlock3()) {
@@ -2528,54 +2598,49 @@ bool TSqlTranslation::CreateTopicConsumer(
 }
 
 bool TSqlTranslation::AlterTopicConsumerEntry(
-        const TRule_alter_topic_alter_consumer_entry& node, TTopicConsumerDescription& alterConsumer
-) {
+    const TRule_alter_topic_alter_consumer_entry& node, TTopicConsumerDescription& alterConsumer) {
     switch (node.Alt_case()) {
         case TRule_alter_topic_alter_consumer_entry::kAltAlterTopicAlterConsumerEntry1:
             return CreateConsumerSettings(
-                    node.GetAlt_alter_topic_alter_consumer_entry1().GetRule_topic_alter_consumer_set1()
-                            .GetRule_topic_consumer_settings3(),
-                    alterConsumer.Settings
-            );
-        //case TRule_alter_topic_alter_consumer_entry::ALT_NOT_SET:
+                node.GetAlt_alter_topic_alter_consumer_entry1().GetRule_topic_alter_consumer_set1().GetRule_topic_consumer_settings3(),
+                alterConsumer.Settings);
+        // case TRule_alter_topic_alter_consumer_entry::ALT_NOT_SET:
         case TRule_alter_topic_alter_consumer_entry::kAltAlterTopicAlterConsumerEntry2: {
             auto& resetNode = node.GetAlt_alter_topic_alter_consumer_entry2().GetRule_topic_alter_consumer_reset1();
             TSqlExpression expr(Ctx_, Mode_);
             if (!StoreConsumerSettingsEntry(
                     IdEx(resetNode.GetRule_an_id3(), *this),
                     nullptr,
-                    expr, alterConsumer.Settings, true
-            )) {
+                    expr, alterConsumer.Settings, true,
+                    /* alter = */ true)) {
                 return false;
             }
 
-            for (auto& resetItem: resetNode.GetBlock4()) {
+            for (auto& resetItem : resetNode.GetBlock4()) {
                 if (!StoreConsumerSettingsEntry(
                         IdEx(resetItem.GetRule_an_id2(), *this),
                         nullptr,
-                        expr, alterConsumer.Settings, true
-                )) {
+                        expr, alterConsumer.Settings, true,
+                        /* alter = */ true)) {
                     return false;
                 }
             }
             return true;
         }
-        default:
-            Ctx_.Error() << "unknown alter consumer action";
-            return false;
+        case NSQLv1Generated::TRule_alter_topic_alter_consumer_entry::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
     return true;
 }
 
 bool TSqlTranslation::AlterTopicConsumer(
-        const TRule_alter_topic_alter_consumer& node,
-        THashMap<TString, TTopicConsumerDescription>& alterConsumers
-) {
+    const TRule_alter_topic_alter_consumer& node,
+    THashMap<TString, TTopicConsumerDescription>& alterConsumers) {
     auto consumerId = GetTopicConsumerId(node.GetRule_topic_consumer_ref3());
     TString name = to_lower(consumerId.Name);
     auto iter = alterConsumers.insert(std::make_pair(
-            name, TTopicConsumerDescription(std::move(consumerId))
-    )).first;
+                                          name, TTopicConsumerDescription(std::move(consumerId))))
+                    .first;
     if (!AlterTopicConsumerEntry(node.GetRule_alter_topic_alter_consumer_entry4(), iter->second)) {
         return false;
     }
@@ -2592,9 +2657,8 @@ bool TSqlTranslation::CreateTopicEntry(const TRule_create_topic_entry& node, TCr
 }
 
 static bool StoreTopicSettingsEntry(
-        const TIdentifier& id, const TRule_topic_setting_value* value, TSqlExpression& ctx,
-        TTopicSettings& settings, bool reset
-) {
+    const TIdentifier& id, const TRule_topic_setting_value* value, TSqlExpression& ctx,
+    TTopicSettings& settings, bool reset) {
     YQL_ENSURE(value || reset);
     TNodePtr valueExprNode;
     if (value) {
@@ -2725,6 +2789,16 @@ static bool StoreTopicSettingsEntry(
             }
             settings.AutoPartitioningStrategy.Set(valueExprNode);
         }
+    } else if (to_lower(id.Name) == "metrics_level") {
+        if (reset) {
+            settings.MetricsLevel.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.MetricsLevel.Set(valueExprNode);
+        }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
         return false;
@@ -2733,40 +2807,33 @@ static bool StoreTopicSettingsEntry(
 }
 
 bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params) {
-//    alter_topic_action:
-//    alter_topic_add_consumer
-//    | alter_topic_alter_consumer
-//    | alter_topic_drop_consumer
-//    | alter_topic_set_settings
-//    | alter_topic_reset_settings
+    // alter_topic_action:
+    // alter_topic_add_consumer
+    // | alter_topic_alter_consumer
+    // | alter_topic_drop_consumer
+    // | alter_topic_set_settings
+    // | alter_topic_reset_settings
 
     switch (node.Alt_case()) {
         case TRule_alter_topic_action::kAltAlterTopicAction1: // alter_topic_add_consumer
             return CreateTopicConsumer(
-                    node.GetAlt_alter_topic_action1().GetRule_alter_topic_add_consumer1()
-                                                     .GetRule_topic_create_consumer_entry2(),
-                    params.AddConsumers
-           );
+                node.GetAlt_alter_topic_action1().GetRule_alter_topic_add_consumer1().GetRule_topic_create_consumer_entry2(),
+                params.AddConsumers);
 
         case TRule_alter_topic_action::kAltAlterTopicAction2: // alter_topic_alter_consumer
             return AlterTopicConsumer(
-                    node.GetAlt_alter_topic_action2().GetRule_alter_topic_alter_consumer1(),
-                    params.AlterConsumers
-            );
+                node.GetAlt_alter_topic_action2().GetRule_alter_topic_alter_consumer1(),
+                params.AlterConsumers);
 
         case TRule_alter_topic_action::kAltAlterTopicAction3: // drop_consumer
             params.DropConsumers.emplace_back(GetTopicConsumerId(
-                    node.GetAlt_alter_topic_action3().GetRule_alter_topic_drop_consumer1()
-                                                     .GetRule_topic_consumer_ref3()
-            ));
+                node.GetAlt_alter_topic_action3().GetRule_alter_topic_drop_consumer1().GetRule_topic_consumer_ref3()));
             return true;
 
         case TRule_alter_topic_action::kAltAlterTopicAction4: // set_settings
             return CreateTopicSettings(
-                    node.GetAlt_alter_topic_action4().GetRule_alter_topic_set_settings1()
-                                                     .GetRule_topic_settings3(),
-                    params.TopicSettings
-            );
+                node.GetAlt_alter_topic_action4().GetRule_alter_topic_set_settings1().GetRule_topic_settings3(),
+                params.TopicSettings);
 
         case TRule_alter_topic_action::kAltAlterTopicAction5: { // reset_settings
             auto& resetNode = node.GetAlt_alter_topic_action5().GetRule_alter_topic_reset_settings1();
@@ -2774,25 +2841,23 @@ bool TSqlTranslation::AlterTopicAction(const TRule_alter_topic_action& node, TAl
             if (!StoreTopicSettingsEntry(
                     IdEx(resetNode.GetRule_an_id3(), *this),
                     nullptr, expr,
-                    params.TopicSettings, true
-            )) {
+                    params.TopicSettings, true)) {
                 return false;
             }
 
-            for (auto& resetItem: resetNode.GetBlock4()) {
+            for (auto& resetItem : resetNode.GetBlock4()) {
                 if (!StoreTopicSettingsEntry(
                         IdEx(resetItem.GetRule_an_id_pure2(), *this),
                         nullptr, expr,
-                        params.TopicSettings, true
-                )) {
+                        params.TopicSettings, true)) {
                     return false;
                 }
             }
             return true;
         }
-        default:
-            Ctx_.Error() << "unknown alter topic action";
-            return false;
+
+        case NSQLv1Generated::TRule_alter_topic_action::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -2804,8 +2869,7 @@ bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTop
     if (!StoreTopicSettingsEntry(
             IdEx(firstEntry.GetRule_an_id1(), *this),
             &firstEntry.GetRule_topic_setting_value3(),
-            expr, settings, false
-    )) {
+            expr, settings, false)) {
         return false;
     }
     for (auto& block : node.GetBlock2()) {
@@ -2813,8 +2877,7 @@ bool TSqlTranslation::CreateTopicSettings(const TRule_topic_settings& node, TTop
         if (!StoreTopicSettingsEntry(
                 IdEx(entry.GetRule_an_id1(), *this),
                 &entry.GetRule_topic_setting_value3(),
-                expr, settings, false
-        )) {
+                expr, settings, false)) {
             return false;
         }
     }
@@ -2845,7 +2908,7 @@ TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
             return atom.Build();
         }
         case TRule_integer_or_bind::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -2879,7 +2942,7 @@ TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
             return atom.Build();
         }
         case TRule_type_name_tag::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -2903,7 +2966,7 @@ TNodePtr TSqlTranslation::TypeDecimal(const TRule_type_name_decimal& node) {
     if (!paramTwo) {
         return {};
     }
-    return new TCallNodeImpl(pos, "DataType", { BuildQuotedAtom(pos, "Decimal", flags), paramOne, paramTwo });
+    return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, "Decimal", flags), paramOne, paramTwo});
 }
 
 TNodePtr TSqlTranslation::AddOptionals(const TNodePtr& node, size_t optionalCount) {
@@ -2911,12 +2974,11 @@ TNodePtr TSqlTranslation::AddOptionals(const TNodePtr& node, size_t optionalCoun
     if (node) {
         TPosition pos = node->GetPos();
         for (size_t i = 0; i < optionalCount; ++i) {
-            result = new TCallNodeImpl(pos, "OptionalType", { result });
+            result = new TCallNodeImpl(pos, "OptionalType", {result});
         }
     }
     return result;
 }
-
 
 TMaybe<std::pair<TVector<TNodePtr>, bool>> TSqlTranslation::CallableArgList(const TRule_callable_arg_list& argList, bool namedArgsStarted) {
     auto pos = Ctx_.Pos();
@@ -2991,14 +3053,14 @@ TNodePtr TSqlTranslation::TypeNodeOrBind(const TRule_type_name_or_bind& node) {
             return GetNamedNode(bindName);
         }
         case TRule_type_name_or_bind::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
 TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
-    //type_name:
-    //    type_name_composite
-    //  | (type_name_decimal | type_name_simple) QUESTION*;
+    // type_name:
+    //     type_name_composite
+    //   | (type_name_decimal | type_name_simple) QUESTION*;
     if (node.Alt_case() == TRule_type_name::kAltTypeName1) {
         return TypeNode(node.GetAlt_type_name1().GetRule_type_name_composite1());
     }
@@ -3020,41 +3082,41 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name& node) {
             break;
         }
         case TRule_type_name::TAlt2::TBlock1::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     return AddOptionals(result, alt.GetBlock2().size());
 }
 
 TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
-    //type_name_composite:
-    //  ( type_name_optional
-    //  | type_name_tuple
-    //  | type_name_struct
-    //  | type_name_variant
-    //  | type_name_list
-    //  | type_name_stream
-    //  | type_name_flow
-    //  | type_name_dict
-    //  | type_name_set
-    //  | type_name_enum
-    //  | type_name_resource
-    //  | type_name_tagged
-    //  | type_name_callable
-    //  ) QUESTION*;
+    // type_name_composite:
+    //   ( type_name_optional
+    //   | type_name_tuple
+    //   | type_name_struct
+    //   | type_name_variant
+    //   | type_name_list
+    //   | type_name_stream
+    //   | type_name_flow
+    //   | type_name_dict
+    //   | type_name_set
+    //   | type_name_enum
+    //   | type_name_resource
+    //   | type_name_tagged
+    //   | type_name_callable
+    //   ) QUESTION*;
     TNodePtr result;
     TPosition pos = Ctx_.Pos();
     auto flags = TNodeFlags::Default;
 
-    auto wrapOneParamType = [&] (const TRule_type_name_or_bind& param, const char* type) -> TNodePtr {
+    auto wrapOneParamType = [&](const TRule_type_name_or_bind& param, const char* type) -> TNodePtr {
         auto node = TypeNodeOrBind(param);
-        return node ? new TAstListNodeImpl(pos, { BuildAtom(pos, type, flags), node }) : nullptr;
+        return node ? new TAstListNodeImpl(pos, {BuildAtom(pos, type, flags), node}) : nullptr;
     };
-    auto makeVoid = [&] () -> TNodePtr {
-        return new TAstListNodeImpl(pos, { BuildAtom(pos, "VoidType", flags) });
+    auto makeVoid = [&]() -> TNodePtr {
+        return new TAstListNodeImpl(pos, {BuildAtom(pos, "VoidType", flags)});
     };
-    auto makeQuote = [&] (const TNodePtr& node) -> TNodePtr {
-        return new TAstListNodeImpl(pos, { new TAstAtomNodeImpl(pos, "quote", 0), node });
+    auto makeQuote = [&](const TNodePtr& node) -> TNodePtr {
+        return new TAstListNodeImpl(pos, {new TAstAtomNodeImpl(pos, "quote", 0), node});
     };
 
     auto& block = node.GetBlock1();
@@ -3070,27 +3132,27 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             items.push_back(BuildAtom(pos, "TupleType", flags));
 
             switch (tupleType.GetBlock2().Alt_case()) {
-            case TRule_type_name_tuple::TBlock2::kAlt1: {
-                if (tupleType.GetBlock2().GetAlt1().HasBlock2()) {
-                    auto typeNode = TypeNodeOrBind(tupleType.GetBlock2().GetAlt1().GetBlock2().GetRule_type_name_or_bind1());
-                    if (!typeNode) {
-                        return {};
-                    }
-                    items.push_back(typeNode);
-                    for (auto& arg : tupleType.GetBlock2().GetAlt1().GetBlock2().GetBlock2()) {
-                        auto typeNode = TypeNodeOrBind(arg.GetRule_type_name_or_bind2());
+                case TRule_type_name_tuple::TBlock2::kAlt1: {
+                    if (tupleType.GetBlock2().GetAlt1().HasBlock2()) {
+                        auto typeNode = TypeNodeOrBind(tupleType.GetBlock2().GetAlt1().GetBlock2().GetRule_type_name_or_bind1());
                         if (!typeNode) {
                             return {};
                         }
                         items.push_back(typeNode);
+                        for (auto& arg : tupleType.GetBlock2().GetAlt1().GetBlock2().GetBlock2()) {
+                            auto typeNode = TypeNodeOrBind(arg.GetRule_type_name_or_bind2());
+                            if (!typeNode) {
+                                return {};
+                            }
+                            items.push_back(typeNode);
+                        }
                     }
+                    [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
                 }
-                [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
-            }
-            case TRule_type_name_tuple::TBlock2::kAlt2:
-                break;
-            case TRule_type_name_tuple::TBlock2::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                case TRule_type_name_tuple::TBlock2::kAlt2:
+                    break;
+                case TRule_type_name_tuple::TBlock2::ALT_NOT_SET:
+                    Y_UNREACHABLE();
             }
 
             result = new TAstListNodeImpl(pos, items);
@@ -3114,7 +3176,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                             return {};
                         }
 
-                        items.push_back(makeQuote(new TAstListNodeImpl(pos, { tag, typeNode })));
+                        items.push_back(makeQuote(new TAstListNodeImpl(pos, {tag, typeNode})));
                         for (auto& arg : structType.GetBlock2().GetAlt1().GetBlock2().GetBlock2()) {
                             auto typeNode = TypeNodeOrBind(arg.GetRule_struct_arg2().GetRule_type_name_or_bind3());
                             if (!typeNode) {
@@ -3124,7 +3186,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                             if (!tag) {
                                 return {};
                             }
-                            items.push_back(makeQuote(new TAstListNodeImpl(pos, { tag, typeNode })));
+                            items.push_back(makeQuote(new TAstListNodeImpl(pos, {tag, typeNode})));
                         }
                     }
                     [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
@@ -3132,7 +3194,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                 case TRule_type_name_struct::TBlock2::kAlt2:
                     break;
                 case TRule_type_name_struct::TBlock2::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
+                    Y_UNREACHABLE();
             }
 
             result = new TAstListNodeImpl(pos, items);
@@ -3154,7 +3216,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                 if (!tag) {
                     return {};
                 }
-                items.push_back(makeQuote(new TAstListNodeImpl(pos, { tag, typeNode })));
+                items.push_back(makeQuote(new TAstListNodeImpl(pos, {tag, typeNode})));
             } else {
                 items.push_back(BuildAtom(pos, "TupleType", flags));
                 items.push_back(typeNode);
@@ -3174,7 +3236,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                     if (!tag) {
                         return {};
                     }
-                    items.push_back(makeQuote(new TAstListNodeImpl(pos, { tag, typeNode })));
+                    items.push_back(makeQuote(new TAstListNodeImpl(pos, {tag, typeNode})));
                 } else {
                     if (arg.GetRule_variant_arg2().HasBlock1()) {
                         Ctx_.Error() << "Variant over struct and tuple mixture";
@@ -3184,7 +3246,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
                 }
             }
             typeNode = new TAstListNodeImpl(pos, items);
-            result = new TAstListNodeImpl(pos, { BuildAtom(pos, "VariantType", flags), typeNode });
+            result = new TAstListNodeImpl(pos, {BuildAtom(pos, "VariantType", flags), typeNode});
             break;
         }
         case TRule_type_name_composite_TBlock1::kAlt5: {
@@ -3225,7 +3287,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             if (!typeNode) {
                 return {};
             }
-            result = new TAstListNodeImpl(pos, { BuildAtom(pos, "DictType", flags), typeNode, makeVoid() });
+            result = new TAstListNodeImpl(pos, {BuildAtom(pos, "DictType", flags), typeNode, makeVoid()});
             break;
         }
         case TRule_type_name_composite_TBlock1::kAlt10: {
@@ -3236,16 +3298,16 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             if (!tag) {
                 return {};
             }
-            items.push_back(makeQuote(new TAstListNodeImpl(pos, { tag, makeVoid() })));
+            items.push_back(makeQuote(new TAstListNodeImpl(pos, {tag, makeVoid()})));
             for (auto& arg : enumType.GetBlock4()) {
                 auto tag = TypeNameTag(arg.GetRule_type_name_tag2());
                 if (!tag) {
                     return {};
                 }
-                items.push_back(makeQuote(new TAstListNodeImpl(pos, { tag, makeVoid() })));
+                items.push_back(makeQuote(new TAstListNodeImpl(pos, {tag, makeVoid()})));
             }
             auto typeNode = new TAstListNodeImpl(pos, items);
-            result = new TAstListNodeImpl(pos, { BuildAtom(pos, "VariantType", flags), typeNode });
+            result = new TAstListNodeImpl(pos, {BuildAtom(pos, "VariantType", flags), typeNode});
             break;
         }
         case TRule_type_name_composite_TBlock1::kAlt11: {
@@ -3254,7 +3316,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             if (!tag) {
                 return {};
             }
-            result = new TAstListNodeImpl(pos, { BuildAtom(pos, "ResourceType", flags), tag });
+            result = new TAstListNodeImpl(pos, {BuildAtom(pos, "ResourceType", flags), tag});
             break;
         }
         case TRule_type_name_composite_TBlock1::kAlt12: {
@@ -3267,7 +3329,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             if (!tag) {
                 return {};
             }
-            result = new TAstListNodeImpl(pos, { BuildAtom(pos, "TaggedType", flags), typeNode, tag });
+            result = new TAstListNodeImpl(pos, {BuildAtom(pos, "TaggedType", flags), typeNode, tag});
             break;
         }
         case TRule_type_name_composite_TBlock1::kAlt13: {
@@ -3299,26 +3361,36 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
             items.push_back(BuildAtom(pos, "CallableType", flags));
             if (optionalArgsCount) {
                 items.push_back(makeQuote(new TAstListNodeImpl(pos,
-                    { BuildQuotedAtom(pos, ToString(optionalArgsCount), flags) })));
+                                                               {BuildQuotedAtom(pos, ToString(optionalArgsCount), flags)})));
             } else {
                 items.push_back(makeQuote(new TAstListNodeImpl(pos, {})));
             }
-            items.push_back(makeQuote(new TAstListNodeImpl(pos, { returnType })));
+            items.push_back(makeQuote(new TAstListNodeImpl(pos, {returnType})));
             if (requiredArgs) {
-                for (auto& arg: requiredArgs->first) {
+                for (auto& arg : requiredArgs->first) {
                     items.push_back(makeQuote(arg));
                 }
             }
             if (optionalArgs) {
-                for (auto& arg: optionalArgs->first) {
+                for (auto& arg : optionalArgs->first) {
                     items.push_back(makeQuote(arg));
                 }
             }
             result = new TAstListNodeImpl(pos, items);
             break;
         }
+        case TRule_type_name_composite_TBlock1::kAlt14: {
+            auto& linearType = block.GetAlt14().GetRule_type_name_linear1();
+            result = wrapOneParamType(linearType.GetRule_type_name_or_bind3(), "LinearType");
+            break;
+        }
+        case TRule_type_name_composite_TBlock1::kAlt15: {
+            auto& linearType = block.GetAlt15().GetRule_type_name_dynamiclinear1();
+            result = wrapOneParamType(linearType.GetRule_type_name_or_bind3(), "DynamicLinearType");
+            break;
+        }
         case TRule_type_name_composite_TBlock1::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     return AddOptionals(result, node.GetBlock2().size());
@@ -3459,131 +3531,131 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
     //    | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     //    | WATERMARK AS LPAREN expr RPAREN
     switch (rule.Alt_case()) {
-    case TRule_table_hint::kAltTableHint1: {
-        const auto& alt = rule.GetAlt_table_hint1();
-        const TString id = Id(alt.GetRule_an_id_hint1(), *this);
-        const auto idLower = to_lower(id);
-        if (idLower == "schema" || idLower == "columns") {
-            Error() << "Expected type after " << to_upper(id);
-            return false;
-        }
-        TVector<TNodePtr> hint_val;
-        if (alt.HasBlock2()) {
-            auto& tags = alt.GetBlock2().GetBlock2();
-            switch (tags.Alt_case()) {
-                case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt1:
-                    hint_val.push_back(TypeNameTag(tags.GetAlt1().GetRule_type_name_tag1()));
-                    break;
-                case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt2: {
-                    hint_val.push_back(TypeNameTag(tags.GetAlt2().GetRule_type_name_tag2()));
-                    for (auto& tag : tags.GetAlt2().GetBlock3()) {
-                        hint_val.push_back(TypeNameTag(tag.GetRule_type_name_tag2()));
-                    }
-                    break;
-                }
-                case TRule_table_hint_TAlt1_TBlock2_TBlock2::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
+        case TRule_table_hint::kAltTableHint1: {
+            const auto& alt = rule.GetAlt_table_hint1();
+            const TString id = Id(alt.GetRule_an_id_hint1(), *this);
+            const auto idLower = to_lower(id);
+            if (idLower == "schema" || idLower == "columns") {
+                Error() << "Expected type after " << to_upper(id);
+                return false;
             }
-        }
-        hints[id] = hint_val;
-        break;
-    }
-
-    case TRule_table_hint::kAltTableHint2: {
-        const auto& alt2 = rule.GetAlt_table_hint2();
-        auto node = TypeNodeOrBind(alt2.GetRule_type_name_or_bind3());
-        if (!node) {
-            return false;
-        }
-
-        hints["user_" + to_lower(alt2.GetToken1().GetValue())] = { node };
-        break;
-    }
-
-    case TRule_table_hint::kAltTableHint3: {
-        const auto& alt = rule.GetAlt_table_hint3();
-        TVector<TNodePtr> labels;
-        TVector<TNodePtr> structTypeItems;
-        if (alt.HasBlock4()) {
-            bool warn = false;
-            auto processItem = [&](const TRule_struct_arg_positional& arg) {
-                // struct_arg_positional:
-                //     type_name_tag type_name_or_bind (NOT? NULL)?
-                //   | type_name_or_bind AS type_name_tag; //deprecated
-                const bool altCurrent = arg.Alt_case() == TRule_struct_arg_positional::kAltStructArgPositional1;
-                auto& typeNameOrBind = altCurrent ?
-                    arg.GetAlt_struct_arg_positional1().GetRule_type_name_or_bind2() :
-                    arg.GetAlt_struct_arg_positional2().GetRule_type_name_or_bind1();
-                auto typeNode = TypeNodeOrBind(typeNameOrBind);
-                if (!typeNode) {
-                    return false;
-                }
-
-                auto pos = Ctx_.Pos();
-                if (!altCurrent && !warn) {
-                    Ctx_.Warning(pos, TIssuesIds::YQL_DEPRECATED_POSITIONAL_SCHEMA)
-                        << "Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column'";
-                    warn = true;
-                }
-
-                if (altCurrent) {
-                    bool notNull = arg.GetAlt_struct_arg_positional1().HasBlock3() && arg.GetAlt_struct_arg_positional1().GetBlock3().HasBlock1();
-                    if (!notNull) {
-                        typeNode = new TCallNodeImpl(pos, "AsOptionalType", { typeNode });
+            TVector<TNodePtr> hint_val;
+            if (alt.HasBlock2()) {
+                auto& tags = alt.GetBlock2().GetBlock2();
+                switch (tags.Alt_case()) {
+                    case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt1:
+                        hint_val.push_back(TypeNameTag(tags.GetAlt1().GetRule_type_name_tag1()));
+                        break;
+                    case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt2: {
+                        hint_val.push_back(TypeNameTag(tags.GetAlt2().GetRule_type_name_tag2()));
+                        for (auto& tag : tags.GetAlt2().GetBlock3()) {
+                            hint_val.push_back(TypeNameTag(tag.GetRule_type_name_tag2()));
+                        }
+                        break;
                     }
+                    case TRule_table_hint_TAlt1_TBlock2_TBlock2::ALT_NOT_SET:
+                        Y_UNREACHABLE();
                 }
+            }
+            hints[id] = hint_val;
+            break;
+        }
 
-                auto& typeNameTag = altCurrent ?
-                    arg.GetAlt_struct_arg_positional1().GetRule_type_name_tag1() :
-                    arg.GetAlt_struct_arg_positional2().GetRule_type_name_tag3();
-                auto tag = TypeNameTag(typeNameTag);
-                if (!tag) {
-                    return false;
-                }
-
-                labels.push_back(tag);
-                structTypeItems.push_back(BuildTuple(pos, { tag, typeNode }));
-                return true;
-            };
-
-            if (!processItem(alt.GetBlock4().GetRule_struct_arg_positional1())) {
+        case TRule_table_hint::kAltTableHint2: {
+            const auto& alt2 = rule.GetAlt_table_hint2();
+            auto node = TypeNodeOrBind(alt2.GetRule_type_name_or_bind3());
+            if (!node) {
                 return false;
             }
 
-            for (auto& entry : alt.GetBlock4().GetBlock2()) {
-                if (!processItem(entry.GetRule_struct_arg_positional2())) {
+            hints["user_" + to_lower(alt2.GetToken1().GetValue())] = {node};
+            break;
+        }
+
+        case TRule_table_hint::kAltTableHint3: {
+            const auto& alt = rule.GetAlt_table_hint3();
+            TVector<TNodePtr> labels;
+            TVector<TNodePtr> structTypeItems;
+            if (alt.HasBlock4()) {
+                bool warn = false;
+                auto processItem = [&](const TRule_struct_arg_positional& arg) {
+                    // struct_arg_positional:
+                    //     type_name_tag type_name_or_bind (NOT? NULL)?
+                    //   | type_name_or_bind AS type_name_tag; //deprecated
+                    const bool altCurrent = arg.Alt_case() == TRule_struct_arg_positional::kAltStructArgPositional1;
+                    auto& typeNameOrBind = altCurrent ? arg.GetAlt_struct_arg_positional1().GetRule_type_name_or_bind2() : arg.GetAlt_struct_arg_positional2().GetRule_type_name_or_bind1();
+                    auto typeNode = TypeNodeOrBind(typeNameOrBind);
+                    if (!typeNode) {
+                        return false;
+                    }
+
+                    auto pos = Ctx_.Pos();
+                    if (!altCurrent && !warn) {
+                        if (!Ctx_.Warning(pos, TIssuesIds::YQL_DEPRECATED_POSITIONAL_SCHEMA, [](auto& out) {
+                                out << "Deprecated syntax for positional schema: "
+                                    << "please use 'column type' instead of 'type AS column'";
+                            })) {
+                            return false;
+                        }
+                        warn = true;
+                    }
+
+                    if (altCurrent) {
+                        bool notNull = arg.GetAlt_struct_arg_positional1().HasBlock3() && arg.GetAlt_struct_arg_positional1().GetBlock3().HasBlock1();
+                        if (!notNull) {
+                            typeNode = new TCallNodeImpl(pos, "AsOptionalType", {typeNode});
+                        }
+                    }
+
+                    auto& typeNameTag = altCurrent ? arg.GetAlt_struct_arg_positional1().GetRule_type_name_tag1() : arg.GetAlt_struct_arg_positional2().GetRule_type_name_tag3();
+                    auto tag = TypeNameTag(typeNameTag);
+                    if (!tag) {
+                        return false;
+                    }
+
+                    labels.push_back(tag);
+                    structTypeItems.push_back(BuildTuple(pos, {tag, typeNode}));
+                    return true;
+                };
+
+                if (!processItem(alt.GetBlock4().GetRule_struct_arg_positional1())) {
                     return false;
                 }
+
+                for (auto& entry : alt.GetBlock4().GetBlock2()) {
+                    if (!processItem(entry.GetRule_struct_arg_positional2())) {
+                        return false;
+                    }
+                }
+            }
+
+            TPosition pos = Ctx_.TokenPosition(alt.GetToken1());
+            TNodePtr structType = new TCallNodeImpl(pos, "StructType", structTypeItems);
+            bool shouldEmitLabel = provider != YtProviderName || TCiString(keyFunc) == "object";
+            if (shouldEmitLabel) {
+                auto labelsTuple = BuildTuple(pos, labels);
+                hints["user_" + to_lower(alt.GetToken1().GetValue())] = {structType, labelsTuple};
+                break;
+            } else {
+                hints["user_" + to_lower(alt.GetToken1().GetValue())] = {structType};
+                break;
             }
         }
 
-        TPosition pos = Ctx_.TokenPosition(alt.GetToken1());
-        TNodePtr structType = new TCallNodeImpl(pos, "StructType", structTypeItems);
-        bool shouldEmitLabel = provider != YtProviderName || TCiString(keyFunc) == "object";
-        if (shouldEmitLabel) {
-            auto labelsTuple = BuildTuple(pos, labels);
-            hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType, labelsTuple };
-            break;
-        } else {
-            hints["user_" + to_lower(alt.GetToken1().GetValue())] = { structType };
+        case TRule_table_hint::kAltTableHint4: {
+            const auto& alt = rule.GetAlt_table_hint4();
+            const auto pos = Ctx_.TokenPosition(alt.GetToken1());
+            TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
+            auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
+            if (!expr) {
+                return false;
+            }
+            hints["watermark"] = {BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr))};
             break;
         }
-    }
 
-    case TRule_table_hint::kAltTableHint4: {
-        const auto& alt = rule.GetAlt_table_hint4();
-        const auto pos = Ctx_.TokenPosition(alt.GetToken1());
-        TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        auto expr = TSqlExpression(Ctx_, Mode_).Build(alt.GetRule_expr4());
-        if (!expr) {
-            return false;
-        }
-        hints["watermark"] = { BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), std::move(expr)) };
-        break;
-    }
-
-    case TRule_table_hint::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case TRule_table_hint::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 
     return true;
@@ -3594,20 +3666,20 @@ TMaybe<TTableHints> TSqlTranslation::TableHintsImpl(const TRule_table_hints& nod
     auto& block = node.GetBlock2();
     bool hasErrors = false;
     switch (block.Alt_case()) {
-    case TRule_table_hints::TBlock2::kAlt1: {
-        hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints, provider, keyFunc);
-        break;
-    }
-    case TRule_table_hints::TBlock2::kAlt2: {
-        hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints, provider, keyFunc);
-        for (const auto& x : block.GetAlt2().GetBlock3()) {
-            hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints, provider, keyFunc);
+        case TRule_table_hints::TBlock2::kAlt1: {
+            hasErrors = !TableHintImpl(block.GetAlt1().GetRule_table_hint1(), hints, provider, keyFunc);
+            break;
         }
+        case TRule_table_hints::TBlock2::kAlt2: {
+            hasErrors = !TableHintImpl(block.GetAlt2().GetRule_table_hint2(), hints, provider, keyFunc);
+            for (const auto& x : block.GetAlt2().GetBlock3()) {
+                hasErrors = hasErrors || !TableHintImpl(x.GetRule_table_hint2(), hints, provider, keyFunc);
+            }
 
-        break;
-    }
-    case TRule_table_hints::TBlock2::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+            break;
+        }
+        case TRule_table_hints::TBlock2::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
     if (hasErrors) {
         return Nothing();
@@ -3646,55 +3718,55 @@ bool TSqlTranslation::SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& 
     TString service = Context().Scoped->CurrService;
     TDeferredAtom cluster = Context().Scoped->CurrCluster;
     switch (node.Alt_case()) {
-    case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
-        if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-            if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+        case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
+            if (node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
+                if (!ClusterExpr(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                    return false;
+                }
+            }
+
+            if (cluster.Empty()) {
+                Error() << "No cluster name given and no default cluster is selected";
                 return false;
             }
-        }
 
-        if (cluster.Empty()) {
-            Error() << "No cluster name given and no default cluster is selected";
-            return false;
+            result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
+            auto tableOrAt = Id(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
+            auto tableAndView = TableKeyImpl(tableOrAt, {}, *this);
+            result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster,
+                                        TDeferredAtom(Context().Pos(), tableAndView.first), tableAndView.second);
+            break;
         }
+        case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
+            if (node.GetAlt_simple_table_ref_core2().HasBlock1()) {
+                if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+                    return false;
+                }
+            }
 
-        result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
-        auto tableOrAt = Id(node.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
-        auto tableAndView = TableKeyImpl(tableOrAt, {}, *this);
-        result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster,
-            TDeferredAtom(Context().Pos(), tableAndView.first), tableAndView.second);
-        break;
-    }
-    case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
-        if (node.GetAlt_simple_table_ref_core2().HasBlock1()) {
-            if (!ClusterExpr(node.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1(), false, service, cluster)) {
+            if (cluster.Empty()) {
+                Error() << "No cluster name given and no default cluster is selected";
                 return false;
             }
-        }
 
-        if (cluster.Empty()) {
-            Error() << "No cluster name given and no default cluster is selected";
-            return false;
-        }
+            auto at = node.GetAlt_simple_table_ref_core2().HasBlock2();
+            TString bindName;
+            if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), bindName, *this)) {
+                return false;
+            }
+            auto named = GetNamedNode(bindName);
+            if (!named) {
+                return false;
+            }
 
-        auto at = node.GetAlt_simple_table_ref_core2().HasBlock2();
-        TString bindName;
-        if (!NamedNodeImpl(node.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), bindName, *this)) {
-            return false;
+            TDeferredAtom table;
+            MakeTableFromExpression(Context().Pos(), Context(), named, table);
+            result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
+            result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {at ? "@" : ""});
+            break;
         }
-        auto named = GetNamedNode(bindName);
-        if (!named) {
-            return false;
-        }
-
-        TDeferredAtom table;
-        MakeTableFromExpression(Context().Pos(), Context(), named, table);
-        result = TTableRef(Context().MakeName("table"), service, cluster, nullptr);
-        result.Keys = BuildTableKey(Context().Pos(), result.Service, result.Cluster, table, {at ? "@" : ""});
-        break;
-    }
-    case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 
     return result.Keys != nullptr;
@@ -3727,52 +3799,37 @@ bool TSqlTranslation::TopicRefImpl(const TRule_topic_ref& node, TTopicRef& resul
 }
 
 TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<TSymbolNameWithPos>& names) {
-    // named_nodes_stmt: bind_parameter_list EQUALS (expr | subselect_stmt);
-    // subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
+    // named_nodes_stmt: bind_parameter_list EQUALS (expr | select_unparenthesized_stmt);
     if (!BindList(rule.GetRule_bind_parameter_list1(), names)) {
         return {};
     }
 
     TNodePtr nodeExpr = nullptr;
     switch (rule.GetBlock3().Alt_case()) {
-    case TRule_named_nodes_stmt::TBlock3::kAlt1: {
-        TSqlExpression expr(Ctx_, Mode_);
-        auto result = expr.Build(rule.GetBlock3().GetAlt1().GetRule_expr1());
-        return result;
-    }
-
-    case TRule_named_nodes_stmt::TBlock3::kAlt2:{
-        const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_subselect_stmt1();
-
-        TSqlSelect expr(Ctx_, Mode_);
-        TPosition pos;
-        TSourcePtr source = nullptr;
-        switch (subselect_rule.GetBlock1().Alt_case()) {
-            case TRule_subselect_stmt::TBlock1::kAlt1:
-                source = expr.Build(subselect_rule.GetBlock1().GetAlt1().GetRule_select_stmt2(), pos);
-                break;
-
-            case TRule_subselect_stmt::TBlock1::kAlt2:
-                source = expr.Build(subselect_rule.GetBlock1().GetAlt2().GetRule_select_unparenthesized_stmt1(), pos);
-                break;
-
-            case TRule_subselect_stmt::TBlock1::ALT_NOT_SET:
-                AltNotImplemented("subselect_stmt", subselect_rule.GetBlock1());
-                Ctx_.IncrementMonCounter("sql_errors", "UnknownNamedNode");
-                return nullptr;
+        case TRule_named_nodes_stmt::TBlock3::kAlt1: {
+            TSqlExpression expr(Ctx_, Mode_);
+            auto result = expr.BuildSourceOrNode(rule.GetBlock3().GetAlt1().GetRule_expr1());
+            if (TSourcePtr source = MoveOutIfSource(result)) {
+                result = BuildSourceNode(Ctx_.Pos(), std::move(source));
+            }
+            return result;
         }
 
-        if (!source) {
-            return {};
+        case TRule_named_nodes_stmt::TBlock3::kAlt2: {
+            const auto& subselect_rule = rule.GetBlock3().GetAlt2().GetRule_select_unparenthesized_stmt1();
+
+            TPosition pos;
+            TSourcePtr source = TSqlSelect(Ctx_, Mode_).Build(subselect_rule, pos);
+
+            if (!source) {
+                return {};
+            }
+
+            return BuildSourceNode(pos, std::move(source));
         }
 
-        return BuildSourceNode(pos, std::move(source));
-    }
-
-    case TRule_named_nodes_stmt::TBlock3::ALT_NOT_SET:
-        AltNotImplemented("named_node", rule.GetBlock3());
-        Ctx_.IncrementMonCounter("sql_errors", "UnknownNamedNode");
-        return nullptr;
+        case TRule_named_nodes_stmt::TBlock3::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 
@@ -3850,7 +3907,7 @@ bool TSqlTranslation::SortSpecificationList(const TRule_sort_specification_list&
     if (!SortSpecification(node.GetRule_sort_specification1(), sortSpecs)) {
         return false;
     }
-    for (auto sortSpec: node.GetBlock2()) {
+    for (auto sortSpec : node.GetBlock2()) {
         Token(sortSpec.GetToken1());
         if (!SortSpecification(sortSpec.GetRule_sort_specification2(), sortSpecs)) {
             return false;
@@ -3875,25 +3932,23 @@ bool TSqlTranslation::IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPo
 bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom& result, bool allowSystemRoles) {
     // role_name: an_id_or_type | bind_parameter;
     switch (node.Alt_case()) {
-        case TRule_role_name::kAltRoleName1:
-        {
+        case TRule_role_name::kAltRoleName1: {
             TString name = Id(node.GetAlt_role_name1().GetRule_an_id_or_type1(), *this);
             result = TDeferredAtom(Ctx_.Pos(), name);
             break;
         }
-        case TRule_role_name::kAltRoleName2:
-        {
+        case TRule_role_name::kAltRoleName2: {
             if (!BindParameterClause(node.GetAlt_role_name2().GetRule_bind_parameter1(), result)) {
                 return false;
             }
             break;
         }
         case TRule_role_name::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     if (auto literalName = result.GetLiteral(); literalName && !allowSystemRoles) {
-        static const THashSet<TStringBuf> systemRoles = { "current_role", "current_user", "session_user" };
+        static const THashSet<TStringBuf> systemRoles = {"current_role", "current_user", "session_user"};
         if (systemRoles.contains(to_lower(*literalName))) {
             Ctx_.Error() << "System role " << to_upper(*literalName) << " can not be used here";
             return false;
@@ -3955,7 +4010,7 @@ void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std:
     } else if (IS_TOKEN(Ctx_.Settings.Antlr4Parser, token, NOLOGIN)) {
         canLogin = false;
     } else {
-        Y_ABORT("You should change implementation according to grammar changes");
+        Y_UNREACHABLE();
     }
 }
 
@@ -3972,8 +4027,7 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
         //      authentication_option: password_option | hash_option;
 
         switch (option.Alt_case()) {
-            case TRule_user_option::kAltUserOption1:
-            {
+            case TRule_user_option::kAltUserOption1: {
                 if (used.contains(EUserOption::Authentication)) {
                     Error() << "Conflicting or redundant options";
                     return false;
@@ -3985,28 +4039,26 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
 
                 switch (authenticationOption.Alt_case()) {
                     case TRule_authentication_option::kAltAuthenticationOption1: {
-                        if (!PasswordParameter(authenticationOption.GetAlt_authentication_option1().GetRule_password_option1(), result)){
+                        if (!PasswordParameter(authenticationOption.GetAlt_authentication_option1().GetRule_password_option1(), result)) {
                             return false;
                         }
 
                         break;
                     }
                     case TRule_authentication_option::kAltAuthenticationOption2: {
-                        if (!HashParameter(authenticationOption.GetAlt_authentication_option2().GetRule_hash_option1(), result)){
+                        if (!HashParameter(authenticationOption.GetAlt_authentication_option2().GetRule_hash_option1(), result)) {
                             return false;
                         }
 
                         break;
                     }
-                    case TRule_authentication_option::ALT_NOT_SET: {
-                        Y_ABORT("You should change implementation according to grammar changes");
-                    }
+                    case TRule_authentication_option::ALT_NOT_SET:
+                        Y_UNREACHABLE();
                 }
 
                 break;
             }
-            case TRule_user_option::kAltUserOption2:
-            {
+            case TRule_user_option::kAltUserOption2: {
                 if (used.contains(EUserOption::Login)) {
                     Error() << "Conflicting or redundant options";
                     return false;
@@ -4019,9 +4071,7 @@ bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optio
                 break;
             }
             case TRule_user_option::ALT_NOT_SET:
-            {
-                Y_ABORT("You should change implementation according to grammar changes");
-            }
+                Y_UNREACHABLE();
         }
 
         return true;
@@ -4056,20 +4106,20 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_id& node, TDef
     // | (USE | FULL) LEGACY?
     // | CREATE (DIRECTORY | TABLE | QUEUE)?
 
-    auto handleOneIdentifier = [&result, this] (const auto& permissionNameKeyword) {
+    auto handleOneIdentifier = [&result, this](const auto& permissionNameKeyword) {
         result = TDeferredAtom(Ctx_.Pos(), GetIdentifier(*this, permissionNameKeyword).Name);
     };
 
-    auto handleTwoIdentifiers = [&result, this] (const auto& permissionNameKeyword) {
+    auto handleTwoIdentifiers = [&result, this](const auto& permissionNameKeyword) {
         const auto& token1 = permissionNameKeyword.GetToken1();
         const auto& token2 = permissionNameKeyword.GetToken2();
         TString identifierName = TIdentifier(TPosition(token1.GetColumn(), token1.GetLine()), Identifier(token1)).Name +
-                                "_" +
-                                TIdentifier(TPosition(token2.GetColumn(), token2.GetLine()), Identifier(token2)).Name;
+                                 "_" +
+                                 TIdentifier(TPosition(token2.GetColumn(), token2.GetLine()), Identifier(token2)).Name;
         result = TDeferredAtom(Ctx_.Pos(), identifierName);
     };
 
-    auto handleOneOrTwoIdentifiers = [&result, this] (const auto& permissionNameKeyword) {
+    auto handleOneOrTwoIdentifiers = [&result, this](const auto& permissionNameKeyword) {
         TString identifierName = GetIdentifier(*this, permissionNameKeyword).Name;
         if (permissionNameKeyword.HasBlock2()) {
             identifierName += "_" + GetIdentifier(*this, permissionNameKeyword.GetBlock2()).Name;
@@ -4078,80 +4128,68 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_id& node, TDef
     };
 
     switch (node.GetAltCase()) {
-        case TRule_permission_id::kAltPermissionId1:
-        {
+        case TRule_permission_id::kAltPermissionId1: {
             // CONNECT
             handleOneIdentifier(node.GetAlt_permission_id1());
             break;
         }
-        case TRule_permission_id::kAltPermissionId2:
-        {
+        case TRule_permission_id::kAltPermissionId2: {
             // LIST
             handleOneIdentifier(node.GetAlt_permission_id2());
             break;
         }
-        case TRule_permission_id::kAltPermissionId3:
-        {
+        case TRule_permission_id::kAltPermissionId3: {
             // INSERT
             handleOneIdentifier(node.GetAlt_permission_id3());
             break;
         }
-        case TRule_permission_id::kAltPermissionId4:
-        {
+        case TRule_permission_id::kAltPermissionId4: {
             // MANAGE
             handleOneIdentifier(node.GetAlt_permission_id4());
             break;
         }
-        case TRule_permission_id::kAltPermissionId5:
-        {
+        case TRule_permission_id::kAltPermissionId5: {
             // DROP
             handleOneIdentifier(node.GetAlt_permission_id5());
             break;
         }
-        case TRule_permission_id::kAltPermissionId6:
-        {
+        case TRule_permission_id::kAltPermissionId6: {
             // GRANT
             handleOneIdentifier(node.GetAlt_permission_id6());
             break;
         }
-        case TRule_permission_id::kAltPermissionId7:
-        {
+        case TRule_permission_id::kAltPermissionId7: {
             // MODIFY (TABLES | ATTRIBUTES)
             handleTwoIdentifiers(node.GetAlt_permission_id7());
             break;
         }
-        case TRule_permission_id::kAltPermissionId8:
-        {
+        case TRule_permission_id::kAltPermissionId8: {
             // (UPDATE | ERASE) ROW
             handleTwoIdentifiers(node.GetAlt_permission_id8());
             break;
         }
-        case TRule_permission_id::kAltPermissionId9:
-        {
+        case TRule_permission_id::kAltPermissionId9: {
             // (REMOVE | DESCRIBE | ALTER) SCHEMA
             handleTwoIdentifiers(node.GetAlt_permission_id9());
             break;
         }
-        case TRule_permission_id::kAltPermissionId10:
-        {
+        case TRule_permission_id::kAltPermissionId10: {
             // SELECT (TABLES | ATTRIBUTES | ROW)?
             handleOneOrTwoIdentifiers(node.GetAlt_permission_id10());
             break;
         }
-        case TRule_permission_id::kAltPermissionId11:
-        {
+        case TRule_permission_id::kAltPermissionId11: {
             // (USE | FULL) LEGACY?
             handleOneOrTwoIdentifiers(node.GetAlt_permission_id11());
             break;
         }
-        case TRule_permission_id::kAltPermissionId12:
-        {
+        case TRule_permission_id::kAltPermissionId12: {
             // CREATE (DIRECTORY | TABLE | QUEUE)?
             handleOneOrTwoIdentifiers(node.GetAlt_permission_id12());
             break;
         }
         case TRule_permission_id::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -4159,13 +4197,11 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_id& node, TDef
 bool TSqlTranslation::PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result) {
     // permission_name: permission_id | STRING_VALUE;
     switch (node.Alt_case()) {
-        case TRule_permission_name::kAltPermissionName1:
-        {
+        case TRule_permission_name::kAltPermissionName1: {
             return PermissionNameClause(node.GetAlt_permission_name1().GetRule_permission_id1(), result);
             break;
         }
-        case TRule_permission_name::kAltPermissionName2:
-        {
+        case TRule_permission_name::kAltPermissionName2: {
             const TString stringValue(Ctx_.Token(node.GetAlt_permission_name2().GetToken1()));
             auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
             if (!unescaped) {
@@ -4175,7 +4211,7 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name& node, TD
             break;
         }
         case TRule_permission_name::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -4183,8 +4219,7 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name& node, TD
 bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption) {
     // permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
     switch (node.Alt_case()) {
-        case TRule_permission_name_target::kAltPermissionNameTarget1:
-        {
+        case TRule_permission_name_target::kAltPermissionNameTarget1: {
             const auto& permissionNameRule = node.GetAlt_permission_name_target1();
             result.emplace_back();
             if (!PermissionNameClause(permissionNameRule.GetRule_permission_name1(), result.back())) {
@@ -4198,13 +4233,12 @@ bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& n
             }
             break;
         }
-        case TRule_permission_name_target::kAltPermissionNameTarget2:
-        {
+        case TRule_permission_name_target::kAltPermissionNameTarget2: {
             result.emplace_back(Ctx_.Pos(), "all_privileges");
             break;
         }
         case TRule_permission_name_target::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     if (withGrantOption) {
         result.emplace_back(Ctx_.Pos(), "grant");
@@ -4252,7 +4286,6 @@ bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredA
     return true;
 }
 
-
 bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_backup_collection_actions& actions) {
     auto parseAction = [&](auto& actionVariant) {
         switch (actionVariant.Alt_case()) {
@@ -4278,7 +4311,7 @@ bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredA
                 return true;
             }
             case TRule_alter_backup_collection_action::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     };
 
@@ -4292,7 +4325,6 @@ bool TSqlTranslation::ParseBackupCollectionSettings(std::map<TString, TDeferredA
             return false;
         }
     }
-
 
     return true;
 }
@@ -4334,7 +4366,7 @@ bool TSqlTranslation::ParseBackupCollectionEntry(
             return true;
         }
         case TRule_alter_backup_collection_entry::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -4359,18 +4391,20 @@ bool TSqlTranslation::ParseBackupCollectionEntries(
     return true;
 }
 
-
 TString TSqlTranslation::FrameSettingsToString(EFrameSettings settings, bool isUnbounded) {
     TString result;
     switch (settings) {
         case FramePreceding:
-            result = "PRECEDING"; break;
+            result = "PRECEDING";
+            break;
         case FrameCurrentRow:
             YQL_ENSURE(!isUnbounded);
-            result = "CURRENT ROW"; break;
+            result = "CURRENT ROW";
+            break;
         case FrameFollowing:
-            result = "FOLLOWING"; break;
-        default:
+            result = "FOLLOWING";
+            break;
+        case FrameUndefined:
             Y_ABORT("Unexpected frame settings");
     }
 
@@ -4456,7 +4490,11 @@ bool TSqlTranslation::IsValidFrameSettings(TContext& ctx, const TFrameSpecificat
 
         if (*beginValue > *endValue) {
             YQL_ENSURE(begin.Bound);
-            ctx.Warning(begin.Bound->GetPos(), TIssuesIds::YQL_EMPTY_WINDOW_FRAME) << "Used frame specification implies empty window frame";
+            if (!ctx.Warning(begin.Bound->GetPos(), TIssuesIds::YQL_EMPTY_WINDOW_FRAME, [](auto& out) {
+                    out << "Used frame specification implies empty window frame";
+                })) {
+                return false;
+            }
         }
     }
 
@@ -4490,7 +4528,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
                     bound->Pos = GetPos(block.GetAlt2().GetToken1());
                     break;
                 case TRule_window_frame_bound_TAlt2_TBlock1::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
+                    Y_UNREACHABLE();
             }
 
             const TString settingToken = to_lower(Token(rule.GetAlt_window_frame_bound2().GetToken2()));
@@ -4499,12 +4537,12 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
             } else if (settingToken == "following") {
                 bound->Settings = FrameFollowing;
             } else {
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
             }
             break;
         }
         case TRule_window_frame_bound::ALT_NOT_SET:
-            Y_ABORT("FrameClause: frame bound not correspond to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -4549,7 +4587,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
             break;
         }
         case TRule_window_frame_extent::ALT_NOT_SET:
-            Y_ABORT("FrameClause: frame extent not correspond to grammar changes");
+            Y_UNREACHABLE();
     }
     YQL_ENSURE(frameSpec->FrameBegin);
     YQL_ENSURE(frameSpec->FrameEnd);
@@ -4573,7 +4611,7 @@ bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameS
                 frameSpec->FrameExclusion = FrameExclNone;
                 break;
             case TRule_window_frame_exclusion::ALT_NOT_SET:
-                Y_ABORT("FrameClause: frame exclusion not correspond to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -4616,13 +4654,12 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         // "PARTITION BY (), foo(x) as y, (), (z)" is allowed and will work exactly the same as
         // "PARTITION BY foo(x) as y, z"
         auto removed = std::remove_if(winSpecPtr->Partitions.begin(), winSpecPtr->Partitions.end(),
-            [](const TNodePtr& partitionNode) {
-                return !partitionNode->GetLabel() && !partitionNode->GetColumnName() &&
-                       partitionNode->GetTupleNode() != nullptr &&
-                       partitionNode->GetTupleSize() == 0;
-        });
+                                      [](const TNodePtr& partitionNode) {
+                                          return !partitionNode->GetLabel() && !partitionNode->GetColumnName() &&
+                                                 partitionNode->GetTupleNode() != nullptr &&
+                                                 partitionNode->GetTupleSize() == 0;
+                                      });
         winSpecPtr->Partitions.erase(removed, winSpecPtr->Partitions.end());
-
     }
     if (rule.HasBlock3()) {
         if (!OrderByClause(rule.GetBlock3().GetRule_window_order_clause1().GetRule_order_by_clause1(), winSpecPtr->OrderBy)) {
@@ -4659,7 +4696,7 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
     }
 
     // Normalize and simplify
-    auto replaceCurrentWith = [](TFrameBound& frame, bool preceding, TNodePtr value ) {
+    auto replaceCurrentWith = [](TFrameBound& frame, bool preceding, TNodePtr value) {
         frame.Settings = preceding ? EFrameSettings::FramePreceding : EFrameSettings::FrameFollowing;
         frame.Bound = value;
     };
@@ -4701,93 +4738,93 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
 
 TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda, const TVector<TString>& args) {
     switch (stmt.GetBlock2().Alt_case()) {
-    case TRule_do_stmt_TBlock2::kAlt1: {
-        const auto& callAction = stmt.GetBlock2().GetAlt1().GetRule_call_action1();
-        TNodePtr action;
-        switch (callAction.GetBlock1().GetAltCase()) {
-        case TRule_call_action_TBlock1::kAlt1: {
-            TString bindName;
-            if (!NamedNodeImpl(callAction.GetBlock1().GetAlt1().GetRule_bind_parameter1(), bindName, *this)) {
+        case TRule_do_stmt_TBlock2::kAlt1: {
+            const auto& callAction = stmt.GetBlock2().GetAlt1().GetRule_call_action1();
+            TNodePtr action;
+            switch (callAction.GetBlock1().GetAltCase()) {
+                case TRule_call_action_TBlock1::kAlt1: {
+                    TString bindName;
+                    if (!NamedNodeImpl(callAction.GetBlock1().GetAlt1().GetRule_bind_parameter1(), bindName, *this)) {
+                        return nullptr;
+                    }
+                    action = GetNamedNode(bindName);
+                    if (!action) {
+                        return nullptr;
+                    }
+                    break;
+                }
+                case TRule_call_action_TBlock1::kAlt2:
+                    action = BuildEmptyAction(Ctx_.Pos());
+                    break;
+                case TRule_call_action_TBlock1::ALT_NOT_SET:
+                    Y_UNREACHABLE();
+            }
+
+            TVector<TNodePtr> values;
+            values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "Apply", TNodeFlags::Default));
+            values.push_back(action);
+            values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "world", TNodeFlags::Default));
+
+            TSqlExpression sqlExpr(Ctx_, Mode_);
+            if (callAction.HasBlock3() && !ExprList(sqlExpr, values, callAction.GetBlock3().GetRule_expr_list1())) {
                 return nullptr;
             }
-            action = GetNamedNode(bindName);
-            if (!action) {
+
+            TNodePtr apply = new TAstListNodeImpl(Ctx_.Pos(), std::move(values));
+            if (!makeLambda) {
+                return BuildDoCall(Ctx_.Pos(), apply);
+            }
+
+            TNodePtr params = new TAstListNodeImpl(Ctx_.Pos());
+            params->Add("world");
+            for (const auto& arg : args) {
+                params->Add(new TAstAtomNodeImpl(Ctx_.Pos(), arg, TNodeFlags::ArbitraryContent));
+            }
+
+            return BuildDoCall(Ctx_.Pos(), BuildLambda(Ctx_.Pos(), params, apply));
+        }
+        case TRule_do_stmt_TBlock2::kAlt2: {
+            const auto& inlineAction = stmt.GetBlock2().GetAlt2().GetRule_inline_action1();
+            const auto& body = inlineAction.GetRule_define_action_or_subquery_body2();
+
+            auto saveScoped = Ctx_.Scoped;
+            Ctx_.Scoped = MakeIntrusive<TScopedState>();
+            Ctx_.AllScopes.push_back(Ctx_.Scoped);
+            *Ctx_.Scoped = *saveScoped;
+            Ctx_.Scoped->Local = TScopedState::TLocal{};
+            Ctx_.ScopeLevel++;
+            TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
+            TBlocks innerBlocks;
+
+            const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
+            auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+            if (!WarnUnusedNodes()) {
                 return nullptr;
             }
-            break;
+            Ctx_.ScopeLevel--;
+            Ctx_.Scoped = saveScoped;
+
+            if (!ret) {
+                return {};
+            }
+
+            TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
+            blockNode->Add("block");
+            blockNode->Add(blockNode->Q(ret));
+            if (!makeLambda) {
+                return blockNode;
+            }
+
+            TNodePtr params = new TAstListNodeImpl(Ctx_.Pos());
+            params->Add("world");
+            for (const auto& arg : args) {
+                params->Add(new TAstAtomNodeImpl(Ctx_.Pos(), arg, TNodeFlags::ArbitraryContent));
+            }
+
+            return BuildLambda(Ctx_.Pos(), params, blockNode);
         }
-        case TRule_call_action_TBlock1::kAlt2:
-            action = BuildEmptyAction(Ctx_.Pos());
-            break;
-        case TRule_call_action_TBlock1::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownDoStmt");
-            AltNotImplemented("do_stmt", callAction.GetBlock1());
-            return nullptr;
-        }
-
-        TVector<TNodePtr> values;
-        values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "Apply", TNodeFlags::Default));
-        values.push_back(action);
-        values.push_back(new TAstAtomNodeImpl(Ctx_.Pos(), "world", TNodeFlags::Default));
-
-        TSqlExpression sqlExpr(Ctx_, Mode_);
-        if (callAction.HasBlock3() && !ExprList(sqlExpr, values, callAction.GetBlock3().GetRule_expr_list1())) {
-            return nullptr;
-        }
-
-        TNodePtr apply = new TAstListNodeImpl(Ctx_.Pos(), std::move(values));
-        if (!makeLambda) {
-            return BuildDoCall(Ctx_.Pos(), apply);
-        }
-
-        TNodePtr params = new TAstListNodeImpl(Ctx_.Pos());
-        params->Add("world");
-        for (const auto& arg : args) {
-            params->Add(new TAstAtomNodeImpl(Ctx_.Pos(), arg, TNodeFlags::ArbitraryContent));
-        }
-
-        return BuildDoCall(Ctx_.Pos(), BuildLambda(Ctx_.Pos(), params, apply));
-    }
-    case TRule_do_stmt_TBlock2::kAlt2: {
-        const auto& inlineAction = stmt.GetBlock2().GetAlt2().GetRule_inline_action1();
-        const auto& body = inlineAction.GetRule_define_action_or_subquery_body2();
-
-        auto saveScoped = Ctx_.Scoped;
-        Ctx_.Scoped = MakeIntrusive<TScopedState>();
-        Ctx_.AllScopes.push_back(Ctx_.Scoped);
-        *Ctx_.Scoped = *saveScoped;
-        Ctx_.Scoped->Local = TScopedState::TLocal{};
-        Ctx_.ScopeLevel++;
-        TSqlQuery query(Ctx_, Ctx_.Settings.Mode, false);
-        TBlocks innerBlocks;
-
-        const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, body);
-        auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
-        WarnUnusedNodes();
-        Ctx_.ScopeLevel--;
-        Ctx_.Scoped = saveScoped;
-
-        if (!ret) {
-            return {};
-        }
-
-        TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
-        blockNode->Add("block");
-        blockNode->Add(blockNode->Q(ret));
-        if (!makeLambda) {
-            return blockNode;
-        }
-
-        TNodePtr params = new TAstListNodeImpl(Ctx_.Pos());
-        params->Add("world");
-        for (const auto& arg : args) {
-            params->Add(new TAstAtomNodeImpl(Ctx_.Pos(), arg, TNodeFlags::ArbitraryContent));
-        }
-
-        return BuildLambda(Ctx_.Pos(), params, blockNode);
-    }
-    case TRule_do_stmt_TBlock2::ALT_NOT_SET:
-        Y_ABORT("You should change implementation according to grammar changes");
+        case TRule_do_stmt_TBlock2::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 
@@ -4858,27 +4895,14 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
     TBlocks innerBlocks;
     const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, stmt.GetRule_define_action_or_subquery_body8());
 
-    ui32 topLevelSelects = 0;
-    bool hasTailOps = false;
-    for (auto& block : innerBlocks) {
-        if (block->SubqueryAlias()) {
-            continue;
-        }
-
-        if (block->HasSelectResult()) {
-            ++topLevelSelects;
-        } else if (topLevelSelects) {
-            hasTailOps = true;
-        }
-    }
-
-    if (isSubquery && (topLevelSelects != 1 || hasTailOps)) {
-        Error() << "Strictly one select/process/reduce statement is expected at the end of subquery";
+    if (isSubquery && !ValidateSubqueryOrViewBody(innerBlocks)) {
         return false;
     }
 
-    auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
-    WarnUnusedNodes();
+    auto ret = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, !isSubquery && Ctx_.SeqMode) : nullptr;
+    if (!WarnUnusedNodes()) {
+        return false;
+    }
     Ctx_.Scoped = saveScoped;
     Ctx_.ScopeLevel--;
     Ctx_.Settings.Mode = saveMode;
@@ -4899,10 +4923,8 @@ bool TSqlTranslation::DefineActionOrSubqueryStatement(const TRule_define_action_
 
     lambda = BuildLambda(Ctx_.Pos(), params, blockNode);
     if (optionalArgumentsCount > 0) {
-        lambda = new TCallNodeImpl(Ctx_.Pos(), "WithOptionalArgs", {
-            lambda,
-            BuildQuotedAtom(Ctx_.Pos(), ToString(optionalArgumentsCount), TNodeFlags::Default)
-            });
+        lambda = new TCallNodeImpl(Ctx_.Pos(), "WithOptionalArgs", {lambda,
+                                                                    BuildQuotedAtom(Ctx_.Pos(), ToString(optionalArgumentsCount), TNodeFlags::Default)});
     }
 
     nameAndPos.Name = actionName;
@@ -4946,7 +4968,7 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
 
     auto exprNode = expr.Build(stmt.GetRule_expr6());
     if (!exprNode) {
-        return{};
+        return {};
     }
 
     itemArgName = PushNamedAtom(itemArgNamePos, itemArgName);
@@ -4954,21 +4976,24 @@ TNodePtr TSqlTranslation::ForStatement(const TRule_for_stmt& stmt) {
         ++Ctx_.ParallelModeCount;
     }
 
-    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, { itemArgName });
+    auto bodyNode = DoStatement(stmt.GetRule_do_stmt7(), true, {itemArgName});
     if (isParallel) {
         --Ctx_.ParallelModeCount;
     }
 
-    PopNamedNode(itemArgName);
+    if (!PopNamedNode(itemArgName)) {
+        return {};
+    }
+
     if (!bodyNode) {
-        return{};
+        return {};
     }
 
     TNodePtr elseNode;
     if (stmt.HasBlock8()) {
         elseNode = DoStatement(stmt.GetBlock8().GetRule_do_stmt2(), true);
         if (!elseNode) {
-            return{};
+            return {};
         }
     }
 
@@ -4992,21 +5017,18 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
 bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
     // object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
     switch (node.Alt_case()) {
-        case TRule_object_feature_value::kAltObjectFeatureValue1:
-        {
+        case TRule_object_feature_value::kAltObjectFeatureValue1: {
             TString name = Id(node.GetAlt_object_feature_value1().GetRule_id_or_type1(), *this);
             result = TDeferredAtom(Ctx_.Pos(), name);
             break;
         }
-        case TRule_object_feature_value::kAltObjectFeatureValue2:
-        {
+        case TRule_object_feature_value::kAltObjectFeatureValue2: {
             if (!BindParameterClause(node.GetAlt_object_feature_value2().GetRule_bind_parameter1(), result)) {
                 return false;
             }
             break;
         }
-        case TRule_object_feature_value::kAltObjectFeatureValue3:
-        {
+        case TRule_object_feature_value::kAltObjectFeatureValue3: {
             auto strValue = StringContent(Ctx_, Ctx_.Pos(), Ctx_.Token(node.GetAlt_object_feature_value3().GetToken1()));
             if (!strValue) {
                 Error() << "Cannot parse string correctly: " << Ctx_.Token(node.GetAlt_object_feature_value3().GetToken1());
@@ -5015,14 +5037,13 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
             result = TDeferredAtom(Ctx_.Pos(), strValue->Content);
             break;
         }
-        case TRule_object_feature_value::kAltObjectFeatureValue4:
-        {
+        case TRule_object_feature_value::kAltObjectFeatureValue4: {
             TString value = Ctx_.Token(node.GetAlt_object_feature_value4().GetRule_bool_value1().GetToken1());
             result = TDeferredAtom(BuildLiteralBool(Ctx_.Pos(), FromString<bool>(value)), Ctx_);
             break;
         }
         case TRule_object_feature_value::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -5088,7 +5109,7 @@ bool TSqlTranslation::StoreDataSourceSettingsEntry(const TRule_alter_table_setti
 bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
     const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
     if (!StoreDataSourceSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(),
-            result)) {
+                                      result)) {
         return false;
     }
     for (auto& block : settingsNode.GetBlock4()) {
@@ -5139,8 +5160,144 @@ bool TSqlTranslation::ParseExternalDataSourceSettings(std::map<TString, TDeferre
             return true;
         }
         case TRule_alter_external_data_source_action::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
+}
+
+bool TSqlTranslation::StoreSecretInheritPermissions(
+    const TRule_secret_setting_value& value,
+    const TString& key,
+    TSecretParameters& secretParams) {
+    if (secretParams.InheritPermissions) {
+        Error() << "Duplicate parameter: " << key;
+        return false;
+    }
+    const NSQLv1Generated::TToken* errToken = nullptr;
+    switch (value.Alt_case()) {
+        // secret_setting_value: STRING_VALUE | bool_value | bind_parameter
+        case TRule_secret_setting_value::kAltSecretSettingValue2: {
+            if (auto inheritPermissions = ParseBool(Ctx_, value.GetAlt_secret_setting_value2().GetRule_bool_value1())) {
+                secretParams.InheritPermissions = TDeferredAtom(Ctx_.Pos(), *inheritPermissions ? "1" : "0");
+            } else {
+                errToken = &value.GetAlt_secret_setting_value2().GetRule_bool_value1().GetToken1();
+            }
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue1: {
+            errToken = &value.GetAlt_secret_setting_value1().GetToken1();
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue3: {
+            errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
+            break;
+        }
+        default: {
+            return false;
+        }
+    }
+    if (errToken) {
+        Ctx_.Error(Ctx_.TokenPosition(*errToken)) << "Unsupported type for parameter: " << key << ". Bool was expected";
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::StoreSecretValue(
+    const TRule_secret_setting_value& value,
+    const TString& key,
+    TSecretParameters& secretParams) {
+    if (secretParams.Value) {
+        Error() << "Duplicate parameter: " << key;
+        return false;
+    }
+    const NSQLv1Generated::TToken* errToken = nullptr;
+    switch (value.Alt_case()) {
+        case TRule_secret_setting_value::kAltSecretSettingValue1: {
+            const auto& token = value.GetAlt_secret_setting_value1().GetToken1();
+            auto content = StringContent(Ctx_, Ctx_.Pos(), Ctx_.Token(token));
+            if (!content) {
+                errToken = &value.GetAlt_secret_setting_value1().GetToken1();
+            } else {
+                secretParams.Value = TDeferredAtom(Ctx_.Pos(), std::move(content->Content));
+            }
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue3: {
+            TDeferredAtom result;
+            if (!BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1(), result)) {
+                errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
+            } else {
+                secretParams.Value = std::move(result);
+            }
+            break;
+        }
+        case TRule_secret_setting_value::kAltSecretSettingValue2: {
+            errToken = &value.GetAlt_secret_setting_value2().GetRule_bool_value1().GetToken1();
+            break;
+        }
+        default: {
+            return false;
+        }
+    }
+    if (errToken) {
+        Ctx_.Error(Ctx_.TokenPosition(*errToken)) << "Unsupported type for parameter: " << key << ". String (or named expression with type String) was expected";
+        return false;
+    }
+    return true;
+}
+
+bool TSqlTranslation::StoreSecretSettingEntry(const TIdentifier& id, const TRule_secret_setting_value& value, TSecretParameters& secretParams) {
+    const TString key = to_upper(id.Name);
+    if (key == "INHERIT_PERMISSIONS") {
+        return StoreSecretInheritPermissions(value, key, secretParams);
+    } else if (key == "VALUE") {
+        return StoreSecretValue(value, key, secretParams);
+    }
+
+    Error() << "Unknown parameter: " << key;
+    return false;
+}
+
+bool TSqlTranslation::ParseSecretSettings(
+    const TPosition pos,
+    const TRule_with_secret_settings& settingsNode,
+    TSecretParameters& secretParams,
+    const TSecretParameters::TOperationMode mode) {
+    // with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
+    auto tryStoreEntry = [&](const auto& entry) -> bool {
+        return StoreSecretSettingEntry(
+            IdEx(entry.GetRule_an_id1(), *this),
+            entry.GetRule_secret_setting_value3(),
+            secretParams);
+    };
+
+    const auto& firstEntry = settingsNode.GetRule_secret_setting_entry3();
+    if (!tryStoreEntry(firstEntry)) {
+        return false;
+    }
+
+    for (auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_secret_setting_entry2();
+        if (!tryStoreEntry(entry)) {
+            return false;
+        }
+    }
+
+    return secretParams.ValidateParameters(Ctx_, pos, mode);
+}
+
+bool TSqlTranslation::ParseSecretId(const TRule_id_or_at& node, TString& objectId) {
+    const auto idOrAt = Id(node, *this);
+    if (idOrAt.first) { // has @
+        Error() << "'@' is not allowed prefix for secret name";
+        return false;
+    }
+    objectId = idOrAt.second;
+    if (objectId.empty()) {
+        Error() << "Empty secret name";
+        return false;
+    }
+    return true;
 }
 
 bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result) {
@@ -5152,16 +5309,14 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         "aws_access_key_id_secret_name",
         "aws_secret_access_key_secret_name",
         "aws_region",
-        "token_secret_name"
-    };
+        "token_secret_name"};
     const static TMap<TStringBuf, TSet<TStringBuf>> authMethodFields{
         {"NONE", {}},
         {"SERVICE_ACCOUNT", {"service_account_id", "service_account_secret_name"}},
         {"BASIC", {"login", "password_secret_name"}},
         {"AWS", {"aws_access_key_id_secret_name", "aws_secret_access_key_secret_name", "aws_region"}},
         {"MDB_BASIC", {"service_account_id", "service_account_secret_name", "login", "password_secret_name"}},
-        {"TOKEN", {"token_secret_name"}}
-    };
+        {"TOKEN", {"token_secret_name"}}};
     auto authMethodIt = result.find("auth_method");
     if (authMethodIt == result.end() || authMethodIt->second.GetLiteral() == nullptr) {
         Ctx_.Error() << "AUTH_METHOD requires key";
@@ -5174,7 +5329,7 @@ bool TSqlTranslation::ValidateAuthMethod(const std::map<TString, TDeferredAtom>&
         return false;
     }
     const auto& currentAuthFields = it->second;
-    for (const auto& authField: allAuthFields) {
+    for (const auto& authField : allAuthFields) {
         if (currentAuthFields.contains(authField) && !result.contains(TString{authField})) {
             Ctx_.Error() << to_upper(TString{authField}) << " requires key";
             return false;
@@ -5210,16 +5365,39 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
     return true;
 }
 
+bool TSqlTranslation::ValidateSubqueryOrViewBody(const TBlocks& blocks) {
+    ui32 topLevelSelects = 0;
+    bool hasTailOps = false;
+    for (auto& block : blocks) {
+        if (block->SubqueryAlias()) {
+            continue;
+        }
+
+        if (block->HasSelectResult()) {
+            ++topLevelSelects;
+        } else if (topLevelSelects) {
+            hasTailOps = true;
+        }
+    }
+
+    if (topLevelSelects != 1 || hasTailOps) {
+        Error() << "Strictly one select/process/reduce statement is expected at the end of "
+                << (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW ? "view" : "subquery");
+        return false;
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::ParseViewQuery(
     std::map<TString, TDeferredAtom>& features,
-    const TRule_select_stmt& query
-) {
+    const TRule_select_stmt& query) {
     TStringBuilder queryText;
     if (!BuildContextRecreationQuery(Ctx_, queryText)) {
         return false;
     }
     queryText << CollectTokens(query);
-    features["query_text"] = { Ctx_.Pos(), queryText };
+    features["query_text"] = {Ctx_.Pos(), queryText};
 
     // The AST is needed solely for the validation of the CREATE VIEW statement.
     // The final storage format for the query is a plain text, not an AST.
@@ -5227,33 +5405,76 @@ bool TSqlTranslation::ParseViewQuery(
     if (!viewSelect) {
         return false;
     }
-    features["query_ast"] = { viewSelect, Ctx_ };
+    features["query_ast"] = {viewSelect, Ctx_};
+
+    return true;
+}
+
+bool TSqlTranslation::ParseViewQuery(
+    std::map<TString, TDeferredAtom>& features,
+    const TRule_define_action_or_subquery_body& body,
+    const NSQLv1Generated::TToken& beforeToken,
+    const NSQLv1Generated::TToken& afterToken,
+    const TString& service,
+    const TDeferredAtom& cluster)
+{
+    if (!body.HasBlock2()) {
+        Error() << "Empty view body is not allowed";
+        return false;
+    }
+    const auto saveScoped = Ctx_.Scoped;
+    const auto saveMode = Ctx_.Settings.Mode;
+    Ctx_.Scoped = Ctx_.CreateScopedState();
+    Ctx_.AllScopes.push_back(Ctx_.Scoped);
+    Ctx_.Scoped->CurrCluster = cluster;
+    Ctx_.Scoped->CurrService = service;
+    Ctx_.Settings.Mode = ESqlMode::LIMITED_VIEW;
+
+    Y_DEFER {
+        Ctx_.ScopeLevel--;
+        Ctx_.Scoped = saveScoped;
+        Ctx_.Settings.Mode = saveMode;
+    };
+
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /* topLevel */ false, /* allowTopLevelPragmas */ true);
+    TBlocks innerBlocks;
+
+    TNodePtr clearWorldNode = new TAstListNodeImpl(Ctx_.Pos());
+    clearWorldNode->Add("World");
+    innerBlocks.push_back(clearWorldNode);
+
+    if (!DefineActionOrSubqueryBody(query, innerBlocks, body)) {
+        return false;
+    }
+
+    if (!ValidateSubqueryOrViewBody(innerBlocks)) {
+        return false;
+    }
+
+    auto queryNode = BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode);
+    if (!queryNode) {
+        return false;
+    }
+
+    if (!WarnUnusedNodes()) {
+        return false;
+    }
+
+    TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
+    blockNode->Add("block", blockNode->Q(queryNode));
+    features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
+
+    auto begin = GetQueryPosition(Ctx_.Query, beforeToken, Ctx_.Settings.Antlr4Parser);
+    auto end = GetQueryPosition(Ctx_.Query, afterToken, Ctx_.Settings.Antlr4Parser);
+    YQL_ENSURE(begin < Ctx_.Query.size() && end < Ctx_.Query.size());
+    begin += beforeToken.value().size();
+    YQL_ENSURE(begin < end);
+    features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin));
 
     return true;
 }
 
 namespace {
-
-static std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
-    if (1 == token.GetLine() && 0 == token.GetColumn()) {
-        return 0;
-    }
-
-    TPosition pos = {0, 1};
-    TTextWalker walker(pos, antlr4);
-
-    std::string::size_type position = 0;
-    for (char c : query) {
-        walker.Advance(c);
-        ++position;
-
-        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
-            return position;
-        }
-    }
-
-    return std::string::npos;
-}
 
 static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambda_or_parameter& lambdaOrParameter) {
     static const TString statementSeparator = ";\n";
@@ -5283,7 +5504,7 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
                     endToken = &lambda.GetBlock2().GetBlock2().GetAlt2().GetToken3();
                     break;
                 case TRule_lambda_TBlock2_TBlock2::AltCase::ALT_NOT_SET:
-                    Y_ABORT("You should change implementation according to grammar changes");
+                    Y_UNREACHABLE();
             }
 
             auto begin = GetQueryPosition(Ctx.Query, beginToken, Ctx.Settings.Antlr4Parser);
@@ -5303,16 +5524,36 @@ static TString GetLambdaText(TTranslation& ctx, TContext& Ctx, const TRule_lambd
             return result;
         }
         case NSQLv1Generated::TRule_lambda_or_parameter::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
+} // anonymous namespace
+
+std::string::size_type GetQueryPosition(const TString& query, const NSQLv1Generated::TToken& token, bool antlr4) {
+    if (1 == token.GetLine() && 0 == token.GetColumn()) {
+        return 0;
+    }
+
+    TPosition pos = {0, 1};
+    TTextWalker walker(pos, antlr4);
+
+    std::string::size_type position = 0;
+    for (char c : query) {
+        walker.Advance(c);
+        ++position;
+
+        if (pos.Row == token.GetLine() && pos.Column == token.GetColumn()) {
+            return position;
+        }
+    }
+
+    return std::string::npos;
 }
 
 bool TSqlTranslation::ParseTransferLambda(
     TString& lambdaText,
     const TRule_lambda_or_parameter& lambdaOrParameter) {
-
     TSqlExpression expr(Ctx_, Ctx_.Settings.Mode);
     auto result = expr.Build(lambdaOrParameter);
     if (!result) {
@@ -5327,7 +5568,7 @@ bool TSqlTranslation::ParseTransferLambda(
     return !lambdaText.empty();
 }
 
-class TReturningListColumns : public INode {
+class TReturningListColumns: public INode {
 public:
     TReturningListColumns(TPosition pos)
         : INode(pos)
@@ -5339,7 +5580,7 @@ public:
         Star_ = true;
     }
 
-    void AddColumn(const NSQLv1Generated::TRule_an_id & rule, TTranslation& ctx) {
+    void AddColumn(const NSQLv1Generated::TRule_an_id& rule, TTranslation& ctx) {
         ColumnNames_.push_back(NSQLTranslationV1::Id(rule, ctx));
     }
 
@@ -5452,7 +5693,7 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
             return true;
         }
         case TRule_alter_resource_pool_action::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 }
 
@@ -5523,8 +5764,188 @@ bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDef
             return true;
         }
         case TRule_alter_resource_pool_classifier_action::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
+}
+
+TMaybe<TString> TSqlTranslation::ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context) {
+    // object_ref: (cluster_expr .)? id_or_at
+
+    if (node.HasBlock1()) {
+        if (!ClusterExpr(node.GetBlock1().GetRule_cluster_expr1(), false, context.ServiceId, context.Cluster)) {
+            return Nothing();
+        }
+    }
+
+    const auto& [hasAt, objectId] = Id(node.GetRule_id_or_at2(), *this);
+    if (hasAt) {
+        Error() << "'@' is not allowed prefix for object name";
+        return Nothing();
+    }
+
+    return BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId);
+}
+
+bool TSqlTranslation::ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings) {
+    // streaming_query_setting: an_id_or_type = (id_or_type | STRING_VALUE | bool_value)
+
+    const auto& id = to_lower(Id(node.GetRule_an_id_or_type1(), *this));
+    if (id.StartsWith(TStreamingQuerySettings::RESERVED_FEATURE_PREFIX)) {
+        Error() << "Streaming query parameter name should not start with prefix '" << TStreamingQuerySettings::RESERVED_FEATURE_PREFIX << "': " << to_upper(id);
+        return false;
+    }
+
+    const auto [it, inserted] = settings.Features.emplace(id, TDeferredAtom{});
+    if (!inserted) {
+        Error() << "Found duplicated parameter: " << to_upper(id);
+        return false;
+    }
+
+    const auto& valueNode = node.GetRule_streaming_query_setting_value3();
+    switch (valueNode.GetAltCase()) {
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue1: {
+            it->second = TDeferredAtom(Ctx_.Pos(), Id(valueNode.GetAlt_streaming_query_setting_value1().GetRule_id_or_type1(), *this));
+            break;
+        }
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue2: {
+            const auto& strToken = Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value2().GetToken1());
+            const auto& strValue = StringContent(Ctx_, Ctx_.Pos(), strToken);
+            if (!strValue) {
+                Error() << "Cannot parse string correctly: " << strToken;
+                return false;
+            }
+
+            it->second = TDeferredAtom(Ctx_.Pos(), strValue->Content);
+            break;
+        }
+        case TRule_streaming_query_setting_value::kAltStreamingQuerySettingValue3: {
+            it->second = TDeferredAtom(BuildLiteralBool(
+                                           Ctx_.Pos(),
+                                           FromString<bool>(Ctx_.Token(valueNode.GetAlt_streaming_query_setting_value3().GetRule_bool_value1().GetToken1()))), Ctx_);
+            break;
+        }
+        case TRule_streaming_query_setting_value::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings) {
+    // streaming_query_settings: (
+    //     streaming_query_setting
+    //     (, streaming_query_setting)* ,?
+    // )
+
+    if (!ParseStreamingQuerySetting(node.GetRule_streaming_query_setting2(), settings)) {
+        return false;
+    }
+
+    for (const auto& setting : node.GetBlock3()) {
+        if (!ParseStreamingQuerySetting(setting.GetRule_streaming_query_setting2(), settings)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings) {
+    // streaming_query_definition: AS DO (BEGIN define_action_or_subquery_body END DO);
+
+    Ctx_.Token(node.GetToken1());
+
+    // Save query ast to perform type check and validation of allowed expressions
+
+    const auto saveScoped = Ctx_.Scoped;
+    Ctx_.Scoped = Ctx_.CreateScopedState(); // Reset scoped context to interrupt inheritance of global settings and named nodes
+    Ctx_.AllScopes.push_back(Ctx_.Scoped);
+    Ctx_.Scoped->Local = TScopedState::TLocal{};
+    Ctx_.ScopeLevel++;
+    TSqlQuery query(Ctx_, Ctx_.Settings.Mode, /* topLevel */ false, /* allowTopLevelPragmas */ true);
+    TBlocks innerBlocks;
+
+    TNodePtr clearWorldNode = new TAstListNodeImpl(Ctx_.Pos());
+    clearWorldNode->Add("World");
+    innerBlocks.push_back(clearWorldNode);
+
+    const auto& inlineAction = node.GetRule_inline_action3();
+    const bool hasValidBody = DefineActionOrSubqueryBody(query, innerBlocks, inlineAction.GetRule_define_action_or_subquery_body2());
+    auto queryNode = hasValidBody ? BuildQuery(Ctx_.Pos(), innerBlocks, false, Ctx_.Scoped, Ctx_.SeqMode) : nullptr;
+    if (!WarnUnusedNodes()) {
+        return false;
+    }
+    Ctx_.ScopeLevel--;
+    Ctx_.Scoped = saveScoped;
+
+    if (!queryNode) {
+        return false;
+    }
+
+    TNodePtr blockNode = new TAstListNodeImpl(Ctx_.Pos());
+    blockNode->Add("block", blockNode->Q(queryNode));
+    settings.Features[TStreamingQuerySettings::QUERY_AST_FEATURE] = TDeferredAtom(blockNode, Ctx_);
+
+    // Extract whole query text between BEGIN and END tokens
+
+    const auto& queryBegin = inlineAction.GetToken1();
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(Ctx_.Settings.Antlr4Parser, queryBegin.GetId(), BEGIN));
+
+    const auto& queryEnd = inlineAction.GetToken3();
+    Y_DEBUG_ABORT_UNLESS(IS_TOKEN(Ctx_.Settings.Antlr4Parser, queryEnd.GetId(), END));
+
+    auto beginPos = GetQueryPosition(Ctx_.Query, queryBegin, Ctx_.Settings.Antlr4Parser);
+    const auto endPos = GetQueryPosition(Ctx_.Query, queryEnd, Ctx_.Settings.Antlr4Parser);
+    if (beginPos == std::string::npos || endPos == std::string::npos) {
+        Error() << "Failed to parse streaming query definition";
+        return false;
+    }
+
+    beginPos += queryBegin.value().size();
+    settings.Features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(beginPos, endPos - beginPos));
+
+    return true;
+}
+
+bool TSqlTranslation::ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings) {
+    // alter_streaming_query_action:
+    //     (SET streaming_query_settings)
+    //   | (SET streaming_query_settings)? streaming_query_definition
+
+    switch (node.GetAltCase()) {
+        case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction1: {
+            const auto& alterSettingsNode = node.GetAlt_alter_streaming_query_action1().GetRule_alter_streaming_query_set_settings1();
+            Ctx_.Token(alterSettingsNode.GetToken1());
+
+            if (!ParseStreamingQuerySettings(alterSettingsNode.GetRule_streaming_query_settings2(), settings)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_streaming_query_action::kAltAlterStreamingQueryAction2: {
+            const auto& action = node.GetAlt_alter_streaming_query_action2();
+
+            if (action.HasBlock1()) {
+                const auto& alterSettingsNode = action.GetBlock1().GetRule_alter_streaming_query_set_settings1();
+                Ctx_.Token(alterSettingsNode.GetToken1());
+
+                if (!ParseStreamingQuerySettings(alterSettingsNode.GetRule_streaming_query_settings2(), settings)) {
+                    return false;
+                }
+            }
+
+            if (!ParseStreamingQueryDefinition(action.GetRule_streaming_query_definition2(), settings)) {
+                return false;
+            }
+
+            break;
+        }
+        case TRule_alter_streaming_query_action::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+
+    return true;
 }
 
 } // namespace NSQLTranslationV1

@@ -8,4 +8,4 @@ void PrepareYqlModule();
 void InitYqlModule(NYql::NUdf::EPythonFlavor pythonFlavor, bool standalone = true);
 void TermYqlModule();
 
-} // namspace NPython
+} // namespace NPython

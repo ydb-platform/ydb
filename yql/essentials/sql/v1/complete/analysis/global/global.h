@@ -13,54 +13,55 @@
 
 namespace NSQLComplete {
 
-    struct TClusterContext {
-        TString Provider;
-        TString Name;
+struct TClusterContext {
+    TString Provider;
+    TString Name;
 
-        friend bool operator==(const TClusterContext& lhs, const TClusterContext& rhs) = default;
-    };
+    friend bool operator==(const TClusterContext& lhs, const TClusterContext& rhs) = default;
+};
 
-    struct TFunctionContext {
-        TString Name;
-        size_t ArgumentNumber = 0;
-        TMaybe<TString> Arg0 = Nothing();
-        TMaybe<TClusterContext> Cluster = Nothing();
+struct TFunctionContext {
+    TString Name;
+    size_t ArgumentNumber = 0;
+    TMaybe<TString> Arg0 = Nothing();
+    TMaybe<TString> Arg1 = Nothing();
+    TMaybe<TClusterContext> Cluster = Nothing();
 
-        friend bool operator==(const TFunctionContext& lhs, const TFunctionContext& rhs) = default;
-    };
+    friend bool operator==(const TFunctionContext& lhs, const TFunctionContext& rhs) = default;
+};
 
-    // TODO(YQL-19747): Try to refactor to use Map/Set data structures
-    struct TColumnContext {
-        TVector<TAliased<TTableId>> Tables;
-        TVector<TColumnId> Columns;
-        THashMap<TString, THashSet<TString>> WithoutByTableAlias;
+// TODO(YQL-19747): Try to refactor to use Map/Set data structures
+struct TColumnContext {
+    TVector<TAliased<TTableId>> Tables;
+    TVector<TColumnId> Columns;
+    THashMap<TString, THashSet<TString>> WithoutByTableAlias;
 
-        bool IsAsterisk() const;
-        TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
-        TColumnContext Renamed(TStringBuf alias) &&;
+    bool IsAsterisk() const;
+    TColumnContext ExtractAliased(TMaybe<TStringBuf> alias);
+    TColumnContext Renamed(TStringBuf alias) &&;
 
-        friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
-        friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
+    friend bool operator==(const TColumnContext& lhs, const TColumnContext& rhs) = default;
+    friend TColumnContext operator|(TColumnContext lhs, TColumnContext rhs);
 
-        static TColumnContext Asterisk();
-    };
+    static TColumnContext Asterisk();
+};
 
-    struct TGlobalContext {
-        TMaybe<TClusterContext> Use;
-        TVector<TString> Names;
-        TMaybe<TFunctionContext> EnclosingFunction;
-        TMaybe<TColumnContext> Column;
-    };
+struct TGlobalContext {
+    TMaybe<TClusterContext> Use;
+    TVector<TString> Names;
+    TMaybe<TFunctionContext> EnclosingFunction;
+    TMaybe<TColumnContext> Column;
+};
 
-    // TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
-    class IGlobalAnalysis {
-    public:
-        using TPtr = THolder<IGlobalAnalysis>;
+// TODO(YQL-19747): Make it thread-safe to make ISqlCompletionEngine thread-safe.
+class IGlobalAnalysis {
+public:
+    using TPtr = THolder<IGlobalAnalysis>;
 
-        virtual ~IGlobalAnalysis() = default;
-        virtual TGlobalContext Analyze(TCompletionInput input, TEnvironment env) = 0;
-    };
+    virtual ~IGlobalAnalysis() = default;
+    virtual TGlobalContext Analyze(TCompletionInput input, TEnvironment env) = 0;
+};
 
-    IGlobalAnalysis::TPtr MakeGlobalAnalysis();
+IGlobalAnalysis::TPtr MakeGlobalAnalysis();
 
 } // namespace NSQLComplete

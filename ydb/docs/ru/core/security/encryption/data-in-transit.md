@@ -18,7 +18,13 @@
 
 {% if feature_async_replication == true %}
 
-* В [асинхронной репликации](../../concepts/async-replication.md) между двумя базами данных {{ ydb-short-name }} одна из них выступает в роли клиента для другой.
+* В [асинхронной репликации](../../concepts/async-replication.md) между двумя базами данных {{ ydb-short-name }} одна из них выступает в роли клиента по отношению к другой.
+
+{% endif %}
+
+{% if feature_transfer == true %}
+
+* В [трансфере](../../concepts/transfer.md) между двумя базами данных {{ ydb-short-name }} одна из них выступает в роли клиента по отношению к другой.
 
 {% endif %}
 

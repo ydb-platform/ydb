@@ -124,7 +124,7 @@ protected:
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
     using IRetryPolicy = IRetryPolicy<bool>;
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
     static constexpr TDuration REFRESH_PERIOD = TDuration::MilliSeconds(10);
@@ -251,7 +251,7 @@ private:
         }
 
         if (auto delay = RetryState_->GetNextRetryDelay(shortRetry)) {
-            if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
+            if (Settings_.VerbosityLevel >= EVerbosity::InitLogs) {
                 const TString str = TStringBuilder() << CoutColors_.Cyan() << "Retry for database '" << Settings_.Database << "' in " << *delay << " " << message << CoutColors_.Default();
                 Cout << str << Endl;
             }
@@ -267,7 +267,7 @@ private:
     }
 
     void FailTimeout() {
-        Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded for database '" << Settings_.Database << "', use --health-check-timeout for increasing it or check out health check logs by using --verbose " << static_cast<ui32>(EVerbose::InitLogs));
+        Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded for database '" << Settings_.Database << "', use --health-check-timeout for increasing it or check out health check logs by using --verbosity " << static_cast<ui32>(EVerbosity::InitLogs));
     }
 
     void Fail(const TString& error) {
@@ -292,13 +292,13 @@ private:
 };
 
 class TSessionHolderActor : public NActors::TActorBootstrapped<TSessionHolderActor> {
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
 
 public:
     TSessionHolderActor(TCreateSessionRequest request, NThreading::TPromise<TString> openPromise, NThreading::TPromise<void> closePromise)
         : TargetNode_(request.TargetNode)
         , TraceId_(request.Event->Record.GetTraceId())
-        , VerboseLevel_(request.VerboseLevel)
+        , VerbosityLevel_(request.VerbosityLevel)
         , Request_(std::move(request.Event))
         , OpenPromise_(openPromise)
         , ClosePromise_(closePromise)
@@ -317,7 +317,7 @@ public:
         }
 
         SessionId_ = response.GetResponse().GetSessionId();
-        if (VerboseLevel_ >= EVerbose::Info) {
+        if (VerbosityLevel_ >= EVerbosity::Info) {
             Cout << CoutColors_.Cyan() << "Created new session on node " << TargetNode_ << " with id " << SessionId_ << "\n";
         }
 
@@ -395,7 +395,7 @@ private:
 private:
     const ui32 TargetNode_;
     const TString TraceId_;
-    const EVerbose VerboseLevel_;
+    const EVerbosity VerbosityLevel_;
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
 
     std::unique_ptr<NKikimr::NKqp::TEvKqp::TEvCreateSessionRequest> Request_;

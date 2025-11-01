@@ -1,5 +1,7 @@
 # DELETE FROM
 
+{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 Deletes rows that match the `WHERE` clause, from the table.{% if feature_mapreduce %}  The table is searched by name in the database specified by the [USE](use.md) operator.{% endif %}
 
 ## Example
@@ -24,6 +26,28 @@ $to_delete = (
 
 DELETE FROM my_table ON
 SELECT * FROM $to_delete;
+```
+
+## DELETE FROM ... RETURNING {delete-from-returning}
+
+Deletes rows and returns their values in a single operation. It allows to retrieve data from the rows being deleted without needing to perform a separate SELECT query beforehand.
+
+### Examples
+
+* Return all values of modified rows
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING order_id, order_date;
 ```
 
 {% if feature_batch_operations %}

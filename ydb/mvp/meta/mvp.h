@@ -8,7 +8,6 @@
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <util/system/rwlock.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 
 namespace NMVP {
@@ -16,9 +15,6 @@ namespace NMVP {
 const TString& GetEServiceName(NActors::NLog::EComponent component);
 
 class TMVP {
-private:
-    TRWMutex ActorSystemStoppingLock;
-    TAtomic ActorSystemStopping; // Used by async gRPC callbacks to determine whether they are still allowed to send messages to the actor system.
 protected:
     static TAtomic Quit;
     static void OnTerminate(int);

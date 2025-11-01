@@ -14,7 +14,7 @@ LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 class TProcessMemoryScope: public NColumnShard::TMonitoringObjectsCounter<TProcessMemoryScope> {
 private:
     const ui64 ExternalProcessId;
-    const ui64 ExternalScopeId;
+    YDB_READONLY(ui64, ExternalScopeId, 0);
     TAllocationGroups WaitAllocations;
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> AllocationInfo;
     TExternalIdsControl GroupIds;
@@ -160,6 +160,10 @@ public:
             Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
         }
     }
+
+    bool HasWaitingAllocations() const {
+        return !WaitAllocations.IsEmpty();
+    }
 };
 
 class TProcessMemoryUsage {
@@ -193,6 +197,7 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TStageFeatures>>, Stages);
     const std::shared_ptr<TStageFeatures> DefaultStage;
     THashMap<ui64, std::shared_ptr<TProcessMemoryScope>> AllocationScopes;
+    std::set<ui64> WaitingScopes;
 
     TProcessMemoryScope* GetAllocationScopeOptional(const ui64 externalScopeId) const {
         auto it = AllocationScopes.find(externalScopeId);
@@ -224,7 +229,9 @@ public:
     }
 
     bool AllocationUpdated(const ui64 externalScopeId, const ui64 allocationId) {
-        if (GetAllocationScopeVerified(externalScopeId).AllocationUpdated(allocationId)) {
+        auto& scope = GetAllocationScopeVerified(externalScopeId);
+        if (scope.AllocationUpdated(allocationId)) {
+            UpdateWaitingScopes(&scope);
             RefreshMemoryUsage();
             return true;
         } else {
@@ -247,12 +254,14 @@ public:
         AFL_VERIFY(stage);
         auto& scope = GetAllocationScopeVerified(externalScopeId);
         scope.RegisterAllocation(IsPriorityProcess(), externalGroupId, task, stage);
+        UpdateWaitingScopes(&scope);
     }
 
     bool UnregisterAllocation(const ui64 externalScopeId, const ui64 allocationId) {
         if (auto* scope = GetAllocationScopeOptional(externalScopeId)) {
             if (scope->UnregisterAllocation(allocationId)) {
                 RefreshMemoryUsage();
+                UpdateWaitingScopes(scope);
                 return true;
             }
         }
@@ -263,11 +272,14 @@ public:
         if (auto* scope = GetAllocationScopeOptional(externalScopeId)) {
             scope->UnregisterGroup(IsPriorityProcess(), externalGroupId);
             RefreshMemoryUsage();
+            UpdateWaitingScopes(scope);
         }
     }
 
     void RegisterGroup(const ui64 externalScopeId, const ui64 externalGroupId) {
-        GetAllocationScopeVerified(externalScopeId).RegisterGroup(IsPriorityProcess(), externalGroupId);
+        auto& scope = GetAllocationScopeVerified(externalScopeId);
+        scope.RegisterGroup(IsPriorityProcess(), externalGroupId);
+        UpdateWaitingScopes(&scope);
     }
 
     void UnregisterScope(const ui64 externalScopeId) {
@@ -277,6 +289,7 @@ public:
             AllocationScopes.erase(it);
             RefreshMemoryUsage();
         }
+        WaitingScopes.erase(externalScopeId);
     }
 
     void RegisterScope(const ui64 externalScopeId) {
@@ -305,9 +318,19 @@ public:
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {
         bool allocated = false;
-        for (auto&& i : AllocationScopes) {
-            if (i.second->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
+        for (auto waitingIt = WaitingScopes.begin(); waitingIt != WaitingScopes.end();) {
+            auto it = AllocationScopes.find(*waitingIt);
+            AFL_VERIFY(it != AllocationScopes.end());
+            auto* scope = it->second.get();
+            if (scope->TryAllocateWaiting(IsPriorityProcess(), allocationsCountLimit)) {
                 allocated = true;
+            }
+
+            auto hasWaitingAllocations = scope->HasWaitingAllocations();
+            if (!hasWaitingAllocations) {
+                waitingIt = WaitingScopes.erase(waitingIt);
+            } else {
+                ++waitingIt;
             }
         }
         if (allocated) {
@@ -323,6 +346,20 @@ public:
         RefreshMemoryUsage();
         //        AFL_VERIFY(MemoryUsage == 0)("usage", MemoryUsage);
         AllocationScopes.clear();
+        WaitingScopes.clear();
+    }
+
+    bool HasWaitingAllocations() const {
+        return !WaitingScopes.empty();
+    }
+
+    void UpdateWaitingScopes(TProcessMemoryScope* scope) {
+        auto hasWaitingAllocations = scope->HasWaitingAllocations();
+        if (hasWaitingAllocations) {
+            WaitingScopes.insert(scope->GetExternalScopeId());
+            return;
+        }
+        WaitingScopes.erase(scope->GetExternalScopeId());
     }
 };
 

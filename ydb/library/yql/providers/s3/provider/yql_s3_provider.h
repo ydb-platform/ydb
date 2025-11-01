@@ -1,20 +1,20 @@
 #pragma once
 
-#include <yql/essentials/core/yql_data_provider.h>
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include "yql_s3_settings.h"
+
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
-#include "yql_s3_settings.h"
+#include <yql/essentials/core/yql_data_provider.h>
 
 namespace NKikimr::NMiniKQL {
    class IFunctionRegistry;
-}
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
-struct TS3State : public TThrRefBase
-{
+struct TS3State : public TThrRefBase {
     using TPtr = TIntrusivePtr<TS3State>;
 
     struct TTableMeta {
@@ -35,7 +35,9 @@ struct TS3State : public TThrRefBase
     NActors::TActorSystem* ActorSystem = nullptr;
 };
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, NActors::TActorSystem* actorSystem = nullptr);
+TDataProviderInitializer GetS3DataProviderInitializer(
+    IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr,
+    NActors::TActorSystem* actorSystem = nullptr, TS3Configuration::TSetupper configurationInit = nullptr);
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state);
 TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state);

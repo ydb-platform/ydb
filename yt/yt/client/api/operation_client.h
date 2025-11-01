@@ -107,12 +107,9 @@ struct TGetJobTraceOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
 {
-    std::optional<NJobTrackerClient::TJobId> JobId;
-    std::optional<NScheduler::TJobTraceId> TraceId;
-    std::optional<i64> FromTime;
-    std::optional<i64> ToTime;
-    std::optional<i64> FromEventIndex;
-    std::optional<i64> ToEventIndex;
+    std::optional<NJobTrackerClient::TJobTraceId> TraceId;
+    std::optional<TInstant> FromTime;
+    std::optional<TInstant> ToTime;
 };
 
 struct TGetJobFailContextOptions
@@ -233,6 +230,7 @@ struct TListJobsOptions
 {
     // NB(bystrovserg): Do not forget to add new options to continuation token serializer!
     NJobTrackerClient::TJobId JobCompetitionId;
+    NJobTrackerClient::TJobId MainJobId;
     std::optional<NJobTrackerClient::EJobType> Type;
     std::optional<NJobTrackerClient::EJobState> State;
     std::optional<std::string> Address;
@@ -244,6 +242,7 @@ struct TListJobsOptions
     std::optional<bool> WithInterruptionInfo;
     std::optional<TString> TaskName;
     std::optional<std::string> OperationIncarnation;
+    std::optional<std::string> MonitoringDescriptor;
 
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;
@@ -409,6 +408,7 @@ struct TJob
     std::optional<bool> HasSpec;
     std::optional<bool> HasCompetitors;
     std::optional<bool> HasProbingCompetitors;
+    NJobTrackerClient::TJobId MainJobId;
     NJobTrackerClient::TJobId JobCompetitionId;
     NJobTrackerClient::TJobId ProbingJobCompetitionId;
     NYson::TYsonString Error;
@@ -424,6 +424,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
+    std::optional<ui64> JobCookieGroupIndex;
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
     std::optional<NScheduler::TAllocationId> AllocationId;
@@ -443,9 +444,9 @@ struct TJobTraceEvent
 {
     NJobTrackerClient::TOperationId OperationId;
     NJobTrackerClient::TJobId JobId;
-    NScheduler::TJobTraceId TraceId;
+    NJobTrackerClient::TJobTraceId TraceId;
     i64 EventIndex;
-    TString Event;
+    std::string Event;
     TInstant EventTime;
 };
 
@@ -570,8 +571,9 @@ struct IOperationClient
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options = {}) = 0;
 
-    virtual TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+    virtual TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> GetJobTrace(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NJobTrackerClient::TJobId jobId,
         const TGetJobTraceOptions& options = {}) = 0;
 
     virtual TFuture<TSharedRef> GetJobFailContext(

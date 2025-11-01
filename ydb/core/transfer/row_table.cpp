@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/util/backoff.h>
 
 namespace NKikimr::NReplication::NTransfer {
 
@@ -12,9 +13,10 @@ class TRowTableState : public ITableKindState {
 public:
     TRowTableState(
         const TActorId& selfId,
+        const TString& database,
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
-        : ITableKindState(selfId, result)
+        : ITableKindState(selfId, database, result)
     {
         Path = JoinPath(result->ResultSet.front().Path);
     }
@@ -60,7 +62,7 @@ public:
         }
 
         UploaderActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            new TTableUploader(SelfId, GetScheme(), std::move(tableData))
+            new TTableUploader(SelfId, Database, GetScheme(), std::move(tableData))
         );
 
         Batchers.clear();
@@ -72,13 +74,21 @@ private:
     TString Path;
 };
 
-std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
-    return std::make_unique<TRowTableState>(selfId, result);
+std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
+    return std::make_unique<TRowTableState>(selfId, database, result);
 }
 
+namespace {
+
+const TBackoff DefaultBackoff = TBackoff(TDuration::Seconds(1), TDuration::Seconds(15));
+
+}
 template<>
-IActor* TTableUploader<TData>::CreateUploaderInternal(const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie) {
-    return NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie);
+IActor* TTableUploader<TData>::CreateUploaderInternal(
+    const TString& database, const TString& tablePath,
+    const std::shared_ptr<TData>& data, ui64 cookie)
+{
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
 }
 
 }

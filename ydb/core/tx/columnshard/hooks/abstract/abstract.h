@@ -17,6 +17,7 @@
 #include <util/generic/singleton.h>
 
 #include <memory>
+#include <atomic>
 
 namespace NKikimr::NColumnShard {
 class TTiersManager;
@@ -402,10 +403,21 @@ public:
 
 class TControllers {
 private:
-    ICSController::TPtr CSController = std::make_shared<ICSController>();
+    std::atomic<ICSController::TPtr*> CSControllerPtr{new ICSController::TPtr(std::make_shared<ICSController>())};
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
+    
+    void ReplaceCSController(const ICSController::TPtr& newController) {
+        auto* newPtr = new ICSController::TPtr(newController);
+        auto* oldPtr = CSControllerPtr.exchange(newPtr);
+        delete oldPtr;
+    }
 
 public:
+    ~TControllers() {
+        auto* ptr = CSControllerPtr.load();
+        delete ptr;
+    }
+
     template <class TController>
     class TGuard: TMoveOnly {
     private:
@@ -431,7 +443,8 @@ public:
 
         ~TGuard() {
             if (Controller) {
-                Singleton<TControllers>()->CSController = std::make_shared<ICSController>();
+                auto* controllers = Singleton<TControllers>();
+                controllers->ReplaceCSController(std::make_shared<ICSController>());
             }
         }
     };
@@ -439,17 +452,19 @@ public:
     template <class T, class... Types>
     static TGuard<T> RegisterCSControllerGuard(Types... args) {
         auto result = std::make_shared<T>(args...);
-        Singleton<TControllers>()->CSController = result;
+        auto* controllers = Singleton<TControllers>();
+        controllers->ReplaceCSController(result);
         return result;
     }
 
     static ICSController::TPtr GetColumnShardController() {
-        return Singleton<TControllers>()->CSController;
+        auto* controllers = Singleton<TControllers>();
+        return *controllers->CSControllerPtr.load();
     }
 
     template <class T>
     static T* GetControllerAs() {
-        auto controller = Singleton<TControllers>()->CSController;
+        auto controller = GetColumnShardController();
         return dynamic_cast<T*>(controller.get());
     }
 

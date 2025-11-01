@@ -13,6 +13,7 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/base/domain.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/cms/console/config_helpers.h>
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -84,6 +85,8 @@ void TCms::OnActivateExecutor(const TActorContext &ctx)
 
     State->CmsTabletId = TabletID();
     State->CmsActorId = SelfId();
+
+    ctx.Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(true));
 
     SubscribeForConfig(ctx);
 
@@ -527,6 +530,7 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
         case TAction::REBOOT_HOST:
+        case TAction::DRAIN_NODE:
             AddHostExtensions(action.GetHost(), perm);
             break;
         default:
@@ -611,6 +615,10 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+        case TAction::DRAIN_NODE:
+        case TAction::CORDON_NODE:
+            error.Deadline = TActivationContext::Now() + opts.PermissionDuration;
+            return true;
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:
@@ -1155,8 +1163,9 @@ void TCms::DoPermissionsCleanup(const TActorContext &ctx)
         const TDuration duration = TDuration::MicroSeconds(entry.second.Action.GetDuration());
         const TDuration doubleDuration = ((TDuration::Max() / 2) >= duration ? (2 * duration) : TDuration::Max());
         const TInstant deadline(entry.second.Deadline);
-        if ((deadline + doubleDuration) <= now)
+        if ((deadline + doubleDuration) <= now) {
             ids.push_back(entry.first);
+        }
     }
 
     Execute(CreateTxRemovePermissions(std::move(ids), nullptr, nullptr, true), ctx);
@@ -1551,6 +1560,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         TInstant deadline = TActivationContext::Now() + TDuration::MicroSeconds(copy->Request.GetDuration());
         perm->SetDeadline(deadline.GetValue());
     }
+
+    copy->Request.ClearActions();
+
+    it->second = *copy;
 
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
 
@@ -2530,6 +2543,33 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->ClientId == State->BSControllerPipe && msg->Status != NKikimrProto::OK)
         OnBSCPipeDestroyed(ctx);
+}
+
+void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx)
+{
+    const auto& record = *ev->Get();
+
+    if (!record.Config || !record.Config->HasClusterState()) {
+        return;
+    }
+
+    const auto& cs = record.Config->GetClusterState();
+    THashSet<TBridgePileId> suspended;
+    for (ui32 i = 0; i < cs.PerPileStateSize(); ++i) {
+        if (cs.GetPerPileState(i) == NKikimrBridge::TClusterState::SUSPENDED) {
+            suspended.insert(TBridgePileId::FromPileIndex(i));
+        }
+    }
+    if (suspended.empty()) {
+        return;
+    }
+    for (const auto& pileId : suspended) {
+        auto evInvoke = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto* req = evInvoke->Record.MutableNotifyBridgeSuspended();
+        req->SetGeneration(cs.GetGeneration());
+        pileId.CopyToProto(req, &std::decay_t<decltype(*req)>::SetPileId);
+        ctx.Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), evInvoke.release());
+    }
 }
 
 IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info)

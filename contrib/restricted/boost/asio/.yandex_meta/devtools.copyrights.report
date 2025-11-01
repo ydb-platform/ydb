@@ -253,7 +253,7 @@ BELONGS ya.make
         include/boost/asio/detail/io_uring_socket_service_base.hpp [5:5]
         include/boost/asio/detail/io_uring_wait_op.hpp [5:5]
         include/boost/asio/detail/is_buffer_sequence.hpp [5:5]
-        include/boost/asio/detail/is_executor.hpp [5:5]
+        include/boost/asio/detail/is_executor.hpp [7:7]
         include/boost/asio/detail/keyword_tss_ptr.hpp [5:5]
         include/boost/asio/detail/kqueue_reactor.hpp [5:6]
         include/boost/asio/detail/local_free_on_block_exit.hpp [5:5]

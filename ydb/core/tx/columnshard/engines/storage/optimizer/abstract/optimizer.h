@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -112,7 +113,7 @@ private:
 protected:
     virtual void DoModifyPortions(
         const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
@@ -151,12 +152,46 @@ public:
         Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
     }
 
-    bool IsOverloaded() const {
+    bool IsOverloaded(const NMonitoring::TDynamicCounters::TCounterPtr& badPortions) const {
+        if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
+            return false;
+        }
+
+        if (std::cmp_less_equal(GetBadPortionsLimit(), badPortions->Val())) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: bad portions")("value", badPortions->Val())("limit", GetBadPortionsLimit());
+            return true;
+        }
+
+        if (std::cmp_less_equal(GetNodePortionsCountLimit(), NodePortionsCounter.Val())) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: node portions count limit")("value", NodePortionsCounter.Val())("limit", GetNodePortionsCountLimit());
+            return true;
+        }
+
+        return DoIsOverloaded();
+    }
+
+    ui64 GetBadPortionsLimit() const {
+        if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
+            return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();
+        }
+        return 2 * GetNodePortionsCountLimit();
+    }
+
+    ui64 GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
+    }
+
+    bool IsHighPriority() const {
+        if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
+            return false;
+        }
         if (NodePortionsCountLimit) {
-            if (std::cmp_less_equal(*NodePortionsCountLimit, NodePortionsCounter.Val())) {
+            if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * *NodePortionsCountLimit), ui64(1)), NodePortionsCounter.Val())) {
                 return true;
             }
-        } else if (std::cmp_less_equal(DynamicPortionsCountLimit.load(), NodePortionsCounter.Val())) {
+        } else if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * DynamicPortionsCountLimit.load()), ui64(1)), NodePortionsCounter.Val())) {
             return true;
         }
         return DoIsOverloaded();
@@ -216,7 +251,7 @@ public:
         DoModifyPortions(add, remove);
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+    std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
     TOptimizationPriority GetUsefulMetric() const {
         auto result = DoGetUsefulMetric();
@@ -272,7 +307,7 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("lc-buckets");
+        auto result = TFactory::MakeHolder("tiling");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

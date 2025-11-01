@@ -5,7 +5,7 @@
 #include <library/cpp/digest/argonish/blake2b.h>
 #include <library/cpp/digest/argonish/argon2.h>
 #include <library/cpp/digest/argonish/internal/proxies/ref/proxy_ref.h>
-#if !defined(_arm64_)
+#if defined(_x86_64_)
 #include <library/cpp/digest/argonish/internal/proxies/sse2/proxy_sse2.h>
 #include <library/cpp/digest/argonish/internal/proxies/ssse3/proxy_ssse3.h>
 #include <library/cpp/digest/argonish/internal/proxies/sse41/proxy_sse41.h>
@@ -17,7 +17,7 @@
 
 namespace NArgonish {
     static EInstructionSet GetBestSet() {
-#if !defined(_arm64_)
+#if defined(_x86_64_)
         if (NX86::HaveAVX2()) {
             return EInstructionSet::AVX2;
         }
@@ -48,7 +48,7 @@ namespace NArgonish {
         switch (instructionSet) {
             case EInstructionSet::REF:
                 return MakeHolder<TArgon2ProxyREF>(atype, tcost, mcost, threads, key, keylen);
-#if !defined(_arm64_)
+#if defined(_x86_64_)
             case EInstructionSet::SSE2:
                 return MakeHolder<TArgon2ProxySSE2>(atype, tcost, mcost, threads, key, keylen);
             case EInstructionSet::SSSE3:
@@ -97,7 +97,7 @@ namespace NArgonish {
             if (memcmp(test_result[atype], hash_result, sizeof(hash_result)) != 0)
                 ythrow yexception() << "Argon2: Runtime test failed for reference implementation";
         }
-#if !defined(_arm64_)
+#if defined(_x86_64_)
         if (InstructionSet_ >= EInstructionSet::SSE2) {
             for (ui32 atype = (ui32)EArgon2Type::Argon2d; atype <= (ui32)EArgon2Type::Argon2id; ++atype) {
                 auto argon2d = MakeHolder<TArgon2ProxySSE2>((EArgon2Type)atype, 1U, 1024U, 1U);
@@ -147,7 +147,7 @@ namespace NArgonish {
         switch (instructionSet) {
             case EInstructionSet::REF:
                 return MakeHolder<TBlake2BProxyREF>(outlen, key, keylen);
-#if !defined(_arm64_)
+#if defined(_x86_64_)
             case EInstructionSet::SSE2:
                 return MakeHolder<TBlake2BProxySSE2>(outlen, key, keylen);
             case EInstructionSet::SSSE3:
@@ -185,7 +185,7 @@ namespace NArgonish {
             if (memcmp(test_result, hash_val, 16) != 0)
                 ythrow yexception() << "Blake2B: Runtime test failed for reference implementation";
         }
-#if !defined(_arm64_)
+#if defined(_x86_64_)
         if (InstructionSet_ >= EInstructionSet::SSE2) {
             auto blake2 = MakeHolder<TBlake2BProxySSE2>(16U);
             blake2->Update(test_str, 3);

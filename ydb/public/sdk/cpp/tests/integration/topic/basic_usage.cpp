@@ -179,7 +179,7 @@ TEST_F(BasicUsage, TEST_NAME(MaxByteSizeEqualZero)) {
 TEST_F(BasicUsage, TEST_NAME(WriteAndReadSomeMessagesWithSyncCompression)) {
     auto driver = MakeDriver();
 
-    IExecutor::TPtr executor = new TSyncExecutor();
+    IExecutor::TPtr executor = std::make_shared<TSyncExecutor>();
     auto writeSettings = NPersQueue::TWriteSessionSettings()
         .Path(GetTopicPath())
         .MessageGroupId(TEST_MESSAGE_GROUP_ID)
@@ -507,7 +507,7 @@ TEST_F(BasicUsage, TEST_NAME(SessionNotDestroyedWhileUserEventHandlingInFlight))
     RunTasks(stepByStepExecutor, {1});
     futureRead.GetValueSync();
     ASSERT_TRUE(futureRead.HasValue());
-    std::cerr << ">>>TEST: future read has value " << std::endl;
+    std::cerr << ">>> TEST: future read has value " << std::endl;
 
     f.get();
 
@@ -520,7 +520,7 @@ TEST_F(BasicUsage, TEST_NAME(ReadSessionCorrectClose)) {
     NPersQueue::TWriteSessionSettings writeSettings;
     writeSettings.Path(GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
     writeSettings.Codec(NPersQueue::ECodec::RAW);
-    IExecutor::TPtr executor = new TSyncExecutor();
+    IExecutor::TPtr executor = std::make_shared<TSyncExecutor>();
     writeSettings.CompressionExecutor(executor);
 
     NPersQueue::TPersQueueClient client(driver);
@@ -743,6 +743,113 @@ TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded)) {
                 FAIL() << "Session closed";
             }
 
+        }, event);
+    }
+}
+
+TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded_Broken)) {
+    // Write a broken compressed message.
+    // GetData should throw an exception.
+    // GetBrokenData should return the broken data.
+
+    // Write a correct compressed message.
+    // GetData should return the correct data.
+    // GetBrokenData should throw an exception.
+
+    auto driver = MakeDriver();
+
+    TTopicClient client(driver);
+
+    auto settings = TWriteSessionSettings()
+        .Path(GetTopicPath())
+        .MessageGroupId(TEST_MESSAGE_GROUP_ID);
+
+    auto writer = client.CreateWriteSession(settings);
+    std::string brokenPacked = "some broken data";
+
+    {
+        auto event = *writer->GetEvent(true);
+        ASSERT_TRUE(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+        writer->WriteEncoded(
+            std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken),
+            TWriteMessage::CompressedMessage(brokenPacked, ECodec::GZIP, 100)
+        );
+    }
+
+    std::string correctMessage = "message";
+    TString packed;
+    {
+        TStringOutput so(packed);
+        TZLibCompress oss(&so, ZLib::GZip, 6);
+        oss << correctMessage;
+    }
+    {
+        auto event = *writer->GetEvent(true);
+        ASSERT_TRUE(std::holds_alternative<TWriteSessionEvent::TReadyToAcceptEvent>(event));
+        writer->WriteEncoded(
+            std::move(std::get<TWriteSessionEvent::TReadyToAcceptEvent>(event).ContinuationToken),
+            TWriteMessage::CompressedMessage(packed, ECodec::GZIP, correctMessage.size())
+        );
+    }
+
+    std::uint32_t acks = 0;
+    while (acks < 2)  {
+        auto event = *writer->GetEvent(true);
+        if (auto e = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+            acks += e->Acks.size();
+        } else {
+            continue;
+        }
+    }
+
+    ASSERT_EQ(acks, 2u);
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(GetConsumerName())
+        .AppendTopics(GetTopicPath())
+        // .DirectRead(EnableDirectRead)
+        ;
+    std::shared_ptr<IReadSession> readSession = client.CreateReadSession(readSettings);
+    std::uint32_t readMessageCount = 0;
+    while (readMessageCount < 2) {
+        std::cerr << "Get event on client\n";
+        auto event = *readSession->GetEvent(true);
+        std::visit(TOverloaded {
+            [&](TReadSessionEvent::TDataReceivedEvent& event) {
+                for (auto& message: event.GetMessages()) {
+                    if (readMessageCount == 0) {
+                        ASSERT_THROW(message.GetData(), std::exception);
+                        std::string data = message.GetBrokenData();
+                        ASSERT_TRUE(brokenPacked == data);
+                    } else {
+                        ASSERT_THROW(message.GetBrokenData(), std::exception);
+                        std::string data = message.GetData();
+                        ASSERT_TRUE(correctMessage == data);
+                    }
+                    ++readMessageCount;
+                }
+            },
+            [&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
+                FAIL();
+            },
+            [&](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TStopPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TEndPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TPartitionSessionStatusEvent&) {
+                FAIL() << "Test does not support lock sessions yet";
+            },
+            [&](TReadSessionEvent::TPartitionSessionClosedEvent&) {
+                FAIL() << "Test does not support lock sessions yet";
+            },
+            [&](TSessionClosedEvent&) {
+                FAIL() << "Session closed";
+            }
         }, event);
     }
 }

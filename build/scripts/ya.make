@@ -2,13 +2,11 @@ SUBSCRIBER(g:ymake)
 
 PY23_TEST()
 
-IF (PY2)
+IF (PYTHON2)
     TEST_SRCS(
         build_catboost.py
-        collect_java_srcs.py
         compile_cuda.py
         coverage-info.py
-        copy_clang_profile_rt.py
         create_jcoverage_report.py
         custom_link_green_mysql.py
         f2c.py
@@ -33,7 +31,11 @@ IF (PY2)
         with_crash_on_timeout.py
         yndexer.py
     )
-ELSEIF (PY3)
+ELSEIF (PYTHON3)
+    PEERDIR(
+        contrib/python/PyYAML
+    )
+
     STYLE_PYTHON()
     TEST_SRCS(
         append_file.py
@@ -41,6 +43,7 @@ ELSEIF (PY3)
         build_info_gen.py
         build_java_codenav_index.py
         build_java_with_error_prone2.py
+        bundle_output.py
         cat.py
         cgo1_wrapper.py
         check_config_h.py
@@ -52,6 +55,7 @@ ELSEIF (PY3)
         compile_pysrc.py
         configure_file.py
         container.py
+        copy_clang_profile_rt.py
         copy_docs_files.py
         copy_docs_files_to_dir.py
         copy_files_to_dir.py
@@ -82,6 +86,8 @@ ELSEIF (PY3)
         generate_pom.py
         generate_win_vfs.py
         go_proto_wrapper.py
+        iwyu.py
+        iwyu_arch.py
         java_command_file.py
         java_pack_to_file.py
         jni_swig.py
@@ -109,7 +115,6 @@ ELSEIF (PY3)
         preprocess.py
         process_command_files.py
         process_whole_archive_option.py
-        py_compile.py
         resolve_java_srcs.py
         retry.py
         retry_cc.py

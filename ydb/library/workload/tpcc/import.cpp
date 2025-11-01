@@ -388,6 +388,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     int district,
     google::protobuf::Arena& arena,
     TReallyFastRng32& fastRng,
+    i64 baseTs,
     TLog* Log)
 {
     LOG_T("Loading customer history for warehouse " << wh << " district " << district);
@@ -395,16 +396,9 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
     auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
-    i64 prevTs = 0;
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
-        TInstant date = TInstant::Now();
-        // Match Benchbase: ensure monotonic nanosecond timestamps
-        i64 nanoTs = TInstant::Now().NanoSeconds();
-        if (nanoTs <= prevTs) {
-            nanoTs = prevTs + 1;
-        }
-        prevTs = nanoTs;
+    TInstant date = TInstant::Now();
 
+    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("H_C_W_ID").Int32(wh)
@@ -415,7 +409,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
             .AddMember("H_DATE").Timestamp(date)
             .AddMember("H_AMOUNT").Double(10.00)
             .AddMember("H_DATA").Utf8(RandomAlphaString(fastRng, 10, 24))
-            .AddMember("H_C_NANO_TS").Int64(nanoTs)
+            .AddMember("H_C_NANO_TS").Int64(baseTs++)
             .EndStruct();
     }
 
@@ -454,7 +448,10 @@ NTable::TBulkUpsertResult LoadOpenOrders(
 
     for (int orderId = 1; orderId <= CUSTOMERS_PER_DISTRICT; ++orderId) {
         int customerId = customerIds[orderId - 1]; // Use shuffled customer ID
-        int carrierId = (orderId < FIRST_UNPROCESSED_O_ID) ? RandomNumber(fastRng, 1, 10) : 0;
+        std::optional<int> carrierId;
+        if (orderId < FIRST_UNPROCESSED_O_ID) {
+            carrierId = RandomNumber(fastRng, 1, 10);
+        }
         int olCnt = GetRandomCount(wh, orderId, district); // Deterministic count
 
         valueBuilder.AddListItem()
@@ -463,7 +460,7 @@ NTable::TBulkUpsertResult LoadOpenOrders(
             .AddMember("O_D_ID").Int32(district)
             .AddMember("O_ID").Int32(orderId)
             .AddMember("O_C_ID").Int32(customerId)
-            .AddMember("O_CARRIER_ID").Int32(carrierId)
+            .AddMember("O_CARRIER_ID").OptionalInt32(carrierId)
             .AddMember("O_OL_CNT").Int32(olCnt)
             .AddMember("O_ALL_LOCAL").Int32(1)
             .AddMember("O_ENTRY_D").Timestamp(TInstant::Now())
@@ -540,13 +537,12 @@ NTable::TBulkUpsertResult LoadOrderLines(
             int itemId = RandomNumber(fastRng, 1, ITEM_COUNT);
 
             // Set OL_DELIVERY_D and OL_AMOUNT based on itemId condition (like Benchbase!)
-            TInstant deliveryDate;
+            std::optional<TInstant> deliveryDate;
             double amount;
-            if (itemId < FIRST_UNPROCESSED_O_ID) {
+            if (orderId < FIRST_UNPROCESSED_O_ID) {
                 deliveryDate = TInstant::Now();
                 amount = 0.0;
             } else {
-                deliveryDate = TInstant::Zero(); // epoch timestamp
                 // random within [0.01 .. 9,999.99]
                 amount = RandomNumber(fastRng, 1, 999999) / 100.0;
             }
@@ -558,7 +554,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
                 .AddMember("OL_O_ID").Int32(orderId)
                 .AddMember("OL_NUMBER").Int32(lineNumber)
                 .AddMember("OL_I_ID").Int32(itemId)
-                .AddMember("OL_DELIVERY_D").Timestamp(deliveryDate)
+                .AddMember("OL_DELIVERY_D").OptionalTimestamp(deliveryDate)
                 .AddMember("OL_AMOUNT").Double(amount)
                 .AddMember("OL_SUPPLY_W_ID").Int32(wh)
                 .AddMember("OL_QUANTITY").Double(5.0)
@@ -709,13 +705,23 @@ void LoadRange(
             }, arena, Log);
         }
 
+        i64 prevTs = 0;
         for (int district = DISTRICT_LOW_ID; district <= DISTRICT_HIGH_ID; ++district) {
             ExecuteWithRetry("LoadOrderLines", [&]() {
                 return LoadOrderLines(tableClient, orderLineTablePath, wh, district, arena, fastRng, Log);
             }, arena, Log);
+
+            // Match Benchbase: ensure monotonic nanosecond timestamps
+            i64 nanoTs = TInstant::Now().NanoSeconds();
+            if (nanoTs <= prevTs) {
+                nanoTs = prevTs + 1;
+            }
+            prevTs = nanoTs;
+
             ExecuteWithRetry("LoadCustomerHistory", [&]() {
-                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, Log);
+                return LoadCustomerHistory(tableClient, historyTablePath, wh, district, arena, fastRng, nanoTs, Log);
             }, arena, Log);
+
             ExecuteWithRetry("LoadNewOrders", [&]() {
                 return LoadNewOrders(tableClient, newOrderTablePath, wh, district, arena, Log);
             }, arena, Log);
@@ -844,10 +850,35 @@ public:
         Config.SetDisplay();
         CalculateApproximateDataSize();
 
-        // TODO: detect number of threads
+        std::vector<TDriver> drivers;
+        drivers.reserve(10);
+        drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+
         if (Config.LoadThreadCount == 0) {
-            LOG_W("Automatic calculation of loading threads is not implemented, falling back to the default");
-            Config.LoadThreadCount = DEFAULT_LOAD_THREAD_COUNT;
+            int32_t computeCores = 0;
+            std::string reason;
+            try {
+                computeCores = NumberOfComputeCpus(drivers[0]);
+            } catch (const std::exception& ex) {
+                reason = ex.what();
+            }
+
+            if (computeCores == 0) {
+                std::cerr << "Failed to autodetect max number of load threads";
+                if (!reason.empty()) {
+                    std::cerr << ": " << reason;
+                }
+
+                std::cerr << ". Please specify '--threads' manually." << std::endl;
+                std::exit(1);
+            }
+
+            const size_t clientCpuCount = NumberOfMyCpus();
+
+            const size_t optimalThreadCount =
+                (computeCores + COMPUTE_CORES_PER_IMPORT_THREAD - 1) / COMPUTE_CORES_PER_IMPORT_THREAD;
+
+            Config.LoadThreadCount = std::min(clientCpuCount, optimalThreadCount);
         }
 
         // TODO: detect number of threads
@@ -869,9 +900,9 @@ public:
                 threadCount << " threads and " << driverCount << " YDB drivers. Approximate data size: "
                 << GetFormattedSize(LoadState.ApproximateDataSize));
 
-        std::vector<TDriver> drivers;
+        // already have 1, add more if needed
         drivers.reserve(driverCount);
-        for (size_t i = 0; i < driverCount; ++i) {
+        for (size_t i = 1; i < driverCount; ++i) {
             drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
         }
 
@@ -999,6 +1030,33 @@ public:
             thread.join();
         }
 
+        // if there is either error we have failed to retry or user wants to cancel import,
+        // we must try to cancel indices being created
+        if (GetGlobalInterruptSource().stop_requested() && !LoadState.IndexBuildStates.empty()) {
+            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                auto& indexState = LoadState.IndexBuildStates[i];
+                try {
+                    auto operation = operationClient.Get<NTable::TBuildIndexOperation>(indexState.Id).GetValueSync();
+                    if (operation.Metadata().State == NTable::EBuildIndexState::TransferData) {
+                        auto cancelResult = operationClient.Cancel(indexState.Id).GetValueSync();
+                        if (cancelResult.IsSuccess()) {
+                            LOG_I("Cancelled creation of index '" << indexState.Name
+                                << "' for table '" << indexState.Table
+                                << "', operation id '" << indexState.Id.ToString() << "'");
+                        } else {
+                            LOG_W("Failed to cancel creation of index '" << indexState.Name
+                                << "' for table '" << indexState.Table
+                                << "', operation id '" << indexState.Id.ToString() << "'");
+                        }
+                    }
+                } catch (const std::exception& ex) {
+                    LOG_W("Exception while cancelling index '" << indexState.Name << "' for table '"
+                        << indexState.Table << "', operation id '" << indexState.Id.ToString() << "': "
+                        << ex.what());
+                }
+            }
+        }
+
         for (auto& driver : drivers) {
             driver.Stop(true);
         }
@@ -1051,6 +1109,10 @@ private:
             displayData.StatusData.IsLoadingTablesAndBuildingIndices =
                 LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
 
+        auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
+        displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
+        displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
+
         if (!displayData.StatusData.IsWaitingForIndices) {
             displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
 
@@ -1063,12 +1125,8 @@ private:
                 static_cast<double>(
                     displayData.StatusData.CurrentDataSizeLoaded - PreviousDataSizeLoaded) / (1024 * 1024) / deltaSeconds : 0.0;
 
-            auto totalElapsed = std::chrono::duration<double>(now - StartTime).count();
             displayData.StatusData.AvgSpeedMiBs = totalElapsed > 0 ?
                 static_cast<double>(displayData.StatusData.CurrentDataSizeLoaded) / (1024 * 1024) / totalElapsed : 0.0;
-
-            displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
-            displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
             if (displayData.StatusData.AvgSpeedMiBs > 0
                     && displayData.StatusData.CurrentDataSizeLoaded < LoadState.ApproximateDataSize) {
@@ -1079,6 +1137,18 @@ private:
             }
 
             PreviousDataSizeLoaded = displayData.StatusData.CurrentDataSizeLoaded;
+        } else {
+            // we still want to display that data is loaded while we are waiting for indices
+            displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
+            displayData.StatusData.PercentLoaded = 100;
+
+            double remainingSeconds = 0;
+            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
+                const auto& indexState = LoadState.IndexBuildStates[i];
+                remainingSeconds = std::max(remainingSeconds, indexState.GetRemainingSeconds());
+            }
+            displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
+            displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
         }
 
         switch (Config.DisplayMode) {

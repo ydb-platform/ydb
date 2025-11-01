@@ -41,6 +41,9 @@ DEFINE_ENUM(EAddressType,
     ((TvmOnlyHttp)        (5))
     ((TvmOnlyHttps)       (6))
     ((PublicRpc)          (7))
+    ((ChytHttp)           (8))
+    ((ChytHttps)          (9))
+
 );
 
 ////////////////////////////////////////////////////////////////////////////////

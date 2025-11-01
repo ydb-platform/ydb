@@ -1,5 +1,8 @@
 #include "format_handler.h"
 
+#include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/consumer.h>
+#include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/purecalc_filter.h>
+
 #include <util/generic/queue.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
@@ -18,7 +21,7 @@ class TTopicFormatHandler : public NActors::TActor<TTopicFormatHandler>, public 
     using TBase = NActors::TActor<TTopicFormatHandler>;
 
 public:
-    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_FORMAT_HANDLER";
+    [[maybe_unused]] static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_FORMAT_HANDLER";
 
 private:
     struct TCounters {
@@ -73,7 +76,7 @@ private:
         void OnParsedData(ui64 numberRows) override {
             LOG_ROW_DISPATCHER_TRACE("Got parsed data, number rows: " << numberRows);
 
-            Self.ParsedData.assign(ParerSchema.size(), nullptr);
+            Self.ParsedData.assign(ParerSchema.size(), std::span<NYql::NUdf::TUnboxedValue>());
             for (size_t i = 0; i < ParerSchema.size(); ++i) {
                 auto columnStatus = Self.Parser->GetParsedColumn(i);
                 if (Y_LIKELY(columnStatus.IsSuccess())) {
@@ -84,7 +87,7 @@ private:
             }
 
             Self.Offsets = &Self.Parser->GetOffsets();
-            Self.FilterData(numberRows);
+            Self.ProcessData(numberRows);
         }
 
     private:
@@ -111,7 +114,7 @@ private:
         const TString LogPrefix;
     };
 
-    class TClientHandler : public IFilteredDataConsumer {
+    class TClientHandler : public IProcessedDataConsumer {
     public:
         using TPtr = TIntrusivePtr<TClientHandler>;
 
@@ -130,7 +133,7 @@ private:
             return Client;
         }
 
-        bool IsClientStarted() const {
+        bool IsStarted() const override {
             return ClientStarted;
         }
 
@@ -164,9 +167,9 @@ private:
             return SetupPacker();
         }
 
-        TQueue<std::pair<TRope, TVector<ui64>>> ExtractClientData() {
+        TQueue<TDataBatch> ExtractClientData() {
             FinishPacking();
-            TQueue<std::pair<TRope, TVector<ui64>>> result;
+            TQueue<TDataBatch> result;
             result.swap(ClientData);
             LOG_ROW_DISPATCHER_TRACE("ExtractClientData, number batches: " << result.size());
             return result;
@@ -178,7 +181,7 @@ private:
         }
 
     public:
-        NActors::TActorId GetFilterId() const override {
+        NActors::TActorId GetClientId() const override {
             return Client->GetClientId();
         }
 
@@ -194,54 +197,104 @@ private:
             return Client->GetNextMessageOffset();
         }
 
-        const TString& GetWhereFilter() const override {
-            return Client->GetWhereFilter();
+        const TString& GetFilterExpr() const override {
+            return Client->GetFilterExpr();
+        }
+
+        const TString& GetWatermarkExpr() const override {
+            return Client->GetWatermarkExpr();
         }
 
         TPurecalcCompileSettings GetPurecalcSettings() const override {
             return Client->GetPurecalcSettings();
         }
 
-        void OnFilteringError(TStatus status) override {
+        void OnError(TStatus status) override {
             Client->OnClientError(status);
         }
 
-        void OnFilterStarted() override {
+        void OnStart() override {
             ClientStarted = true;
             Client->StartClientSession();
         }
 
-        void OnFilteredBatch(ui64 firstRow, ui64 lastRow) override {
-            LOG_ROW_DISPATCHER_TRACE("OnFilteredBatch, rows [" << firstRow << ", " << lastRow << "]");
-            for (ui64 rowId = firstRow; rowId <= lastRow; ++rowId) {
-                OnFilteredData(rowId);
+    private:
+        void OnWatermark(ui64 offset, TMaybe<ui64> maybeWatermark) {
+            if (!maybeWatermark) {
+                return;
             }
+            const auto watermark = TInstant::MicroSeconds(*maybeWatermark);
+            if (Watermark < watermark) {
+                Watermark = watermark;
+            }
+            LOG_ROW_DISPATCHER_TRACE("OnWatermark, offset: " << offset << ", watermark: " << watermark);
         }
 
-        void OnFilteredData(ui64 rowId) override {
-            const ui64 offset = Self.Offsets->at(rowId);
-            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && offset < *nextOffset) {
-                LOG_ROW_DISPATCHER_TRACE("OnFilteredData, skip historical offset: " << offset << ", next message offset: " << *nextOffset);
+    public:
+        void OnData(const NYql::NUdf::TUnboxedValue* value) override {
+            ui64 rowId;
+            bool filter = true;
+            TMaybe<ui64> maybeWatermark = Nothing();
+            if (value->IsEmbedded()) {
+                rowId = value->Get<ui64>();
+            } else if (value->IsBoxed()) {
+                if (value->GetListLength() == 2 || value->GetListLength() == 3) {
+                    filter = value->GetElement(0).Get<bool>();
+                    rowId = value->GetElement(1).Get<ui64>();
+                    if (value->GetListLength() == 3 && value->GetElement(2)) {
+                        maybeWatermark = value->GetElement(2).Get<ui64>();
+                    }
+                } else {
+                    Y_ENSURE(false, "Unexpected output schema size (" << value->GetListLength() << " elements)");
+                }
+            } else {
+                Y_ENSURE(false, "Expected embedded or list from purecalc");
+            }
+
+            Offset = Self.Offsets->at(rowId);
+            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
+                LOG_ROW_DISPATCHER_TRACE("OnData, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
                 return;
             }
 
-            Y_DEFER {
-                // Values allocated on parser allocator and should be released
-                FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
-            };
+            auto newNumberRows = NumberRows;
+            auto newDataPackerSize = DataPackerSize;
+            if (filter) {
+                FilteredOffsets.push_back(Offset);
 
-            for (size_t i = 0; const ui64 columnId : ColumnsIds) {
-                // All data was locked in parser, so copy is safe
-                FilteredRow[i++] = Self.ParsedData[Self.ParserSchemaIndex[columnId]]->at(rowId);
+                Y_DEFER {
+                    // Values allocated on parser allocator and should be released
+                    FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
+                };
+
+                for (size_t i = 0; const ui64 columnId : ColumnsIds) {
+                    auto& parsedData = Self.ParsedData[Self.ParserSchemaIndex[columnId]];
+                    Y_DEBUG_ABORT_UNLESS(parsedData.size() > rowId);
+
+                    // All data was locked in parser, so copy is safe
+                    FilteredRow[i++] = parsedData[rowId];
+                }
+                DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+
+                ++newNumberRows;
+                newDataPackerSize = DataPacker->PackedSizeEstimate();
             }
-            DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
-            FilteredOffsets.emplace_back(offset);
 
-            const ui64 newPackerSize = DataPacker->PackedSizeEstimate();
-            LOG_ROW_DISPATCHER_TRACE("OnFilteredData, row id: " << rowId << ", offset: " << offset << ", new packer size: " << newPackerSize);
-            Client->AddDataToClient(offset, newPackerSize - DataPackerSize);
+            OnWatermark(Offset, maybeWatermark);
 
-            DataPackerSize = newPackerSize;
+            const auto numberRows = newNumberRows - NumberRows;
+            const auto rowSize = newDataPackerSize - DataPackerSize;
+
+            if (!numberRows && !rowSize && !Watermark) {
+                return;
+            }
+
+            LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, offset: " << Offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << Watermark);
+
+            Client->AddDataToClient(Offset, numberRows, rowSize, Watermark);
+
+            NumberRows = newNumberRows;
+            DataPackerSize = newDataPackerSize;
             if (DataPackerSize > MAX_BATCH_SIZE) {
                 FinishPacking();
             }
@@ -267,11 +320,16 @@ private:
         }
 
         void FinishPacking() {
-            if (!DataPacker->IsEmpty()) {
+            if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
-                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), FilteredOffsets);
+                if (FilteredOffsets.empty()) {
+                    FilteredOffsets.push_back(Offset);
+                }
+                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), std::move(FilteredOffsets), Watermark);
+                NumberRows = 0;
                 DataPackerSize = 0;
                 FilteredOffsets.clear();
+                Watermark.Clear();
             }
         }
 
@@ -285,17 +343,20 @@ private:
         bool ClientStarted = false;
 
         // Filtered data
+        ui64 Offset;
+        ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
         std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataPacker;
         TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
-        TQueue<std::pair<TRope, TVector<ui64>>> ClientData;  // vector of (messages batch, [offsets])
+        TMaybe<TInstant> Watermark;
+        TQueue<TDataBatch> ClientData;
     };
 
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
+        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -322,7 +383,7 @@ public:
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
         if (Filters) {
-            Filters->OnCompileResponse(std::move(ev));
+            Filters->OnCompileResponse(ev);
         }
     }
 
@@ -339,7 +400,7 @@ public:
     void Handle(NActors::TEvents::TEvPoison::TPtr&) {
         if (Filters) {
             for (const auto& [clientId, _] : Clients) {
-                Filters->RemoveFilter(clientId);
+                Filters->RemoveProgram(clientId);
             }
             Filters.Reset();
         }
@@ -367,7 +428,7 @@ public:
         }
     }
 
-    TQueue<std::pair<TRope, TVector<ui64>>> ExtractClientData(NActors::TActorId clientId) override {
+    TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) override {
         const auto it = Clients.find(clientId);
         if (it == Clients.end()) {
             return {};
@@ -380,7 +441,7 @@ public:
 
         if (const auto clientOffset = client->GetNextMessageOffset()) {
             if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
-                LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << "(previous parser offset: " << *CurrentOffset << ")");
+                LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << " (previous parser offset: " << *CurrentOffset << ")");
                 Parser->Refresh(true);
             }
         }
@@ -402,7 +463,9 @@ public:
         }
 
         CreateFilters();
-        if (auto status = Filters->AddFilter(clientHandler); status.IsFail()) {
+
+        auto programHolder = CreateProgramHolder(clientHandler);
+        if (auto status = Filters->AddPrograms(clientHandler, std::move(programHolder)); status.IsFail()) {
             RemoveClient(client->GetClientId());
             return status.AddParentIssue("Failed to create filter for new client");
         }
@@ -414,7 +477,7 @@ public:
         LOG_ROW_DISPATCHER_DEBUG("Remove client with id " << clientId);
 
         if (Filters) {
-            Filters->RemoveFilter(clientId);
+            Filters->RemoveProgram(clientId);
         }
 
         const auto it = Clients.find(clientId);
@@ -454,7 +517,7 @@ public:
             Parser->FillStatistics(statistics);
         }
         if (Filters) {
-            statistics.FilterStats = Filters->GetStatistics();
+            Filters->FillStatistics(statistics.FilterStats);
         }
         return statistics;
     }
@@ -491,27 +554,35 @@ private:
 
         if (Parser) {
             Parser->Refresh(true);
-            Parser.Reset();
         }
 
         LOG_ROW_DISPATCHER_DEBUG("UpdateParser to new schema with size " << parerSchema.size());
         ParserHandler = MakeIntrusive<TParserHandler>(*this, std::move(parerSchema));
 
         if (const ui64 schemaSize = ParserHandler->GetColumns().size()) {
-            auto newParser = CreateParserForFormat();
-            if (newParser.IsFail()) {
-                return newParser;
+            if (!Parser) {
+                auto newParser = CreateParserForFormat();
+                if (newParser.IsFail()) {
+                    return newParser;
+                }
+
+                Parser = newParser.DetachResult();
+                LOG_ROW_DISPATCHER_DEBUG("Parser was created on schema with " << schemaSize << " columns");
+            } else {
+                if (auto status = Parser->ChangeConsumer(ParserHandler); status.IsFail()) {
+                    return status;
+                }
+
+                LOG_ROW_DISPATCHER_DEBUG("Parser was updated on new schema with " << schemaSize << " columns");
             }
 
-            LOG_ROW_DISPATCHER_DEBUG("Parser was updated on new schema with " << schemaSize << " columns");
-
-            Parser = newParser.DetachResult();
             ParserSchemaIndex.resize(MaxColumnId, std::numeric_limits<ui64>::max());
             for (ui64 i = 0; const auto& [_, columnDesc] : ColumnsDesc) {
                 ParserSchemaIndex[columnDesc.ColumnId] = i++;
             }
         } else {
             LOG_ROW_DISPATCHER_INFO("No columns to parse, reset parser");
+            Parser.Reset();
         }
 
         return TStatus::Success();
@@ -520,7 +591,7 @@ private:
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
         const auto& counters = Counters.Desc.CopyWithNewMkqlCountersName("row_dispatcher_parser");
         if (Settings.ParsingFormat == "raw") {
-            return CreateRawParser(ParserHandler, counters);
+            return CreateRawParser(ParserHandler, Config.FunctionRegistry, counters);
         }
         if (Settings.ParsingFormat == "json_each_row") {
             return CreateJsonParser(ParserHandler, Config.JsonParserConfig, counters);
@@ -534,20 +605,20 @@ private:
         }
     }
 
-    void FilterData(ui64 numberRows) {
+    void ProcessData(ui64 numberRows) {
         if (!numberRows) {
             return;
         }
 
         const ui64 lastOffset = Offsets->at(numberRows - 1);
-        LOG_ROW_DISPATCHER_TRACE("Send " << numberRows << " messages to filters, first offset: " << Offsets->front() << ", last offset: " << lastOffset);
+        LOG_ROW_DISPATCHER_TRACE("Send " << numberRows << " messages to programs, first offset: " << Offsets->front() << ", last offset: " << lastOffset);
 
         if (Filters) {
-            Filters->FilterData(ParserSchemaIndex, *Offsets, ParsedData, numberRows);
+            Filters->ProcessData(ParserSchemaIndex, *Offsets, ParsedData, numberRows);
         }
 
         for (const auto& [_, client] : Clients) {
-            if (client->IsClientStarted()) {
+            if (client->IsStarted()) {
                 LOG_ROW_DISPATCHER_TRACE("Commit client " << client->GetClient()->GetClientId() << " offset " << lastOffset);
                 client->GetClient()->UpdateClientOffset(lastOffset);
             }
@@ -573,7 +644,7 @@ private:
     std::map<TString, TColumnDesc> ColumnsDesc;
     std::unordered_map<NActors::TActorId, TClientHandler::TPtr> Clients;
 
-    // Perser and filters
+    // Parser and filters
     ITopicParser::TPtr Parser;
     TParserHandler::TPtr ParserHandler;
     ITopicFilters::TPtr Filters;
@@ -581,7 +652,7 @@ private:
 
     // Parsed data
     const TVector<ui64>* Offsets;
-    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> ParsedData;
+    TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedData;
     bool RefreshScheduled = false;
 
     // Metrics
@@ -606,9 +677,10 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
     return {
-        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser()),
+        .FunctionRegistry = functionRegistry,
+        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry),
         .FiltersConfig = {
             .CompileServiceId = compileServiceId
         }

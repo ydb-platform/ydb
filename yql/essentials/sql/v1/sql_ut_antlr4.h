@@ -1,3 +1,4 @@
+#pragma once
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
@@ -35,7 +36,7 @@ inline TString Err2Str(const NYql::TAstParseResult& res, EDebugOutput debug = ED
 }
 
 inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {},
-    EDebugOutput debug = EDebugOutput::None, bool ansiLexer = false, NSQLTranslation::TTranslationSettings settings = {})
+                                              EDebugOutput debug = EDebugOutput::None, bool ansiLexer = false, NSQLTranslation::TTranslationSettings settings = {})
 {
     google::protobuf::Arena arena;
     const auto service = provider ? provider : TString(NYql::YtProviderName);
@@ -43,6 +44,8 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.ClusterMapping[cluster] = service;
     settings.ClusterMapping["hahn"] = NYql::YtProviderName;
     settings.ClusterMapping["mon"] = NYql::SolomonProviderName;
+    settings.ClusterMapping["rtmr"] = NYql::RtmrProviderName;
+    settings.ClusterMapping["ydb"] = NYql::YdbProviderName;
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
     settings.Arena = &arena;
@@ -60,8 +63,7 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        nullptr
-    );
+        nullptr);
 
     auto res = SqlToYql(translators, query, settings);
     if (debug == EDebugOutput::ToCerr) {
@@ -117,7 +119,7 @@ inline TString Quote(const char* str) {
 class TWordCountHive: public TMap<TString, unsigned> {
 public:
     TWordCountHive(std::initializer_list<TString> strings) {
-        for (auto& str: strings) {
+        for (auto& str : strings) {
             emplace(str, 0);
         }
     }
@@ -128,14 +130,14 @@ public:
     }
 };
 
-typedef std::function<void (const TString& word, const TString& line)> TVerifyLineFunc;
+typedef std::function<void(const TString& word, const TString& line)> TVerifyLineFunc;
 
 inline TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& wordCounter, TVerifyLineFunc verifyLine = TVerifyLineFunc()) {
-    const auto programm = GetPrettyPrint(res);
+    const auto program = GetPrettyPrint(res);
     TVector<TString> yqlProgram;
-    Split(programm, "\n", yqlProgram);
-    for (const auto& line: yqlProgram) {
-        for (auto& counterIter: wordCounter) {
+    Split(program, "\n", yqlProgram);
+    for (const auto& line : yqlProgram) {
+        for (auto& counterIter : wordCounter) {
             const auto& word = counterIter.first;
             auto pos = line.find(word);
             while (pos != TString::npos) {
@@ -147,14 +149,13 @@ inline TString VerifyProgram(const NYql::TAstParseResult& res, TWordCountHive& w
             }
         }
     }
-    return programm;
+    return program;
 }
 
 inline void VerifySqlInHints(const TString& query, const THashSet<TString>& expectedHints, TMaybe<bool> ansi) {
     TString pragma;
     if (ansi.Defined()) {
-        pragma = *ansi ? "PRAGMA AnsiInForEmptyOrNullableItemsCollections;" :
-                         "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;";
+        pragma = *ansi ? "PRAGMA AnsiInForEmptyOrNullableItemsCollections;" : "PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;";
     }
 
     NYql::TAstParseResult res = SqlToYql(pragma + query);
@@ -167,7 +168,7 @@ inline void VerifySqlInHints(const TString& query, const THashSet<TString>& expe
         } else if (*ansi) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("'('ansi)"));
         }
-        for (auto& hint : expectedHints)  {
+        for (auto& hint : expectedHints) {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(hint));
         }
     };
@@ -220,14 +221,15 @@ inline NSQLTranslation::TTranslationSettings GetSettingsWithS3Binding(const TStr
     return settings;
 }
 
-inline void AstBfs(NYql::TAstNode const* root, std::function<bool (NYql::TAstNode const*)> visitor) {
-    std::deque<NYql::TAstNode const*> wishList{ root };
+inline void AstBfs(NYql::TAstNode const* root, std::function<bool(NYql::TAstNode const*)> visitor) {
+    std::deque<NYql::TAstNode const*> wishList{root};
     std::unordered_set<NYql::TAstNode const*> visited;
-    while(!wishList.empty()){
+    while (!wishList.empty()) {
         auto v = wishList.front();
         wishList.pop_front();
-        if (!visitor(v))
+        if (!visitor(v)) {
             return;
+        }
         visited.insert(v);
         if (v->IsList()) {
             for (ui32 i = 0; i != v->GetChildrenCount(); ++i) {
@@ -240,7 +242,7 @@ inline void AstBfs(NYql::TAstNode const* root, std::function<bool (NYql::TAstNod
     }
 }
 
-inline const NYql::TAstNode* FindNodeByChildAtomContent(const NYql::TAstNode* root, uint32_t childIndex, TStringBuf name){
+inline const NYql::TAstNode* FindNodeByChildAtomContent(const NYql::TAstNode* root, uint32_t childIndex, TStringBuf name) {
     const NYql::TAstNode* result = nullptr;
     AstBfs(root, [&result, childIndex, name](auto v) {
         if (v->IsList() && v->GetChildrenCount() > childIndex &&

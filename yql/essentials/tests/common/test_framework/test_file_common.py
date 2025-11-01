@@ -7,7 +7,7 @@ import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_con
 
 from google.protobuf import text_format
 from yql_utils import execute, get_supported_providers, get_tables, get_files, get_http_files, \
-    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path, do_custom_error_check
+    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, skip_on_ubsan_known_failure, yql_binary_path, do_custom_error_check
 from yqlrun import YQLRun
 
 from test_utils import get_parameters_json, replace_vars, get_case_file
@@ -55,7 +55,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-def get_sql_query(provider, suite, case, config, data_path=None, template={'.sql', '.yql'}):
+def get_sql_query(provider, suite, case, config, data_path=None, template=['.sql', '.yql']):
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -90,7 +90,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       run_sql=True, cfg_postprocess=None, langver=None, attr_postprocess=None):
     check_provider(provider, config)
 
-    sql_query = get_sql_query(provider, suite, case, config, data_path, template={'.sql', '.yql'} if run_sql else '.yqls')
+    sql_query = get_sql_query(provider, suite, case, config, data_path, template=['.sql', '.yql'] if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")
 
     xfail = is_xfail(config)
@@ -135,6 +135,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         parameters=parameters)
 
     fixed_stderr = res.std_err
+    skip_on_ubsan_known_failure(res.std_err)
     if xfail:
         assert res.execution_result.exit_code != 0
         do_custom_error_check(res, sql_query)

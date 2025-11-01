@@ -127,6 +127,8 @@ public:
     virtual bool IsClientLost() const = 0;
 
     virtual TString GetEndpointId() const = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 };
 
 } // namespace NYdbGrpc

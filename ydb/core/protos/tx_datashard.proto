@@ -273,6 +273,7 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
+    optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -289,12 +290,9 @@ message TKqpVectorResolveSettings {
     optional uint32 LevelTableClusterColumnId = 5;
     optional uint32 LevelTableCentroidColumnId = 6;
 
-    //optional TKqpTransaction.TTableMeta PrefixTable = ?;
-
     // Input columns (columns of the source table)
     repeated uint32 InputColumnTypes = 7;
     repeated NKikimrProto.TTypeInfo InputColumnTypeInfos = 8;
-    //repeated uint32 PrefixColumnIds = ?;
     repeated uint32 CopyColumnIndexes = 9;
     optional uint32 VectorColumnIndex = 10;
 
@@ -303,6 +301,12 @@ message TKqpVectorResolveSettings {
     optional uint64 LockTxId = 12;
     optional uint32 LockNodeId = 13;
     optional NKikimrDataEvents.ELockMode LockMode = 14;
+
+    // Output position of the cluster column
+    optional uint32 ClusterColumnOutPos = 15;
+
+    // Input root cluster ID column (for the prefixed index)
+    optional uint32 RootClusterColumnIndex = 16;
 }
 
 message TKqpTaskInfo {
@@ -1441,6 +1445,7 @@ message TEvConditionalEraseRowsRequest {
     optional uint64 SchemaVersion = 3;
     repeated TIndexDescription Indexes = 4;
     optional TLimits Limits = 5;
+    optional string DatabaseName = 6;
 
     oneof Condition {
         TExpirationCondition Expiration = 2;
@@ -1497,6 +1502,8 @@ message TEvBuildIndexCreateRequest {
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
+
+    optional string DatabaseName = 18;
 }
 
 message TEvBuildIndexProgressResponse {
@@ -1607,6 +1614,8 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
+
+    optional string DatabaseName = 23;
 }
 
 message TEvLocalKMeansResponse {
@@ -1623,6 +1632,7 @@ message TEvLocalKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+    optional bool IsEmpty = 13;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1654,6 +1664,8 @@ message TEvReshuffleKMeansRequest {
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
+
+    optional string DatabaseName = 17;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1720,7 +1732,7 @@ message TEvIncrementalRestoreResponse {
         RETRY = 1;
         ERROR = 2;
     }
-    
+
     optional uint64 TxId = 1;
     optional uint64 TableId = 2;
     optional uint64 OperationId = 3;
@@ -1765,6 +1777,8 @@ message TEvPrefixKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 
     repeated string SourcePrimaryKeyColumns = 19;
+
+    optional string DatabaseName = 20;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1781,6 +1795,43 @@ message TEvPrefixKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+}
+
+message TEvBuildFulltextIndexRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+
+    optional uint64 SeqNoGeneration = 6;
+    optional uint64 SeqNoRound = 7;
+
+    optional string IndexName = 8;
+
+    optional Ydb.Table.FulltextIndexSettings Settings = 9; // also has key columns
+    repeated string DataColumns = 10;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+
+    optional string DatabaseName = 12;
+}
+
+message TEvBuildFulltextIndexResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 8;
 }
 
 message TEvCdcStreamScanRequest {
@@ -2047,6 +2098,16 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
+
+    optional TReadVectorTopK VectorTopK = 905;
+}
+
+message TReadVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    optional uint32 Column = 1;
+    optional Ydb.Table.VectorIndexSettings Settings = 2;
+    optional string TargetVector = 3;
+    optional uint32 Limit = 4;
 }
 
 message TReadContinuationToken {
@@ -2357,14 +2418,13 @@ message TInMemoryLockVolatileDependency {
 }
 
 // In-memory prepared volatile transactions, i.e. those we have accepted for
-// execution and may be planned and executed later. This includes planned and
-// acknowledged transactions that haven't executed yet (including those that
-// have not been committed yet?)
+// execution and which may be planned and executed later. This includes planned
+// and acknowledged transactions that haven't executed yet.
 message TInMemoryPreparedVolatileTx {
     optional uint64 TxId = 1;
     optional NActorsProto.TActorId Source = 2;
     optional uint64 Cookie = 3;
-    optional uint64 Type = 4;
+    optional uint64 Kind = 4;
     optional bytes Body = 5;
     optional uint64 Flags = 6;
     // This is Min/Max step of a prepared transactions, mostly used for deadline cleanup
@@ -2373,6 +2433,8 @@ message TInMemoryPreparedVolatileTx {
     // Specified when the transaction has been planned already (including predictions)
     optional uint64 PredictedStep = 9;
     optional uint64 Step = 10;
+    // Auxillary state which needs to be preserved
+    optional uint64 ReceivedAt = 11; // TInstant in microseconds
 }
 
 // In-memory waiting volatile transactions, i.e. those that have not been

@@ -13,6 +13,10 @@ inputs:
   repository:
     required: true
     description: "token for access GitHub"
+  merge_ours:
+    description: "File to resolve with --ours (base branch) upon merge conflict"
+  merge_theirs:
+    description: "File to resolve with --theirs (head branch) upon merge conflict"
   gh_personal_access_token:
     required: true
     description: "token for access GitHub"
@@ -38,5 +42,13 @@ runs:
         TOKEN: ${{ inputs.gh_personal_access_token }}
       run: |
         cd ./ydb/ci/rightlib
-        ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --process-label="${{ inputs.label }}"
+        MERGE_ARGS=''
+        if [ -n "${{ inputs.merge_ours }}" ]; then
+          MERGE_ARGS+="--merge-ours ${{ inputs.merge_ours }}"
+        fi
+        if [ -n "${{ inputs.merge_theirs }}" ]; then
+          MERGE_ARGS+=" --merge-theirs ${{ inputs.merge_theirs }}"
+        fi
+        echo $MERGE_ARGS
+        ./create_sync_pr.py --base-branch="${{ inputs.base_branch }}" --head-branch="${{ inputs.head_branch }}" --process-label="${{ inputs.label }}" $MERGE_ARGS
 

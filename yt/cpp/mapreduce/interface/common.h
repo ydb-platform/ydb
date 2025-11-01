@@ -414,6 +414,13 @@ enum EValueType : int
 
     // Universally unique identifier according to RFC-4122.
     VT_UUID,
+
+    VT_TZ_DATE,
+    VT_TZ_DATETIME,
+    VT_TZ_TIMESTAMP,
+    VT_TZ_DATE32,
+    VT_TZ_DATETIME64,
+    VT_TZ_TIMESTAMP64,
 };
 
 ///
@@ -1147,6 +1154,9 @@ struct TRichYPath
 
     /// Specifies cluster for the YPath
     FLUENT_FIELD_OPTION(TString, Cluster);
+
+    /// Specifies input_query for the path.
+    FLUENT_FIELD_OPTION(TString, InputQuery);
 
     /// Create empty path with no attributes
     TRichYPath()

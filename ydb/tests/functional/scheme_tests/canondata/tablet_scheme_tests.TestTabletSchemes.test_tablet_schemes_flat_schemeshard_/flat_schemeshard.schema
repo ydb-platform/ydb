@@ -3263,6 +3263,11 @@
                 "ColumnId": 19,
                 "ColumnName": "ExportMetadata",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "SanitizedToken",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -3287,7 +3292,8 @@
                     16,
                     17,
                     18,
-                    19
+                    19,
+                    20
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5265,6 +5271,26 @@
                 "ColumnId": 45,
                 "ColumnName": "CpuTimeUsProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 46,
+                "ColumnName": "DropColumnsTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 47,
+                "ColumnName": "DropColumnsTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 48,
+                "ColumnName": "DropColumnsTxDone",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 49,
+                "ColumnName": "SubState",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -5315,7 +5341,11 @@
                     42,
                     43,
                     44,
-                    45
+                    45,
+                    46,
+                    47,
+                    48,
+                    49
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6289,6 +6319,11 @@
                 "ColumnId": 13,
                 "ColumnName": "PeerName",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SanitizedToken",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -6307,7 +6342,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8389,6 +8425,11 @@
                 "ColumnId": 9,
                 "ColumnName": "Round",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "IsEmpty",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8403,7 +8444,8 @@
                     6,
                     7,
                     8,
-                    9
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8798,6 +8840,11 @@
                 "ColumnId": 3,
                 "ColumnName": "CurrentIncrementalIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SerializedData",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -8806,7 +8853,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9024,6 +9072,163 @@
                 "ColumnId": 4,
                 "ColumnName": "State",
                 "ColumnType": "Byte"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 127,
+        "TableName": "Secrets",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Description",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 128,
+        "TableName": "SecretsAlterData",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Description",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 129,
+        "TableName": "StreamingQueryState",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Properties",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],

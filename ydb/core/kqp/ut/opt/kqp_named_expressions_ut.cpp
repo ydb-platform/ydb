@@ -542,15 +542,7 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
                 Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
                 Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
 
-                const bool onlyOneIndex = (index1.empty() != index2.empty());
-
-                if (onlyOneIndex && UseSink) {
-                    // "with index" uses literal executer (precompute), while "without index" uses compute actor.
-                    // TODO:
-                    UNIT_ASSERT(FormatResultSetYson(result.GetResultSet(0)) != FormatResultSetYson(result.GetResultSet(1)));
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
-                }
+                UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
             }
         }
     }
@@ -762,14 +754,7 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
                     Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
                     Cerr << FormatResultSetYson(result.GetResultSet(1)) << Endl;
 
-                    const bool onlyOneRevert = (op1 == "INSERT OR REVERT") != (op2 == "INSERT OR REVERT");
-
-                    if (onlyOneRevert && UseSink) {
-                        // TODO:
-                        UNIT_ASSERT(FormatResultSetYson(result.GetResultSet(0)) != FormatResultSetYson(result.GetResultSet(1)));
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
-                    }
+                    UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(1)));
                 }
             }
         }

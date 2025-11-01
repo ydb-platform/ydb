@@ -57,8 +57,7 @@ bool UseLocalModeOptimization(
                 localModeAttr,
                 TExistsOptions().ReadFrom(EMasterReadKind::Cache));
         });
-    if (exists)
-    {
+    if (exists) {
         auto fqdnNode = RequestWithRetry<TNode>(
             clientRetryPolicy->CreatePolicyForGenericRequest(),
             [&rawClient, &localModeAttr] (TMutationId /*mutationId*/) {
@@ -68,8 +67,8 @@ bool UseLocalModeOptimization(
                     TGetOptions().ReadFrom(EMasterReadKind::Cache));
             });
         if (!fqdnNode.IsUndefined()) {
-            auto fqdn = fqdnNode.AsString();
-            isLocalMode = (fqdn == TProcessState::Get()->FqdnHostName);
+            auto fqdn = to_lower(fqdnNode.AsString());
+            isLocalMode = (fqdn == to_lower(TProcessState::Get()->FqdnHostName));
             YT_LOG_DEBUG("Checking local mode; LocalModeFqdn: %v FqdnHostName: %v IsLocalMode: %v",
                 fqdn,
                 TProcessState::Get()->FqdnHostName,

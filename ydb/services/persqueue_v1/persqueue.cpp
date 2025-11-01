@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 #include "grpc_pq_read.h"
 #include "grpc_pq_write.h"
@@ -33,92 +34,67 @@ void TGRpcPersQueueService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
 
 void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace std::placeholders;
-    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+    using namespace Ydb::PersQueue::V1;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-    {
-        using TBiRequest = Ydb::PersQueue::V1::StreamingWriteClientMessage;
-
-        using TBiResponse = Ydb::PersQueue::V1::StreamingWriteServerMessage;
-
-        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
-                    TBiRequest,
-                    TBiResponse,
-                    TGRpcPersQueueService,
-                    NKikimrServices::GRPC_SERVER>;
-
-
-        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestStreamingWrite,
-                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context, TRequestAuxSettings{.AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
-                    },
-                    *ActorSystem_, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true), nullptr
-                );
-    }
-
-    {
-        using TBiRequest = Ydb::PersQueue::V1::MigrationStreamingReadClientMessage;
-
-        using TBiResponse = Ydb::PersQueue::V1::MigrationStreamingReadServerMessage;
-
-        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
-                    TBiRequest,
-                    TBiResponse,
-                    TGRpcPersQueueService,
-                    NKikimrServices::GRPC_SERVER>;
-
-
-        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead,
-                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context, TRequestAuxSettings{.AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
-                    },
-                    *ActorSystem_, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true), nullptr
-                );
-    }
-
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_PQ_METHOD
+#error SETUP_PQ_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, SVC, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::PersQueue::V1::IN, Ydb::PersQueue::V1::OUT, NGRpcService::V1::TGRpcPersQueueService>>(this, this->GetService(), CQ_, \
-        [this](NYdbGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::PersQueue::V1::SVC::AsyncService::Request ## NAME, \
-        "PersQueueService/"#NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run();
 
-    ADD_REQUEST(GetReadSessionsInfo, PersQueueService, ReadInfoRequest, ReadInfoResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQReadInfoRequest(ctx));
-        })
+#ifdef SETUP_PQ_METHOD_IN_OUT
+#error SETUP_PQ_METHOD_IN_OUT macro already defined
+#endif
 
-    ADD_REQUEST(DropTopic, PersQueueService, DropTopicRequest, DropTopicResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDropTopicRequest(ctx, &DoPQDropTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl)}));
-    })
+#ifdef SETUP_PQ_STREAM_METHOD
+#error SETUP_PQ_STREAM_METHOD macro already defined
+#endif
 
-    ADD_REQUEST(CreateTopic, PersQueueService, CreateTopicRequest, CreateTopicResponse, {
-        auto clusterCfg = ClustersCfgProvider->GetCfg();
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQCreateTopicRequest(ctx, std::bind(DoPQCreateTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl) }));
-    })
+#define SETUP_PQ_METHOD_IN_OUT(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                           \
+        inputType,                                                   \
+        outputType,                                                  \
+        methodCallback,                                              \
+        rlMode,                                                      \
+        requestType,                                                 \
+        YDB_API_DEFAULT_COUNTER_BLOCK(persistent_queue, methodName), \
+        auditMode,                                                   \
+        COMMON,                                                      \
+        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,          \
+        GRpcRequestProxyId_,                                         \
+        CQ_,                                                         \
+        nullptr,                                                     \
+        nullptr)
 
-    ADD_REQUEST(AlterTopic, PersQueueService, AlterTopicRequest, AlterTopicResponse, {
-        auto clusterCfg = ClustersCfgProvider->GetCfg();
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQAlterTopicRequest(ctx, std::bind(DoPQAlterTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl)}));
-    })
+#define SETUP_PQ_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_PQ_METHOD_IN_OUT(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, auditMode)
 
-    ADD_REQUEST(DescribeTopic, PersQueueService, DescribeTopicRequest, DescribeTopicResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDescribeTopicRequest(ctx, &DoPQDescribeTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying()}));
-    })
+#define SETUP_PQ_STREAM_METHOD(methodName, rlMode, requestType, auditMode, operationCallClass) \
+        SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName,                           \
+            Y_CAT(methodName, ClientMessage),                                   \
+            Y_CAT(methodName, ServerMessage),                                   \
+            rlMode,                                                             \
+            requestType,                                                        \
+            YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(persistent_queue, methodName), \
+            auditMode,                                                          \
+            operationCallClass,                                                 \
+            GRpcRequestProxyId_,                                                \
+            CQ_,                                                                \
+            nullptr,                                                            \
+            nullptr)
 
-    ADD_REQUEST(AddReadRule, PersQueueService, AddReadRuleRequest, AddReadRuleResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQAddReadRuleRequest(ctx, &DoPQAddReadRuleRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl)}));
-    })
+    SETUP_PQ_METHOD_IN_OUT(GetReadSessionsInfo, ReadInfoRequest, ReadInfoResponse, DoPQReadInfoRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_PQ_METHOD(DropTopic, DoPQDropTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(CreateTopic, std::bind(DoPQCreateTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(AlterTopic, std::bind(DoPQAlterTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(DescribeTopic, DoPQDescribeTopicRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_PQ_METHOD(AddReadRule, DoPQAddReadRuleRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_METHOD(RemoveReadRule, DoPQRemoveReadRuleRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_PQ_STREAM_METHOD(MigrationStreamingRead, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TEvStreamPQMigrationReadRequest);
+    SETUP_PQ_STREAM_METHOD(StreamingWrite, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TEvStreamPQWriteRequest);
 
-    ADD_REQUEST(RemoveReadRule, PersQueueService, RemoveReadRuleRequest, RemoveReadRuleResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQRemoveReadRuleRequest(ctx, &DoPQRemoveReadRuleRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl)}));
-    })
-
-#undef ADD_REQUEST
-
-
+#undef SETUP_PQ_METHOD
+#undef SETUP_PQ_METHOD_IN_OUT
+#undef SETUP_PQ_STREAM_METHOD
 }
 
 void TGRpcPersQueueService::StopService() noexcept {

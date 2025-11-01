@@ -9,6 +9,8 @@
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
 #include <ydb/public/lib/ydb_cli/import/import.h>
 
+#include <library/cpp/regex/pcre/regexp.h>
+
 namespace NYdb::NConsoleClient {
 
 class TCommandImport : public TClientCommandTree {
@@ -43,6 +45,7 @@ private:
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     TString AwsBucket;
     TVector<TItem> Items;
+    TVector<TRegExMatch> ExclusionPatterns;
     TVector<TString> IncludePaths;
     TString Description;
     ui32 NumberOfRetries = 10;
@@ -75,7 +78,12 @@ public:
     void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
 
+private:
+    // Returns file extension (without dot) for current InputFormat
+    TString GetFileExtension() const;
+
 protected:
+
     TVector<TString> FilePaths;
     TString BytesPerRequest;
     ui64 MaxInFlightRequests = 1;

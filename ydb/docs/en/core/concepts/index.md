@@ -7,7 +7,7 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Glossary](glossary.md)
 - [Architecture](architecture.md)
 - [Connecting to a database](connect.md)
-- [Data model](datamodel/index.md)
+- [Schema objects](datamodel/index.md)
 - [Cluster topology](topology.md)
 - [Transactions](transactions.md)
 - [Secondary indexes](secondary_indexes.md)

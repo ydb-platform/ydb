@@ -9,26 +9,34 @@
 #ifndef BOOST_ANYS_UNIQUE_ANY_HPP_INCLUDED
 #define BOOST_ANYS_UNIQUE_ANY_HPP_INCLUDED
 
+#include <boost/any/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
+
+/// \file boost/any/unique_any.hpp
+/// \brief \copybrief boost::anys::unique_any
+
+#ifndef BOOST_ANY_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #   pragma once
 #endif
 
-/// \file boost/any/unique_any.hpp
-/// \brief \copybrief boost::anys::unique_any
-
 #include <memory>  // for std::unique_ptr
 #include <utility>
 #include <type_traits>
+
+#include <boost/throw_exception.hpp>
+#include <boost/type_index.hpp>
+#endif  // #ifndef BOOST_ANY_INTERFACE_UNIT
 
 #include <boost/any/fwd.hpp>
 #include <boost/any/bad_any_cast.hpp>
 #include <boost/any/detail/placeholder.hpp>
 
-#include <boost/throw_exception.hpp>
-#include <boost/type_index.hpp>
-
 namespace boost { namespace anys {
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
 /// Helper type for providing emplacement type to the constructor.
 template <class T>
@@ -342,12 +350,19 @@ inline T any_cast(unique_any&& operand)
     return std::move(anys::any_cast<T&>(operand));
 }
 
+BOOST_ANY_END_MODULE_EXPORT
+
 } // namespace anys
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
 using boost::anys::any_cast;
 using boost::anys::unsafe_any_cast;
 
+BOOST_ANY_END_MODULE_EXPORT
+
 } // namespace boost
 
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
 
 #endif // BOOST_ANYS_UNIQUE_ANY_HPP_INCLUDED

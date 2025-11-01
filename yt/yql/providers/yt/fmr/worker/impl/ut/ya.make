@@ -2,6 +2,7 @@ UNITTEST()
 
 SRCS(
     yql_yt_worker_ut.cpp
+    yql_yt_worker_status_ut.cpp
 )
 
 PEERDIR(

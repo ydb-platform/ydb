@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grp§c://localhost:2135"
+                    CONNECTION_STRING = "grp§c://localhost:2135/?database=/Root"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135"
+                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135/?database=/Root"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
@@ -620,6 +620,46 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTopic();
     }
 
+    Y_UNIT_TEST(PausedAfterError)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return $x._unknown_field_for_lambda_compilation_error;
+                };
+            )");
+
+        testCase.CheckTransferStateError("_unknown_field_for_lambda_compilation_error");
+
+        {
+           auto result = testCase.DescribeReplication(testCase.TransferName);
+           UNIT_ASSERT_VALUES_EQUAL(result.GetReplicationDescription().GetState(), TReplicationDescription::EState::Error);
+        }
+
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TTransferDescription::EState::Paused);
+
+        {
+            auto result = testCase.DescribeReplication(testCase.TransferName);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReplicationDescription().GetState(), TReplicationDescription::EState::Paused);
+        }
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
     Y_UNIT_TEST(DescribeTransferWithErrorTopicNotFound)
     {
         MainTestCase testCase;
@@ -705,6 +745,60 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.DropTable();
         testCase.DropTopic();
+    }
+
+    void CustomConsumer_NotExists(bool local)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        testCase.CreateTopic(1);
+
+        auto settings = MainTestCase::CreateTransferSettings::WithConsumerName("PredefinedConsumer");
+        settings.LocalTopic = local;
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.Write({"Message-1"});
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer was not created
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(0, consumers.size());
+        }
+
+        testCase.CheckTransferStateError("consumer 'PredefinedConsumer' does not exist");
+
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(CustomConsumer_NotExists_Remote) {
+        CustomConsumer_NotExists(false);
+    }
+
+    Y_UNIT_TEST(CustomConsumer_NotExists_Local) {
+        CustomConsumer_NotExists(true);
     }
 
     Y_UNIT_TEST(CustomFlushInterval)
@@ -896,6 +990,46 @@ Y_UNIT_TEST_SUITE(Transfer)
 
     Y_UNIT_TEST(CreateTransferSourceNotExists_LocalTopic) {
         CreateTransferSourceNotExists(true);
+    }
+
+    void CreateTransferSourceDirNotExists(bool localTopic)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic);
+        settings.TopicName = "dir_not_exists/topic_name";
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.CheckTransferStateError("Discovery error:");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceDirNotExists) {
+        CreateTransferSourceDirNotExists(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceDirNotExists_LocalTopic) {
+        CreateTransferSourceDirNotExists(true);
     }
 
     void TransferSourceDropped(bool localTopic)
@@ -1595,7 +1729,99 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.Write({"Message-1"});
 
         testCase.CheckTransferStateError("unwrap error");
-
     }
+
+    void ReadFromCDC(bool localTopic)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )");
+
+        std::string cdcTableName = Sprintf("%s_in", testCase.TableName.data());
+
+        testCase.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )", cdcTableName.data()));
+
+        testCase.ExecuteDDL(Sprintf(R"(
+            ALTER TABLE `%s`
+                ADD CHANGEFEED `feed` WITH (
+                    MODE = 'UPDATES',
+                    FORMAT = 'JSON'
+                );
+            )", cdcTableName.data()));
+
+        auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic);
+        settings.TopicName = Sprintf("%s/feed", cdcTableName.data());
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:Unwrap(CAST($x._offset AS Uint64)),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.ExecuteQuery(Sprintf("INSERT INTO `%s` (Key, Message) VALUES ( 7, '13' )", cdcTableName.data()));
+
+        testCase.CheckResult({{
+            _C("Message", TString("{\"update\":{\"Message\":\"13\"},\"key\":[7]}"))
+        }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(ReadFromCDC_Remote) {
+        ReadFromCDC(false);
+    }
+
+    Y_UNIT_TEST(ReadFromCDC_Local) {
+        ReadFromCDC(true);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Remote) {
+        MessageField_CreateTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_CreateTimestamp_Local) {
+        MessageField_CreateTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Remote) {
+        MessageField_WriteTimestamp("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_WriteTimestamp_Local) {
+        MessageField_WriteTimestamp("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Remote) {
+        MessageField_Attributes("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Attributes_Local) {
+        MessageField_Attributes("ROW", true);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Remote) {
+        MessageField_Partition("ROW", false);
+    }
+
+    Y_UNIT_TEST(MessageField_Partition_Local) {
+        MessageField_Partition("ROW", true);
+    }
+
 }
 

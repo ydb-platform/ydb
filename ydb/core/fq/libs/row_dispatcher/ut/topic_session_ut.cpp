@@ -14,6 +14,7 @@
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -29,12 +30,16 @@ constexpr ui64 TimeoutBeforeStartSessionSec = 3;
 constexpr ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 static_assert(GrabTimeoutSec <= WAIT_TIMEOUT.Seconds());
 
-template<bool MockTopicSession>
+template <bool MockTopicSession>
 class TFixture : public NTests::TBaseFixture {
 public:
     using TBase = NTests::TBaseFixture;
 
 public:
+    TFixture()
+        : FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    {}
+
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TBase::SetUp(ctx);
 
@@ -44,16 +49,18 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool skipErrors = false) {
         TopicPath = topicPath;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
+        Config.MutableJsonParser()->SetSkipErrors(skipErrors);
+        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(100);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-   
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
@@ -64,7 +71,7 @@ public:
         CompileNotifier = Runtime.AllocateEdgeActor();
         const auto compileServiceActorId = Runtime.Register(CreatePurecalcCompileServiceMock(CompileNotifier));
 
-        if (MockTopicSession) {
+        if constexpr (MockTopicSession) {
             PqGatewayNotifier = Runtime.AllocateEdgeActor();
             MockPqGateway = CreateMockPqGateway({.Runtime = &Runtime, .Notifier = PqGatewayNotifier});
         }
@@ -75,6 +82,7 @@ public:
             GetDefaultPqEndpoint(),
             GetDefaultPqDatabase(),
             Config,
+            FunctionRegistry.Get(),
             RowDispatcherActorId,
             compileServiceActorId,
             0,
@@ -109,9 +117,10 @@ public:
             UNIT_ASSERT_C(ping, "Compilation is not performed for predicate: " << predicate);
         }
 
-        if (MockTopicSession) {
+        if constexpr (MockTopicSession) {
             Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-            MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+            MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
+            MockReadSession->AddStartSessionEvent();
         }
     }
 
@@ -128,7 +137,7 @@ public:
         settings.AddColumnTypes("[DataType; Uint64]");
         settings.AddColumnTypes("[DataType; String]");
         if (!emptyPredicate) {
-            settings.SetPredicate("WHERE true");
+            settings.SetPredicate("TRUE");
         }
         return settings;
     }
@@ -139,7 +148,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event.release()));
     }
 
-    void ExpectMessageBatch(NActors::TActorId readActorId, const TBatch& expected) {
+    void ExpectMessageBatch(NActors::TActorId readActorId, const TBatch& expected, const std::vector<ui64>& expectedLastOffset = {}) {
         Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
 
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
@@ -149,6 +158,12 @@ public:
 
         NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(0);
         UNIT_ASSERT_VALUES_EQUAL(message.OffsetsSize(), expected.Rows.size());
+        if (!expectedLastOffset.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset.size(), message.OffsetsSize());
+            for (size_t i =0; i < expectedLastOffset.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset[i], message.GetOffsets().Get(i));
+            }
+        }
         CheckMessageBatch(eventHolder->Get()->GetPayload(message.GetPayloadId()), expected);
     }
 
@@ -187,7 +202,7 @@ public:
         return numberMessages;
     }
 
-    void ExpectStatistics(TMap<NActors::TActorId, ui64> clients) {
+    void ExpectStatistics(TMap<NActors::TActorId, TMaybe<ui64>> clients) {
         auto check = [&]() -> bool {
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
@@ -217,40 +232,18 @@ public:
         return TRow().AddUint64(100 * index).AddString(TStringBuilder() << "value" << index);
     }
 
-    using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation; 
-    using TMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage; 
-
-    TMessageInformation MakeNextMessageInformation(size_t offset, size_t uncompressedSize) { 
-        auto now = TInstant::Now(); 
-        TMessageInformation msgInfo(
-            offset,
-            "ProducerId",
-            0,
-            now,
-            now,
-            MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>(),
-            MakeIntrusive<NYdb::NTopic::TMessageMeta>(),
-            uncompressedSize,
-            "messageGroupId"
-        );
-        return msgInfo;
-    }
-
     void PQWrite(
         const std::vector<TString>& sequence,
         ui64 firstMessageOffset = 0) {
-        if (!MockTopicSession) {
+        if constexpr (!MockTopicSession) {
             NYql::NDq::PQWrite(sequence, TopicPath, GetDefaultPqEndpoint());
         } else {
             ui64 offset = firstMessageOffset;
-            TVector<TMessage> msgs;
-            size_t size = 0;
+            TVector<IMockPqReadSession::TMessage> msgs;
             for (const auto& s : sequence) {
-                TMessage msg(s, nullptr, MakeNextMessageInformation(offset++, s.size()), CreatePartitionSession());
-                msgs.emplace_back(msg);
-                size += s.size();
+                msgs.push_back({.Offset = offset++, .Data = s});
             }
-            MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, CreatePartitionSession()), size);
+            MockReadSession->AddDataReceivedEvent(msgs);
         }
     }
 
@@ -259,6 +252,7 @@ public:
     }
 
 public:
+    const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry;
     TString TopicPath;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
@@ -273,6 +267,7 @@ public:
     ui32 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
+    IMockPqReadSession::TPtr MockReadSession;
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
     const TString Json2 = "{\"dt\":200,\"value\":\"value2\"}";
@@ -293,9 +288,9 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         Init(topicName);
         auto source = BuildSource();
         StartSession(ReadActorId1, source);
-        ExpectStatistics({{ReadActorId1, 0}});
+        ExpectStatistics({{ReadActorId1, Nothing()}});
         StartSession(ReadActorId2, source);
-        ExpectStatistics({{ReadActorId1, 0}, {ReadActorId2, 0}});
+        ExpectStatistics({{ReadActorId1, Nothing()}, {ReadActorId2, Nothing()}});
 
         std::vector<TString> data = { Json1 };
         PQWrite(data);
@@ -523,6 +518,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         Sleep(TDuration::MilliSeconds(100));
 
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);
 
@@ -621,13 +617,66 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId2, source);
         Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
-        MockPqGateway->AddEvent(TopicPath, NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent(nullptr, 0, 0), 0);
+        MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
+        MockReadSession->AddStartSessionEvent();
 
         std::vector<TString> data3 = { Json4 };
         PQWrite(data3, 4);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
 
+        PassAway();
+    }
+
+    Y_UNIT_TEST_F(WrongJson, TRealTopicFixture) {
+        const TString topicName = "wrong_json";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), true);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+        
+        auto writeRead = [&](const std::vector<TString>& input, const TBatch& output) {
+            PQWrite(input);
+            if (output.Rows.empty()) {
+                return;
+            }
+            ExpectNewDataArrived({ReadActorId1});
+            ExpectMessageBatch(ReadActorId1, output);
+        };
+        
+        auto test = [&](const TString& wrongJson) {
+            writeRead({ wrongJson }, { });
+            Sleep(TDuration::MilliSeconds(100));
+            writeRead({ Json1, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
+            writeRead({ wrongJson, Json2, Json3 }, { JsonMessage(2), JsonMessage(3) });
+            writeRead({ Json1, Json2 , wrongJson }, { JsonMessage(1), JsonMessage(2) });
+            writeRead({ Json1, wrongJson, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
+        };
+
+        test("wrong");                      // not json
+        test("{\"dt\":100,\"value\"}");     // empty value
+        test("{\"dt\":100}");               // no field
+        test("{\"dt\":400,\"value\":777}"); // wrong value type
+        test("{}\x80");
+        test("}");
+        test("{");
+        writeRead({ "{\"dt\":100}", "{}\x80", Json3 }, { JsonMessage(3) });
+        writeRead({Json1 + Json1, Json3 }, { JsonMessage(1), JsonMessage(1) });  // not checked 
+        writeRead({Json1.substr(0, 3), Json1.substr(3), Json2, Json3 }, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
+        PassAway();
+    }
+
+    Y_UNIT_TEST_F(WrongJsonOffset, TRealTopicFixture) {
+        const TString topicName = "wrong_json_offset";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), true);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+
+        TString wrongJson{"wrong"};
+        PQWrite({ Json1, wrongJson, wrongJson, Json3 });
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(3) }, {0, 3});
         PassAway();
     }
 }

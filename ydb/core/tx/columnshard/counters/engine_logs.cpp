@@ -1,12 +1,21 @@
 #include "engine_logs.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NColumnShard {
+
+namespace {
+
+ui64 GetBadPortionSizeLimit() {
+    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetBadPortionSizeLimit() : 512_KB;
+}
+
+}
 
 TEngineLogsCounters::TEngineLogsCounters()
     : TBase("EngineLogs")
@@ -68,6 +77,8 @@ TEngineLogsCounters::TEngineLogsCounters()
 
     StatUsageForTTLCount = TBase::GetDeriviative("Ttl/StatUsageForTTLCount/Count");
     ChunkUsageForTTLCount = TBase::GetDeriviative("Ttl/ChunkUsageForTTLCount/Count");
+
+    BadPortionsCount = TBase::GetValue("BadPortions/Count");
 }
 
 void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 removeCount) const {
@@ -84,6 +95,10 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr
     const ui32 producedId = (ui32)portion->GetProduced();
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
+
+    if (portion->GetTotalBlobBytes() <= GetBadPortionSizeLimit()) {
+        BadPortionsCount->Add(1);
+    }
 }
 
 void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
@@ -91,6 +106,10 @@ void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_pt
     THashSet<NOlap::TUnifiedBlobId> blobIds;
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
+
+    if (portion->GetTotalBlobBytes() <= GetBadPortionSizeLimit()) {
+        BadPortionsCount->Sub(1);
+    }
 }
 
 NKikimr::NColumnShard::TBaseGranuleDataClassSummary TBaseGranuleDataClassSummary::operator+(const TBaseGranuleDataClassSummary& item) const {

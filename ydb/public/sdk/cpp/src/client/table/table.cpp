@@ -1,17 +1,17 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/src/client/table/impl/client_session.h>
@@ -102,6 +102,14 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     }
 }
 
+std::optional<std::uint32_t> TStorageSettings::GetExternalDataChannelsCount() const {
+    if (GetProto().has_external_data_channels_count()) {
+        return GetProto().external_data_channels_count();
+    } else {
+        return { };
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnFamilyDescription::TImpl {
@@ -140,6 +148,17 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        default:
+            return { };
+    }
+}
+
+std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
+    switch (GetProto().cache_mode()) {
+        case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+            return EColumnFamilyCacheMode::Regular;
+        case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+            return EColumnFamilyCacheMode::InMemory;
         default:
             return { };
     }
@@ -461,6 +480,14 @@ public:
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
     }
 
+    void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, indexSettings));
+    }
+
+    void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
+    }
+
     void AddChangefeed(const std::string& name, EChangefeedMode mode, EChangefeedFormat format) {
         Changefeeds_.emplace_back(name, mode, format);
     }
@@ -765,6 +792,14 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
     Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
+void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, indexSettings);
+}
+
+void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, dataColumns, indexSettings);
+}
+
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
     AddSyncSecondaryIndex(indexName, indexColumns);
 }
@@ -995,6 +1030,11 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool ena
     return *this;
 }
 
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternalDataChannelsCount(uint32_t count) {
+    Impl_->Proto.set_external_data_channels_count(count);
+    return *this;
+}
+
 TStorageSettings TStorageSettingsBuilder::Build() const {
     return TStorageSettings(Impl_->Proto);
 }
@@ -1070,6 +1110,18 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
             break;
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            break;
+    }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+    switch (cacheMode) {
+        case EColumnFamilyCacheMode::Regular:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            break;
+        case EColumnFamilyCacheMode::InMemory:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
             break;
     }
     return *this;
@@ -1234,6 +1286,16 @@ TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexN
 
 TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
     TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+    TableDescription_.AddFulltextIndex(indexName, indexColumns, dataColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+    TableDescription_.AddFulltextIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 
@@ -1460,7 +1522,7 @@ NThreading::TFuture<void> TTableClient::Stop() {
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {
-    return Impl_->BulkUpsert(table, std::move(rows), settings, rows.Impl_.use_count() == 1);
+    return Impl_->BulkUpsert(table, std::move(rows), settings);
 }
 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const std::string& table, EDataFormat format,
@@ -2294,7 +2356,7 @@ TIndexDescription::TIndexDescription(
     const std::vector<std::string>& indexColumns,
     const std::vector<std::string>& dataColumns,
     const std::vector<TGlobalIndexSettings>& globalIndexSettings,
-    const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
@@ -2335,7 +2397,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 
@@ -2508,13 +2570,187 @@ void TKMeansTreeSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
+TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::Analyzers& proto) {
+    using ETokenizer = TFulltextIndexSettings::ETokenizer;
+    using TAnalyzers = TFulltextIndexSettings::TAnalyzers;
+
+    auto convertTokenizer = [&] {
+        switch (proto.tokenizer()) {
+        case Ydb::Table::FulltextIndexSettings::WHITESPACE:
+            return ETokenizer::Whitespace;
+        case Ydb::Table::FulltextIndexSettings::STANDARD:
+            return ETokenizer::Standard;
+        case Ydb::Table::FulltextIndexSettings::KEYWORD:
+            return ETokenizer::Keyword;
+        default:
+            return ETokenizer::Unspecified;
+        }
+    };
+
+    TAnalyzers result;
+    result.Tokenizer = convertTokenizer();
+    
+    if (proto.has_language()) {
+        result.Language = proto.language();
+    }
+    if (proto.has_use_filter_lowercase()) {
+        result.UseFilterLowercase = proto.use_filter_lowercase();
+    }
+    if (proto.has_use_filter_stopwords()) {
+        result.UseFilterStopwords = proto.use_filter_stopwords();
+    }
+    if (proto.has_use_filter_ngram()) {
+        result.UseFilterNgram = proto.use_filter_ngram();
+    }
+    if (proto.has_use_filter_edge_ngram()) {
+        result.UseFilterEdgeNgram = proto.use_filter_edge_ngram();
+    }
+    if (proto.has_filter_ngram_min_length()) {
+        result.FilterNgramMinLength = proto.filter_ngram_min_length();
+    }
+    if (proto.has_filter_ngram_max_length()) {
+        result.FilterNgramMaxLength = proto.filter_ngram_max_length();
+    }
+    if (proto.has_use_filter_length()) {
+        result.UseFilterLength = proto.use_filter_length();
+    }
+    if (proto.has_filter_length_min()) {
+        result.FilterLengthMin = proto.filter_length_min();
+    }
+    if (proto.has_filter_length_max()) {
+        result.FilterLengthMax = proto.filter_length_max();
+    }
+    
+    return result;
+}
+
+Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSettings::TAnalyzers& analyzers) {
+    using ETokenizer = TFulltextIndexSettings::ETokenizer;
+    
+    auto convertTokenizer = [&] {
+        switch (*analyzers.Tokenizer) {
+        case ETokenizer::Whitespace:
+            return Ydb::Table::FulltextIndexSettings::WHITESPACE;
+        case ETokenizer::Standard:
+            return Ydb::Table::FulltextIndexSettings::STANDARD;
+        case ETokenizer::Keyword:
+            return Ydb::Table::FulltextIndexSettings::KEYWORD;
+        case ETokenizer::Unspecified:
+            return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
+        }
+        return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
+    };
+
+    Ydb::Table::FulltextIndexSettings::Analyzers proto;
+    if (analyzers.Tokenizer) {
+        proto.set_tokenizer(convertTokenizer());
+    }
+    if (analyzers.Language.has_value()) {
+        proto.set_language(*analyzers.Language);
+    }
+    if (analyzers.UseFilterLowercase.has_value()) {
+        proto.set_use_filter_lowercase(*analyzers.UseFilterLowercase);
+    }
+    if (analyzers.UseFilterStopwords.has_value()) {
+        proto.set_use_filter_stopwords(*analyzers.UseFilterStopwords);
+    }
+    if (analyzers.UseFilterNgram.has_value()) {
+        proto.set_use_filter_ngram(*analyzers.UseFilterNgram);
+    }
+    if (analyzers.UseFilterEdgeNgram.has_value()) {
+        proto.set_use_filter_edge_ngram(*analyzers.UseFilterEdgeNgram);
+    }
+    if (analyzers.FilterNgramMinLength.has_value()) {
+        proto.set_filter_ngram_min_length(*analyzers.FilterNgramMinLength);
+    }
+    if (analyzers.FilterNgramMaxLength.has_value()) {
+        proto.set_filter_ngram_max_length(*analyzers.FilterNgramMaxLength);
+    }
+    if (analyzers.UseFilterLength.has_value()) {
+        proto.set_use_filter_length(*analyzers.UseFilterLength);
+    }
+    if (analyzers.FilterLengthMin.has_value()) {
+        proto.set_filter_length_min(*analyzers.FilterLengthMin);
+    }
+    if (analyzers.FilterLengthMax.has_value()) {
+        proto.set_filter_length_max(*analyzers.FilterLengthMax);
+    }
+
+    return proto;
+}
+
+TFulltextIndexSettings::TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
+    TFulltextIndexSettings::TColumnAnalyzers result;
+    if (proto.has_column()) {
+        result.Column = proto.column();
+    }
+    if (proto.has_analyzers()) {
+        result.Analyzers = FromProto(proto.analyzers());
+    }
+    return result;
+}
+
+Ydb::Table::FulltextIndexSettings::ColumnAnalyzers ToProto(const TFulltextIndexSettings::TColumnAnalyzers& columnAnalyzers) {
+    Ydb::Table::FulltextIndexSettings::ColumnAnalyzers proto;
+    if (columnAnalyzers.Column.has_value()) {
+        proto.set_column(*columnAnalyzers.Column);
+    }
+    if (columnAnalyzers.Analyzers.has_value()) {
+        *proto.mutable_analyzers() = ToProto(*columnAnalyzers.Analyzers);
+    }
+    return proto;
+}
+
+TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::FulltextIndexSettings& proto) {
+    auto convertLayout = [&] {
+        switch (proto.layout()) {
+        case Ydb::Table::FulltextIndexSettings::FLAT:
+            return ELayout::Flat;
+        default:
+            return ELayout::Unspecified;
+        }
+    };
+
+    TFulltextIndexSettings result;
+    result.Layout = convertLayout();
+    for (const auto& columnProto : proto.columns()) {
+        result.Columns.push_back(NTable::FromProto(columnProto));
+    }
+
+    return result;
+}
+
+void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& settings) const {
+    auto convertLayout = [&] {
+        switch (*Layout) {
+        case ELayout::Flat:
+            return Ydb::Table::FulltextIndexSettings::FLAT;
+        case ELayout::Unspecified:
+            return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
+        }
+        return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
+    };
+
+    if (Layout.has_value()) {
+        settings.set_layout(convertLayout());
+    }
+    
+    for (const auto& column : Columns) {
+        *settings.add_columns() = ToProto(column);
+    }
+}
+
+void TFulltextIndexSettings::Out(IOutputStream& o) const {
+    o << *this;
+}
+
 template <typename TProto>
 TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     EIndexType type;
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings = std::monostate{};
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> specializedIndexSettings = std::monostate{};
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2542,6 +2778,13 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
             globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings()));
         }
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
+        break;
+    }
+    case TProto::kGlobalFulltextIndex: {
+        type = EIndexType::GlobalFulltext;
+        const auto& fulltextProto = proto.global_fulltext_index();
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
+        specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
     }
     default: // fallback to global sync
@@ -2599,6 +2842,18 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         break;
     }
+    case EIndexType::GlobalFulltext: {
+        auto* global_fulltext_index = proto.mutable_global_fulltext_index();
+        auto& settings = *global_fulltext_index->mutable_settings();
+        auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_[0].SerializeTo(settings);
+        }
+        if (const auto* ftSettings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
+            ftSettings->SerializeTo(fulltext_settings);
+        }
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -2620,11 +2875,23 @@ void TIndexDescription::Out(IOutputStream& o) const {
         o << ", data_columns: [" << JoinSeq(", ", DataColumns_) << "]";
     }
 
-    std::visit([&]<typename T>(const T& settings) {
-        if constexpr (!std::is_same_v<T, std::monostate>) {
-            o << ", vector_settings: " << settings;
+    switch (IndexType_) {
+    case EIndexType::GlobalSync:
+    case EIndexType::GlobalAsync:
+    case EIndexType::GlobalUnique:
+    case EIndexType::Unknown:
+        break;
+    case EIndexType::GlobalVectorKMeansTree:
+        if (auto settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
+            o << ", vector_settings: " << *settings;
         }
-    }, SpecializedIndexSettings_);
+        break;
+    case EIndexType::GlobalFulltext:
+        if (auto settings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
+            o << ", fulltext_settings: " << *settings;
+        }
+        break;
+    }
 
     o << " }";
 }

@@ -283,12 +283,14 @@ TEST(TReconfigurableThroughputThrottlerTest, FractionalLimit)
         TThroughputThrottlerConfig::Create(0.5));
 
     NProfiling::TWallTimer timer;
-    for (int i = 0; i < 2; ++i) {
+    const auto N = 3;
+    for (int i = 0; i < N; ++i) {
         throttler->Throttle(1).Get().ThrowOnError();
     }
+
     auto duration = timer.GetElapsedTime().MilliSeconds();
-    EXPECT_GE(duration, 1500u);
-    EXPECT_LE(duration, 4000u);
+    EXPECT_GE(duration, 2900u);
+    EXPECT_LE(duration, 3100u);
 }
 
 TEST(TReconfigurableThroughputThrottlerTest, ZeroLimit)
@@ -350,7 +352,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Release)
     EXPECT_EQ(future, VoidFuture);
 
     throttler->Release(100);
-    future = throttler->Throttle(100);
+    future = throttler->Throttle(150);
     EXPECT_EQ(future, VoidFuture);
 
     future = throttler->Throttle(100);

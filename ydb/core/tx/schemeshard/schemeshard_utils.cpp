@@ -2,8 +2,8 @@
 
 #include "schemeshard_info_types.h"
 
-#include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -271,16 +271,16 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     }
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
-    implTableDesc.SetName(TString::Join(NTableVectorKmeansTreeIndex::PostingTable, suffix));
+    implTableDesc.SetName(TString::Join(NKMeans::PostingTable, suffix));
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetName(NKMeans::ParentColumn);
+        parentColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
     FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
@@ -296,19 +296,57 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc
 ) {
     NKikimrSchemeOp::TTableDescription implTableDesc;
-    implTableDesc.SetName(NTableVectorKmeansTreeIndex::PrefixTable);
+    implTableDesc.SetName(NKMeans::PrefixTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     auto keys = implTableColumns.Keys;
     std::erase_if(keys, [&](const auto& key) { return !indexKeyColumns.contains(key); });
     FillIndexImplTableColumns(GetColumns(baseTable), keys, indexKeyColumns, implTableDesc);
     {
         auto idColumn = implTableDesc.AddColumns();
-        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetName(NKMeans::IdColumn);
+        idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
+        idColumn->SetDefaultFromSequence(NKMeans::IdColumnSequence);
     }
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
+auto CalcFulltextImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns = indexDataColumns;
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+    auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto tokenColumn = implTableDesc.AddColumns();
+        tokenColumn->SetName(NFulltext::TokenColumn);
+        tokenColumn->SetType(NScheme::TypeName(textColumnInfo.GetTypeId()));
+        tokenColumn->SetTypeId(textColumnInfo.GetTypeId());
+        tokenColumn->SetNotNull(true);
+    }
+    implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
+    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -347,34 +385,34 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
 
-    implTableDesc.SetName(NTableVectorKmeansTreeIndex::LevelTable);
+    implTableDesc.SetName(NKMeans::LevelTable);
 
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
 
     {
         auto parentColumn = implTableDesc.AddColumns();
-        parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetName(NKMeans::ParentColumn);
+        parentColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
-        idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetName(NKMeans::IdColumn);
+        idColumn->SetType(NTableIndex::NKMeans::ClusterIdTypeName);
         idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
     {
         auto centroidColumn = implTableDesc.AddColumns();
-        centroidColumn->SetName(NTableVectorKmeansTreeIndex::CentroidColumn);
+        centroidColumn->SetName(NKMeans::CentroidColumn);
         centroidColumn->SetType("String");
         centroidColumn->SetTypeId(NScheme::NTypeIds::String);
         centroidColumn->SetNotNull(true);
     }
 
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
-    implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::ParentColumn);
+    implTableDesc.AddKeyColumnNames(NKMeans::IdColumn);
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -419,6 +457,26 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc)
 {
     return CalcVectorKmeansTreePrefixImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const THashSet<TString>& indexDataColumns,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
+{
+    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
 }
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {

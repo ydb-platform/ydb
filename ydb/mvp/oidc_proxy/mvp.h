@@ -8,7 +8,6 @@
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
-#include <util/system/rwlock.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include "oidc_settings.h"
 
@@ -18,8 +17,6 @@ const TString& GetEServiceName(NActors::NLog::EComponent component);
 
 class TMVP {
 private:
-    TRWMutex ActorSystemStoppingLock;
-    TAtomic ActorSystemStopping; // Used by async gRPC callbacks to determine whether they are still allowed to send messages to the actor system.
     TString SecretName;
 
     const static ui16 DefaultHttpPort;

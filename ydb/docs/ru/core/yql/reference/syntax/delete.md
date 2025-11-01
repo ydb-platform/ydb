@@ -1,6 +1,8 @@
 
 # DELETE FROM
 
+{% include [column-and-row-tables-in-read-only-tx](../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 Удаляет строки из таблицы, подходящие под условия, заданные в `WHERE`.{% if feature_mapreduce %} Таблица ищется по имени в базе данных, заданной оператором [USE](use.md).{% endif %}
 
 ## Пример
@@ -26,6 +28,28 @@ $to_delete = (
 
 DELETE FROM my_table ON
 SELECT * FROM $to_delete;
+```
+
+## DELETE FROM ... RETURNING {delete-from-returning}
+
+Используется для удаления строк и одновременного возврата значений из них. Это позволяет получить информацию об удаляемых записях за один запрос, избавляя от необходимости выполнять предварительный SELECT.
+
+### Примеры
+
+* Возврат всех значений удаленных строк
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+DELETE FROM orders
+WHERE status = 'cancelled'
+RETURNING order_id, order_date;
 ```
 
 {% if feature_batch_operations %}

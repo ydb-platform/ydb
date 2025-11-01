@@ -82,10 +82,10 @@
                                                             }
                                                         ],
                                                         "Name": "Aggregate",
-                                                        "Phase": "Intermediate",
-                                                        "Pushdown": "True"
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
+                                                        "Blocks": "True",
                                                         "Inputs": [
                                                             {
                                                                 "InternalOperatorId": 2
@@ -148,24 +148,10 @@
                                                                     }
                                                                 },
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 108
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Id": 2
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 108
+                                                                                "Id": 41
                                                                             }
                                                                         ]
                                                                     }

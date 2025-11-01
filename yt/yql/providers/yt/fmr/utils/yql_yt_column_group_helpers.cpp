@@ -28,7 +28,7 @@ TParsedColumnGroupSpec GetColumnGroupsFromSpec(const TString& serializedColumnGr
     return parsedColumnGroupSpec;
 }
 
-std::unordered_map<TString, TString> SplitYsonByColumnGroups(const TString& tableContent, const TParsedColumnGroupSpec& columnGroupsSpec) {
+TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& tableContent, const TParsedColumnGroupSpec& columnGroupsSpec) {
     std::unordered_map<TString, TString> splittedYsonByColumnGroups; // columnGroupName -> All data in yson row corresponding to it
 
     THashMap<TString, ui64> columnGroups; // Column name -> column group index (for non-default groups)
@@ -44,7 +44,8 @@ std::unordered_map<TString, TString> SplitYsonByColumnGroups(const TString& tabl
     }
 
     TString defaultColumnGroupName = columnGroupsSpec.DefaultColumnGroupName;
-    if (!defaultColumnGroupName.empty()) {
+    // don't use default column group (#) if all columns are filled with explicit group names.
+    if (!(defaultColumnGroupName.empty() && columnGroupIndex > 0)) {
         columnGroupIndexes[columnGroupIndex] = defaultColumnGroupName;
         splittedYsonByColumnGroups[defaultColumnGroupName] = TString();
         ++columnGroupIndex;
@@ -67,22 +68,37 @@ std::unordered_map<TString, TString> SplitYsonByColumnGroups(const TString& tabl
         consumers.emplace_back(binaryYsonWriters[columnGroupIndexes[i]].Get());
     }
 
-    TColumnGroupSplitterYsonConsumer splitConsumer(consumers, columnGroups, columnGroupsNum);
+    ui64 recordsCount = 0;
+    TColumnGroupSplitterYsonConsumer splitConsumer(consumers, columnGroups, recordsCount);
     TStringStream inputStream(tableContent);
     NYson::TYsonParser parser(&splitConsumer, &inputStream, ::NYson::EYsonType::ListFragment);
     parser.Parse();
     for (auto& [groupName, ysonContent]: outputYsonStreams) {
         splittedYsonByColumnGroups[groupName] = ysonContent.Str();
     }
-    return splittedYsonByColumnGroups;
+    return TSplittedYsonByColumnGroups{.SplittedYsonByColumnGroups = splittedYsonByColumnGroups, .RecordsCount = recordsCount};
 }
 
-TString GetYsonUnion(const std::vector<TString>& ysonInputs) {
+TString GetNeededColumnsFromYsonData(const TString& ysonInputs, const std::vector<TString>& neededColumns) {
+    TStringStream inputYsonStream(ysonInputs);
+    TStringStream outputStream;
+    TBinaryYsonWriter writer(&outputStream, ::NYson::EYsonType::ListFragment);
+    NYT::NYson::IYsonConsumer* consumer = &writer;
+    TSet<TStringBuf> columnsToKeep(neededColumns.begin(), neededColumns.end());
+    TColumnFilteringConsumer columnFilteringConsumer(consumer, columnsToKeep, Nothing());
+    NYson::TYsonParser parser(&columnFilteringConsumer, &inputYsonStream, ::NYson::EYsonType::ListFragment);
+    parser.Parse();
+    return outputStream.ReadAll();
+}
+
+TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<TString>& neededColumns) {
     TStringStream unionYsonStream;
     TBinaryYsonWriter writer(&unionYsonStream, NYson::EYsonType::ListFragment);
     NYT::NYson::IYsonConsumer* outputConsumer = &writer;
 
     ui64 inputsNum = ysonInputs.size(), readerIndex = 0, mapDepth = 0, listDepth = 0, finishedReadersNum = 0;
+    bool isCurrentColumnNeeeded = true;
+    TSet<TStringBuf> columnsToKeep(neededColumns.begin(), neededColumns.end());
 
     std::vector<THolder<NYsonPull::TReader>> ysonReaders;
     for (auto& ysonInput: ysonInputs) {
@@ -97,17 +113,21 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs) {
         switch (event.Type()) {
 
         case NYsonPull::EEventType::BeginList:
-            outputConsumer->OnBeginList();
-            ++listDepth;
-            break;
+            if (isCurrentColumnNeeeded) {
+                outputConsumer->OnBeginList();
+                ++listDepth;
+                break;
+            }
 
         case NYsonPull::EEventType::EndList:
-            outputConsumer->OnEndList();
-            --listDepth;
+            if (isCurrentColumnNeeeded) {
+                outputConsumer->OnEndList();
+                --listDepth;
+            }
             break;
 
         case NYsonPull::EEventType::BeginMap:
-            if (mapDepth > 0 || readerIndex == 0) {
+            if ((mapDepth > 0 && isCurrentColumnNeeeded) || readerIndex == 0) {
                 outputConsumer->OnBeginMap();
             }
             ++mapDepth;
@@ -116,7 +136,9 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs) {
         case NYsonPull::EEventType::EndMap:
             --mapDepth;
             if (mapDepth > 0) {
-                outputConsumer->OnEndMap();
+                if (isCurrentColumnNeeeded) {
+                    outputConsumer->OnEndMap();
+                }
             } else {
                 if (readerIndex == inputsNum - 1) {
                     readerIndex = 0;
@@ -128,10 +150,18 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs) {
             break;
 
         case NYsonPull::EEventType::Key:
-            outputConsumer->OnKeyedItem(event.AsString());
+            if (mapDepth == 1) {
+                isCurrentColumnNeeeded = columnsToKeep.contains(event.AsString()) || columnsToKeep.empty(); // If columns to keep is not set, we add all columns.
+            }
+            if (isCurrentColumnNeeeded) {
+                outputConsumer->OnKeyedItem(event.AsString());
+            }
             break;
 
         case NYsonPull::EEventType::Scalar: {
+            if (!isCurrentColumnNeeeded) {
+                break;
+            }
             const auto& scalar = event.AsScalar();
             if (listDepth > 0) {
                 outputConsumer->OnListItem();
@@ -184,11 +214,12 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs) {
 TColumnGroupSplitterYsonConsumer::TColumnGroupSplitterYsonConsumer(
     const std::vector<NYT::NYson::IYsonConsumer*>& columnGroupConsumers,
     const THashMap<TString, ui64>& columnGroups,
-    ui64 groupsNum
+    ui64& recordsCount
 )
     : ColumnGroupConsumers_(columnGroupConsumers)
     , ColumnGroups_(columnGroups)
-    , GroupsNum_(groupsNum)
+    , GroupsNum_(columnGroupConsumers.size())
+    , RecordsCount_(recordsCount)
 {
 }
 
@@ -235,6 +266,7 @@ void TColumnGroupSplitterYsonConsumer::OnBeginMap() {
         for (ui64 i = 0; i < GroupsNum_; ++i) {
             ColumnGroupConsumers_[i]->OnBeginMap();
         }
+        ++RecordsCount_;
     } else {
         ColumnGroupConsumers_[ConsumerIndex_]->OnBeginMap();
     }

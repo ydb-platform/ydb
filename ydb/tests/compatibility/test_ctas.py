@@ -21,6 +21,7 @@ class TestCTASOperations(RollingUpgradeAndDowngradeFixture):
             "enable_oltp_sink": True,
             "enable_olap_sink": True,
             "enable_create_table_as": True,
+            "enable_data_shard_create_table_as": True,
         }, extra_feature_flags={
             "enable_temp_tables": True,
             "enable_olap_schema_operations": True,

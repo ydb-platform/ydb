@@ -56,6 +56,7 @@ class TCompilePhysicalQueryTransformer : public TSyncTransformerBase {
 public:
     TCompilePhysicalQueryTransformer(
         const TString& cluster,
+        const TString& database,
         TKqlTransformContext& transformCtx,
         TKqpOptimizeContext& optimizeCtx,
         TTypeAnnotationContext& typesCtx,
@@ -63,6 +64,7 @@ public:
         const TKikimrConfiguration::TPtr& config
     )
         : Cluster(cluster)
+        , Database(database)
         , TransformCtx(transformCtx)
         , OptimizeCtx(optimizeCtx)
         , TypesCtx(typesCtx)
@@ -80,7 +82,7 @@ public:
             TKqpPhysicalQuery physicalQuery(input);
 
             YQL_ENSURE(TransformCtx.DataQueryBlocks);
-            auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx.Tables, FuncRegistry, TypesCtx, Config);
+            auto compiler = CreateKqpQueryCompiler(Cluster, Database, OptimizeCtx.Tables, FuncRegistry, TypesCtx, Config);
             auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
             if (!ret) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));
@@ -99,6 +101,7 @@ public:
 
 private:
     const TString Cluster;
+    const TString Database;
     TKqlTransformContext& TransformCtx;
     TKqpOptimizeContext& OptimizeCtx;
     TTypeAnnotationContext& TypesCtx;
@@ -317,7 +320,7 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
-            .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnStatisticsRequester")
+            .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem), "ColumnStatisticsRequester")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
@@ -333,10 +336,17 @@ private:
             .Add(CreateKqpFinalizingOptTransformer(OptimizeCtx), "FinalizingOptimize")
             .Add(CreateKqpQueryPhasesTransformer(), "QueryPhases")
             .Add(CreateKqpQueryEffectsTransformer(OptimizeCtx), "QueryEffects")
+            .Add(CreateKqpSinkPrecomputeTransformer(OptimizeCtx), "KqpSinkPrecompute")
             .Add(CreateKqpCheckPhysicalQueryTransformer(), "CheckKqlPhysicalQuery")
             .Build(false));
 
         auto kqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .Build(false);
+
+        auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
@@ -363,7 +373,7 @@ private:
             //.AddCommonOptimization()
 
             .Add(CreateKqpPgRewriteTransformer(OptimizeCtx, *typesCtx), "RewritePgSelect")
-            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, Config, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer), "NewRBOTransformer")
+            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, rboKqpTypeAnnTransformer, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer), "NewRBOTransformer")
             .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 
             //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")
@@ -448,6 +458,7 @@ private:
             .Build(false);
 
         TAutoPtr<IGraphTransformer> compilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+            SessionCtx->GetDatabase(),
             *TransformCtx,
             *OptimizeCtx,
             *typesCtx,
@@ -455,6 +466,7 @@ private:
             Config));
 
         TAutoPtr<IGraphTransformer> newRBOCompilePhysicalQuery(new TCompilePhysicalQueryTransformer(Cluster,
+            SessionCtx->GetDatabase(),
             *TransformCtx,
             *OptimizeCtx,
             *typesCtx,

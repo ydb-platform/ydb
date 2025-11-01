@@ -44,11 +44,13 @@ struct TDistributedWriteSessionStartOptions
     std::optional<TDuration> Timeout;
 };
 
+struct TDistributedWriteSessionPingOptions
+    : public TTimeoutOptions
+{ };
+
 struct TDistributedWriteSessionFinishOptions
     : public TTimeoutOptions
-{
-    int MaxChildrenPerAttachRequest = 10'000;
-};
+{ };
 
 struct TTableFragmentWriterOptions
     : public TTableWriterOptions
@@ -63,6 +65,10 @@ struct IDistributedTableClientBase
     virtual TFuture<TDistributedWriteSessionWithCookies> StartDistributedWriteSession(
         const NYPath::TRichYPath& path,
         const TDistributedWriteSessionStartOptions& options = {}) = 0;
+
+    virtual TFuture<void> PingDistributedWriteSession(
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options = {}) = 0;
 
     virtual TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
@@ -79,13 +85,6 @@ struct IDistributedTableClient
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options = {}) = 0;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-// Defined in distributed_table_session.cpp.
-TFuture<void> PingDistributedWriteSession(
-    const TSignedDistributedWriteSessionPtr& session,
-    const IClientPtr& client);
 
 ////////////////////////////////////////////////////////////////////////////////
 

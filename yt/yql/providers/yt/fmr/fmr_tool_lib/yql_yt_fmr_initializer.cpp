@@ -22,9 +22,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         tableDataService = MakeTableDataServiceClient(tableDataServiceDiscovery);
     }
 
-    IFmrGcService::TPtr gcService = MakeGcService(tableDataService);
+    IFmrCoordinator::TPtr coordinator;
 
-    auto coordinator = MakeFmrCoordinator(coordinatorSettings, fmrServices->YtCoordinatorService, gcService);
     if (!coordinatorServerUrl.empty()) {
         TFmrCoordinatorClientSettings coordinatorClientSettings;
         THttpURL parsedUrl;
@@ -34,6 +33,11 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         coordinatorClientSettings.Port = parsedUrl.GetPort();
         coordinatorClientSettings.Host = parsedUrl.GetHost();
         coordinator = MakeFmrCoordinatorClient(coordinatorClientSettings);
+        YQL_CLOG(INFO, FastMapReduce) << "Created client to connect to coordinator server with host " << parsedUrl.GetHost() << " and port " << parsedUrl.GetPort();
+    } else {
+        // creating local coordinator since url was not passed via services
+        IFmrGcService::TPtr gcService = MakeGcService(tableDataService);
+        coordinator = MakeFmrCoordinator(coordinatorSettings, fmrServices->YtCoordinatorService, gcService);
     }
 
     IFmrWorker::TPtr worker = nullptr;

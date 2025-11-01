@@ -65,17 +65,17 @@ public:
         Y_ENSURE(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
-        bool deletedMarkerColumnFound = false;
+        bool changeMetadataColumnFound = false;
         for (const auto& [tag, column] : table->Columns) {
             if (!column.IsKey) {
                 valueTags.push_back(tag);
-                if (column.Name == "__ydb_incrBackupImpl_deleted") {
-                    deletedMarkerColumnFound = true;
+                if (column.Name == "__ydb_incrBackupImpl_changeMetadata") {
+                    changeMetadataColumnFound = true;
                 }
             }
         }
 
-        Y_ENSURE(deletedMarkerColumnFound);
+        Y_ENSURE(changeMetadataColumnFound);
 
         return valueTags;
     }
@@ -194,37 +194,12 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) override {
         LOG_D("Finish " << status);
 
-        bool success = (status == EStatus::Done);
-        
         if (status != EStatus::Done) {
             // TODO: https://github.com/ydb-platform/ydb/issues/18797
             LOG_W("IncrementalRestoreScan finished with error status: " << status);
         }
 
-        // Send completion notification to DataShard
         Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
-
-        // Send completion notification to SchemeShard
-        if (OperatorActorId) {
-            LOG_D("Sending completion notification to operator actor " << OperatorActorId 
-                << " for txId " << TxId << " sourcePathId " << SourcePathId);
-            
-            auto response = MakeHolder<TEvDataShard::TEvIncrementalRestoreResponse>(
-                TxId,                                                              // txId
-                SourcePathId.LocalPathId,                                         // tableId
-                0,                                                                // operationId (will be filled by DataShard)
-                0,                                                                // incrementalIdx (will be filled by DataShard)
-                success ? NKikimrTxDataShard::TEvIncrementalRestoreResponse::SUCCESS 
-                        : NKikimrTxDataShard::TEvIncrementalRestoreResponse::ERROR,
-                success ? "" : "Scan completed with error status"                 // errorMessage
-            );
-            
-            // Send directly to the stored operator actor (handles SchemeShard restarts)
-            Send(OperatorActorId, response.Release());
-            LOG_D("Successfully sent completion notification to operator actor");
-        } else {
-            LOG_W("OperatorActorId is not set, cannot send completion notification");
-        }
 
         PassAway();
         return nullptr;

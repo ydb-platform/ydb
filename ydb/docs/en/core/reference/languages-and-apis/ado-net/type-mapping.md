@@ -8,28 +8,49 @@ The following shows the mappings used when reading values.
 
 These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDataReader.GetValue()`, and similar methods.
 
-| {{ ydb-short-name }} type     | .NET type  |
-|-------------------------------|------------|
-| `Bool`                        | `bool`     |
-| `Text` (synonym of `Utf8`)    | `string`   |
-| `Bytes` (synonym of `String`) | `byte[]`   |
-| `Uint8`                       | `byte`     |
-| `Uint16`                      | `ushort`   |
-| `Uint32`                      | `uint`     |
-| `Uint64`                      | `ulong`    |
-| `Int8`                        | `sbyte`    |
-| `Int16`                       | `short`    |
-| `Int32`                       | `int`      |
-| `Int64`                       | `long`     |
-| `Float`                       | `float`    |
-| `Double`                      | `double`   |
-| `Date`                        | `DateTime` |
-| `Datetime`                    | `DateTime` |
-| `Timestamp`                   | `DateTime` |
-| `Decimal(22,9)`               | `Decimal`  |
-| `Json`                        | `string`   |
-| `JsonDocument`                | `string`   |
-| `Yson`                        | `byte[]`   |
+| {{ ydb-short-name }} type     | .NET type                           |
+|-------------------------------|-------------------------------------|
+| `Bool`                        | `bool`                              |
+| `Text` (synonym of `Utf8`)    | `string`                            |
+| `Bytes` (synonym of `String`) | `byte[]`                            |
+| `Uint8`                       | `byte`                              |
+| `Uint16`                      | `ushort`                            |
+| `Uint32`                      | `uint`                              |
+| `Uint64`                      | `ulong`                             |
+| `Int8`                        | `sbyte`                             |
+| `Int16`                       | `short`                             |
+| `Int32`                       | `int`                               |
+| `Int64`                       | `long`                              |
+| `Float`                       | `float`                             |
+| `Double`                      | `double`                            |
+| `Date`                        | `DateTime`                          |
+| `Datetime`                    | `DateTime`                          |
+| `Timestamp`                   | `DateTime`                          |
+| `Decimal`                     | [see the Decimal section](#decimal) |
+| `Json`                        | `string`                            |
+| `JsonDocument`                | `string`                            |
+| `Yson`                        | `byte[]`                            |
+
+## Decimal {#decimal}
+
+`Decimal (Precision, Scale)` is a parameterized data type in {{ ydb-short-name }} that allows you to explicitly specify:
+
+* `Precision` — the total number of significant digits;
+* `Scale` — the number of digits after the decimal point.
+
+For more details, see the [documentation](../../../yql/reference/types/primitive.md#numeric).
+
+By default, the Decimal(22, 9) type is used. If you need to set different values for `Precision` and `Scale`, you can do this in your code.
+
+The example below demonstrates how to store the value 1.5 in the database with the Decimal type and parameters Precision = 5 and Scale = 3.
+
+```c#
+await new YdbCommand(ydbConnection)
+{
+    CommandText = $"INSERT INTO {tableName}(Id, Decimal) VALUES (1, @Decimal);",
+    Parameters = new YdbParameter { Name = "Decimal", Value = 1.5m, Precision = 5, Scale = 3 }
+}.ExecuteNonQueryAsync();
+```
 
 ## Type Mapping Table for Writing
 
@@ -51,7 +72,7 @@ These are the return types when using `YdbCommand.ExecuteScalarAsync()`, `YdbDat
 | `Date`                        | `Date`                                                                                    | `DateTime`                   |
 | `Datetime`                    | `DateTime`                                                                                | `DateTime`                   |
 | `Timestamp`                   | `DateTime2` (for .NET type `DateTime`), `DateTimeOffset` (for .NET type `DateTimeOffset`) | `DateTime`, `DateTimeOffset` |
-| `Decimal(22,9)`               | `Decimal`, `Currency`                                                                     | `decimal`                    |
+| `Decimal($p, $s)`             | `Decimal`, `Currency`                                                                     | `decimal`                    |
 
 {% note info %}
 

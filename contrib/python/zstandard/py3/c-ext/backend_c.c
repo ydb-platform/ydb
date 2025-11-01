@@ -134,7 +134,12 @@ void decompressoriterator_module_init(PyObject *mod);
 void frameparams_module_init(PyObject *mod);
 
 void zstd_module_init(PyObject *m) {
-    /* python-zstandard relies on unstable zstd C API features. This means
+#ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
+#endif
+
+    /*
+       python-zstandard relies on unstable zstd C API features. This means
        that changes in zstd may break expectations in python-zstandard.
 
        python-zstandard is distributed with a copy of the zstd sources.
@@ -148,19 +153,25 @@ void zstd_module_init(PyObject *m) {
 
        We detect this mismatch here and refuse to load the module if this
        scenario is detected.
+
+       Historically we required exact matches. But over the years the churn
+       in libzstd became reasonable and we relaxed this constraint to a minimum
+       version check. Our assumption going forward is that we will only rely on
+       unstable C API features that are in reality stable for years.
     */
     PyObject *features = NULL;
     PyObject *feature = NULL;
-    unsigned zstd_ver_no = ZSTD_versionNumber();
-    unsigned our_hardcoded_version = 10507;
-    if (ZSTD_VERSION_NUMBER != our_hardcoded_version ||
-        zstd_ver_no != our_hardcoded_version) {
+    unsigned zstd_version_no = ZSTD_versionNumber();
+    unsigned zstd_version_min = 10506;
+    // if either compile-time or runtime version of libzstd is lower than expected, abort initialization
+    if (ZSTD_VERSION_NUMBER < zstd_version_min ||
+        zstd_version_no < zstd_version_min) {
         PyErr_Format(
             PyExc_ImportError,
             "zstd C API versions mismatch; Python bindings were not "
             "compiled/linked against expected zstd version (%u returned by the "
             "lib, %u hardcoded in zstd headers, %u hardcoded in the cext)",
-            zstd_ver_no, ZSTD_VERSION_NUMBER, our_hardcoded_version);
+            zstd_version_no, ZSTD_VERSION_NUMBER, zstd_version_min);
         return;
     }
 
@@ -313,7 +324,7 @@ size_t roundpow2(size_t i) {
 int safe_pybytes_resize(PyObject **obj, Py_ssize_t size) {
     PyObject *tmp;
 
-    if ((*obj)->ob_refcnt == 1) {
+    if (PyUnstable_Object_IsUniquelyReferenced(*obj)) {
         return _PyBytes_Resize(obj, size);
     }
 

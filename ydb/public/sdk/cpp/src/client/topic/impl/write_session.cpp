@@ -107,7 +107,7 @@ TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
         subSettings.EventHandlers_.CommonHandler({});
     }
     Writer = std::make_shared<TWriteSession>(subSettings, client, connections, dbDriverState);
-    Writer->Start(TDuration::Max());
+    Writer->Start(TDuration::Zero());
 }
 
 uint64_t TSimpleBlockingWriteSession::GetInitSeqNo() {
@@ -147,9 +147,9 @@ std::optional<TContinuationToken> TSimpleBlockingWriteSession::WaitForToken(cons
             if (auto* readyEvent = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
                 Y_ABORT_UNLESS(!token.has_value());
                 token = std::move(readyEvent->ContinuationToken);
-            } else if (auto* ackEvent = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+            } else if (std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
                 // discard
-            } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&event)) {
+            } else if (std::get_if<TSessionClosedEvent>(&event)) {
                 Closed.store(true);
                 return std::nullopt;
             }

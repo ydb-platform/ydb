@@ -12,5 +12,5 @@ NUdf::TUnboxedValuePod SubString(const NUdf::TUnboxedValuePod value, ui32 offset
 NUdf::TUnboxedValuePod MakeString(const NUdf::TStringRef ref);
 NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size, ui32 pad = 0U);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -476,7 +476,7 @@ void ColumnType_Int64(const std::string& tableType) {
     });
 }
 
-void MessageField_Partition(const std::string& tableType) {
+void MessageField_Partition(const std::string& tableType, bool local) {
     MainTestCase(std::nullopt, tableType).Run({
         .TableDDL = R"(
             CREATE TABLE `%s` (
@@ -505,7 +505,7 @@ void MessageField_Partition(const std::string& tableType) {
             _C("Partition", ui32(7)),
             _C("Message", TString("Message-1")),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
 void MessageField_SeqNo(const std::string& tableType) {
@@ -601,7 +601,7 @@ void MessageField_MessageGroupId(const std::string& tableType) {
     });
 }
 
-void MessageField_Attributes(const std::string& tableType) {
+void MessageField_Attributes(const std::string& tableType, bool local) {
     MainTestCase(std::nullopt, tableType).Run({
         .TableDDL = R"(
             CREATE TABLE `%s` (
@@ -629,10 +629,10 @@ void MessageField_Attributes(const std::string& tableType) {
         .Expectations = {{
             _C("Value", TString("attribute_value")),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
-void MessageField_CreateTimestamp(const std::string& tableType) {
+void MessageField_CreateTimestamp(const std::string& tableType, bool local) {
     TInstant timestamp = TInstant::Now() - TDuration::Minutes(1);
 
     MainTestCase(std::nullopt, tableType).Run({
@@ -662,10 +662,10 @@ void MessageField_CreateTimestamp(const std::string& tableType) {
         .Expectations = {{
             _T<Timestamp64Checker>("CreateTimestamp", std::move(timestamp), TDuration::MilliSeconds(1)),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
-void MessageField_WriteTimestamp(const std::string& tableType) {
+void MessageField_WriteTimestamp(const std::string& tableType, bool local) {
     TInstant timestamp = TInstant::Now();
 
     MainTestCase(std::nullopt, tableType).Run({
@@ -695,7 +695,7 @@ void MessageField_WriteTimestamp(const std::string& tableType) {
         .Expectations = {{
             _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(5)),
         }}
-    });
+    }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }
 
 void WriteNullToKeyColumn(const std::string& tableType) {

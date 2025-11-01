@@ -299,37 +299,30 @@ class DMLOperations():
         rows = self.query(f"select {", ".join(statements)} from {table_name}")
         count = 0
         for data_type in all_types.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                for i in range(len(rows)):
-                    self.assert_type(all_types, data_type, i+1, rows[i][count])
-                count += 1
+            for i in range(len(rows)):
+                self.assert_type(all_types, data_type, i+1, rows[i][count])
+            count += 1
         for data_type in pk_types.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                for i in range(len(rows)):
-                    self.assert_type(pk_types, data_type, i+1, rows[i][count])
-                count += 1
+            for i in range(len(rows)):
+                self.assert_type(pk_types, data_type, i+1, rows[i][count])
+            count += 1
         for data_type in index.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                for i in range(len(rows)):
-                    self.assert_type(index, data_type, i+1, rows[i][count])
-                count += 1
+            for i in range(len(rows)):
+                self.assert_type(index, data_type, i+1, rows[i][count])
+            count += 1
         if ttl != "":
             for i in range(len(rows)):
                 self.assert_type(ttl_types, ttl, i+1, rows[i][count])
             count += 1
 
     def create_statements(self, pk_types, all_types, index, ttl):
-        # delete if after https://github.com/ydb-platform/ydb/issues/16930
         statements = []
         for data_type in all_types.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                statements.append(f"col_{cleanup_type_name(data_type)}")
+            statements.append(f"col_{cleanup_type_name(data_type)}")
         for data_type in pk_types.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                statements.append(f"pk_{cleanup_type_name(data_type)}")
+            statements.append(f"pk_{cleanup_type_name(data_type)}")
         for data_type in index.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                statements.append(f"col_index_{cleanup_type_name(data_type)}")
+            statements.append(f"col_index_{cleanup_type_name(data_type)}")
         if ttl != "":
             statements.append(f"ttl_{cleanup_type_name(ttl)}")
         return statements

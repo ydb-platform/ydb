@@ -330,7 +330,7 @@ void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
 
 void Serialize(const TTableSchemaPtr& schema, IYsonConsumer* consumer)
 {
-    Serialize(*schema, consumer);
+    NYTree::Serialize<TTableSchema>(schema, consumer);
 }
 
 void Deserialize(TTableSchemaPtr& schema, INodePtr node)

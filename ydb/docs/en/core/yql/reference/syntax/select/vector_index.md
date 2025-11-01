@@ -1,17 +1,5 @@
 # VIEW (Vector index)
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
-
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
-{% endnote %}
-
-{% endif %}
-
 To select data from a row-oriented table using a [vector index](../../../../concepts/glossary.md#vector-index), use the following statements:
 
 ```yql
@@ -35,6 +23,12 @@ SELECT ...
 A vector index supports a distance or similarity function [from the Knn extension](../../udf/list/knn#functions-distance) specified during its construction.
 
 A vector index isn't automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer) and must be specified explicitly using the `VIEW IndexName` expression.
+
+{% endnote %}
+
+{% note warning %}
+
+{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
 
 {% endnote %}
 

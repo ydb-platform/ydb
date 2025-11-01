@@ -39,6 +39,7 @@
     )
 {% if feature_map_tables %}
     WITH ( key = value, ... )
+    [AS SELECT ...]
 {% endif %}
 
 {% if oss == true and backend_name == "YDB" %}
@@ -67,7 +68,11 @@ WITH (
 
 {% endif %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+{% note info %}
+
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
 
 ## Примеры создания таблиц
 
@@ -255,10 +260,12 @@ CREATE TABLE <table_name> (
 * [Векторный индекс](vector_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+* [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 Для колоночных таблиц при их создании возможно задать:
 
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+* [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 {% endif %}

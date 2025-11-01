@@ -13,7 +13,8 @@ class TTopicMessage: protected NYdb::NTopic::TReadSessionEvent::TDataReceivedEve
 public:
     explicit TTopicMessage(const TDataEvent::TMessage& msg);
     explicit TTopicMessage(const TDataEvent::TCompressedMessage& msg);
-    explicit TTopicMessage(ui64 offset, const TString& data); // from scratch
+    TTopicMessage(TDataEvent::TMessageInformation&& msg, TString&& data);
+    TTopicMessage(ui64 offset, const TString& data); // from scratch
 
     NYdb::NTopic::TMessageMeta::TPtr GetMessageMeta() const;
     ECodec GetCodec() const;

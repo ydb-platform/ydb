@@ -1156,8 +1156,13 @@ namespace orc {
   };
 
   uint64_t ZSTDCompressionStream::doBlockCompression() {
-    return ZSTD_compressCCtx(cctx_, compressorBuffer.data(), compressorBuffer.size(),
-                             rawInputBuffer.data(), static_cast<size_t>(bufferSize), level);
+    auto ret = ZSTD_compressCCtx(cctx_, compressorBuffer.data(), compressorBuffer.size(),
+                                 rawInputBuffer.data(), static_cast<size_t>(bufferSize), level);
+    if (ZSTD_isError(ret)) {
+      throw CompressionError(std::string("Error while calling ZSTD_compressCCtx(), error: ") +
+                             ZSTD_getErrorName(ret));
+    }
+    return ret;
   }
 
   DIAGNOSTIC_PUSH
@@ -1213,8 +1218,12 @@ namespace orc {
 
   uint64_t ZSTDDecompressionStream::decompress(const char* inputPtr, uint64_t length, char* output,
                                                size_t maxOutputLength) {
-    return static_cast<uint64_t>(
-        ZSTD_decompressDCtx(dctx_, output, maxOutputLength, inputPtr, length));
+    auto ret = ZSTD_decompressDCtx(dctx_, output, maxOutputLength, inputPtr, length);
+    if (ZSTD_isError(ret)) {
+      throw CompressionError(std::string("Error while calling ZSTD_decompressDCtx(), error: ") +
+                             ZSTD_getErrorName(ret));
+    }
+    return static_cast<uint64_t>(ret);
   }
 
   DIAGNOSTIC_PUSH

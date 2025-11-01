@@ -13,7 +13,7 @@ message PileState {
     enum State {
         UNSPECIFIED = 0;
         PRIMARY = 1; // pile is primary
-        PROMOTE = 2; // pile is being promoted to primary
+        PROMOTED = 2; // pile is being promoted to primary
         SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
         NOT_SYNCHRONIZED = 4; // not synchronized with primary, cannot be promoted
         SUSPENDED = 5;    // pile is gracefully taken down, preparing to be disconnected

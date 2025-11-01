@@ -98,4 +98,4 @@ TEST(TAsyncBarrierTest, Clear)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT:::NConcurrency
+} // namespace NYT::NConcurrency

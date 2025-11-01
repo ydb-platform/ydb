@@ -49,7 +49,7 @@ namespace NMiniKQL = NKikimr::NMiniKQL;
 const ui32 PRETTY_FLAGS = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote |
                           NYql::TAstPrintFlags::AdaptArbitraryContent;
 
-enum class EByteaOutput{
+enum class EByteaOutput {
     hex,
     escape,
 };
@@ -66,8 +66,7 @@ bool IsEscapedChar(const TString& s, size_t pos) {
 }
 
 class TStatementIterator final
-    : public TInputRangeAdaptor<TStatementIterator>
-{
+    : public TInputRangeAdaptor<TStatementIterator> {
     enum class State {
         InOperator,
         EndOfOperator,
@@ -133,8 +132,9 @@ public:
 
     const TString* Next()
     {
-        if (TStringBuf::npos == Pos_)
+        if (TStringBuf::npos == Pos_) {
             return nullptr;
+        }
 
         size_t startPos = Pos_;
         size_t curPos = Pos_;
@@ -186,8 +186,9 @@ public:
 
         stmt << RemoveEmptyLines(rawStmt, inStatement);
         // inv: Pos_ is at the start of next token
-        if (startPos == endPos)
+        if (startPos == endPos) {
             return nullptr;
+        }
 
         stmt << '\n';
         Cur_ = stmt;
@@ -198,7 +199,6 @@ public:
     }
 
 private:
-
     // States:
     //  - in-operator
     //  - line comment
@@ -219,43 +219,45 @@ private:
     //      $tag$, not preceded by alnum char (a bit of simplification here but sufficient) -> tag := tag, next: $ string literal
     //      ; -> current_mode := end-of-operator, next: end-of-operator
 
-    //  - line comment
-    //      EOL -> next: current_mode
+    // - line comment
+    //     EOL -> next: current_mode
 
-    //  - block comment
-    //      /* -> ++depth
-    //      */ -> --depth, if (depth == 0) -> next: current_mode
+    // - block comment
+    //     /* -> ++depth
+    //     */ -> --depth, if (depth == 0) -> next: current_mode
 
-    //  - quoted identifier
-    //      " -> next: in-operator
+    // - quoted identifier
+    //     " -> next: in-operator
 
-    //  - string literal
-    //      ' -> next: in-operator
+    // - string literal
+    //     ' -> next: in-operator
 
-    //  - E string literal
-    //      ' -> if not preceeded by \ next: in-operator
+    // - E string literal
+    //     ' -> if not preceeded by \ next: in-operator
 
-    //  - $ string literal
-    //      $tag$ -> next: in-operator
+    // - $ string literal
+    //     $tag$ -> next: in-operator
 
-    //  - end-of-operator
-    //      -- -> next: line comment, just once
-    //      /* -> depth := 1, next: block comment
-    //      non-space char -> unget, emit, current_mode := in-operator, next: in-operator
+    // - end-of-operator
+    //     -- -> next: line comment, just once
+    //     /* -> depth := 1, next: block comment
+    //     non-space char -> unget, emit, current_mode := in-operator, next: in-operator
 
     // In every state:
     //    EOS -> emit if consumed part of the input is not empty
 
     bool SaveDollarTag() {
-        if (Pos_ + 1 == Program_.length())
+        if (Pos_ + 1 == Program_.length()) {
             return false;
+        }
 
         auto p = Program_.cbegin() + (Pos_ + 1);
 
-        if (std::isdigit(*p))
+        if (std::isdigit(*p)) {
             return false;
+        }
 
-        for (;p != Program_.cend(); ++p) {
+        for (; p != Program_.cend(); ++p) {
             if (*p == '$') {
                 auto bp = &Program_[Pos_];
                 auto l = p - bp;
@@ -264,8 +266,9 @@ private:
 
                 return true;
             }
-            if (!(std::isalpha(*p) || std::isdigit(*p) || *p == '_'))
+            if (!(std::isalpha(*p) || std::isdigit(*p) || *p == '_')) {
                 return false;
+            }
         }
         return false;
     }
@@ -300,8 +303,8 @@ private:
         switch (Program_[Pos_]) {
             case '\'':
                 State_ = (!StandardConformingStrings_ || 0 < Pos_ && std::toupper(Program_[Pos_ - 1]) == 'E')
-                         ? State::EscapedStringLiteral
-                         : State::StringLiteral;
+                             ? State::EscapedStringLiteral
+                             : State::StringLiteral;
                 break;
 
             case '"':
@@ -310,8 +313,8 @@ private:
 
             case ';':
                 State_ = Mode_ = IsCopyFromStdin(startPos, Pos_)
-                    ? State::InCopyFromStdin
-                    : State::EndOfOperator;
+                                     ? State::InCopyFromStdin
+                                     : State::EndOfOperator;
                 break;
 
             case '-':
@@ -331,8 +334,9 @@ private:
 
             case '$':
                 if (Pos_ == 0 || std::isspace(Program_[Pos_ - 1])) {
-                    if (SaveDollarTag())
+                    if (SaveDollarTag()) {
                         State_ = State::DollarStringLiteral;
+                    }
                 }
                 break;
 
@@ -346,7 +350,7 @@ private:
                 break;
 
             case ':':
-                if (Pos_ == 0 || Program_[Pos_-1] == '\n') {
+                if (Pos_ == 0 || Program_[Pos_ - 1] == '\n') {
                     State_ = State::InVar;
                 }
                 break;
@@ -420,8 +424,9 @@ private:
     bool LineCommentParser() {
         Pos_ = Program_.find('\n', Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         ++Pos_;
         if (Program_.length() == Pos_) {
@@ -441,10 +446,11 @@ private:
     bool BlockCommentParser() {
         Pos_ = Program_.find_first_of("*/", Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
-        switch(Program_[Pos_]) {
+        switch (Program_[Pos_]) {
             case '/':
                 if (Pos_ < Program_.length() && Program_[Pos_ + 1] == '*') {
                     ++Depth_;
@@ -475,8 +481,9 @@ private:
     bool QuotedIdentifierParser() {
         Pos_ = Program_.find('"', Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         ++Pos_;
         if (Program_.length() == Pos_) {
@@ -493,8 +500,9 @@ private:
     bool StringLiteralParser() {
         Pos_ = Program_.find('\'', Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         ++Pos_;
         if (Program_.length() == Pos_) {
@@ -511,8 +519,9 @@ private:
     bool EscapedStringLiteralParser() {
         Pos_ = Program_.find('\'', Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         if (IsEscapedChar(Program_, Pos_)) {
             ++Pos_;
@@ -536,8 +545,9 @@ private:
 
         Pos_ = Program_.find(Tag_, Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         Pos_ += Tag_.length();
         if (Program_.length() == Pos_) {
@@ -556,8 +566,9 @@ private:
     bool MetaCommandParser() {
         Pos_ = Program_.find('\n', Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         ++Pos_;
         if (Program_.length() == Pos_) {
@@ -571,8 +582,9 @@ private:
     bool InCopyFromStdinParser() {
         Pos_ = Program_.find("\n\\.\n", Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         Pos_ += 4;
         return Emit(false);
@@ -583,8 +595,9 @@ private:
         // TODO: validate var name
         Pos_ = Program_.find('\n', Pos_);
 
-        if (TString::npos == Pos_)
+        if (TString::npos == Pos_) {
             return true;
+        }
 
         ++Pos_;
         if (Program_.length() == Pos_) {
@@ -670,14 +683,17 @@ TString GetFormattedStmt(const TStringBuf& stmt) {
         }
         pos = next_pos + 1;
     }
-    if (pos < stmt.length())
+    if (pos < stmt.length()) {
         result += stmt.substr(pos);
+    }
 
-    if (0 < result.length() && '\n' == result.back())
+    if (0 < result.length() && '\n' == result.back()) {
         result.pop_back();
+    }
 
-    if (0 < result.length() && '\r' == result.back())
+    if (0 < result.length() && '\r' == result.back()) {
         result.pop_back();
+    }
 
     return result;
 }
@@ -708,8 +724,9 @@ TString GetPgErrorMessage(const TIssue& issue) {
 
     auto pos = msg.find(anchor);
 
-    if (TString::npos == pos)
+    if (TString::npos == pos) {
         return TString(msg);
+    }
 
     return msg.substr(pos + anchor.length());
 }
@@ -718,7 +735,7 @@ void WriteErrorToStream(const TProgramPtr program)
 {
     program->PrintErrorsTo(Cerr);
 
-    for (const auto& topIssue: program->Issues()) {
+    for (const auto& topIssue : program->Issues()) {
         WalkThroughIssues(topIssue, true, [&](const TIssue& issue, ui16 /*level*/) {
             const auto msg = GetPgErrorMessage(issue);
             Cout << msg;
@@ -737,10 +754,10 @@ inline const TString FormatBool(const TString& value)
     static const TString T = "t";
     static const TString F = "f";
 
-    return (value == "true") ? T
-         : (value == "false") ? F
-         : (value == nullRepr) ? nullRepr
-         : ythrow yexception() << "Unexpected bool literal: " << value;
+    return (value == "true")     ? T
+           : (value == "false")  ? F
+           : (value == nullRepr) ? nullRepr
+                                 : ythrow yexception() << "Unexpected bool literal: " << value;
 }
 
 inline const TString FormatNumeric(const TString& value)
@@ -756,11 +773,11 @@ const TString FormatFloat(const TString& value, std::function<TString(const TStr
     static const TString minf = "-Infinity";
 
     try {
-        return (value == "") ? ""
-             : (value == "nan") ? nan
-             : (value == "inf") ? inf
-             : (value == "-inf") ? minf
-             : formatter(value);
+        return (value == "")       ? ""
+               : (value == "nan")  ? nan
+               : (value == "inf")  ? inf
+               : (value == "-inf") ? minf
+                                   : formatter(value);
     } catch (const std::exception& e) {
         Cerr << "Unexpected float value '" << value << "'\n";
         return "";
@@ -770,13 +787,13 @@ const TString FormatFloat(const TString& value, std::function<TString(const TStr
 inline const TString FormatFloat4(const TString& value)
 {
     return FormatFloat(value,
-        [] (const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
+                       [](const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
 }
 
 inline const TString FormatFloat8(const TString& value)
 {
     return FormatFloat(value,
-        [] (const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
+                       [](const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
 }
 
 inline const TString FormatTransparent(const TString& value)
@@ -784,14 +801,14 @@ inline const TString FormatTransparent(const TString& value)
     return value;
 }
 
-static const THashMap<TColumnType, CellFormatter> ColumnFormatters {
-    { "bool", FormatBool },
-    { "numeric", FormatNumeric },
-    { "float4", FormatFloat4 },
-    { "float8", FormatFloat8 },
+static const THashMap<TColumnType, CellFormatter> ColumnFormatters{
+    {"bool", FormatBool},
+    {"numeric", FormatNumeric},
+    {"float4", FormatFloat4},
+    {"float8", FormatFloat8},
 };
 
-static const THashSet<TColumnType> RightAlignedTypes {
+static const THashSet<TColumnType> RightAlignedTypes{
     "int2",
     "int4",
     "int8",
@@ -812,11 +829,13 @@ struct TColumn {
 std::string FormatCell(const TString& data, const TColumn& column, size_t index, size_t numberOfColumns) {
     const auto delim = (index == 0) ? " " : " | ";
 
-    if (column.RightAligned)
+    if (column.RightAligned) {
         return fmt::format("{0}{1:>{2}}", delim, data, column.Width);
+    }
 
-    if (index == numberOfColumns - 1)
+    if (index == numberOfColumns - 1) {
         return fmt::format("{0}{1}", delim, data);
+    }
 
     return fmt::format("{0}{1:<{2}}", delim, data, column.Width);
 }
@@ -824,8 +843,8 @@ std::string FormatCell(const TString& data, const TColumn& column, size_t index,
 TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
     if (column.Type == "bytea") {
         const auto rawValue = (cell.IsList())
-            ? Base64Decode(cell.AsList()[0].AsString())
-            : cell.AsString();
+                                  ? Base64Decode(cell.AsList()[0].AsString())
+                                  : cell.AsString();
 
         switch (byteaOutput) {
             case EByteaOutput::hex: {
@@ -845,13 +864,13 @@ TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
                 TString result;
 
                 ui64 expectedSize = std::accumulate(rawValue.cbegin(), rawValue.cend(), 0U,
-                    [] (ui64 acc, char c) {
-                        return acc + ((c == '\\')
-                                        ? 2
-                                        : ((ui8)c < 0x20 || 0x7e < (ui8)c)
-                                        ? 4
-                                        : 1);
-                    });
+                                                    [](ui64 acc, char c) {
+                                                        return acc + ((c == '\\')
+                                                                          ? 2
+                                                                      : ((ui8)c < 0x20 || 0x7e < (ui8)c)
+                                                                          ? 4
+                                                                          : 1);
+                                                    });
                 result.resize(expectedSize);
                 auto p = result.begin();
                 for (const auto c : rawValue) {
@@ -864,7 +883,7 @@ TString GetCellData(const NYT::TNode& cell, const TColumn& column) {
                         *p++ = '\\';
                         *p++ = ((val >> 6) & 03) + '0';
                         *p++ = ((val >> 3) & 07) + '0';
-                        *p++ =  (val & 07) + '0';
+                        *p++ = (val & 07) + '0';
                     } else {
                         *p++ = c;
                     }
@@ -884,7 +903,7 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
     TVector<TColumn> columns;
     TList<TVector<TString>> formattedData;
 
-    for (const auto& col: cols) {
+    for (const auto& col : cols) {
         const auto& colName = col[0].AsString();
         const auto& colType = col[1][1].AsString();
 
@@ -900,17 +919,19 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
     for (const auto& row : rows) {
         auto& rowData = formattedData.emplace_back();
 
-        { int i = 0;
-        for (const auto& cell : row.AsList()) {
-            auto& c = columns[i];
+        {
+            int i = 0;
+            for (const auto& cell : row.AsList()) {
+                auto& c = columns[i];
 
-            const auto cellData = cell.HasValue() ? GetCellData(cell, c) : nullRepr;
+                const auto cellData = cell.HasValue() ? GetCellData(cell, c) : nullRepr;
 
-            rowData.emplace_back(c.Formatter(cellData));
-            c.Width = std::max(c.Width, rowData.back().length());
+                rowData.emplace_back(c.Formatter(cellData));
+                c.Width = std::max(c.Width, rowData.back().length());
 
-            ++i;
-        }}
+                ++i;
+            }
+        }
     }
 
     if (columns.empty()) {
@@ -918,7 +939,8 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
     } else {
         const auto totalTableWidth =
             std::accumulate(columns.cbegin(), columns.cend(), std::size_t{0},
-            [] (const auto& sum, const auto& elem) { return sum + elem.Width; }) + columns.size() * 3 - 1;
+                            [](const auto& sum, const auto& elem) { return sum + elem.Width; }) +
+            columns.size() * 3 - 1;
         TString filler(totalTableWidth, '-');
         stream << fmt::format(" {0:^{1}} ", columns[0].Name, columns[0].Width);
         for (size_t i = 1, pos = columns[0].Width + 2; i < columns.size(); ++i) {
@@ -928,11 +950,12 @@ void WriteTableToStream(IOutputStream& stream, const NYT::TNode::TListType& cols
             filler[pos] = '+';
             pos += c.Width + 3;
         }
-        stream << '\n' << filler;
+        stream << '\n'
+               << filler;
     }
 
     for (const auto& row : formattedData) {
-        stream  << '\n';
+        stream << '\n';
 
         for (size_t i = 0; i < row.size(); ++i) {
             stream << FormatCell(row[i], columns[i], i, columns.size());
@@ -948,9 +971,9 @@ std::pair<TString, TString> GetYtTableDataPaths(const TFsPath& dataDir, const TS
 }
 
 void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TExprNode::TPtr columnsNode,
-    THashMap<TString, TString>& tablesMapping, TExprContext& ctx, const TPosition& pos) {
-  const auto [dataFilePath, attrFilePath] =
-      GetYtTableDataPaths(dataDir, tableName);
+                       THashMap<TString, TString>& tablesMapping, TExprContext& ctx, const TPosition& pos) {
+    const auto [dataFilePath, attrFilePath] =
+        GetYtTableDataPaths(dataDir, tableName);
 
     TFile dataFile{dataFilePath, CreateNew};
     TFile attrFile{attrFilePath, CreateNew};
@@ -963,18 +986,18 @@ void CreateYtFileTable(const TFsPath& dataDir, const TString tableName, const TE
     TStringBuilder ysonType;
     ysonType << "[\"StructType\";[";
 
-    for (const auto &columnNode : columnsNode->Children()) {
-      const auto &colName = columnNode->Child(0)->Content();
-      const auto &colTypeNode = columnNode->Child(1);
+    for (const auto& columnNode : columnsNode->Children()) {
+        const auto& colName = columnNode->Child(0)->Content();
+        const auto& colTypeNode = columnNode->Child(1);
 
-      columnOrder.AddColumn(TString(colName));
+        columnOrder.AddColumn(TString(colName));
 
-      ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
-                          colName, colTypeNode->Content(),
-                          colTypeNode->Child(0)->Content());
+        ysonType << fmt::format("[\"{0}\";[\"{1}\";\"{2}\";];];",
+                                colName, colTypeNode->Content(),
+                                colTypeNode->Child(0)->Content());
     }
     ysonType << "];]";
-    const auto *typeNode = NCommon::ParseTypeFromYson(TStringBuf(ysonType), ctx, pos);
+    const auto* typeNode = NCommon::ParseTypeFromYson(TStringBuf(ysonType), ctx, pos);
 
     rowSpec->SetType(typeNode->Cast<TStructExprType>());
     rowSpec->SetColumnOrder(std::move(columnOrder));
@@ -1054,9 +1077,8 @@ void WriteToYtTableScheme(
         Y_ENSURE(columnsNode);
 
         CreateYtFileTable(tempDir.Path(), TString(tableName), columnsNode->ChildPtr(1),
-                        yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
-    }
-    else if (mode == "drop") {
+                          yqlNativeServices->GetTablesMapping(), ctx, writeNode.Pos(ctx));
+    } else if (mode == "drop") {
         DeleteYtFileTable(tempDir.Path(), TString(tableName), yqlNativeServices->GetTablesMapping());
     }
 }
@@ -1095,7 +1117,7 @@ void FillTablesMapping(const TFsPath& dataDir, THashMap<TString, TString>& table
     dataDir.List(children);
 
     bool regMsgLogged = false;
-    for (const auto& f: children) {
+    for (const auto& f : children) {
         if (f.GetExtension() != "attr") {
             continue;
         }
@@ -1158,7 +1180,7 @@ int Main(int argc, char* argv[])
     fileStorage = WithAsync(fileStorage);
 
     auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, CreateBuiltinRegistry(), false, udfsPaths);
-    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);;
+    IUdfResolver::TPtr udfResolver = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), fileStorage, true);
 
     bool keepTempFiles = true;
     bool emulateOutputForMultirun = false;
@@ -1206,7 +1228,8 @@ int Main(int argc, char* argv[])
         const auto stmt = GetFormattedStmt(raw_stmt);
         Cout << stmt << '\n';
 
-        Cerr << "<sql-statement>\n" << stmt << "\n</sql-statement>\n";
+        Cerr << "<sql-statement>\n"
+             << stmt << "\n</sql-statement>\n";
 
         if (stmt[0] == '\\') {
             ProcessMetaCmd(stmt);
@@ -1268,15 +1291,15 @@ int Main(int argc, char* argv[])
             PrintExprTo(program, Cerr);
         }
 
-        static const THashSet<TString> ignoredNodes{"CommitAll!", "Commit!" };
+        static const THashSet<TString> ignoredNodes{"CommitAll!", "Commit!"};
         const auto opNode = NYql::FindNode(program->ExprRoot(),
-                                           [] (const TExprNode::TPtr& node) { return !ignoredNodes.contains(node->Content()); });
+                                           [](const TExprNode::TPtr& node) { return !ignoredNodes.contains(node->Content()); });
         if (opNode->IsCallable("Write!")) {
             Y_ENSURE(opNode->ChildrenSize() == 5);
 
             const auto* keyNode = opNode->Child(2);
             const bool isWriteToTableSchemeNode = keyNode->IsCallable("Key") && 0 < keyNode->ChildrenSize() &&
-                keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
+                                                  keyNode->Child(0)->Child(0)->IsAtom("tablescheme");
 
             if (isWriteToTableSchemeNode) {
                 try {
@@ -1311,9 +1334,9 @@ int Main(int argc, char* argv[])
         }
 
         if (program->HasResults()) {
-             if (needPrintResult) {
+            if (needPrintResult) {
                 Cerr << program->ResultsAsString() << Endl;
-             }
+            }
 
             const auto root = ParseYson(program->ResultsAsString());
 
@@ -1340,10 +1363,8 @@ int main(int argc, char* argv[])
             }
         }
         return Main(argc, argv);
-    }
-    catch (...) {
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;
     }
 }
-

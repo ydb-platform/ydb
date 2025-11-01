@@ -1,5 +1,4 @@
 PRAGMA warning('disable', '4510');
-PRAGMA config.flags('OptimizerFlags', 'UnorderedOverSortImproved');
 
 $l = ListSort(ListFromRange(1, 5), ($x) -> (-$x));
 

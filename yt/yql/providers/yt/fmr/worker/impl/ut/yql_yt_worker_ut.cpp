@@ -6,13 +6,13 @@
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
-#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service//file/yql_yt_file_coordinator_service.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file/yql_yt_file_coordinator_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
 namespace NYql::NFmr {
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = "FilePath"},
+    .Input = TYtTableRef("Cluster", "Path", "Filepath"),
     .Output = TFmrTableRef{{"Cluster", "Path"}}
 };
 
@@ -20,6 +20,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
     return TStartOperationRequest{
         .TaskType = taskType,
         .OperationParams = operationParams,
+        .SessionId = "test-session-id",
         .IdempotencyKey = "IdempotencyKey",
         .ClusterConnections = {{TFmrTableId("Cluster", "Path"), TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}}}
     };
@@ -28,6 +29,7 @@ TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Do
 Y_UNIT_TEST_SUITE(FmrWorkerTests) {
     Y_UNIT_TEST(GetSuccessfulOperationResult) {
         auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
+        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -50,6 +52,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
 
     Y_UNIT_TEST(CancelOperation) {
         auto coordinator = MakeFmrCoordinator(TFmrCoordinatorSettings(), MakeFileYtCoordinatorService());
+        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
         auto operationResults = std::make_shared<TString>("no_result_yet");
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             int numIterations = 0;
@@ -81,6 +84,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
         auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
+        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
         auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
             while (!cancelFlag->load()) {
@@ -107,6 +111,7 @@ Y_UNIT_TEST_SUITE(FmrWorkerTests) {
         coordinatorSettings.WorkersNum = 2;
         coordinatorSettings.RandomProvider = CreateDeterministicRandomProvider(3);
         auto coordinator = MakeFmrCoordinator(coordinatorSettings, MakeFileYtCoordinatorService());
+        coordinator->OpenSession({.SessionId = "test-session-id"}).GetValueSync();
         std::shared_ptr<std::atomic<ui32>> operationResult = std::make_shared<std::atomic<ui32>>(0);
         // TODO - maybe improve test
         ui64 numIterations = 5;

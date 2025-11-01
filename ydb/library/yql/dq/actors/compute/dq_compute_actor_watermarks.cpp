@@ -21,9 +21,7 @@ namespace NYql::NDq {
 
 using namespace NActors;
 
-TDqComputeActorWatermarks::TDqComputeActorWatermarks(
-    const TString& logPrefix
-)
+TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
     : LogPrefix(logPrefix) {
 }
 
@@ -31,26 +29,38 @@ void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId) {
     AsyncInputsWatermarks[inputId] = Nothing();
 }
 
+void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId) {
+    auto found = AsyncInputsWatermarks.erase(inputId);
+    Y_ENSURE(found);
+    RecalcPendingWatermark();
+}
+
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId) {
     InputChannelsWatermarks[inputId] = Nothing();
 }
 
-void TDqComputeActorWatermarks::RegisterOutputChannel(ui64 outputId) {
-    OutputChannelsWatermarks[outputId] = Nothing();
-}
-
-bool TDqComputeActorWatermarks::HasOutputChannels() const {
-    return !OutputChannelsWatermarks.empty();
+void TDqComputeActorWatermarks::UnregisterInputChannel(ui64 inputId) {
+    auto found = InputChannelsWatermarks.erase(inputId);
+    Y_ENSURE(found);
+    RecalcPendingWatermark();
 }
 
 bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, TInstant watermark) {
+    auto it = AsyncInputsWatermarks.find(inputId);
+    if (it == AsyncInputsWatermarks.end()) {
+        LOG_D("Ignored watermark notification on unregistered async input " << inputId);
+        return false;
+    }
+
     LOG_T("Async input " << inputId << " notified about watermark " << watermark);
 
-    auto& asyncInputWatermark = AsyncInputsWatermarks[inputId];
-    if (!asyncInputWatermark || *asyncInputWatermark < watermark) {
+    if (MaxWatermark < watermark) {
+        MaxWatermark = watermark;
+    }
+
+    auto& asyncInputWatermark = it->second;
+    if (UpdateAndRecalcPendingWatermark(asyncInputWatermark, watermark)) {
         LOG_T("Async input " << inputId << " watermark was updated to " << watermark);
-        asyncInputWatermark = watermark;
-        RecalcPendingWatermark();
         return true;
     }
 
@@ -58,38 +68,64 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
 }
 
 bool TDqComputeActorWatermarks::NotifyInChannelWatermarkReceived(ui64 inputId, TInstant watermark) {
+    auto it = InputChannelsWatermarks.find(inputId);
+    if (it == InputChannelsWatermarks.end()) {
+        LOG_D("Ignored watermark notification on unregistered input channel" << inputId);
+        return false;
+    }
+
     LOG_T("Input channel " << inputId << " notified about watermark " << watermark);
 
-    auto& inputChannelWatermark = InputChannelsWatermarks[inputId];
-    if (!inputChannelWatermark || *inputChannelWatermark < watermark) {
+    if (MaxWatermark < watermark) {
+        MaxWatermark = watermark;
+    }
+
+    auto& inputChannelWatermark = it->second;
+    if (UpdateAndRecalcPendingWatermark(inputChannelWatermark, watermark)) {
         LOG_T("Input channel " << inputId << " watermark was updated to " << watermark);
-        inputChannelWatermark = watermark;
-        RecalcPendingWatermark();
         return true;
     }
 
     return false;
 }
 
-bool TDqComputeActorWatermarks::NotifyOutputChannelWatermarkSent(ui64 outputId, TInstant watermark) {
-    auto logPrefix = TStringBuilder() << "Output channel "
-        << outputId << " notified about watermark '" << watermark << "'";
+// Modifies and optionally recalc pending watermarks
+bool TDqComputeActorWatermarks::UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark) {
+    if (storedWatermark < watermark) {
+        auto oldWatermark = std::exchange(storedWatermark, watermark);
+        if (LastWatermark == oldWatermark) {
+            // LastWatermark was unset; old watermark value was unset
+            // -> it is possible now all channels have watermark set, needs recalc
+            // LastWatermark was set and same as old watermark value
+            // -> it is possible LastWatermark can be advanced, needs recalc
+            RecalcPendingWatermark();
+        } else {
+            // otherwise LastWatermark will be same
+        }
+        return true;
+    }
+    return false;
+}
 
-    LOG_T(logPrefix);
+bool TDqComputeActorWatermarks::NotifyWatermarkWasSent(TInstant watermark) {
+    auto logPrefix = [watermark] {
+        return TStringBuilder() << "Output notified about watermark '" << watermark << "'";
+    };
 
-    if (watermark <= LastWatermark) {
-        LOG_E(logPrefix << "' when LastWatermark was already forwarded to " << *LastWatermark);
-        // We will try to ignore this error, but something strange happened
+    LOG_T(logPrefix());
+
+    if (watermark < PendingWatermark) {
+        LOG_D(logPrefix() << " before '" << PendingWatermark << "'");
+        return false;
     }
 
-    if (watermark != PendingWatermark) {
-        LOG_E(logPrefix << " when '" << PendingWatermark << "' was expected");
+    if (watermark > PendingWatermark) {
+        LOG_E(logPrefix() << " when '" << PendingWatermark << "' was expected");
         // We will try to ignore this error, but something strange happened
+        return false;
     }
 
-    OutputChannelsWatermarks[outputId] = watermark;
-
-    return MaybePopPendingWatermark();
+    return true;
 }
 
 bool TDqComputeActorWatermarks::HasPendingWatermark() const {
@@ -98,6 +134,10 @@ bool TDqComputeActorWatermarks::HasPendingWatermark() const {
 
 TMaybe<TInstant> TDqComputeActorWatermarks::GetPendingWatermark() const {
     return PendingWatermark;
+}
+
+TDuration TDqComputeActorWatermarks::GetWatermarkDiscrepancy() const {
+    return *MaxWatermark - *PendingWatermark;
 }
 
 void TDqComputeActorWatermarks::RecalcPendingWatermark() {
@@ -122,39 +162,11 @@ void TDqComputeActorWatermarks::RecalcPendingWatermark() {
         newWatermark = std::min(newWatermark, *watermark);
     }
 
-    if (!LastWatermark || newWatermark != LastWatermark) {
+    if (newWatermark > LastWatermark) {
         LOG_T("New pending watermark " << newWatermark);
         PendingWatermark = newWatermark;
+        LastWatermark = newWatermark;
     }
-}
-
-bool TDqComputeActorWatermarks::MaybePopPendingWatermark() {
-    if (OutputChannelsWatermarks.empty()) {
-        return true;
-    }
-
-    if (!PendingWatermark) {
-        LOG_E("There is no pending watermark, but pop was called");
-        // We will try to ignore this error, but something strange happened
-        return true;
-    }
-
-    auto outWatermark = TInstant::Max();
-    for (const auto& [_, watermark] : OutputChannelsWatermarks) {
-        if (!watermark) {
-            return false;
-        }
-
-        outWatermark = std::min(outWatermark, *watermark);
-    }
-
-    if (outWatermark >= *PendingWatermark) {
-        LastWatermark = PendingWatermark;
-        PopPendingWatermark();
-        return true;
-    }
-
-    return false;
 }
 
 void TDqComputeActorWatermarks::PopPendingWatermark() {

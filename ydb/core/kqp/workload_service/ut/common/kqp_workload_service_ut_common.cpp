@@ -250,13 +250,20 @@ class TWorkloadServiceYdbSetup : public IYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
-        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
         *appConfig.MutableWorkloadManagerConfig() = Settings_.WorkloadManagerConfig_;
+
+        auto& featureFlags = *appConfig.MutableFeatureFlags();
+        featureFlags.SetEnableResourcePools(Settings_.EnableResourcePools_);
+        featureFlags.SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
+        featureFlags.SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        featureFlags.SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableResourcePoolsCounters(true);
+        featureFlags.SetEnableStreamingQueries(true);
+
+        auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
+        queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);
+        queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
         appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         return appConfig;
@@ -280,13 +287,16 @@ private:
             .SetNodeCount(Settings_.NodeCount_)
             .SetDomainName(Settings_.DomainName_)
             .SetAppConfig(appConfig)
-            .SetFeatureFlags(appConfig.GetFeatureFlags());
+            .SetFeatureFlags(appConfig.GetFeatureFlags())
+            .SetInitializeFederatedQuerySetupFactory(true);
 
         if (Settings_.CreateSampleTenants_) {
+            const auto dedicatedPoolKind = SplitPath(Settings_.GetDedicatedTenantName()).back();
+            const auto sharedPoolKind = SplitPath(Settings_.GetSharedTenantName()).back();
             serverSettings
                 .SetDynamicNodeCount(2)
-                .AddStoragePoolType(Settings_.GetDedicatedTenantName())
-                .AddStoragePoolType(Settings_.GetSharedTenantName());
+                .AddStoragePool(dedicatedPoolKind, TStringBuilder() << Settings_.GetDedicatedTenantName() << ":" << dedicatedPoolKind)
+                .AddStoragePool(sharedPoolKind, TStringBuilder() << Settings_.GetSharedTenantName() << ":" << sharedPoolKind);
         }
 
         SetLoggerSettings(serverSettings);
@@ -298,7 +308,7 @@ private:
 
     void SetupResourcesTenant(Ydb::Cms::CreateDatabaseRequest& request, Ydb::Cms::StorageUnits* storage, const TString& name) {
         request.set_path(name);
-        storage->set_unit_kind(name);
+        storage->set_unit_kind(SplitPath(name).back());
         storage->set_count(1);
     }
 
@@ -309,6 +319,7 @@ private:
             Tenants_->CreateTenant(std::move(request));
             const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetDedicatedTenantName());
             DedicatedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
+            Server_->EnableGRpc(PortManager_.GetPort(), Tenants_->List(Settings_.GetDedicatedTenantName())[0], Settings_.GetDedicatedTenantName());
         }
 
         {  // Shared
@@ -317,6 +328,7 @@ private:
             Tenants_->CreateTenant(std::move(request));
             const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetSharedTenantName());
             SharedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
+            Server_->EnableGRpc(PortManager_.GetPort(), Tenants_->List(Settings_.GetSharedTenantName())[0], Settings_.GetSharedTenantName());
         }
 
         {  // Serverless
@@ -552,7 +564,11 @@ public:
         return response;
     }
 
-    // Coomon helpers
+    // Common helpers
+    ui64 GetGrpcPort() const override {
+        return Server_->GetGRpcServer().GetPort();
+    }
+
     TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
     }
@@ -561,16 +577,26 @@ public:
         return Settings_;
     }
 
-    TLocalPathId GetDedicatedTenantPathId() const override {
-        return DedicatedTenantPathId;
+    TTenantInfo GetDedicatedTenantInfo() const override {
+        return {
+            .PathId = DedicatedTenantPathId,
+            .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetDedicatedTenantName()).GetPort(),
+            .NodeIdx = Tenants_->List(Settings_.GetDedicatedTenantName())[0]
+        };
     }
 
-    TLocalPathId GetSharedTenantPathId() const override {
-        return SharedTenantPathId;
+    TTenantInfo GetSharedTenantInfo() const override {
+        return {
+            .PathId = SharedTenantPathId,
+            .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetSharedTenantName()).GetPort(),
+            .NodeIdx = Tenants_->List(Settings_.GetSharedTenantName())[0]
+        };
     }
 
-    TLocalPathId GetServerlessTenantPathId() const override {
-        return ServerlessTenantPathId;
+    TTenantInfo GetServerlessTenantInfo() const override {
+        auto sharedInfo = GetSharedTenantInfo();
+        sharedInfo.PathId = ServerlessTenantPathId;
+        return sharedInfo;
     }
 
 private:

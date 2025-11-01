@@ -519,11 +519,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -561,11 +563,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -679,7 +683,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     createPartitionStreamEvent->Confirm();
                 } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
                     destroyPartitionStreamEvent->Confirm();
-                } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                     break;
                 }
             }
@@ -703,11 +707,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [/*storageMb*/](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -743,11 +749,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -1460,7 +1468,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 break;
             }
         }
@@ -1618,7 +1626,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 break;
             }
         }
@@ -1737,7 +1745,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 UNIT_ASSERT(false);
                 break;
             } else {

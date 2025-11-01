@@ -1,59 +1,11 @@
-#include "proxy.h"
 #include "clusters_from_connections.h"
+#include "proxy.h"
 #include "table_bindings_from_bindings.h"
-
-#include <yql/essentials/ast/yql_expr.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
-#include <yql/essentials/core/services/yql_out_transformers.h>
-#include <yql/essentials/core/facade/yql_facade.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
-#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/dq/actors/events.h>
-#include <ydb/library/yql/providers/dq/actors/executer_actor.h>
-#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
-#include <ydb/library/yql/providers/dq/actors/task_controller.h>
-#include <ydb/library/yql/providers/dq/actors/result_receiver.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
-#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
-#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
-#include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_program_builder.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/mkql_node_serialization.h>
-#include <yql/essentials/providers/common/codec/yql_codec.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/public/issue/protos/issue_message.pb.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-
-#include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/services/services.pb.h>
 
 #include <ydb/core/fq/libs/actors/nodes_manager.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
-#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/common/compression.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
@@ -69,21 +21,66 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/json/yson/json2yson.h>
-#include <library/cpp/yson/node/node_io.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
+#include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/actors/executer_actor.h>
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
+#include <ydb/library/yql/providers/dq/actors/result_receiver.h>
+#include <ydb/library/yql/providers/dq/actors/task_controller.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+#include <ydb/library/yql/providers/dq/counters/counters.h>
+#include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
+#include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
+#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/protos/issue_message.pb.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 #include <google/protobuf/util/time_util.h>
 
-#include <util/string/split.h>
-#include <util/system/hostname.h>
-
+#include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/scheme/scheme.h>
+#include <library/cpp/yson/node/node_io.h>
+
+#include <util/string/split.h>
+#include <util/system/hostname.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "QueryId: " << Params.QueryId << " " << stream)
@@ -97,7 +94,6 @@ namespace NFq {
 using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
-using namespace NFq;
 
 namespace {
 
@@ -154,8 +150,6 @@ public:
 
 static TTraceOptPipelineConfigurator TraceOptPipelineConfigurator;
 
-}
-
 class TProgramRunnerActor : public NActors::TActorBootstrapped<TProgramRunnerActor> {
 public:
     TProgramRunnerActor(
@@ -202,6 +196,8 @@ public:
                     return;
                 }
 
+                Parsed = true;
+
                 if (ExecuteMode == FederatedQuery::ExecuteMode::PARSE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
@@ -215,13 +211,13 @@ public:
                     return;
                 }
 
+                Compiled = true;
+
                 if (ExecuteMode == FederatedQuery::ExecuteMode::COMPILE) {
                     SendStatusAndDie(TProgram::TStatus::Ok);
                     return;
                 }
             }
-
-            Compiled = true;
 
             // next phases can be async: optimize, validate, run
             TProgram::TFutureStatus futureStatus;
@@ -259,6 +255,10 @@ public:
             Program->Print(&exprOut, &planOut);
             plan = Plan2Json(planOut.Str());
             expr = exprOut.Str();
+        } else if (Parsed) {
+            if (const auto& ast = Program->GetQueryAst()) {
+                expr = *ast;
+            }
         }
         Issues.AddIssues(Program->Issues());
         Send(RunActorId, new TEvPrivate::TEvProgramFinished(Issues, plan, expr, status, message));
@@ -315,6 +315,7 @@ private:
     const NSQLTranslation::TTranslationSettings SqlSettings;
     const FederatedQuery::ExecuteMode ExecuteMode;
     const TString QueryId;
+    bool Parsed = false;
     bool Compiled = false;
 };
 
@@ -929,6 +930,7 @@ private:
         if (Params.Resources.rate_limiter_path()) {
             const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
             for (auto& task : *ev->Get()->GraphParams.MutableTasks()) {
+                task.SetRateLimiterDatabase(Params.TenantName);
                 task.SetRateLimiter(Params.Resources.rate_limiter_path());
                 task.SetRateLimiterResource(rateLimiterResource);
             }
@@ -1699,7 +1701,6 @@ private:
         apply("WatermarksMode", "disable");
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
-        apply("WatermarksIdlePartitions", "true");
         apply("EnableChannelStats", "true");
         apply("ExportStats", "true");
 
@@ -2015,7 +2016,14 @@ private:
         }
 
         {
-           dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory, NActors::TActivationContext::ActorSystem()));
+           dataProvidersInit.push_back(GetS3DataProviderInitializer(
+                Params.S3Gateway,
+                Params.CredentialsFactory,
+                TActivationContext::ActorSystem(),
+                [](TS3Configuration& configuration) {
+                    configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not allowed for federated queries, pragma value was ignored");
+                }
+            ));
         }
 
         {
@@ -2041,7 +2049,15 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(
+                pqGateway,
+                /* supportRtmrMode */ false,
+                dbResolver,
+                std::move(disposition),
+                Params.TaskSensorLabels,
+                Params.NodeIds,
+                Params.Config.GetCommon().GetUseActorSystemThreadsInTopicClient()
+            ));
         }
 
         {
@@ -2350,7 +2366,7 @@ private:
 
     const ui64 MaxTasksPerStage;
     const ui64 MaxTasksPerOperation;
-    const TCompressor Compressor;
+    const NKikimr::NKqp::TCompressor Compressor;
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     TMap<TString, TString> Statistics;
@@ -2390,6 +2406,7 @@ private:
     };
 };
 
+} // anonymous namespace
 
 IActor* CreateRunActor(
     const NActors::TActorId& fetcherId,
@@ -2400,4 +2417,4 @@ IActor* CreateRunActor(
     return new NYql::NDq::TLogWrapReceive(new TRunActor(fetcherId, serviceCounters, std::move(params)), queryId);
 }
 
-} /* NFq */
+} // namespace NFq

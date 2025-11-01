@@ -21,7 +21,7 @@ using namespace NNodes;
 
 class TYtYtflowIntegration: public IYtflowIntegration {
 public:
-    TYtYtflowIntegration(TYtState* state)
+    TYtYtflowIntegration(TYtState::TWeakPtr state)
         : State_(state)
     {
     }
@@ -81,10 +81,13 @@ public:
         auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
         auto commitEpoch = TEpochInfo::Parse(maybeWriteTable.Cast().Table().CommitEpoch().Ref());
 
-        auto tableDesc = State_->TablesData->GetTable(
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+
+        auto tableDesc = ytState->TablesData->GetTable(
             cluster, tableName, 0);
 
-        auto commitTableDesc = State_->TablesData->GetTable(
+        auto commitTableDesc = ytState->TablesData->GetTable(
             cluster, tableName, commitEpoch);
 
         if (!tableDesc.Meta->IsDynamic
@@ -171,7 +174,10 @@ public:
             auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
             auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
 
-            auto tableDesc = State_->TablesData->GetTable(
+            auto ytState = State_.lock();
+            YQL_ENSURE(ytState);
+
+            auto tableDesc = ytState->TablesData->GetTable(
                 cluster, tableName, 0);
 
             sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
@@ -197,11 +203,11 @@ private:
     }
 
 private:
-    TYtState* State_;
+    TYtState::TWeakPtr State_;
 };
 
-THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtYtflowIntegration>(state);
 }
 

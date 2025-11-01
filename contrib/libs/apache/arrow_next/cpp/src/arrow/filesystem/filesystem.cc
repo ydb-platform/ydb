@@ -26,13 +26,13 @@
 
 #include "arrow/filesystem/filesystem.h"
 #ifdef ARROW_AZURE
-#error  include "arrow/filesystem/azurefs.h"
+#  error #include "arrow/filesystem/azurefs.h"
 #endif
 #ifdef ARROW_GCS
-#error  include "arrow/filesystem/gcsfs.h"
+#  error #include "arrow/filesystem/gcsfs.h"
 #endif
 #ifdef ARROW_HDFS
-
+#  error #include "arrow/filesystem/hdfs.h"
 #endif
 #ifdef ARROW_S3
 #  error #include "arrow/filesystem/s3fs.h"

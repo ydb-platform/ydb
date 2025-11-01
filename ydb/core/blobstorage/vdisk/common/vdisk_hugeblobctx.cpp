@@ -45,7 +45,7 @@ namespace NKikimr {
 
     // check whether this blob is huge one; userPartSize doesn't include any metadata stored along with blob
     bool THugeBlobCtx::IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minHugeBlobInBytes) const {
-        return gtype.MaxPartSize(fullId) + (AddHeader ? TDiskBlob::HeaderSize : 0) >= minHugeBlobInBytes;
+        return gtype.MaxPartSize(fullId) + TDiskBlob::GetBlobHeaderSize(BlobHeaderMode) >= minHugeBlobInBytes;
     }
 
 } // NKikimr

@@ -7,12 +7,12 @@ void TExtensionContext::Reply(NHttp::THttpOutgoingResponsePtr httpResponse) {
 }
 
 void TExtensionContext::Reply() {
-    if (Params->StatusOverride) {
-        return Reply(Params->Request->CreateResponse(Params->StatusOverride, Params->MessageOverride, *Params->HeadersOverride, Params->BodyOverride));
+    if (!Params.StatusOverride.empty()) {
+        return Reply(Params.Request->CreateResponse(Params.StatusOverride, Params.MessageOverride, *Params.HeadersOverride, Params.BodyOverride));
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
-        BLOG_D("Can not process request to protected resource:\n" << Params->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        return Reply(CreateResponseForNotExistingResponseFromProtectedResource(Params->Request, Params->ResponseError));
+        BLOG_D("Can not process request to protected resource:\n" << Params.Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+        return Reply(CreateResponseForNotExistingResponseFromProtectedResource(Params.Request, Params.ResponseError));
     }
 }
 

@@ -136,6 +136,14 @@ void Deserialize(EValueType& valueType, const TNode& node)
         {"interval64", VT_INTERVAL64},
 
         {"uuid", VT_UUID},
+
+        {"tz_date", VT_TZ_DATE},
+        {"tz_datetime", VT_TZ_DATETIME},
+        {"tz_timestamp", VT_TZ_TIMESTAMP},
+
+        {"tz_date32", VT_TZ_DATE32},
+        {"tz_datetime64", VT_TZ_DATETIME64},
+        {"tz_timestamp64", VT_TZ_TIMESTAMP64},
     };
 
     auto it = str2ValueType.find(nodeStr);
@@ -474,6 +482,9 @@ void Serialize(const TRichYPath& path, NYson::IYsonConsumer* consumer)
         .DoIf(path.Create_.Defined(), [&] (TFluentAttributes fluent) {
             fluent.Item("create").Value(*path.Create_);
         })
+        .DoIf(path.InputQuery_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("input_query").Value(*path.InputQuery_);
+        })
     .EndAttributes()
     .Value(path.Path_);
 }
@@ -507,6 +518,7 @@ void Deserialize(TRichYPath& path, const TNode& node)
     DESERIALIZE_ATTR("bypass_artifact_cache", path.BypassArtifactCache_);
     DESERIALIZE_ATTR("cluster", path.Cluster_);
     DESERIALIZE_ATTR("create", path.Create_);
+    DESERIALIZE_ATTR("input_query", path.InputQuery_);
     Deserialize(path.Path_, node);
 }
 

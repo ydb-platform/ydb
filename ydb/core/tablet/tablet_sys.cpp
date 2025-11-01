@@ -1393,7 +1393,7 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         } else if (GcFailCount > 0 && !GcPendingRetry && GcTryCounter < GcMaxErrors) {
             ++GcTryCounter;
             GcPendingRetry = true;
-            Schedule(TDuration::MilliSeconds(GcBackoffTimer.NextBackoffMs()), new TEvTabletBase::TEvLogGcRetry());
+            Schedule(GcBackoffTimer.Next(), new TEvTabletBase::TEvLogGcRetry());
         }
     };
 

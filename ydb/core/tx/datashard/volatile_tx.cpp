@@ -518,6 +518,7 @@ namespace NKikimr::NDataShard {
             std::optional<ui64> changeGroup,
             bool commitOrdered,
             bool isArbiter,
+            bool disableExpectations,
             TTransactionContext& txc)
     {
         using Schema = TDataShard::Schema;
@@ -540,6 +541,7 @@ namespace NKikimr::NDataShard {
         info->CommitOrder = NextCommitOrder++;
         info->CommitOrdered = commitOrdered;
         info->IsArbiter = isArbiter;
+        info->DisableExpectations = disableExpectations;
 
         if (info->Participants.empty()) {
             // Transaction is committed when we don't have to wait for other participants

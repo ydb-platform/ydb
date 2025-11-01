@@ -213,7 +213,6 @@ def pytest_configure(config):
     config.suite_metrics = {}
     config.configure_timestamp = time.time()
     context = {
-        "project_path": config.option.project_path,
         "test_stderr": config.option.test_stderr,
         "test_debug": config.option.test_debug,
         "build_type": config.option.build_type,
@@ -237,6 +236,7 @@ def pytest_configure(config):
         config.option.valgrind_path,
         config.option.gdb_path,
         config.option.data_root,
+        project_path=config.option.project_path,
     )
     config.option.test_log_level = {
         "critical": logging.CRITICAL,
@@ -341,7 +341,9 @@ def _graceful_shutdown(*args):
         library.python.coverage.stop_coverage_tracing()
     except ImportError:
         pass
-    traceback.print_stack(file=sys.stderr)
+    stack = traceback.format_stack()
+    # NOTE: Using os.write because it's reentrant, Python I/O stack isn't https://bugs.python.org/issue24283
+    os.write(sys.stderr.fileno(), b''.join(item.encode() for item in stack))
     capman = pytest_config.pluginmanager.getplugin("capturemanager")
     capman.suspend(in_=True)
     _graceful_shutdown_on_log(not capman.is_globally_capturing())

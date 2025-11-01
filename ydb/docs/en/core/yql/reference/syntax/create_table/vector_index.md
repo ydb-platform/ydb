@@ -1,17 +1,5 @@
 # Vector index
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
-{% note warning %}
-
-It makes no sense to create an empty table with a vector index, because for now we don't allow mutations in tables with vector indexes.
-
-You should use `ALTER TABLE ... ADD INDEX` [command](../alter_table/indexes.md)) to add a vector index to an existing table.
-
-{% endnote %}
-
 [Vector index](../../../../concepts/glossary.md#vector-index) in [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) tables is created using the same syntax as [secondary indexes](secondary_index.md), by specifying `vector_kmeans_tree` as the index type. Subset of syntax available for vector indexes:
 
 ```yql
@@ -40,9 +28,11 @@ Where:
 
 {% note warning %}
 
-Vector indexes with `vector_type=bit` are not currently supported.
+{% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
 
 {% endnote %}
+
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Example
 

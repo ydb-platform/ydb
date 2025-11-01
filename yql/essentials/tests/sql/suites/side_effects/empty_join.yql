@@ -1,0 +1,6 @@
+/* custom error: Condition violated */
+$input1 = ListTake([<|x:1|>],0);
+$input2 = WithSideEffects(Ensure([<|y:1|>],false));
+
+select * from (select * from AS_TABLE($input1)) as a
+join (select * from AS_TABLE($input2)) as b on a.x=b.y;

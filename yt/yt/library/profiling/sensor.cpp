@@ -325,6 +325,12 @@ bool TProfiler<UseWeakPtr>::IsEnabled() const
 }
 
 template <bool UseWeakPtr>
+const TTagSet& TProfiler<UseWeakPtr>::GetTags() const
+{
+    return Tags_;
+}
+
+template <bool UseWeakPtr>
 TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithPrefix(const std::string& prefix) const
 {
     if (!Enabled_) {
@@ -513,6 +519,18 @@ TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithHot(bool value) const
 
     auto opts = Options_;
     opts.Hot = value;
+    return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
+}
+
+template <bool UseWeakPtr>
+TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithMemOnly() const
+{
+    if (!Enabled_) {
+        return {};
+    }
+
+    auto opts = Options_;
+    opts.MemOnly = true;
     return TProfiler<UseWeakPtr>(Prefix_, Namespace_, Tags_, GetRegistry(), opts);
 }
 

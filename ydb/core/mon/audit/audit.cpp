@@ -1,12 +1,14 @@
 #include "audit.h"
-#include "auditable_actions.cpp"
+#include "audit_denylist.cpp"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/util/address_classifier.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/core/protos/config.pb.h>
 
+#include <util/generic/is_in.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/string.h>
 
 namespace NMonitoring::NAudit {
@@ -17,15 +19,10 @@ namespace {
     const TString EMPTY_VALUE = "{none}";
     const TString X_FORWARDED_FOR_HEADER = "X-Forwarded-For";
     const TStringBuf TRUNCATED_SUFFIX = "**TRUNCATED_BY_YDB**";
+    const TString REASON_EXECUTE = "Execute";
 
     // audit event has limit of 4 MB, but we limit body size to 2 MB
     const size_t MAX_AUDIT_BODY_SIZE = 2_MB - TRUNCATED_SUFFIX.size();
-
-    enum ERequestStatus {
-        Success,
-        Process,
-        Error,
-    };
 
     ERequestStatus GetStatus(const NHttp::THttpOutgoingResponsePtr response) {
         auto status = response.Get()->Status;
@@ -47,21 +44,51 @@ namespace {
         return EMPTY_VALUE;
     }
 
-    inline TUrlMatcher CreateAuditableActionsMatcher() {
+    TString GetReason(const NHttp::THttpOutgoingResponsePtr& response) {
+        TStringBuilder reason;
+        reason << response.Get()->Status << " " << response.Get()->Message;
+        return reason;
+    }
+
+    inline TUrlMatcher CreateDenylistMatcher() {
         TUrlMatcher policy;
-        for (const auto& pattern : AUDITABLE_ACTIONS) {
+        for (const auto& pattern : AUDIT_DENYLIST) {
             policy.AddPattern(pattern);
         }
         return policy;
     }
 }
 
+TString ExtractRemoteAddress(const NHttp::THttpIncomingRequest* request) {
+    if (!request) {
+        return {};
+    }
+    NHttp::THeaders headers(request->Headers);
+
+    TString remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    if (remoteAddress.empty()) {
+        remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request->Address->ToString());
+    }
+    return remoteAddress;
+}
+
+bool TAuditCtx::AuditEnabled(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType)
+{
+    if (NKikimr::HasAppData()) {
+        return NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin,
+                                                             logPhase, subjectType);
+    }
+    return false;
+}
+
+
 void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const TString& method, const TString& url, const TCgiParameters& cgiParams) {
-    // only modifying methods are audited
+bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const {
+    // modifying methods are always audited
+    const TString method(request->Method);
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
     if (MODIFYING_METHODS.contains(method)) {
         return true;
@@ -72,30 +99,34 @@ bool TAuditCtx::AuditableRequest(const TString& method, const TString& url, cons
         return false;
     }
 
-    // force audit for specific URLs
-    static auto FORCE_AUDIT_MATCHER = CreateAuditableActionsMatcher();
-    if (FORCE_AUDIT_MATCHER.Match(url, cgiParams)) {
-        return true;
+    // skip audit for URLs from denylist
+    static auto DENYLIST_MATCHER = CreateDenylistMatcher();
+    if (DENYLIST_MATCHER.Match(request->URL)) {
+        return false;
     }
 
-    return false;
+    return true;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, bool needAudit) {
+    if (!(Auditable = needAudit)) {
+        return;
+    }
+
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));
     const auto params = request->URL.After('?');
     const auto cgiParams = TCgiParameters(params);
-    if (!(AuditEnabled = AuditableRequest(method, url, cgiParams))) {
+
+    if (!(Auditable = AuditableRequest(ev->Get()->Request))) {
         return;
     }
 
-    NHttp::THeaders headers(request->Headers);
-    auto remoteAddress = ToString(headers.Get(X_FORWARDED_FOR_HEADER).Before(',')); // Get the first address in the list
+    TString remoteAddress = ExtractRemoteAddress(request.Get());
 
     AddAuditLogPart("component", MONITORING_COMPONENT_NAME);
-    AddAuditLogPart("remote_address", remoteAddress);
+    AddAuditLogPart("remote_address", remoteAddress ? remoteAddress : EMPTY_VALUE);
     AddAuditLogPart("operation", DEFAULT_OPERATION);
     AddAuditLogPart("method", method);
     AddAuditLogPart("url", url);
@@ -115,39 +146,56 @@ void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPt
     }
 }
 
-void TAuditCtx::AddAuditLogParts(const TIntrusiveConstPtr<NACLib::TUserToken>& userToken) {
-    if (!AuditEnabled) {
+void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
+    if (!Auditable) {
         return;
     }
-    SubjectType = userToken ? userToken->GetSubjectType() : NACLibProto::SUBJECT_TYPE_ANONYMOUS;
-    if (userToken) {
-        Subject = userToken->GetUserSID();
-        SanitizedToken = userToken->GetSanitizedToken();
+    // TODO: refactor so that all the parts are logged
+    static const THashSet<TString> ALLOWED_PARTS = {
+        "subject",
+        "sanitized_token",
+        // "start_time",
+        // "end_time",
+        // "database",
+        // "remote_address",
+        "cloud_id",
+        "folder_id",
+        "resource_id",
+    };
+    for (const auto& [k, v] : parts) {
+        if (IsIn(ALLOWED_PARTS, k)) {
+            Parts.emplace_back(k, v);
+        }
     }
 }
 
-void TAuditCtx::FinishAudit(const NHttp::THttpOutgoingResponsePtr& response) {
-    AuditEnabled &= NKikimr::AppData()->AuditConfig.EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ClusterAdmin, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed, SubjectType);
+void TAuditCtx::SetSubjectType(NACLibProto::ESubjectType subjectType) {
+    SubjectType = subjectType;
+}
 
-    if (!AuditEnabled) {
+void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase) {
+    if (!Auditable || !AuditEnabled(logPhase, SubjectType)) {
         return;
     }
 
-    auto status = GetStatus(response);
-
     AUDIT_LOG(
-        AddAuditLogPart("subject", (Subject ? Subject : EMPTY_VALUE));
-        AddAuditLogPart("sanitized_token", (SanitizedToken ? SanitizedToken : EMPTY_VALUE));
-
         for (const auto& [name, value] : Parts) {
-            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE))
+            AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }
 
         AUDIT_PART("status", ToString(status));
-        if (status != ERequestStatus::Success) {
-            AUDIT_PART("reason", response.Get()->Message);
-        }
+        AUDIT_PART("reason", reason, !reason.empty());
     );
+}
+
+void TAuditCtx::LogOnReceived() {
+    LogAudit(ERequestStatus::Process, REASON_EXECUTE, NKikimrConfig::TAuditConfig::TLogClassConfig::Received);
+}
+
+void TAuditCtx::LogOnCompleted(const NHttp::THttpOutgoingResponsePtr& response) {
+    auto status = GetStatus(response);
+    auto reason = GetReason(response);
+    LogAudit(status, reason, NKikimrConfig::TAuditConfig::TLogClassConfig::Completed);
 }
 
 }

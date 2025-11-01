@@ -427,6 +427,355 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         }
     }
 
+    Y_UNIT_TEST(CheckQueryLimitsWorksAsExpected) {
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(2);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateRangesLimit(3);
+
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `TestCacheWithRecompile` (
+                version Int64,
+                id Int64,
+                PRIMARY KEY (version, id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        {
+            auto query = Q1_(R"(
+                --!syntax_v1
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $items as List<Struct<version:Int64,id:Int64>>;
+                UPSERT INTO `/Root/TestCacheWithRecompile`
+                SELECT `version`, `id` FROM AS_TABLE($items);
+            )");
+
+            auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+            auto params = prepareResult.GetQuery().GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(1).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(2).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(3).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(4).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(5).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(6).EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+            auto execResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+            auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            auto query = Q1_(R"(
+                --!syntax_v1
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $items as List<Tuple<Int64,Int64>>;
+                SELECT * FROM `TestCacheWithRecompile` WHERE (version, id) in $items;
+            )");
+
+            auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+            {
+                auto params = prepareResult.GetQuery().GetParamsBuilder()
+                .AddParam("$items")
+                    .BeginList()
+                    .AddListItem().BeginTuple().AddElement().Int64(1).AddElement().Int64(0).EndTuple()
+                    .EndList()
+                    .Build()
+                .Build();
+
+                auto execResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+                Cerr << "Optimized query ok scenario " << Endl << execResult.GetStats()->GetAst() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetResultSet(0).RowsCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+
+            {
+                auto params = prepareResult.GetQuery().GetParamsBuilder()
+                    .AddParam("$items")
+                        .BeginList()
+                        .AddListItem().BeginTuple().AddElement().Int64(1).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(2).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(3).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(4).AddElement().Int64(0).EndTuple()
+                        .EndList()
+                        .Build()
+                    .Build();
+
+                std::vector<bool> fromCacheFlags{false, true};
+                for(bool fromCache: fromCacheFlags) {
+                    Cerr << fromCache << Endl;
+                    auto execResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+                    auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+                    Cerr << "Optimized query ok scenario " << Endl << execResult.GetStats()->GetAst() << Endl;
+                    UNIT_ASSERT_VALUES_EQUAL(execResult.GetResultSet(0).RowsCount(), 4);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+                }
+            }
+        }
+
+        {
+
+            auto query = Q1_(R"(
+                --!syntax_v1
+
+                DECLARE $items as Struct<LookupKeys:List<Tuple<Int64,Int64>>,threshold:Uint64>;
+                SELECT COUNT(*) FROM `TestCacheWithRecompile` WHERE (version, id) in $items.LookupKeys;
+            )");
+
+            auto explainRes = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explainRes.GetStatus(), EStatus::SUCCESS, explainRes.GetIssues().ToString());
+            Cerr << explainRes.GetAst() << Endl;
+
+            auto prepareResult = session.PrepareDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+
+            auto params = prepareResult.GetQuery().GetParamsBuilder()
+                .AddParam("$items")
+                    .BeginStruct()
+                    .AddMember("LookupKeys")
+                        .BeginList()
+                        .AddListItem()
+                            .BeginTuple()
+                                .AddElement().Int64(1)
+                                .AddElement().Int64(0)
+                            .EndTuple()
+                        .AddListItem()
+                            .BeginTuple()
+                                .AddElement().Int64(2)
+                                .AddElement().Int64(0)
+                            .EndTuple()
+                        .AddListItem()
+                            .BeginTuple()
+                                .AddElement().Int64(3)
+                                .AddElement().Int64(0)
+                            .EndTuple()
+                            .AddListItem()
+                            .BeginTuple()
+                                .AddElement().Int64(4)
+                                .AddElement().Int64(0)
+                            .EndTuple()
+                        .EndList()
+                    .AddMember("threshold").Uint64(0)
+                    .EndStruct()
+                    .Build()
+                .Build();
+
+            std::vector<bool> fromCacheFlags{true, true};
+            for(bool fromCache: fromCacheFlags) {
+                Cerr << fromCache << Endl;
+                auto execResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params, execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(execResult.GetStatus(), EStatus::SUCCESS, execResult.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*execResult.GetStats());
+                CompareYson(R"([[4u]])", FormatResultSetYson(execResult.GetResultSet(0)));
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CheckQueryLimitsWorksAsExpectedQueryService) {
+        NYdb::NQuery::TExecuteQuerySettings execSettings;
+        execSettings.StatsMode(NQuery::EStatsMode::Full);
+
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(2);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetExtractPredicateRangesLimit(3);
+
+        TKikimrRunner kikimr(serverSettings.SetWithSampleTables(true));
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto schemeResult = db.ExecuteQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `TestCacheWithRecompile` (
+                version Int64,
+                id Int64,
+                PRIMARY KEY (version, id)
+            );
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        {
+            auto query = Q1_(R"(
+                --!syntax_v1
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $items as List<Struct<version:Int64,id:Int64>>;
+                UPSERT INTO `/Root/TestCacheWithRecompile`
+                SELECT `version`, `id` FROM AS_TABLE($items);
+            )");
+
+            auto params = tableClient.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(1).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(2).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(3).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(4).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(5).EndStruct()
+                .AddListItem().BeginStruct().AddMember("id").Int64(0).AddMember("version").Int64(6).EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto resultRep = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(resultRep.GetStatus(), EStatus::SUCCESS, resultRep.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*resultRep.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+        }
+
+        {
+            auto query = Q1_(R"(
+                --!syntax_v1
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $items as List<Tuple<Int64,Int64>>;
+                SELECT * FROM `TestCacheWithRecompile` WHERE (version, id) in $items;
+            )");
+
+            {
+                auto params = tableClient.GetParamsBuilder()
+                .AddParam("$items")
+                    .BeginList()
+                    .AddListItem().BeginTuple().AddElement().Int64(1).AddElement().Int64(0).EndTuple()
+                    .EndList()
+                    .Build()
+                .Build();
+
+                auto resultFirst = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultFirst.GetStatus(), EStatus::SUCCESS, resultFirst.GetIssues().ToString());
+
+                auto resultRep = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultRep.GetStatus(), EStatus::SUCCESS, resultRep.GetIssues().ToString());
+
+                auto stats = NYdb::TProtoAccessor::GetProto(*resultRep.GetStats());
+                Cerr << "Optimized query ok scenario " << Endl << resultRep.GetStats()->GetAst() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(resultRep.GetResultSet(0).RowsCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+
+            {
+                auto params = tableClient.GetParamsBuilder()
+                    .AddParam("$items")
+                        .BeginList()
+                        .AddListItem().BeginTuple().AddElement().Int64(1).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(2).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(3).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(4).AddElement().Int64(0).EndTuple()
+                        .EndList()
+                        .Build()
+                    .Build();
+
+                std::vector<bool> fromCacheFlags{false, true};
+                for(bool fromCache: fromCacheFlags) {
+                    Cerr << fromCache << Endl;
+                    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                    Cerr << "Bad scenario " << Endl << result.GetStats()->GetAst() << Endl;
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 4);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+                }
+            }
+        }
+
+          {
+            auto query = Q1_(R"(
+                --!syntax_v1
+
+                DECLARE $items as Struct<LookupKeys:List<Tuple<Int64,Int64>>,threshold:Uint64>;
+                SELECT * FROM `TestCacheWithRecompile` WHERE (version, id) in $items.LookupKeys;
+            )");
+
+            {
+                auto params = tableClient.GetParamsBuilder()
+                .AddParam("$items")
+                    .BeginStruct()
+                    .AddMember("LookupKeys")
+                        .BeginList()
+                        .AddListItem().BeginTuple().AddElement().Int64(1).AddElement().Int64(0).EndTuple()
+                        .EndList()
+                    .AddMember("threshold").Uint64(0)
+                    .EndStruct()
+                    .Build()
+                .Build();
+
+                auto resultFirst = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultFirst.GetStatus(), EStatus::SUCCESS, resultFirst.GetIssues().ToString());
+
+                auto resultRep = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultRep.GetStatus(), EStatus::SUCCESS, resultRep.GetIssues().ToString());
+
+                auto stats = NYdb::TProtoAccessor::GetProto(*resultRep.GetStats());
+                Cerr << "Optimized query ok scenario " << Endl << resultRep.GetStats()->GetAst() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(resultRep.GetResultSet(0).RowsCount(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+            }
+
+            {
+                auto params = tableClient.GetParamsBuilder()
+                .AddParam("$items")
+                    .BeginStruct()
+                    .AddMember("LookupKeys")
+                        .BeginList()
+                        .AddListItem().BeginTuple().AddElement().Int64(1).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(2).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(3).AddElement().Int64(0).EndTuple()
+                        .AddListItem().BeginTuple().AddElement().Int64(4).AddElement().Int64(0).EndTuple()
+                        .EndList()
+                    .AddMember("threshold").Uint64(0)
+                    .EndStruct()
+                    .Build()
+                .Build();
+
+                std::vector<bool> fromCacheFlags{true, true};
+                for(bool fromCache: fromCacheFlags) {
+                    Cerr << fromCache << Endl;
+                    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                    auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                    Cerr << "Bad scenario " << Endl << result.GetStats()->GetAst() << Endl;
+                    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 4);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), fromCache);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(CheckCacheWithRecompilationQuery) {
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.KeepInQueryCache(true);
@@ -632,10 +981,10 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             .AddParam("$ParamTzDate").TzDate("2022-03-14,GMT").Build()
             .AddParam("$ParamTzDateTime").TzDatetime("2022-03-14T00:00:00,GMT").Build()
             .AddParam("$ParamTzTimestamp").TzTimestamp("2022-03-14T00:00:00.123,GMT").Build()
-            .AddParam("$ParamDate32").Date32(-17158).Build()
-            .AddParam("$ParamDatetime64").Datetime64(TInstant::ParseIso8601("2020-01-11 15:04:53").Seconds()).Build()
-            .AddParam("$ParamTimestamp64").Timestamp64(TInstant::ParseIso8601("2020-01-12 21:18:37").MicroSeconds()).Build()
-            .AddParam("$ParamInterval64").Interval64(3600).Build()
+            .AddParam("$ParamDate32").Date32(std::chrono::sys_time<TWideDays>(TWideDays(-17158))).Build()
+            .AddParam("$ParamDatetime64").Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(TInstant::ParseIso8601("2020-01-11 15:04:53").Seconds()))).Build()
+            .AddParam("$ParamTimestamp64").Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(TInstant::ParseIso8601("2020-01-12 21:18:37").MicroSeconds()))).Build()
+            .AddParam("$ParamInterval64").Interval64(TWideMicroseconds(3600)).Build()
             .AddParam("$ParamOpt").OptionalString("Opt").Build()
             .AddParam("$ParamTuple")
                 .BeginTuple()

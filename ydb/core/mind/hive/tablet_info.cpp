@@ -292,7 +292,6 @@ bool TTabletInfo::BecomeStopped() {
 }
 
 void TTabletInfo::BecomeUnknown(TNodeInfo* node) {
-    Y_ABORT_UNLESS(VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
     Y_ABORT_UNLESS(Node == nullptr || node == Node);
     Node = node;
     ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
@@ -313,7 +312,7 @@ const TVector<i64>& TTabletInfo::GetTabletAllowedMetricIds() const {
 
 bool TTabletInfo::HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource) {
     switch (resource) {
-        case EResourceToBalance::ComputeResources: { 
+        case EResourceToBalance::ComputeResources: {
             auto isComputeMetric = [](i64 metricId) {
                 return metricId == NKikimrTabletBase::TMetrics::kCPUFieldNumber ||
                        metricId == NKikimrTabletBase::TMetrics::kMemoryFieldNumber ||
@@ -544,6 +543,13 @@ bool TTabletInfo::RestartsOften() const {
     // If its current size is >= RestartsMaxCount, it means the tablet was restarting
     // often at the time of last update, and thus deserves low booting priority
     return Statistics.RestartTimestampSize() >= Hive.GetTabletRestartsMaxCount();
+}
+
+void TTabletInfo::NotifyOnRestart(const TString& status, TSideEffects& sideEffects) {
+    for (auto actorId : ActorsToNotifyOnRestart) {
+        sideEffects.Send(actorId, new TEvPrivate::TEvRestartComplete(GetFullTabletId(), status));
+    }
+    ActorsToNotifyOnRestart.clear();
 }
 
 } // NHive

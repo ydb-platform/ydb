@@ -9,6 +9,8 @@ items:
   href: update-executable.md
 - name: Аутентификация и авторизация узлов баз данных
   href: node-authorization.md
+- name: Управление кластером в режиме bridge
+  href: bridge-management.md
 - name: Управление дисковой подсистемой кластера
   include:
     mode: link

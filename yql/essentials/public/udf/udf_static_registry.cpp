@@ -18,5 +18,5 @@ void AddToStaticUdfRegistry(TUdfModuleWrapper&& wrapper) {
     StaticUdfModuleWrapperList()->emplace_back(wrapper);
 };
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

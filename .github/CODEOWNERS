@@ -37,6 +37,7 @@
 /ydb/library/yql/tools/solomon_emulator @ydb-platform/fq
 /ydb/library/yql/tools/solomon_emulator_grpc @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
+/ydb/library/yql/udfs/common/knn @ydb-platform/datashard
 /ydb/services/fq/ @ydb-platform/fq
 
 /ydb/core/kafka_proxy @ydb-platform/Topics
@@ -44,6 +45,7 @@
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
+/ydb/core/transfer @ydb-platform/Topics
 
 /ydb/core/change_exchange @ydb-platform/core
 /ydb/core/cms @ydb-platform/core
@@ -71,13 +73,14 @@
 /ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
 /ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
 
-/ydb/core/scheme @ydb-platform/datashard 
+/ydb/core/scheme @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
+/ydb/core/tx/schemeshard/olap @ydb-platform/cs
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli
@@ -89,3 +92,7 @@
 /ydb/library/aclib @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
 /ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security
+/ydb/core/sys_view/common/registry.h @ydb-platform/Security
+/ydb/core/sys_view/common/registry.cpp @ydb-platform/Security
+/ydb/core/sys_view/ut_registry.cpp @ydb-platform/Security
+/ydb/tests/compatibility/test_system_views.py @ydb-platform/Security

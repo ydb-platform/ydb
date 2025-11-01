@@ -1264,3 +1264,49 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
         assert "big dates is not supported" in issues, "Incorrect Issues: " + issues
+
+    @yq_v1
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_runtime_listing_disabled(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        fruits = '''Fruit,Price,Weight
+Banana,3,100
+Apple,2,22
+Pear,15,33'''
+        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            PRAGMA s3.UseRuntimeListing="true";
+
+            SELECT * FROM `{storage_connection_name}`.`fruits.csv`
+            WITH (
+                FORMAT = csv_with_names,
+                SCHEMA (
+                    Fruit String NOT NULL,
+                    Price Int NOT NULL,
+                    Weight Int NOT NULL
+                )
+            );
+        '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        describe_string = "{}".format(client.describe_query(query_id).result)
+        assert "Runtime listing is not allowed for federated queries, pragma value was ignored" in describe_string, describe_string
+        assert len(client.get_result_data(query_id).result.result_set.rows) == 3

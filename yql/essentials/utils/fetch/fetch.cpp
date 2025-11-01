@@ -125,33 +125,32 @@ inline bool IsRedirectCode(unsigned code) {
     return false;
 }
 
-} // unnamed
+} // namespace
 
 ERetryErrorClass DefaultClassifyHttpCode(unsigned code) {
     switch (code) {
-        case HTTP_REQUEST_TIME_OUT:             //408
-        case HTTP_AUTHENTICATION_TIMEOUT:       //419
+        case HTTP_REQUEST_TIME_OUT:       // 408
+        case HTTP_AUTHENTICATION_TIMEOUT: // 419
             return ERetryErrorClass::ShortRetry;
-        case HTTP_TOO_MANY_REQUESTS:            //429
-        case HTTP_SERVICE_UNAVAILABLE:          //503
+        case HTTP_TOO_MANY_REQUESTS:   // 429
+        case HTTP_SERVICE_UNAVAILABLE: // 503
             return ERetryErrorClass::LongRetry;
         default:
             return IsServerError(code)
-                ? ERetryErrorClass::ShortRetry  //5xx
-                : ERetryErrorClass::NoRetry;
+                       ? ERetryErrorClass::ShortRetry // 5xx
+                       : ERetryErrorClass::NoRetry;
     }
 }
 
 IRetryPolicy<unsigned>::TPtr GetDefaultPolicy() {
     static const auto policy = IRetryPolicy<unsigned>::GetExponentialBackoffPolicy(
-            /*retryClassFunction=*/DefaultClassifyHttpCode,
-            /*minDelay=*/TDuration::Seconds(1),
-            /*minLongRetryDelay:*/TDuration::Seconds(5),
-            /*maxDelay=*/TDuration::Minutes(1),
-            /*maxRetries=*/3,
-            /*maxTime=*/TDuration::Minutes(3),
-            /*scaleFactor=*/2
-    );
+        /*retryClassFunction=*/DefaultClassifyHttpCode,
+        /*minDelay=*/TDuration::Seconds(1),
+        /*minLongRetryDelay:*/ TDuration::Seconds(5),
+        /*maxDelay=*/TDuration::Minutes(1),
+        /*maxRetries=*/3,
+        /*maxTime=*/TDuration::Minutes(3),
+        /*scaleFactor=*/2);
     return policy;
 }
 
@@ -215,4 +214,20 @@ TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders
     ythrow yexception() << "Failed to fetch url '" << currentUrl.PrintS() << "': too many redirects";
 }
 
-} // NYql
+THttpURL AppendUrlPath(const THttpURL& url, const TString& part) {
+    THttpURL resultUrl;
+    if (resultUrl.Parse(part, THttpURL::FeaturesDefault | THttpURL::FeatureSchemeKnown) != THttpURL::ParsedOK) {
+        throw yexception() << "url.Parse finished with not ParsedOK. Tried to parse `" << part << "`";
+    }
+    auto path = TString(url.Get(NUri::TField::FieldPath));
+    if (!path.EndsWith('/')) {
+        auto copy = url;
+        copy.Set(NUri::TField::FieldPath, path + "/");
+        resultUrl.Merge(copy);
+        return resultUrl;
+    }
+    resultUrl.Merge(url);
+    return resultUrl;
+}
+
+} // namespace NYql

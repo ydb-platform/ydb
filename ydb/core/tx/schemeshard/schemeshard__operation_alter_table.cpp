@@ -43,6 +43,20 @@ bool CheckAllowedFields(const TMessage& message, THashSet<TString>&& allowedFiel
     return true;
 }
 
+bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
+    // checks that partitionConfig contains only default column families
+    for (const auto& family : partitionConfig.GetColumnFamilies()) {
+        const bool isDefaultFamily = (
+            (!family.HasId() && !family.HasName()) ||
+            (family.HasId() && family.GetId() == 0) ||
+            (family.HasName() && family.GetName() == "default"));
+        if (!isDefaultFamily) {
+            return false;
+        }
+    }
+    return true;
+}
+
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
@@ -132,8 +146,10 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         return nullptr;
     }
 
+    const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
     NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, errStr)
+    if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, table->PartitionConfig(), copyAlter.GetPartitionConfig(), appData, isServerless, errStr)
         || !TPartitionConfigMerger::VerifyAlterParams(table->PartitionConfig(), compilationPartitionConfig, appData, shadowDataAllowed, errStr)) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -145,7 +161,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
     const TTableInfo::TCreateAlterDataFeatureFlags featureFlags = {
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
-        .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),        
+        .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
+        .EnableSetColumnConstraint = AppData()->FeatureFlags.GetEnableSetColumnConstraint(),
     };
 
 
@@ -749,8 +766,9 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
     if (!(IsAdministrator(AppData(), context.UserToken.Get()) && !AppData()->AdministrationAllowedSIDs.empty())
         && (!CheckAllowedFields(alter, {"Name", "PathId", "PartitionConfig", "ReplicationConfig", "IncrementalBackupConfig"})
             || (alter.HasPartitionConfig()
-                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy", "FollowerCount", "FollowerGroups"})
+                && !CheckAllowedFields(alter.GetPartitionConfig(), {"PartitioningPolicy", "FollowerCount", "FollowerGroups", "ColumnFamilies"})
             )
+            || !CheckDefaultColumnFamilies(alter.GetPartitionConfig())
         )
     ) {
         return {CreateAlterTable(id, tx)};

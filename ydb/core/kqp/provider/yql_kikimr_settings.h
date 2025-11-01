@@ -186,6 +186,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 ExtractPredicateRangesLimit = 0;
     bool EnablePerStatementQueryExecution = false;
     bool EnableCreateTableAs = false;
+    bool EnableDataShardCreateTableAs = false;
     ui64 IdxLookupJoinsPrefixPointLimit = 1;
     bool AllowOlapDataQuery = false;
     bool EnableOlapSink = false;
@@ -213,8 +214,17 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableOlapPushdownProjections = false;
     bool EnableParallelUnionAllConnectionsForExtend = false;
     bool EnableTempTablesForUser = false;
+    bool EnableOlapPushdownAggregate = false;
+    bool EnableOrderOptimizaionFSM = false;
+    bool EnableBuildAggregationResultStages = false;
 
+    bool EnableTopSortSelectIndex = true;
+    bool EnablePointPredicateSortAutoSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
+    bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
+    bool EnableDqHashCombineByDefault = true;
+
+    bool Antlr4ParserIsAmbiguityError = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
@@ -226,6 +236,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
+    bool GetEnableOlapPushdownAggregate() const;
+    bool GetUseDqHashCombine() const;
 };
 
 }

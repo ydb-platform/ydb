@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 
 #include <arrow/io/interfaces.h>
@@ -6,7 +8,7 @@
 namespace NYql {
 namespace NCommon {
 
-class TOutputBufArrowOutputStream : public arrow::io::OutputStream {
+class TOutputBufArrowOutputStream: public arrow::io::OutputStream {
 public:
     explicit TOutputBufArrowOutputStream(TOutputBuf& buffer)
         : Buffer_(buffer)
@@ -34,5 +36,5 @@ private:
     int64_t BytesWritten_ = 0;
 };
 
-} // NCommon
-} // NYql
+} // namespace NCommon
+} // namespace NYql

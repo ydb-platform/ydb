@@ -1,8 +1,33 @@
+
+## 2.27.0 ##
+
+* Added a new `--exclude` option to the `ydb import s3` command, allowing objects to be excluded from the operation if their names match a pattern.
+* Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
+* Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
+* Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.
+* Fixed a bug where the `ydb debug ping` command crashed in case of any error.
+* Added a new `--retention-period` option to the `ydb topic` subcommands. The new option supports various time units, such as seconds, minutes, or days. Usage of the legacy `--retention-period-hours` option is discouraged.
+* The `ydb topic consumer add` subcommand now has a new `--availability-period` option, which overrides the consumer's retention guarantee.
+* The `ydb workload vector` now supports `build-index` and `drop-index` subcommands.
+
+## 2.26.0 ##
+
+* Added the `--no-merge` and `--no-cache` options to the `ydb monitoring healthcheck` command.
+* Added query compilation time statistics to the `ydb workload * run` command.
+* **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `tools restore` command, which specifies whether to replace ACL for system objects.
+* Added the `--retries` option to the `ydb tools restore` command.
+
+## 2.25.0 ##
+
+* Added the `ydb admin cluster bridge` commands to manage a cluster in bridge mode: list, switchover, failover, takedown, rejoin.
+* User and password authentication options are now parsed independently, allowing them to be sourced from different priority levels. For example, the username can be specified via the `--user` command-line option while the password is retrieved from the `YDB_PASSWORD` environment variable.
+* Removed the `--float-mode` option from the `ydb workload tpch run` and `ydb workload tpcds run` commands. Float mode is now inferred automatically from the table schema created during the `init` phase.
+* Added final execute statistics to `ydb workload * run` commands.
 * Fixed a bug where the `ydb import file csv command` with the `--newline-delimited` option could get stuck if the input had incorrect data.
 * Fixed a bug with the progress bar display in the `ydb workload clickbench import files` command — incorrect percentage value and excessive line breaks causing duplicated progress lines.
 * Fixed a bug where the `ydb workload topic write` command could crash with an `Unknown AckedMessageId` error due to an internal race condition.
 * Fixed decimal type comparison in `ydb workload * run` commands.
-* Changed the default logging level from `EMERGENCY` to `ERROR` for commands that support multiple verbosity levels.
+* Changed the default logging level from `EMERGENCY` to `WARN` for commands that support multiple verbosity levels.
 * Added the `--start-offset` option to the `ydb topic read` command, which specifies a starting position for reading from the selected partition.
 * Added a new paths approach in the `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option.
 * Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.

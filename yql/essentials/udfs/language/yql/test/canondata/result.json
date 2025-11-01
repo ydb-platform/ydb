@@ -53,5 +53,10 @@
         {
             "uri": "file://test.test_ObfuscateTable_/results.txt"
         }
+    ],
+    "test.test[TestSyntax]": [
+        {
+            "uri": "file://test.test_TestSyntax_/results.txt"
+        }
     ]
 }

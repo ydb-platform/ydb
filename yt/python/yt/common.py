@@ -5,8 +5,6 @@ except ImportError:
     from six import iteritems, PY3, text_type, binary_type, string_types
     from six.moves import map as imap
 
-import yt.json_wrapper as json
-
 try:
     from library.python.prctl import prctl
 except ImportError:
@@ -31,6 +29,8 @@ import ctypes
 import errno
 import functools
 import inspect
+# Intentionally use python-native json module because custom JSONEncoder is required.
+import json
 import os
 import re
 import signal
@@ -49,6 +49,8 @@ YT_DATETIME_FORMAT_STRING = "%Y-%m-%dT%H:%M:%S.%fZ"
 YT_NULL_TRANSACTION_ID = "0-0-0-0"
 
 _T = typing.TypeVar('_T')
+
+BYTES_PRINTABLE = set(bytes(string.printable, "ascii"))
 
 
 # Deprecation stuff.
@@ -455,10 +457,29 @@ def _pretty_format_escape(value):
         return "".join(imap(escape, value))
 
 
+def _pretty_format_bytes(value):
+    def escape(byte):
+        if byte in BYTES_PRINTABLE:
+            return chr(byte)
+        return "\\x{0:02x}".format(byte)
+
+    try:
+        return value.decode("utf-8")
+    except UnicodeDecodeError:
+        return "".join(imap(escape, value))
+
+
 def _pretty_format_attribute(name, value, attribute_length_limit):
     name = to_native_str(name)
     if isinstance(value, PrettyPrintableDict):
-        value = json.dumps(value, indent=2)
+        class BytesEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, bytes):
+                    return _pretty_format_bytes(obj)
+                else:
+                    return super().default(obj)
+
+        value = json.dumps(value, indent=2, cls=BytesEncoder)
         value = value.replace("\n", "\n" + " " * (15 + 1 + 4))
     else:
         # YsonStringProxy attribute formatting.

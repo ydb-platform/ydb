@@ -5,11 +5,6 @@
 {%-     if target_javac_flags|length -%}
 {#-     skip errorprone options and JVM args -#}
 {%-         set javac_flags = target_javac_flags|reject('startsWith', '-Xep')|reject('startsWith', '-J') -%}
-{%-         if javac_flags|length -%}
-{%-             if (javac_flags|length == 1) and (javac_flags|first == '-parameters') -%}
-{%-                 set javac_flags = [] -%}
-{%-             endif -%}
-{%-         endif -%}
 {%-         set compiler_jvm_flags = target_javac_flags|select('startsWith', '-J') -%}
 {%-     endif -%}
 

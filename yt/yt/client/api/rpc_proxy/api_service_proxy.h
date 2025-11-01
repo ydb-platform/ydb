@@ -124,7 +124,8 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInputPaths);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobStderr);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobFailContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbandonJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PollJobShell);
@@ -211,11 +212,20 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListQueries);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterQuery);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryTrackerInfo);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryDeclaredParametersInfo);
 
     // Distributed table client
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
+        .SetStreamingEnabled(true));
+
+    // Distributed file client
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteFileFragment,
         .SetStreamingEnabled(true));
 
     // Shuffle service

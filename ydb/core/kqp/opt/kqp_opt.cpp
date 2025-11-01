@@ -144,29 +144,80 @@ TKqpTable BuildTableMeta(const TKikimrTableDescription& tableDesc, const TPositi
     return BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 }
 
-bool IsSortKeyPrimary(
-    const NYql::NNodes::TCoLambda& keySelector,
-    const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields
-) {
-    auto checkKey = [keySelector, &tableDesc, &passthroughFields] (NYql::NNodes::TExprBase key, ui32 index) {
+TVector<TString> ExtractSortingKeys(const NYql::NNodes::TCoLambda& keySelector) {
+    auto lambdaBody = keySelector.Body();
+
+    TVector<TString> sortingKeys;
+
+    auto extractSortKey = [keySelector] (NYql::NNodes::TExprBase key) -> TString {
         if (!key.Maybe<TCoMember>()) {
-            return false;
+            return TString();
         }
 
         auto member = key.Cast<TCoMember>();
         if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
-            return false;
+            return TString();
         }
 
-        auto column = TString(member.Name().Value());
-        auto columnIndex = tableDesc.GetKeyColumnIndex(column);
-        if (!columnIndex || *columnIndex != index) {
-            return false;
+        return TString(member.Name().Value());
+    };
+
+    if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
+        auto tuple = maybeTuple.Cast();
+        sortingKeys.reserve(tuple.Size());
+        for (size_t i = 0; i < tuple.Size(); ++i) {
+            sortingKeys.emplace_back(extractSortKey(tuple.Item(i)));
+        }
+
+    } else {
+        sortingKeys.emplace_back(extractSortKey(lambdaBody));
+    }
+
+    return sortingKeys;
+};
+
+bool IsSortKeyPrimary(
+    const NYql::NNodes::TCoLambda& keySelector,
+    const NYql::TKikimrTableDescription& tableDesc,
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields,
+    const ui64 skipPointKeys
+) {
+    YQL_ENSURE(skipPointKeys <= tableDesc.Metadata->KeyColumnNames.size());
+    std::deque<TString> unsortedKeyColumns(tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys, tableDesc.Metadata->KeyColumnNames.end());
+    if (unsortedKeyColumns.empty()) {
+        return true;
+    }
+
+    THashSet<TString> sortedPointKeysSet(tableDesc.Metadata->KeyColumnNames.begin(), tableDesc.Metadata->KeyColumnNames.begin() + skipPointKeys);
+
+    auto extractSortKey = [keySelector] (NYql::NNodes::TExprBase key) -> TString {
+        if (!key.Maybe<TCoMember>()) {
+            return TString();
+        }
+
+        auto member = key.Cast<TCoMember>();
+        if (member.Struct().Raw() != keySelector.Args().Arg(0).Raw()) {
+            return TString();
+        }
+
+        return TString(member.Name().Value());
+    };
+
+    auto checkKey = [keySelector, &extractSortKey, &sortedPointKeysSet, &passthroughFields] (NYql::NNodes::TExprBase key, TString unsorted) -> std::optional<bool> {
+        auto column = extractSortKey(key);
+
+        if (!sortedPointKeysSet.contains(column)) {
+            if (column != unsorted) {
+                return false;
+            }
         }
 
         if (passthroughFields && !passthroughFields->contains(column)) {
             return false;
+        }
+
+        if (sortedPointKeysSet.contains(column)) {
+            return std::nullopt;
         }
 
         return true;
@@ -176,18 +227,56 @@ bool IsSortKeyPrimary(
     if (auto maybeTuple = lambdaBody.Maybe<TExprList>()) {
         auto tuple = maybeTuple.Cast();
         for (size_t i = 0; i < tuple.Size(); ++i) {
-            if (!checkKey(tuple.Item(i), i)) {
+            if (unsortedKeyColumns.empty()) {
+                return true;
+            }
+
+            auto result = checkKey(tuple.Item(i), unsortedKeyColumns.front());
+            if (!result.has_value()) {
+                continue;
+            } else if (!result.value()) {
                 return false;
+            } else {
+                unsortedKeyColumns.pop_front();
             }
         }
     } else {
-        if (!checkKey(lambdaBody, 0)) {
+        if (unsortedKeyColumns.empty()) {
+            return true;
+        }
+
+        auto result = checkKey(lambdaBody, unsortedKeyColumns.front());
+        if (result.has_value() && !result.value()) {
             return false;
         }
     }
 
     return true;
 }
+
+ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
+    auto getDirection = [] (TExprBase expr) -> ESortDirection {
+        if (!expr.Maybe<TCoBool>()) {
+            return ESortDirection::Unknown;
+        }
+
+        if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
+            return ESortDirection::Reverse;
+        }
+
+        return ESortDirection::Forward;
+    };
+
+    auto direction = ESortDirection::None;
+    if (auto maybeList = sortDirections.Maybe<TExprList>()) {
+        for (const auto& expr : maybeList.Cast()) {
+            direction |= getDirection(expr);
+        }
+    } else {
+        direction |= getDirection(sortDirections);
+    }
+    return direction;
+};
 
 bool IsBuiltEffect(const TExprBase& effect) {
     // Stage with effect output

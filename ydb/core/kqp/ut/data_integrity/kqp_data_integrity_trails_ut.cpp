@@ -117,8 +117,6 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
-            ss.Clear();
-
             auto result = session.ExecuteQuery(R"(
                 --!syntax_v1
 
@@ -133,8 +131,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TVector<std::pair<TString, ui64>> regexToMatchCount;
         if (!isOlap) {
             regexToMatchCount = {
-                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
+                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
+                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
                 {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
             };
 
@@ -152,8 +150,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         } else {
             regexToMatchCount = {
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
-                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
+                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
+                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
                 {ConstructRegexToCheckLogs("INFO", "Executer"),
                  useOltpSink ? 1 : 11}};
 

@@ -23,8 +23,12 @@ way as equivalent forms in `typing`.
 [Semantic Versioning](https://semver.org/). The
 major version will be incremented only for backwards-incompatible changes.
 Therefore, it's safe to depend
-on `typing_extensions` like this: `typing_extensions >=x.y, <(x+1)`,
+on `typing_extensions` like this: `typing_extensions ~=x.y`,
 where `x.y` is the first version that includes all features you need.
+[This](https://packaging.python.org/en/latest/specifications/version-specifiers/#compatible-release)
+is equivalent to `typing_extensions >=x.y, <(x+1)`. Do not depend on `~= x.y.z`
+unless you really know what you're doing; that defeats the purpose of
+semantic versioning.
 
 ## Included items
 

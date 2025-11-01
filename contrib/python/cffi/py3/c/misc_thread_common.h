@@ -1,7 +1,10 @@
+#ifndef CFFI_MISC_THREAD_COMMON_H
+#define CFFI_MISC_THREAD_COMMON_H
 #ifndef WITH_THREAD
 # error "xxx no-thread configuration not tested, please report if you need that"
 #endif
 #include "pythread.h"
+#include "inttypes.h"
 
 
 struct cffi_tls_s {
@@ -22,7 +25,7 @@ struct cffi_tls_s {
 #endif
 };
 
-static struct cffi_tls_s *get_cffi_tls(void);   /* in misc_thread_posix.h 
+static struct cffi_tls_s *get_cffi_tls(void);   /* in misc_thread_posix.h
                                                    or misc_win32.h */
 
 
@@ -312,7 +315,7 @@ static void restore_errno_only(void)
 
 /* MESS.  We can't use PyThreadState_GET(), because that calls
    PyThreadState_Get() which fails an assert if the result is NULL.
-   
+
    * in Python 2.7 and <= 3.4, the variable _PyThreadState_Current
      is directly available, so use that.
 
@@ -390,3 +393,29 @@ static void gil_release(PyGILState_STATE oldstate)
     //fprintf(stderr, "%p: gil_release(%d), tls=%p\n", get_cffi_tls(), (int)oldstate, get_cffi_tls());
     PyGILState_Release(oldstate);
 }
+
+
+#if PY_VERSION_HEX <= 0x030d00b3
+# define Py_BEGIN_CRITICAL_SECTION(op) {
+# define Py_END_CRITICAL_SECTION() }
+#endif
+
+#ifdef Py_GIL_DISABLED
+static PyObject _dummy = {0};
+#define cffi_check_flag(arg) cffi_atomic_load_uint8(&(arg))
+#define cffi_set_flag(arg, value) cffi_atomic_store_uint8(&(arg), (value))
+#define cffi_set_size(arg, value) cffi_atomic_store_ssize(&(arg)->ct_size, (value))
+#define cffi_get_size(arg) cffi_atomic_load_ssize(&(arg)->ct_size)
+#define _CFFI_LOAD_OP(arg) cffi_atomic_load(&(arg))
+#else
+#define cffi_check_flag(arg) (arg)
+#define cffi_set_flag(arg, value) (arg) = (value)
+#define cffi_set_size(arg, value) (arg)->ct_size = (value)
+#define cffi_get_size(arg) (arg)->ct_size
+#define _CFFI_LOAD_OP(arg) (arg)
+#endif
+
+#define CFFI_LOCK() Py_BEGIN_CRITICAL_SECTION(&_dummy)
+#define CFFI_UNLOCK() Py_END_CRITICAL_SECTION()
+
+#endif /* CFFI_MISC_THREAD_COMMON_H */

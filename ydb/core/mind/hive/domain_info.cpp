@@ -1,4 +1,5 @@
 #include "domain_info.h"
+#include "hive_impl.h"
 #include "hive_log.h"
 
 namespace NKikimr {
@@ -62,8 +63,8 @@ TString TTargetTrackingPolicy::GetLogPrefix() const {
     return TStringBuilder() << TScaleRecommenderPolicy::GetLogPrefix() << "[TargetTracking] ";
 }
 
-ui32 TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const {
-    ui32 recommendedNodes = readyNodesCount;
+std::optional<ui32> TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const {
+    std::optional<ui32> recommendedNodes;
 
     if (UsageHistory.size() >= config.GetScaleInWindowSize()) {
         auto scaleInWindowBegin = UsageHistory.end() - config.GetScaleInWindowSize();
@@ -116,7 +117,7 @@ ui32 TTargetTrackingPolicy::MakeScaleRecommendation(ui32 readyNodesCount, const 
         BLOG_TRACE("[MSR] Not enough history for scale out");
     }
 
-    return std::max(recommendedNodes, 1u);
+    return recommendedNodes ? std::max(*recommendedNodes, 1u) : recommendedNodes;
 }
 
 void TDomainInfo::SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommenderPolicies& policies) {
@@ -144,6 +145,19 @@ void TDomainInfo::SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommend
                 break;
         }
     }
+}
+
+TActorId TDomainInfo::GetPipeToHive(THive* self) {
+    if (!HivePipeClient) {
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 13};
+        HivePipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), HiveId, pipeConfig));
+    }
+    return HivePipeClient;
+}
+
+void TDomainInfo::ClosePipeToHive(const TActorId& actorId) {
+    NTabletPipe::CloseAndForgetClient(TActorIdentity(actorId), HivePipeClient);
 }
 
 } // NHive

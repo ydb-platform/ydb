@@ -55,7 +55,6 @@ protected:
     NYql::IDatabaseAsyncResolver::TPtr GetDbResolver();
     NConnector::IClient::TPtr GetGenericClient();
     IPqGateway::TPtr GetPqGateway();
-    TVector<std::pair<TActorId, TActorSetupCmd>> GetFqServices();
     NKikimr::NMiniKQL::TComputationNodeFactory CreateCompNodeFactory();
     NYql::TTaskTransformFactory CreateDqTaskTransformFactory();
     NYql::TDqTaskPreprocessorFactoryCollection CreateDqTaskPreprocessorFactories();

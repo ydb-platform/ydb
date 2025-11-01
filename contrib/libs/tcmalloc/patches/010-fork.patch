@@ -369,7 +369,7 @@ index 2b94ac7..8ae5e76 100644
    // We inherit rather than include the list as a data structure to reduce
    // compiler padding.  Without inheritance, the compiler pads the list
 diff --git a/tcmalloc/transfer_cache.h b/tcmalloc/transfer_cache.h
-index b2b29d5..5af6dc8 100644
+index b2b29d5..8bc9eee 100644
 --- a/tcmalloc/transfer_cache.h
 +++ b/tcmalloc/transfer_cache.h
 @@ -415,6 +415,18 @@ class TransferCacheManager : public StaticForwarder {
@@ -390,6 +390,25 @@ index b2b29d5..5af6dc8 100644
 +
    void InsertRange(int size_class, absl::Span<void *> batch) {
      cache_[size_class].tc.InsertRange(size_class, batch);
+   }
+@@ -549,6 +561,18 @@ class TransferCacheManager {
+     }
+   }
+ 
++  void AcquireInternalLocks() {
++    for (int i = 0; i < kNumClasses; ++i) {
++      freelist_[i].AcquireInternalLocks();
++    }
++  }
++
++  void ReleaseInternalLocks() {
++    for (int i = 0; i < kNumClasses; ++i) {
++      freelist_[i].ReleaseInternalLocks();
++    }
++  }
++
+   void InsertRange(int size_class, absl::Span<void*> batch) {
+     freelist_[size_class].InsertRange(batch);
    }
 diff --git a/tcmalloc/transfer_cache_internals.h b/tcmalloc/transfer_cache_internals.h
 index 2a3bd4c..d8f1031 100644

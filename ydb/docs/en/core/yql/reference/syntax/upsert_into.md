@@ -1,5 +1,7 @@
 # UPSERT INTO
 
+{% include [column-and-row-tables-in-read-only-tx](../../../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 UPSERT (which stands for UPDATE or INSERT) updates or inserts multiple rows to a table based on a comparison by the primary key. Missing rows are added. For the existing rows, the values of the specified columns are updated, but the values of the other columns are preserved.
 
 {% if feature_mapreduce %}
@@ -31,3 +33,24 @@ VALUES ( 1, 10, 'Some text', Date('2021-10-07')),
        ( 2, 10, 'Some text', Date('2021-10-08'))
 ```
 
+## UPSERT INTO ... RETURNING {upsert-into-returning}
+
+Inserts or updates a row and returns their values in a single operation. It allows to retrieve information about the affected row in one query, eliminating the need for an additional SELECT statement.
+
+### Examples
+
+* Return all values of modified row
+
+```yql
+UPSERT INTO orders (order_id, status, amount)
+VALUES (1001, 'shipped', 500)
+RETURNING *;
+```
+
+* Return specific columns
+
+```yql
+UPSERT INTO users (user_id, name, email)
+VALUES (42, 'John Doe', 'john@example.com')
+RETURNING user_id, email;
+```

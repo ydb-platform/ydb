@@ -118,6 +118,10 @@ private:
 
     std::vector<TSourceIterator> Iterators;
 
+    virtual bool IsFinished() const override {
+        return FetchedCount >= Limit || TBase::IsFinished();
+    }
+
     virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
         AFL_VERIFY(FetchedCount < Limit);
         Iterators.emplace_back(TSourceIterator(source));

@@ -3,6 +3,7 @@
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -39,6 +40,8 @@ public:
     void SetTimestampProvider(NTransactionClient::ITimestampProviderPtr value);
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
+
+    MOCK_METHOD(const TClientOptions&, GetOptions, (), (override));
 
     MOCK_METHOD(TFuture<std::optional<std::string>>, GetClusterName, (bool fetchIfNull), (override));
 
@@ -545,7 +548,7 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+    MOCK_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (override));
 
@@ -660,8 +663,9 @@ public:
         const TGetJobStderrOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+    MOCK_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobTrace, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const TGetJobTraceOptions& options),
         (override));
 
@@ -813,6 +817,10 @@ public:
         const TGetQueryTrackerInfoOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (
+        const TGetQueryDeclaredParametersInfoOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options), (override));
@@ -882,14 +890,39 @@ public:
         const TDistributedWriteSessionStartOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteFileSession, (
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options),
+        (override));
+
+    MOCK_METHOD(IFileFragmentWriterPtr, CreateFileFragmentWriter, (
+        const TSignedWriteFileFragmentCookiePtr& cookie,
+        const TFileFragmentWriterOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (

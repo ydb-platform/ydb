@@ -22,55 +22,60 @@ class TestSystemViewsRegistry(RestartToAnotherVersionFixture):
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for sysview in self.driver.scheme_client.list_directory("/Root/.sys").children:
-                    if sysview.name not in pg_sysviews:
-                        sysview_descr = dict()
+                    sysview_descr = dict()
 
+                    try:
                         response = session.describe_table(f"/Root/.sys/{sysview.name}")
-                        columns = dict()
-                        for col in response.columns:
-                            columns[col.name] = str(col.type)
+                    except TypeError:
+                        if sysview.name in pg_sysviews:
+                            continue
+                        else:
+                            raise
 
-                        sysview_descr['columns'] = columns
-                        sysview_descr['primary_key'] = [pk_col for pk_col in response.primary_key]
+                    columns = dict()
+                    for col in response.columns:
+                        columns[col.name] = str(col.type)
 
-                        sysviews[sysview.name] = sysview_descr
+                    sysview_descr['columns'] = columns
+                    sysview_descr['primary_key'] = [pk_col for pk_col in response.primary_key]
+
+                    sysviews[sysview.name] = sysview_descr
 
         return sysviews
 
     def compare_sysviews_dicts(self, dict_before, dict_after):
         for sysview_name, sysview_descr in dict_before.items():
+            if min(self.versions) < (25, 1, 4) and sysview_name in ["resource_pools", "resource_pool_classifiers"]:
+                continue
             if sysview_name not in dict_after:
-                logger.debug(f"sysview '{sysview_name}' was deleted")
-                return False
+                return False, f"sysview '{sysview_name}' was deleted"
 
             columns_before = sysview_descr['columns']
             columns_after = dict_after[sysview_name]['columns']
 
             for col_name, col_type in columns_before.items():
                 if col_name not in columns_after:
-                    logger.debug(f"column '{col_name}' was deleted from sysview '{sysview_name}'")
-                    return False
+                    return False, f"column '{col_name}' was deleted from sysview '{sysview_name}'"
 
                 if col_type != columns_after[col_name]:
-                    logger.debug(f"column '{col_name}' changed type in sysview '{sysview_name}'")
-                    return False
+                    return False, f"column '{col_name}' changed type in sysview '{sysview_name}'"
 
             primary_key_before = sysview_descr['primary_key']
             primary_key_after = dict_after[sysview_name]['primary_key']
 
             for i, primary_key_col in enumerate(primary_key_before):
                 if primary_key_col != primary_key_after[i]:
-                    logger.debug(f"column '{primary_key_col}' was deleted from sysview '{sysview_name}' primary key")
-                    return False
+                    return False, f"column '{primary_key_col}' was deleted from sysview '{sysview_name}' primary key"
 
-        return True
+        return True, ''
 
     def test_domain_sys_dir(self):
         sysview_folder_content_before = self.collect_sysviews()
         self.change_cluster_version()
         sysview_folder_content_after = self.collect_sysviews()
 
-        assert self.compare_sysviews_dicts(sysview_folder_content_before, sysview_folder_content_after)
+        result, debug_compare_string = self.compare_sysviews_dicts(sysview_folder_content_before, sysview_folder_content_after)
+        assert result, debug_compare_string
 
 
 class TestSystemViewsRollingUpgrade(RollingUpgradeAndDowngradeFixture):

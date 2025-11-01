@@ -424,7 +424,7 @@ IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRange&
 }
 
 template<>
-struct ::THash<NKikimr::NOlap::TUnifiedBlobId> {
+struct THash<NKikimr::NOlap::TUnifiedBlobId> {
     inline ui64 operator()(const NKikimr::NOlap::TUnifiedBlobId& a) const {
         return a.Hash();
     }

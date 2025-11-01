@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import configparser
 import datetime
 import os
 import re
@@ -21,22 +20,20 @@ from update_mute_issues import (
     close_unmuted_issues,
 )
 
+# Add analytics directory to path for ydb_wrapper import
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+from ydb_wrapper import YDBWrapper
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
-config.read(config_file_path)
-
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 # Константы для временных окон mute-логики
 MUTE_DAYS = 4
-UNMUTE_DAYS = 4
+UNMUTE_DAYS = 7
 DELETE_DAYS = 7
 
 def is_chunk_test(test):
@@ -108,7 +105,6 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     start_date = today - datetime.timedelta(days=days_window-1)
     end_date = today
     
-    query_start_time = datetime.datetime.now()
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     logging.info(f"Date range: {start_date} to {end_date}")
     
@@ -139,44 +135,27 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     logging.info(f"SQL Query:\n{query_string}")
     
     try:
-        with ydb.Driver(
-            endpoint=DATABASE_ENDPOINT,
-            database=DATABASE_PATH,
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            driver.wait(timeout=10, fail_fast=True)
+        # Initialize YDB wrapper with context manager for automatic cleanup
+        script_name = os.path.basename(__file__)
+        with YDBWrapper(script_name=script_name) as ydb_wrapper:
+            script_name = os.path.basename(__file__)
+            
+            # Check credentials
+            if not ydb_wrapper.check_credentials():
+                return []
+            
             logging.info("Successfully connected to YDB")
             
-            query = ydb.ScanQuery(query_string, {})
-            table_client = ydb.TableClient(driver, ydb.TableClientSettings())
-            it = table_client.scan_query(query)
-            results = []
-            
             logging.info("Starting to fetch results...")
-            row_count = 0
-            while True:
-                try:
-                    result = next(it)
-                    batch_results = result.result_set.rows
-                    results.extend(batch_results)
-                    row_count += len(batch_results)
-                    logging.debug(f"Fetched batch of {len(batch_results)} rows, total: {row_count}")
-                except StopIteration:
-                    break
+            results = ydb_wrapper.execute_scan_query(query_string)
             
-            query_end_time = datetime.datetime.now()
-            query_duration = query_end_time - query_start_time
             logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
-            logging.info(f"Query execution time: {query_duration.total_seconds():.2f} seconds")
             return results
         
     except Exception as e:
-        query_end_time = datetime.datetime.now()
-        query_duration = query_end_time - query_start_time
         logging.error(f"Error executing query: {e}")
         logging.error(f"Query parameters: branch='{branch}', build_type='{build_type}', days_window={days_window}")
         logging.error(f"Date range: {start_date} to {end_date}")
-        logging.error(f"Query execution time before error: {query_duration.total_seconds():.2f} seconds")
         raise
 
 
@@ -198,6 +177,12 @@ def aggregate_test_data(all_data, period_days):
     start_date = today - datetime.timedelta(days=period_days-1)
     start_days = (start_date - base_date).days
     
+    # Helper function to convert date to days if needed
+    def to_days(date_value):
+        if isinstance(date_value, datetime.date):
+            return (date_value - base_date).days
+        return date_value
+    
     logging.info(f"Starting aggregation for {period_days} days period...")
     logging.info(f"Processing {len(all_data)} test records...")
     
@@ -213,7 +198,7 @@ def aggregate_test_data(all_data, period_days):
             progress_percent = (processed_count / total_count) * 100
             logging.info(f"Aggregation progress: {processed_count}/{total_count} ({progress_percent:.1f}%)")
         
-        if test.get('date_window', 0) >= start_days:
+        if to_days(test.get('date_window', 0)) >= start_days:
             full_name = test.get('full_name')
             if full_name not in aggregated:
                 aggregated[full_name] = {
@@ -246,7 +231,7 @@ def aggregate_test_data(all_data, period_days):
                     aggregated[full_name]['state_dates'].append(current_date)
                 
                 # Обновляем is_muted если текущая дата новее
-                if test.get('date_window', 0) > aggregated[full_name].get('is_muted_date', 0):
+                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
             
@@ -276,7 +261,10 @@ def aggregate_test_data(all_data, period_days):
             for i, (state, date) in enumerate(zip(test_data['state_history'], test_data['state_dates'])):
                 if date:
                     # Преобразуем дату в читаемый формат
-                    date_obj = base_date + datetime.timedelta(days=date)
+                    if isinstance(date, int):
+                        date_obj = base_date + datetime.timedelta(days=date)
+                    else:
+                        date_obj = date
                     date_str = date_obj.strftime('%m-%d')
                     state_with_dates.append(f"{state}({date_str})")
                 else:
@@ -337,8 +325,8 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
     return debug_string
 
-def is_flaky_test(test, aggregated_data):
-    """Проверяет, является ли тест flaky за указанный период"""
+def is_mute_candidate(test, aggregated_data):
+    """Проверяет, является ли тест кандидатом на mute за указанный период"""
     # Ищем наш тест в агрегированных данных
     test_data = None
     for agg_test in aggregated_data:
@@ -360,7 +348,13 @@ def is_flaky_test(test, aggregated_data):
         return False
     
     total_runs = test_data['pass_count'] + test_data['fail_count']
-    return (test_data['fail_count'] >= 2) or (test_data['fail_count'] >= 1 and total_runs <= 10)
+    result = (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
+    
+    # Добавляем детальное логирование для диагностики
+    if not test_data.get('is_muted', False):  # Логируем только для незамьюченных тестов
+        logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{test_data['fail_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
+    
+    return result
 
 def is_unmute_candidate(test, aggregated_data):
     """Проверяет, является ли тест кандидатом на размьют за указанный период"""
@@ -384,16 +378,11 @@ def is_unmute_candidate(test, aggregated_data):
     total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
     total_fails = test_data['fail_count'] + test_data['mute_count']
     
-    # Проверяем, что не было состояний no_runs в истории
-    state_history = test_data.get('state', [])
-    if 'no_runs' in state_history:
-        return False
-    
-    result = total_runs > 4 and total_fails == 0
+    result = total_runs >= 4 and total_fails == 0
     
     # Добавляем детальное логирование для диагностики
     if test_data.get('is_muted', False):  # Логируем только для замьюченных тестов
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, muted:{test_data.get('is_muted')}, result:{result}")
+        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
     
     return result
 
@@ -501,11 +490,11 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
 
     try:
         # 1. Кандидаты на mute
-        def is_mute_candidate(test):
-            return is_flaky_test(test, aggregated_for_mute)
+        def is_mute_candidate_wrapper(test):
+            return is_mute_candidate(test, aggregated_for_mute)
         
         to_mute, to_mute_debug = create_file_set(
-            aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute'
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
@@ -559,7 +548,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # 4. muted_ya (все замьюченные сейчас)
         all_muted_ya, all_muted_ya_debug = create_file_set(
-            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
+            all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
@@ -851,33 +840,33 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
 
 
 def mute_worker(args):
-
-    # Simplified Connection
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-        return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
-
-    logging.info(f"Starting mute worker with mode: {args.mode}")
-    logging.info(f"Branch: {args.branch}")
+    script_name = os.path.basename(__file__)
     
-    mute_check = YaMuteCheck()
-    mute_check.load(muted_ya_path)
-    logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
 
-    logging.info("Executing single query for 7 days window...")
-    
-    # Один запрос за максимальный период (7 дней)
-    all_data = execute_query(args.branch, days_window=7)
-    logging.info(f"Query returned {len(all_data)} test records")
-    
-    # Используем универсальную агрегацию для разных периодов
-    aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
+        logging.info(f"Starting mute worker with mode: {args.mode}")
+        logging.info(f"Branch: {args.branch}")
+        
+        # Используем переданный файл или дефолтный
+        input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
+        logging.info(f"Using muted_ya file: {input_muted_ya_path}")
+        
+        mute_check = YaMuteCheck()
+        mute_check.load(input_muted_ya_path)
+        logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
+
+        logging.info("Executing single query for 7 days window...")
+        
+        # Один запрос за максимальный период (7 дней)
+        all_data = execute_query(args.branch, days_window=7)
+        logging.info(f"Query returned {len(all_data)} test records")
+        
+        # Используем универсальную агрегацию для разных периодов
+        aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
     aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS дней для unmute
     aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS дней для delete
     
@@ -907,6 +896,7 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
+    update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

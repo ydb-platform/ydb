@@ -195,4 +195,4 @@ private:
     const NUdf::IValueBuilder* ValueBuilder_;
 };
 
-}
+} // namespace NYql::NJsonPath

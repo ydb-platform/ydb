@@ -390,15 +390,15 @@ protected:
         TNodeSet nodesToOptimize;
         TProcessedNodesSet processedNodes;
         processedNodes.insert(map.World().Ref().UniqueId());
-        VisitExpr(lambda.Ptr(), [&nodesToOptimize, &processedNodes, arg](const TExprNode::TPtr& node) {
-            if (TCoTablePath::Match(node.Get())) {
-                if (node->ChildrenSize() == 0 || node->Child(0)->Child(0) == arg.Raw()) {
+        VisitExpr(lambda.Ptr(), [&nodesToOptimize, &processedNodes, arg, directRowDependsOn = State_->Types->DirectRowDependsOn](const TExprNode::TPtr& node) {
+            if (TCoTablePath::Match(node.Get()) || TCoTableRecord::Match(node.Get())) {
+                if (node->ChildrenSize() == 0) {
                     nodesToOptimize.insert(node.Get());
-                }
-            }
-            else if (TCoTableRecord::Match(node.Get())) {
-                if (node->ChildrenSize() == 0 || node->Child(0)->Child(0) == arg.Raw()) {
-                    nodesToOptimize.insert(node.Get());
+                } else {
+                    auto row = directRowDependsOn ? node->Head().HeadPtr() : node->HeadPtr();
+                    if (row == arg.Ptr()) {
+                        nodesToOptimize.insert(node.Get());
+                    }
                 }
             }
             else if (TYtOutput::Match(node.Get())) {
@@ -412,11 +412,24 @@ protected:
             return node;
         }
 
+        auto rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args({"row"})
+            .Body("row")
+            .Done();
+        if (State_->Types->DirectRowDependsOn) {
+            rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+                .Args({"row"})
+                .Body<TCoDependsOn>()
+                    .Input("row")
+                .Build()
+                .Done();
+        }
+
         TExprNode::TPtr newBody = lambda.Body().Ptr();
         TPositionHandle tablePos;
         TOptimizeExprSettings settings(State_->Types);
         settings.ProcessedNodes = &processedNodes; // Prevent optimizer to go deeper than current operation
-        auto status = OptimizeExpr(newBody, newBody, [&nodesToOptimize, &tablePos, arg](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
+        auto status = OptimizeExpr(newBody, newBody, [&nodesToOptimize, &tablePos, arg, rowLambda](const TExprNode::TPtr& input, TExprContext& ctx) -> TExprNode::TPtr {
             if (nodesToOptimize.find(input.Get()) != nodesToOptimize.end()) {
                 if (TCoTablePath::Match(input.Get())) {
                     tablePos = input->Pos();
@@ -424,19 +437,20 @@ protected:
                         return ctx.RenameNode(*input, TYtTablePath::CallableName());
                     }
                     return Build<TYtTablePath>(ctx, input->Pos())
-                        .DependsOn<TCoDependsOn>()
-                            .Input(arg)
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, arg)
                         .Build()
                         .Done().Ptr();
-                }
-                else if (TCoTableRecord::Match(input.Get())) {
+                } else if (TCoTableRecord::Match(input.Get())) {
                     tablePos = input->Pos();
                     if (input->ChildrenSize() == 1) {
                         return ctx.RenameNode(*input, TYtTableRecord::CallableName());
                     }
                     return Build<TYtTableRecord>(ctx, input->Pos())
-                        .DependsOn<TCoDependsOn>()
-                            .Input(arg)
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, arg)
                         .Build()
                         .Done().Ptr();
                 }
@@ -517,6 +531,19 @@ protected:
             return node;
         }
 
+        auto rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+            .Args({"row"})
+            .Body("row")
+            .Done();
+        if (State_->Types->DirectRowDependsOn) {
+            rowLambda = Build<TCoLambda>(ctx, lambda.Pos())
+                .Args({"row"})
+                .Body<TCoDependsOn>()
+                    .Input("row")
+                .Build()
+                .Done();
+        }
+
         TExprNode::TPtr newBody = lambda.Body().Ptr();
         TPosition tablePos;
         TOptimizeExprSettings settings(State_->Types);
@@ -526,8 +553,9 @@ protected:
                 if (TCoIsKeySwitch::Match(input.Get())) {
                     return
                         Build<TYtIsKeySwitch>(ctx, input->Pos())
-                            .DependsOn<TCoDependsOn>()
-                                .Input(input->HeadPtr())
+                            .Row<TExprApplier>()
+                                .Apply(rowLambda)
+                                .With(0, TExprBase(input->HeadPtr()))
                             .Build()
                         .Done().Ptr();
                 }
@@ -602,6 +630,7 @@ protected:
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                     .Build()
                 .Build()
                 .Settings().Build()
@@ -761,9 +790,16 @@ protected:
                                 .Add(0, body)
                                 .Atom(1, col)
                                 .Callable(2, "YtRowNumber")
-                                    .Callable(0, "DependsOn")
-                                        .Add(0, rowArg)
-                                    .Seal()
+                                    .Do([&](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                                        if (State_->Types->DirectRowDependsOn) {
+                                            return builder
+                                                .Callable(0, "DependsOn")
+                                                    .Add(0, rowArg)
+                                                .Seal();
+                                        } else {
+                                            return builder.Add(0, rowArg);
+                                        }
+                                    })
                                 .Seal()
                             .Seal()
                             .Build();
@@ -1349,6 +1385,7 @@ protected:
                         .Columns(extract.Members())
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                     .Build()
                 .Build()
                 .Settings().Build()
@@ -1742,6 +1779,17 @@ protected:
             return node;
         }
 
+        auto rowHandler = [directRowDependsOn = State_->Types->DirectRowDependsOn](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+            if (directRowDependsOn) {
+                return builder
+                    .Callable(0, "DependsOn")
+                        .Arg(0, "row")
+                    .Seal();
+            } else {
+                return builder.Arg(0, "row");
+            }
+        };
+
         // move TablePath/TableRecord if any
         const auto& extend = input.Ref();
         const bool ordered = flatMap.Maybe<TCoOrderedFlatMap>() && !input.Maybe<TCoExtend>();
@@ -1757,16 +1805,12 @@ protected:
                                 .Arg(0, "row")
                                 .Atom(1, "_yql_table_path")
                                 .Callable(2, "TablePath")
-                                    .Callable(0, "DependsOn")
-                                        .Arg(0, "row")
-                                    .Seal()
+                                    .Do(rowHandler)
                                 .Seal()
                             .Seal()
                             .Atom(1, "_yql_table_record")
                             .Callable(2, "TableRecord")
-                                .Callable(0, "DependsOn")
-                                    .Arg(0, "row")
-                                .Seal()
+                                .Do(rowHandler)
                             .Seal()
                         .Seal()
                     .Seal()

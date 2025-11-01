@@ -72,6 +72,8 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "no_tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
+            AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
+                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType(), Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         } else {
             auto& info = Self->OperationsManager->GetLockVerified(operation->GetLockId());
@@ -84,7 +86,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             LWPROBE(EvWriteResult, Self->TabletID(), writeMeta.GetSource().ToString(), 0, operation->GetCookie(), "tx_write", true, "");
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             AddTableAccessStatsToTxStats(*ev->Record.MutableTxStats(), writeMeta.GetPathId().SchemeShardLocalPathId.GetRawValue(),
-                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType());
+                                         writeResult.GetRecordsCount(), writeResult.GetDataSize(), operation->GetModificationType(), Self->TabletID());
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }
     }
@@ -116,6 +118,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         pathIds.emplace(op->GetPathId().InternalPathId);
         if (op->GetBehaviour() == EOperationBehaviour::WriteWithLock || op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             if (op->GetBehaviour() != EOperationBehaviour::NoTxWrite || Self->GetOperationsManager().HasReadLocks(writeMeta.GetPathId().InternalPathId)) {
+                // detect active reads which the given tx has conflicts with
                 auto evWrite = std::make_shared<NOlap::NTxInteractions::TEvWriteWriter>(
                     writeMeta.GetPathId().InternalPathId, writeResult.GetPKBatchVerified(), Self->GetIndexOptional()->GetVersionedIndex().GetPrimaryKey());
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
@@ -125,9 +128,11 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     auto& index = Self->MutableIndexAs<NOlap::TColumnEngineForLogs>();
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
     for (auto&& portion : Pack.GetPortions()) {
+        // make the portions visible as uncommitted for reads
         granule.InsertPortionOnComplete(portion.GetPortionInfoPtr(), index);
     }
     if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
+        // make the portions visible as committed for reads
         for (auto&& i : InsertWriteIds) {
             granule.CommitPortionOnComplete(i, index);
         }
@@ -137,9 +142,15 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
         auto op = Self->GetOperationsManager().GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             AFL_VERIFY(CommitSnapshot);
+            // No tx writes (bulk upsert) must break decent/proper txs.
+            // Decent/proper txs asked for serializable, so we have to give them serializable. 
             Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
+            Self->OperationsManager->BreakConflictingTxs(op->GetLockId());
             Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
             Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
+        } else {
+            Self->GetOperationsManager().SetOperationFinished(op->GetWriteId());
+            Self->MaybeCleanupLock(op->GetLockId());
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();

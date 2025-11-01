@@ -1,0 +1,6 @@
+items:
+  - name: Историзация данных (SCD)
+    href: scd/index.md
+    include:
+      mode: link
+      path: scd/toc_p.yaml

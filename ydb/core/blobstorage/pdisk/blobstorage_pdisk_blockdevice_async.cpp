@@ -238,6 +238,8 @@ class TRealBlockDevice : public IBlockDevice {
             , PCtx(device.PCtx)
         {}
 
+        virtual ~TSubmitThreadBase() = default;
+
         // Schedule op execution
         // pass op = nullptr to quit
         void Schedule(IAsyncIoOperation *op) noexcept {

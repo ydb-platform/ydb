@@ -9,6 +9,7 @@ message TClusterState {
         NOT_SYNCHRONIZED_1 = 1; // not synchonized with primary, can't be promoted, doesn't take part in any quorum
         NOT_SYNCHRONIZED_2 = 2; // not synchonized with primary, can't be promoted, takes part in all quorums
         SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
+        SUSPENDED = 4; // gracefully taken down; treat like disconnected for data quorum; config quorum allowed; connections allowed
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)

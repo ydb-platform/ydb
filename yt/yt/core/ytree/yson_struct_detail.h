@@ -1,12 +1,15 @@
 #pragma once
 
 #include "yson_struct_public.h"
+#include "yson_schema_options.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ypath/public.h>
 #include <yt/yt/core/ytree/public.h>
 
 #include <library/cpp/yt/misc/optional.h>
+
+#include <any>
 
 namespace NYT::NYTree {
 
@@ -103,7 +106,17 @@ struct IYsonStructParameter
     virtual const std::vector<std::string>& GetAliases() const = 0;
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
 
-    virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
+    template <class TOption>
+    std::optional<TOption> FindOption() const;
+    template <class TOption>
+    TOption GetOptionOrThrow() const;
+    virtual std::any FindOption(const std::type_info& typeInfo) const = 0;
+    virtual void WriteMemberSchema(
+        const TYsonStructBase* self,
+        NYson::IYsonConsumer* consumer,
+        const std::function<NYTree::INodePtr()>& defaultValueGetter,
+        const TYsonStructWriteSchemaOptions& options) const = 0;
+    virtual void WriteTypeSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
 
     virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
 
@@ -148,7 +161,7 @@ struct IYsonStructMeta
     virtual void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) = 0;
     virtual void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) = 0;
 
-    virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
+    virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const = 0;
 
     virtual bool CompareStructs(
         const TYsonStructBase* lhs,
@@ -163,6 +176,8 @@ class TYsonStructMeta
     : public IYsonStructMeta
 {
 public:
+    TYsonStructMeta(const NYT::TSourceLocation& sourceLocation, const std::function<IMapNodePtr()>& defaultStructNodeGetter);
+
     void SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers = false) const override;
 
     const THashMap<std::string, IYsonStructParameterPtr>& GetParameterMap() const override;
@@ -195,7 +210,7 @@ public:
     void RegisterPostprocessor(std::function<void(TYsonStructBase*)> postprocessor) override;
     void SetUnrecognizedStrategy(EUnrecognizedStrategy strategy) override;
 
-    void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
+    void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
 
     void FinishInitialization(const std::type_info& structType);
 
@@ -206,10 +221,12 @@ public:
 private:
     friend class TYsonStructRegistry;
 
+    const TSourceLocation SourceLocation_;
     const std::type_info* StructType_;
 
     THashMap<std::string, IYsonStructParameterPtr> Parameters_;
     std::vector<std::pair<std::string, IYsonStructParameterPtr>> SortedParameters_;
+    std::vector<std::pair<std::string, IYsonStructParameterPtr>> InitialOrderParameters_;
     THashSet<std::string> RegisteredKeys_;
     THashMap<std::string, i64> RegisteredParametersIndexes_;
 
@@ -217,6 +234,8 @@ private:
     std::vector<std::function<void(TYsonStructBase*)>> Postprocessors_;
 
     EUnrecognizedStrategy MetaUnrecognizedStrategy_;
+
+    std::function<IMapNodePtr()> DefaultStructNodeGetter_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -280,7 +299,8 @@ public:
     TYsonStructParameter(
         std::string key,
         std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
-        int fieldIndex);
+        int fieldIndex,
+        const std::type_info& containingStructTypeInfo);
 
     void Load(
         TYsonStructBase* self,
@@ -307,7 +327,15 @@ public:
     const std::vector<std::string>& GetAliases() const override;
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
-    void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
+    std::any FindOption(const std::type_info& typeInfo) const override;
+    // Write schema of parameter as part of including struct.
+    void WriteMemberSchema(
+        const TYsonStructBase* self,
+        NYson::IYsonConsumer* consumer,
+        const std::function<NYTree::INodePtr()>& defaultValueGetter,
+        const TYsonStructWriteSchemaOptions& options) const override;
+    // Write schema of parameter type.
+    void WriteTypeSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const override;
 
     bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
@@ -356,8 +384,12 @@ public:
     template <class... TArgs>
     TYsonStructParameter& DefaultNew(TArgs&&... args);
 
+    template <class TOption>
+    TYsonStructParameter& AddOption(TOption option);
+
 private:
     const std::string Key_;
+    const std::type_info& RegisteringStructTypeInfo_;
 
     std::unique_ptr<IYsonFieldAccessor<TValue>> FieldAccessor_;
     std::optional<std::function<TValue()>> DefaultCtor_;
@@ -371,6 +403,7 @@ private:
     std::optional<EUnrecognizedStrategy> DefaultUnrecognizedStrategy_;
     bool EnforceDefaultUnrecognizedStrategy_ = false;
     const int FieldIndex_ = -1;
+    THashMap<std::type_index, std::any> Options_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

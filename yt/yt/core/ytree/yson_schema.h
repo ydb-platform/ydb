@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yson_schema_options.h"
+
 #include <yt/yt/core/yson/public.h>
 
 namespace NYT::NYTree::NPrivate {
@@ -7,7 +9,7 @@ namespace NYT::NYTree::NPrivate {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-void WriteSchema(const T& value, NYson::IYsonConsumer* consumer);
+void WriteSchema(const T& value, NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -146,7 +146,7 @@ def post_install(self):
 
 bison = NixProject(
     arcdir="contrib/tools/bison",
-    owners=["g:cpp-contrib"],
+    owners=["g:contrib"],
     nixattr="bison",
     ignore_commands=[
         "bash",

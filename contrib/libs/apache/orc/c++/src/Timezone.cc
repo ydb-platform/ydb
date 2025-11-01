@@ -33,8 +33,24 @@ namespace orc {
   // default location of the timezone files
   static const char DEFAULT_TZDIR[] = "/usr/share/zoneinfo";
 
-  // location of a symlink to the local timezone
-  static const char LOCAL_TIMEZONE[] = "/etc/localtime";
+  // location of a symlink to the local timezone is /etc/localtime
+  static const char LOCAL_TIMEZONE_DIR[] = "/etc";
+  static const char LOCAL_TIMEZONE[] = "localtime";
+
+  // US aliases from https://data.iana.org/time-zones/tzdb/backward
+  static const std::map<const std::string, const std::string> TZ_ALIASES = {
+      {"US/Alaska", "America/Anchorage"},
+      {"US/Aleutian", "America/Adak"},
+      {"US/Arizona", "America/Phoenix"},
+      {"US/Central", "America/Chicago"},
+      {"US/East-Indiana", "America/Indiana/Indianapolis"},
+      {"US/Eastern", "America/New_York"},
+      {"US/Hawaii", "Pacific/Honolulu"},
+      {"US/Indiana-Starke", "America/Indiana/Knox"},
+      {"US/Michigan", "America/Detroit"},
+      {"US/Mountain", "America/Denver"},
+      {"US/Pacific", "America/Los_Angeles"},
+      {"US/Samoa", "Pacific/Pago_Pago"}};
 
   enum TransitionKind { TRANSITION_JULIAN, TRANSITION_DAY, TRANSITION_MONTH };
 
@@ -734,14 +750,26 @@ namespace orc {
    * Get a timezone by absolute filename.
    * Results are cached.
    */
-  const Timezone& getTimezoneByFilename(const std::string& filename) {
+  const Timezone& getTimezoneByFilename(const std::string& dir, const std::string& zone) {
+    std::string filename(dir);
+    filename += "/";
+    filename += zone;
     // ORC-110
     std::lock_guard<std::mutex> timezone_lock(timezone_mutex);
     std::map<std::string, std::shared_ptr<Timezone> >::iterator itr = timezoneCache.find(filename);
     if (itr != timezoneCache.end()) {
       return *(itr->second).get();
     }
-    timezoneCache[filename] = std::make_shared<LazyTimezone>(filename);
+    auto it = TZ_ALIASES.find(zone);
+    if (it == TZ_ALIASES.end()) {
+      timezoneCache[filename] = std::make_shared<LazyTimezone>(filename);
+    } else {
+      std::string newfilename(dir);
+      newfilename += "/";
+      newfilename += it->second;
+      timezoneCache[newfilename] = std::make_shared<LazyTimezone>(newfilename);
+      timezoneCache[filename] = timezoneCache[newfilename];
+    }
     return *timezoneCache[filename].get();
   }
 
@@ -752,7 +780,7 @@ namespace orc {
 #ifdef _MSC_VER
     return getTimezoneByName("UTC");
 #else
-    return getTimezoneByFilename(LOCAL_TIMEZONE);
+    return getTimezoneByFilename(LOCAL_TIMEZONE_DIR, LOCAL_TIMEZONE);
 #endif
   }
 
@@ -761,10 +789,7 @@ namespace orc {
    * Results are cached.
    */
   const Timezone& getTimezoneByName(const std::string& zone) {
-    std::string filename(getTimezoneDirectory());
-    filename += "/";
-    filename += zone;
-    return getTimezoneByFilename(filename);
+    return getTimezoneByFilename(getTimezoneDirectory(), zone);
   }
 
   /**

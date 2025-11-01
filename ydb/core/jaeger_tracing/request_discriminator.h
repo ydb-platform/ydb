@@ -112,6 +112,7 @@ enum class ERequestType: size_t {
     TOPIC_DESCRIBECONSUMER,
     TOPIC_ALTERTOPIC,
     TOPIC_DROPTOPIC,
+    TOPIC_PROPOSE_TRANSACTION,
 
     // Bridge requests
     BRIDGE_GETCLUSTERSTATE,

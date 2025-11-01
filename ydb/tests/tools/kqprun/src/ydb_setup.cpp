@@ -12,6 +12,7 @@
 #include <ydb/tests/tools/kqprun/src/proto/storage_meta.pb.h>
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/tls_backend.h>
 
 using namespace NKikimrRun;
 
@@ -21,7 +22,7 @@ namespace {
 
 class TSessionState {
 public:
-    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbose verboseLevel)
+    explicit TSessionState(NActors::TTestActorRuntime* runtime, ui32 targetNodeIndex, const TString& database, const TString& traceId, TYdbSetupSettings::EVerbosity verbosityLevel)
         : Runtime_(runtime)
         , TargetNodeIndex_(targetNodeIndex)
     {
@@ -35,7 +36,7 @@ public:
         SessionHolderActor_ = Runtime_->Register(CreateSessionHolderActor(TCreateSessionRequest{
             .Event = std::move(event),
             .TargetNode = Runtime_->GetNodeId(targetNodeIndex),
-            .VerboseLevel = verboseLevel
+            .VerbosityLevel = verbosityLevel
         }, openPromise, closePromise));
 
         SessionId_ = openPromise.GetFuture().GetValueSync();
@@ -88,7 +89,7 @@ void FillQueryMeta(TQueryMeta& meta, const NKikimrKqp::TQueryResponse& response)
 
 class TYdbSetup::TImpl : public TKikimrSetupBase {
     using TBase = TKikimrSetupBase;
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
     class TPortGenerator {
@@ -123,7 +124,7 @@ private:
             }
             diskPath.Fix();
             diskPath.MkDir();
-            if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
+            if (Settings_.VerbosityLevel >= EVerbosity::InitLogs) {
                 Cout << CoutColors_.Cyan() << "Setup storage by path: " << diskPath.GetPath() << CoutColors_.Default() << Endl;
             }
         }
@@ -177,7 +178,7 @@ private:
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
-        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
+        auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerbosityLevel >= EVerbosity::InitLogs);
         serverSettings
             .SetDataCenterCount(Settings_.DcCount)
             .SetPqGateway(Settings_.PqGateway);
@@ -204,7 +205,7 @@ private:
         const auto absolutePath = request.path();
         const auto [it, inserted] = StorageMeta_.MutableTenants()->emplace(relativePath, tenantInfo);
         if (inserted || it->second.GetCreationInProgress()) {
-            if (Settings_.VerboseLevel >= EVerbose::Info) {
+            if (Settings_.VerbosityLevel >= EVerbosity::Info) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
             }
 
@@ -226,7 +227,7 @@ private:
                 it->second.SetNodesCount(tenantInfo.GetNodesCount());
                 UpdateStorageMeta();
             }
-            if (Settings_.VerboseLevel >= EVerbose::Info) {
+            if (Settings_.VerbosityLevel >= EVerbosity::Info) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Starting " << type << " tenant " << absolutePath << "..." << CoutColors_.Default() << Endl;
             }
             if (!request.has_serverless_resources()) {
@@ -300,7 +301,7 @@ private:
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
-            Server_->EnableGRpc(domainGrpcPort);
+            Server_->EnableGRpc(GetGrpcSettings(domainGrpcPort, 0));
         }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
@@ -333,7 +334,7 @@ private:
             .ExpectedNodeCount = nodesCount,
             .HealthCheckLevel = level,
             .HealthCheckTimeout = Settings_.HealthCheckTimeout,
-            .VerboseLevel = Settings_.VerboseLevel,
+            .VerbosityLevel = Settings_.VerbosityLevel,
             .Database = absolutePath
         };
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
@@ -345,7 +346,7 @@ private:
             if (Settings_.GrpcEnabled) {
                 if (node > 0) {
                     // Port for first static node also used in cluster initialization
-                    Server_->EnableGRpc(grpcPortGen.GetPort(), node, absolutePath);
+                    Server_->EnableGRpc(GetGrpcSettings(grpcPortGen.GetPort(), node), node, absolutePath);
                 }
             } else if (Settings_.MonitoringEnabled) {
                 NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
@@ -365,17 +366,7 @@ private:
     }
 
     void InitializeTenants(TPortGenerator& grpcPortGen) const {
-        std::optional<NKikimrWhiteboard::TSystemStateInfo> systemStateInfo;
-        if (const auto memoryInfoProvider = Server_->GetProcessMemoryInfoProvider()) {
-            systemStateInfo = NKikimrWhiteboard::TSystemStateInfo();
-
-            const auto& memInfo = memoryInfoProvider->Get();
-            if (memInfo.CGroupLimit) {
-                systemStateInfo->SetMemoryLimit(*memInfo.CGroupLimit);
-            } else if (memInfo.MemTotal) {
-                systemStateInfo->SetMemoryLimit(*memInfo.MemTotal);
-            }
-        }
+        const auto& systemStateInfo = GetSystemStateInfo(Server_->GetProcessMemoryInfoProvider());
 
         std::vector<NThreading::TFuture<void>> futures(1, InitializeTenantNodes(Settings_.DomainName, systemStateInfo, grpcPortGen));
         futures.reserve(StorageMeta_.GetTenants().size() + 1);
@@ -402,10 +393,15 @@ public:
         InitializeServer(grpcPortGen);
         InitializeTenants(grpcPortGen);
 
-        if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
+        if (Settings_.MonitoringEnabled && Settings_.VerbosityLevel >= EVerbosity::Info) {
             for (ui32 nodeIndex = 0; nodeIndex < Settings_.NodeCount; ++nodeIndex) {
-                Cout << CoutColors_.Cyan() << "Monitoring port" << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString()) << ": " << CoutColors_.Default() << Server_->GetRuntime()->GetMonPort(nodeIndex) << Endl;
+                const auto port = Server_->GetRuntime()->GetMonPort(nodeIndex);
+                Cout << CoutColors_.Cyan() << "Monitoring port"
+                    << (Server_->StaticNodes() + Server_->DynamicNodes() > 1 ? TStringBuilder() << " for static node " << nodeIndex + 1 : TString())
+                    << ": " << CoutColors_.Default()
+                    << (nodeIndex == 0 ? FormatMonitoringLink(port, "monitoring/cluster/tenants") : ToString(port)) << Endl;
             }
+
             const auto printTenantNodes = [this](const std::pair<TString, TStorageMeta::TTenant>& tenantInfo) {
                 if (tenantInfo.second.GetType() == TStorageMeta::TTenant::SERVERLESS) {
                     return;
@@ -418,8 +414,8 @@ public:
             std::for_each(Settings_.Tenants.rbegin(), Settings_.Tenants.rend(), std::bind(printTenantNodes, std::placeholders::_1));
         }
 
-        if (Settings_.GrpcEnabled && Settings_.VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << Server_->GetGRpcServer().GetPort() << Endl;
+        if (Settings_.GrpcEnabled && Settings_.VerbosityLevel >= EVerbosity::Info) {
+            Cout << CoutColors_.Cyan() << "Domain gRPC port: " << CoutColors_.Default() << FormatGrpcLink(Server_->GetGRpcServer().GetPort()) << Endl;
             for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
                 if (tenantInfo.GetType() != TStorageMeta::TTenant::SERVERLESS) {
                     Cout << CoutColors_.Cyan() << "Tenant [" << tenantPath << "] gRPC port: " << CoutColors_.Default() << Server_->GetTenantGRpcServer(GetTenantPath(tenantPath)).GetPort() << Endl;
@@ -461,14 +457,14 @@ public:
         return RunKqpProxyRequest<NKikimr::NKqp::TEvKqp::TEvQueryRequest, NKikimr::NKqp::TEvKqp::TEvQueryResponse>(std::move(event), nodeIndex);
     }
 
-    NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+    NKikimr::NKqp::TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvGetScriptExecutionOperation>(GetDatabasePath(database), operationId);
+        auto event = MakeHolder<NKikimr::NKqp::TEvGetScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvGetScriptExecutionOperation, NKikimr::NKqp::TEvGetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
-    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId) const {
+    NKikimr::NKqp::TEvFetchScriptResultsResponse::TPtr FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId) const {
         TString error;
         const auto executionId = NKikimr::NKqp::ScriptExecutionIdFromOperation(operation, error);
         Y_ENSURE(executionId, error);
@@ -477,23 +473,23 @@ public:
         NActors::TActorId edgeActor = GetRuntime()->AllocateEdgeActor(nodeIndex);
         auto rowsLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultRowsLimit();
         auto sizeLimit = Settings_.AppConfig.GetQueryServiceConfig().GetScriptResultSizeLimit();
-        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), *executionId, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
+        NActors::IActor* fetchActor = NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, GetDatabasePath(database), *executionId, userSID, resultSetId, 0, rowsLimit, sizeLimit, TInstant::Max());
 
         GetRuntime()->Register(fetchActor, nodeIndex, GetRuntime()->GetAppData(nodeIndex).UserPoolId);
 
         return GetRuntime()->GrabEdgeEvent<NKikimr::NKqp::TEvFetchScriptResultsResponse>(edgeActor);
     }
 
-    NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+    NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse::TPtr ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(GetDatabasePath(database), operationId);
+        auto event = MakeHolder<NKikimr::NKqp::TEvForgetScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvForgetScriptExecutionOperation, NKikimr::NKqp::TEvForgetScriptExecutionOperationResponse>(std::move(event), database);
     }
 
-    NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
+    NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse::TPtr CancelScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
         NKikimr::NOperationId::TOperationId operationId(operation);
-        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(GetDatabasePath(database), operationId);
+        auto event = MakeHolder<NKikimr::NKqp::TEvCancelScriptExecutionOperation>(GetDatabasePath(database), operationId, userSID);
 
         return RunKqpProxyRequest<NKikimr::NKqp::TEvCancelScriptExecutionOperation, NKikimr::NKqp::TEvCancelScriptExecutionOperationResponse>(std::move(event), database);
     }
@@ -534,7 +530,7 @@ public:
             ythrow yexception() << "Trace opt was disabled";
         }
 
-        NYql::NLog::YqlLogger().ResetBackend(CreateLogBackend(Settings_));
+        NYql::NLog::YqlLogger().ResetBackend(MakeHolder<NYql::NLog::TTlsLogBackend>(CreateLogBackend(Settings_)));
     }
 
     static void StopTraceOpt() {
@@ -542,7 +538,7 @@ public:
     }
 
 private:
-    NActors::TTestActorRuntime* GetRuntime() const {
+    NActors::TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
     }
 
@@ -586,7 +582,7 @@ private:
 
         if (Settings_.SameSession) {
             if (!SessionState_) {
-                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerboseLevel);
+                SessionState_ = TSessionState(GetRuntime(), targetNodeIndex, database, query.TraceId, Settings_.VerbosityLevel);
             }
             request->SetSessionId(SessionState_->GetSessionId());
         }
@@ -724,8 +720,8 @@ TRequestResult TYdbSetup::YqlScriptRequest(const TRequestOptions& query, TQueryM
     return TRequestResult(yqlQueryOperationResponse.GetYdbStatus(), responseRecord.GetQueryIssues());
 }
 
-TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& database, const TString& operation, TExecutionMeta& meta) const {
-    auto scriptExecutionOperation = Impl_->GetScriptExecutionOperationRequest(database, operation);
+TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID, TExecutionMeta& meta) const {
+    auto scriptExecutionOperation = Impl_->GetScriptExecutionOperationRequest(database, operation, userSID);
 
     meta.Ready = scriptExecutionOperation->Get()->Ready;
 
@@ -746,22 +742,22 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& data
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const {
-    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(database, operation, resultSetId);
+TRequestResult TYdbSetup::FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId, Ydb::ResultSet& resultSet) const {
+    auto scriptExecutionResults = Impl_->FetchScriptExecutionResultsRequest(database, operation, userSID, resultSetId);
 
     resultSet = scriptExecutionResults->Get()->ResultSet.value_or(Ydb::ResultSet());
 
     return TRequestResult(scriptExecutionResults->Get()->Status, scriptExecutionResults->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
-    auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(database, operation);
+TRequestResult TYdbSetup::ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
+    auto forgetScriptExecutionOperationResponse = Impl_->ForgetScriptExecutionOperationRequest(database, operation, userSID);
 
     return TRequestResult(forgetScriptExecutionOperationResponse->Get()->Status, forgetScriptExecutionOperationResponse->Get()->Issues);
 }
 
-TRequestResult TYdbSetup::CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const {
-    auto cancelScriptExecutionOperationResponse = Impl_->CancelScriptExecutionOperationRequest(database, operation);
+TRequestResult TYdbSetup::CancelScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const {
+    auto cancelScriptExecutionOperationResponse = Impl_->CancelScriptExecutionOperationRequest(database, operation, userSID);
 
     return TRequestResult(cancelScriptExecutionOperationResponse->Get()->Status, cancelScriptExecutionOperationResponse->Get()->Issues);
 }

@@ -132,6 +132,10 @@
     "kind": "Agg"
   },
   {
+    "name": "Block",
+    "kind": "Normal"
+  },
+  {
     "name": "BlockWardHistogram",
     "kind": "Agg"
   },
@@ -213,6 +217,10 @@
   },
   {
     "name": "CombineMembers",
+    "kind": "Normal"
+  },
+  {
+    "name": "Concat",
     "kind": "Normal"
   },
   {
@@ -344,6 +352,10 @@
     "kind": "Normal"
   },
   {
+    "name": "DictInsert",
+    "kind": "Normal"
+  },
+  {
     "name": "DictItems",
     "kind": "Normal"
   },
@@ -372,6 +384,10 @@
     "kind": "Normal"
   },
   {
+    "name": "DictRemove",
+    "kind": "Normal"
+  },
+  {
     "name": "DictType",
     "kind": "Normal"
   },
@@ -384,6 +400,18 @@
     "kind": "Normal"
   },
   {
+    "name": "DictUpdate",
+    "kind": "Normal"
+  },
+  {
+    "name": "DictUpsert",
+    "kind": "Normal"
+  },
+  {
+    "name": "DynamicLinearTypeHandle",
+    "kind": "Normal"
+  },
+  {
     "name": "DynamicVariant",
     "kind": "Normal"
   },
@@ -392,11 +420,19 @@
     "kind": "Normal"
   },
   {
+    "name": "EmptyDictType",
+    "kind": "Normal"
+  },
+  {
     "name": "EmptyDictTypeHandle",
     "kind": "Normal"
   },
   {
     "name": "EmptyList",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyListType",
     "kind": "Normal"
   },
   {
@@ -509,6 +545,14 @@
   },
   {
     "name": "FromBytes",
+    "kind": "Normal"
+  },
+  {
+    "name": "FromDynamicLinear",
+    "kind": "Normal"
+  },
+  {
+    "name": "FromMutDict",
     "kind": "Normal"
   },
   {
@@ -626,6 +670,18 @@
   {
     "name": "LinearHistogramCDF",
     "kind": "Agg"
+  },
+  {
+    "name": "LinearItemType",
+    "kind": "Normal"
+  },
+  {
+    "name": "LinearType",
+    "kind": "Normal"
+  },
+  {
+    "name": "LinearTypeHandle",
+    "kind": "Normal"
   },
   {
     "name": "ListAggregate",
@@ -916,6 +972,58 @@
     "kind": "Agg"
   },
   {
+    "name": "MutDictContains",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictCreate",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictHasItems",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictInsert",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictItems",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictKeys",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictLength",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictLookup",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictPayloads",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictPop",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictRemove",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictUpdate",
+    "kind": "Normal"
+  },
+  {
+    "name": "MutDictUpsert",
+    "kind": "Normal"
+  },
+  {
     "name": "NTile",
     "kind": "Window"
   },
@@ -930,6 +1038,14 @@
   {
     "name": "NthValue",
     "kind": "Window"
+  },
+  {
+    "name": "NullIf",
+    "kind": "Normal"
+  },
+  {
+    "name": "NullType",
+    "kind": "Normal"
   },
   {
     "name": "NullTypeHandle",
@@ -1148,6 +1264,38 @@
     "kind": "Normal"
   },
   {
+    "name": "SimplePg::ceil",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::date_part",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::date_trunc",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::floor",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::now",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::round",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::to_char",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::to_date",
+    "kind": "Normal"
+  },
+  {
     "name": "Some",
     "kind": "Agg"
   },
@@ -1344,6 +1492,10 @@
     "kind": "Normal"
   },
   {
+    "name": "ToDynamicLinear",
+    "kind": "Normal"
+  },
+  {
     "name": "ToHashedDict",
     "kind": "Normal"
   },
@@ -1353,6 +1505,10 @@
   },
   {
     "name": "ToMultiDict",
+    "kind": "Normal"
+  },
+  {
+    "name": "ToMutDict",
     "kind": "Normal"
   },
   {
@@ -1505,6 +1661,14 @@
   },
   {
     "name": "WeakField",
+    "kind": "Normal"
+  },
+  {
+    "name": "WithSideEffects",
+    "kind": "Normal"
+  },
+  {
+    "name": "WithSideEffectsMode",
     "kind": "Normal"
   },
   {

@@ -6,10 +6,20 @@ import net.ltgt.gradle.errorprone.errorprone
 
 {%- if with_kotlin -%}
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-{%-     if with_kapt or with_test_kapt %}
-import org.jetbrains.kotlin.gradle.internal.KaptGenerateStubsTask
-{%-     endif -%}
 {%-     if with_lombok_plugin %}
 import io.freefair.gradle.plugins.lombok.tasks.Delombok
+{%-     endif -%}
+{%-     if with_kapt or with_test_kapt %}
+import org.jetbrains.kotlin.gradle.internal.KaptGenerateStubsTask
+{%-         if all_kapt_ap_opts|length %}
+import java.io.ByteArrayOutputStream
+import java.io.ObjectOutputStream
+import java.util.Base64
+{%-         endif -%}
 {%-     endif %}
+{%  endif -%}
+
+{%- if proto_template -%}
+import com.google.protobuf.gradle.*
+
 {%  endif -%}

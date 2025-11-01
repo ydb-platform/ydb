@@ -35,7 +35,7 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
     ydb/core/kqp/opt
-    ydb/core/kqp/proxy_service
+    ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/mon
     ydb/library/db_pool
     ydb/library/security

@@ -1,13 +1,5 @@
 # Adding, removing, and renaming a index
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
-{% endif %}
-
 ## Adding an index {#add-index}
 
 `ADD INDEX` — adds an index with the specified name and type for a given set of columns. Grammar:
@@ -37,6 +29,8 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 {% endif %}
 
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
 ### Examples
 
 A regular secondary index:
@@ -51,7 +45,7 @@ A vector index:
 
 ```yql
 ALTER TABLE `series`
-  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
     distance="cosine",
@@ -90,7 +84,6 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 
 {% note info %}
-
 
 These settings cannot be reset.
 
@@ -141,7 +134,6 @@ Replacement of atomic indexes under load is supported by the command [{{ ydb-cli
 {% endif %}
 
 Example of index renaming:
-
 
 ```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;

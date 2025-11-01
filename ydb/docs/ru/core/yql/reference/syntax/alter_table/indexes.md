@@ -1,13 +1,5 @@
 # Добавление, удаление и переименование индекса
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
-
-{% endif %}
-
 ## Добавление индекса {#add-index}
 
 `ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Грамматика:
@@ -37,6 +29,8 @@ ALTER TABLE `<table_name>`
 
 {% endif %}
 
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
 ### Примеры
 
 Вторичный индекс:
@@ -51,7 +45,7 @@ ALTER TABLE `series`
 
 ```yql
 ALTER TABLE `series`
-  INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
+  ADD INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree
   ON (embedding) COVER (title)
   WITH (
     distance="cosine",

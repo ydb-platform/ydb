@@ -9,3 +9,4 @@ items:
 - { name: Работа с базами данных YDB,                             href: ydb.md }
 - name: Работа с бакетами S3
   include: { path: s3/toc_i.yaml, mode: link }
+- { name: Импорт и экспорт данных,                                href: import_and_export.md }

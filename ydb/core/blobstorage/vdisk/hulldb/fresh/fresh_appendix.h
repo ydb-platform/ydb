@@ -21,19 +21,29 @@ namespace NKikimr {
     class TFreshAppendix {
     public:
         struct TRecord {
+        private:
             TKey Key;
             TMemRec MemRec;
 
+        public:
+            TKey GetKey() const {
+                return ReadUnaligned<TKey>(&Key);
+            }
+
+            TMemRec GetMemRec() const {
+                return ReadUnaligned<TMemRec>(&MemRec);
+            }
+
             bool operator <(const TKey &key) const {
-                return Key < key;
+                return GetKey() < key;
             }
 
             bool operator <(const TRecord &rec) const {
-                return Key < rec.Key;
+                return GetKey() < rec.GetKey();
             }
 
             bool operator ==(const TRecord &rec) const {
-                return Key == rec.Key;
+                return GetKey() == rec.GetKey();
             }
 
             TRecord(const TKey &key, const TMemRec &memRec)
@@ -62,7 +72,7 @@ namespace NKikimr {
         TFreshAppendix &operator=(TFreshAppendix &&) = default;
 
         void Add(const TKey &key, const TMemRec &memRec) {
-            Y_DEBUG_ABORT_UNLESS(SortedRecs.empty() || SortedRecs.back().Key < key);
+            Y_DEBUG_ABORT_UNLESS(SortedRecs.empty() || SortedRecs.back().GetKey() < key);
             SortedRecs.push_back({key, memRec});
             MemConsumed.Add(sizeof(TRecord));
         }
@@ -115,13 +125,13 @@ namespace NKikimr {
 
         TIterator(const THullCtxPtr &hullCtx, TContType *apndx)
             : Apndx(apndx)
-            , It()
+            , It(Apndx ? Apndx->SortedRecs.end() : TFreshAppendix::TVecIterator())
         {
             Y_UNUSED(hullCtx);
         }
 
         bool Valid() const {
-            return Apndx && It >= Apndx->SortedRecs.begin() && It < Apndx->SortedRecs.end();
+            return Apndx && It != Apndx->SortedRecs.end();
         }
 
         void Next() {
@@ -130,35 +140,43 @@ namespace NKikimr {
         }
 
         void Prev() {
-            if (It == Apndx->SortedRecs.begin())
-                It = {};
-            else
+            if (It == Apndx->SortedRecs.begin()) {
+                It = Apndx->SortedRecs.end();
+            } else {
                 --It;
+            }
         }
 
         TKey GetCurKey() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return It->Key;
+            return It->GetKey();
         }
 
         TMemRec GetMemRec() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return It->MemRec;
+            return It->GetMemRec();
         }
 
         void SeekToFirst() {
+            Y_DEBUG_ABORT_UNLESS(Apndx);
             It = Apndx->SortedRecs.begin();
         }
 
+        void SeekToLast() {
+            Y_DEBUG_ABORT_UNLESS(Apndx);
+            It = Apndx->SortedRecs.empty() ? Apndx->SortedRecs.end() : std::prev(Apndx->SortedRecs.end());
+        }
+
         void Seek(const TKey &key) {
-            It = ::LowerBound(Apndx->SortedRecs.begin(), Apndx->SortedRecs.end(), key);
+            Y_DEBUG_ABORT_UNLESS(Apndx);
+            It = std::lower_bound(Apndx->SortedRecs.begin(), Apndx->SortedRecs.end(), key);
         }
 
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
             // because fresh appendix doesn't have data we don't care about exact circaLsn value
             const ui64 circaLsn = 0;
-            merger->AddFromFresh(It->MemRec, nullptr, It->Key, circaLsn);
+            merger->AddFromFresh(It->GetMemRec(), nullptr, It->GetKey(), circaLsn);
         }
 
         template <class THeap>
@@ -459,4 +477,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

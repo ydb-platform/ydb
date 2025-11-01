@@ -11,7 +11,7 @@ class CreateDatabase(DDL):
     """
     # pylint: disable-msg=too-many-arguments
     def __init__(self, name: str, engine: str = None, zoo_path: str = None, shard_name: str = '{shard}',
-                 replica_name: str = '{replica}'):
+                 replica_name: str = '{replica}', exists_ok: bool = False):
         """
         :param name: Database name
         :param engine: Database ClickHouse engine type
@@ -21,7 +21,7 @@ class CreateDatabase(DDL):
         """
         if engine and engine not in ('Ordinary', 'Atomic', 'Lazy', 'Replicated'):
             raise ArgumentError(f'Unrecognized engine type {engine}')
-        stmt = f'CREATE DATABASE {quote_identifier(name)}'
+        stmt = f"CREATE DATABASE {'IF NOT EXISTS ' if exists_ok else ''}{quote_identifier(name)}"
         if engine:
             stmt += f' Engine {engine}'
             if engine == 'Replicated':
@@ -36,5 +36,5 @@ class DropDatabase(DDL):
     """
     Alternative DDL statement for built in SqlAlchemy DropSchema DDL class
     """
-    def __init__(self, name: str):
-        super().__init__(f'DROP DATABASE {quote_identifier(name)}')
+    def __init__(self, name: str, missing_ok: bool = False):
+        super().__init__(f"DROP DATABASE {'IF EXISTS ' if missing_ok else ''}{quote_identifier(name)}")

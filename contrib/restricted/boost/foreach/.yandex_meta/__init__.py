@@ -9,7 +9,7 @@ def post_install(self):
 boost_foreach = NixSourceProject(
     nixattr="boost_foreach",
     arcdir=boost.make_arcdir("foreach"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

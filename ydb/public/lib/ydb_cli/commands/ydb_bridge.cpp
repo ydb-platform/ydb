@@ -28,8 +28,8 @@ namespace {
         if (stateStrUpper == "SYNCHRONIZED") {
             return NYdb::NBridge::EPileState::SYNCHRONIZED;
         }
-        if (stateStrUpper == "PROMOTE") {
-            return NYdb::NBridge::EPileState::PROMOTE;
+        if (stateStrUpper == "PROMOTED") {
+            return NYdb::NBridge::EPileState::PROMOTED;
         }
         if (stateStrUpper == "PRIMARY") {
             return NYdb::NBridge::EPileState::PRIMARY;
@@ -38,7 +38,7 @@ namespace {
             return NYdb::NBridge::EPileState::SUSPENDED;
         }
         ythrow yexception() << "Invalid pile state: \"" << stateStr
-            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTE, PRIMARY, SUSPENDED.";
+            << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTED, PRIMARY, SUSPENDED.";
     }
 
     TString PileStateToString(NYdb::NBridge::EPileState state) {
@@ -47,7 +47,7 @@ namespace {
             case NYdb::NBridge::EPileState::DISCONNECTED: return "DISCONNECTED";
             case NYdb::NBridge::EPileState::NOT_SYNCHRONIZED: return "NOT_SYNCHRONIZED";
             case NYdb::NBridge::EPileState::SYNCHRONIZED: return "SYNCHRONIZED";
-            case NYdb::NBridge::EPileState::PROMOTE: return "PROMOTE";
+            case NYdb::NBridge::EPileState::PROMOTED: return "PROMOTED";
             case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
             case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
         }
@@ -58,7 +58,7 @@ namespace {
 TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     : TClientCommandTree("bridge", {}, "Manage cluster in bridge mode")
 {
-    AddCommand(std::make_unique<TCommandBridgeUpdate>(allowEmptyDatabase));
+    AddHiddenCommand(std::make_unique<TCommandBridgeUpdate>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeList>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeSwitchover>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeFailover>(allowEmptyDatabase));
@@ -185,21 +185,24 @@ int TCommandBridgeList::Run(TConfig& config) {
 
     switch (OutputFormat) {
         case EDataFormat::Json: {
-            NJson::TJsonValue json(NJson::JSON_ARRAY);
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json.InsertValue("generation", result.GetGeneration());
+            NJson::TJsonValue piles(NJson::JSON_ARRAY);
             for (const auto& s : state) {
                 NJson::TJsonValue item(NJson::JSON_MAP);
                 item.InsertValue("pile_name", s.PileName);
                 item.InsertValue("state", PileStateToString(s.State));
-                json.AppendValue(item);
+                piles.AppendValue(item);
             }
+            json.InsertValue("piles", piles);
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
             break;
         }
         case EDataFormat::Csv: {
-            Cout << "pile_name,state" << Endl;
+            Cout << "pile_name,state,generation" << Endl;
             for (const auto& s : state) {
-                Cout << s.PileName << "," << PileStateToString(s.State) << Endl;
+                Cout << s.PileName << "," << PileStateToString(s.State) << "," << result.GetGeneration() << Endl;
             }
             break;
         }
@@ -208,6 +211,7 @@ int TCommandBridgeList::Run(TConfig& config) {
             for (const auto& s : state) {
                 ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
             }
+            ss << "Generation: " << result.GetGeneration() << Endl;
             Cout << ss.Str();
             break;
         }
@@ -239,7 +243,7 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(*driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
-    updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
+    updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -314,7 +318,7 @@ int TCommandBridgeTakedown::Run(TConfig& config) {
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
     updates.push_back({DownPile, NYdb::NBridge::EPileState::SUSPENDED});
     if (!NewPrimaryPile.empty()) {
-        updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTE});
+        updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PROMOTED});
     }
 
     auto result = client.UpdateClusterState(updates, {}).GetValueSync();

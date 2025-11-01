@@ -107,12 +107,18 @@ message LoadAverageStatus {
     uint32 cores = 3;
 }
 
+message ClockSkewStatus {
+    StatusFlag.Status overall = 1;
+    float clock_skew = 2; // ms
+}
+
 message ComputeNodeStatus {
     string id = 1;
     StatusFlag.Status overall = 2;
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
+    ClockSkewStatus clock_skew = 6;
 }
 
 message ComputeStatus {
@@ -121,12 +127,14 @@ message ComputeStatus {
     repeated ComputeTabletStatus tablets = 3;
     float paths_quota_usage = 4;
     float shards_quota_usage = 5;
+    ClockSkewStatus clock_skew = 6;
 }
 
 message LocationNode {
     uint32 id = 1;
     string host = 2;
     uint32 port = 3;
+    LocationBridgePile pile = 4;
 }
 
 message LocationStoragePDisk {
@@ -174,12 +182,19 @@ message LocationBridgePile {
     string name = 1;
 }
 
+message LocationStateStorage {
+    uint32 ring = 1;
+    LocationNode node = 2;
+    LocationBridgePile pile = 3;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
     LocationComputeSchema schema = 4;
     LocationBridgePile pile = 5;
+    LocationStateStorage state_storage = 6;
 }
 
 message LocationDatabase {
@@ -218,4 +233,19 @@ message SelfCheckResult {
     repeated IssueLog issue_log = 2;
     repeated DatabaseStatus database_status = 3;
     LocationNode location = 4;
+}
+
+message ClusterStateRequest {
+    Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+    uint32 duration_seconds = 2;
+    uint32 period_seconds = 3;
+}
+
+message ClusterStateResponse {
+    // After successfull completion must contain ClusterStateResult.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ClusterStateResult {
+    string result = 1;
 }

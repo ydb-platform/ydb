@@ -1,7 +1,9 @@
 # INSERT INTO
 
+{% include [column-and-row-tables-in-read-only-tx](../_includes/limitation-column-row-in-read-only-tx-warn.md) %}
+
 {% if select_command != "SELECT STREAM" %}
-Добавляет строки в {% if oss == true and backend_name == "YDB" %}строковую{% endif %} таблицу.{% if feature_bulk_tables %} Если целевая таблица уже существует и не является сортированной, операция `INSERT INTO` дописывает строки в конец таблицы. В случае сортированной таблицы, YQL пытается сохранить сортированность путем запуска сортированного слияния. {% endif %}{% if feature_map_tables %} При попытке вставить в таблицу строку с уже существующим значением первичного ключа операция завершится ошибкой с кодом `PRECONDITION_FAILED` и текстом `Operation aborted due to constraint violation: insert_pk`.{% endif %}
+Добавляет строки в таблицу.{% if feature_bulk_tables %} Если целевая таблица уже существует и не является сортированной, операция `INSERT INTO` дописывает строки в конец таблицы. В случае сортированной таблицы, YQL пытается сохранить сортированность путем запуска сортированного слияния. {% endif %}{% if feature_map_tables %} При попытке вставить в таблицу строку с уже существующим значением первичного ключа операция завершится ошибкой с кодом `PRECONDITION_FAILED` и текстом `Operation aborted due to constraint violation: insert_pk`.{% endif %}
 
 {% if feature_mapreduce %}Таблица по имени ищется в базе данных, заданной оператором [USE](use.md).{% endif %}
 
@@ -68,7 +70,6 @@ SELECT key FROM my_table_source;
 
 {% endif %}
 
-
 {% if feature_federated_queries %}
 
 При работе с [внешними файловыми источниками данных](../../../concepts/datamodel/external_data_source.md) можно дополнительно указывать ряд параметров:
@@ -99,4 +100,28 @@ SELECT
 * `test/`— путь внутри бакета, куда будут записаны данные. При записи создаются файлы со случайными именами.
 
 {% endif %}
+
+## INSERT INTO ... RETURNING {insert-into-returning}
+
+Используется для вставки строк и одновременного возврата значений из них. Это позволяет получить информацию о вставленных записях за один запрос, избавляя от необходимости выполнять последующий SELECT.
+
+### Примеры
+
+* Возврат всех значений вставленной строки
+
+```yql
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+INSERT INTO some_table (id, color, price)
+VALUES
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```
 

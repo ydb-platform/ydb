@@ -34,16 +34,13 @@ TMessagePtr<TApiVersionsResponseData> TKafkaTestClient::ApiVersions(bool silent)
 // YDB ignores AllowAutoTopicCreation, i.e. it never creates a new topic implicitly.
 // But in Apache Kafka the default behavior is to create a new topic, if there is no one at the moment of the request.
 // With this flag, allowAutoTopicCreation, you can stop this behavior in Apache Kafka.
-TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, std::optional<bool> allowAutoTopicCreation) {
+TMessagePtr<TMetadataResponseData> TKafkaTestClient::Metadata(const TVector<TString>& topics, bool allowAutoTopicCreation) {
     Cerr << ">>>>> MetadataRequest\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::METADATA, 12);
 
     TMetadataRequestData request;
-    if (allowAutoTopicCreation.has_value()) {
-        // If allowAutoTopicCreation does not have a value, use the default value (= true).
-        request.AllowAutoTopicCreation = allowAutoTopicCreation.value() ? 1 : 0;
-    }
+    request.AllowAutoTopicCreation = allowAutoTopicCreation;
     request.Topics.reserve(topics.size());
     for (auto topicName : topics) {
         NKafka::TMetadataRequestData::TMetadataRequestTopic topic;
@@ -811,19 +808,7 @@ TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requ
 }
 
 void TKafkaTestClient::Print(const TBuffer& buffer) {
-    TStringBuilder sb;
-    for (size_t i = 0; i < buffer.Size(); ++i) {
-        char c = buffer.Data()[i];
-        if (i > 0) {
-            sb << ", ";
-        }
-        sb << "0x" << Hex0((c & 0xF0) >> 4) << Hex0(c & 0x0F);
-    }
-    Cerr << ">>>>> Packet sent: " << sb << Endl;
-}
-
-char TKafkaTestClient::Hex0(const unsigned char c) {
-    return c < 10 ? '0' + c : 'A' + c - 10;
+    Cerr << ">>>>> Packet sent: " << Hex(buffer.Begin(), buffer.End()) << Endl;
 }
 
 void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
@@ -841,3 +826,6 @@ void TKafkaTestClient::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, TH
         }
     }
 }
+
+template
+TMessagePtr<TProduceResponseData> TKafkaTestClient::WriteAndRead<TProduceResponseData>(TRequestHeaderData& header, TApiMessage& request, bool silent = false);

@@ -137,4 +137,18 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetQueryDeclaredParametersInfoCommand
+    : public TTypedCommand<NApi::TGetQueryDeclaredParametersInfoOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetQueryDeclaredParametersInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

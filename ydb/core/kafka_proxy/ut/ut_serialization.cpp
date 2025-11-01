@@ -776,11 +776,11 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
     UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
     UNIT_ASSERT_EQUAL(r0.BatchLength, 0);
     UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);
-    UNIT_ASSERT_EQUAL(r0.Magic, 0);
-    UNIT_ASSERT_EQUAL(r0.Crc, 544167206);
+    UNIT_ASSERT_EQUAL(r0.Magic, 2);
+    UNIT_ASSERT_EQUAL(r0.Crc, 0);
     UNIT_ASSERT_EQUAL(r0.Attributes, 0);
     UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 0);
-    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, -1);
+    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, 0);
     UNIT_ASSERT_EQUAL(r0.MaxTimestamp, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerId, -1);
     UNIT_ASSERT_EQUAL(r0.ProducerEpoch, -1);
@@ -790,22 +790,83 @@ Y_UNIT_TEST(ProduceRequestData_Record_v0) {
 
     UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("key-1", 5));
     UNIT_ASSERT_EQUAL(r0.Records[0].Value, TKafkaRawBytes("test message", 12));
-    UNIT_ASSERT_EQUAL(r0.Records[0].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].OffsetDelta, 0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].TimestampDelta, 0);
 }
 
-char Hex(const unsigned char c) {
-    return c < 10 ? '0' + c : 'A' + c - 10;
+//
+
+Y_UNIT_TEST(ProduceRequestData_Record_v0_manyMessages) {
+    ui8 reference[] = { 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x05, 0x00, 0x07, 0x72, 0x64,
+                       0x6B, 0x61, 0x66, 0x6B, 0x61, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x75, 0x30, 0x02,
+                       0x05, 0x61, 0x61, 0x61, 0x61, 0x02, 0x00, 0x00, 0x00, 0x00, 0x7D, 0x00, 0x00, 0x00, 0x00, 0x00,
+                       0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x13, 0x5F, 0x1B, 0x4F, 0x8D, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+                       0xFF, 0x00, 0x00, 0x00, 0x05, 0x61, 0x61, 0x61, 0x61, 0x61, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                       0x00, 0x01, 0x00, 0x00, 0x00, 0x13, 0xBA, 0x6C, 0x26, 0x93, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+                       0x00, 0x00, 0x00, 0x05, 0x62, 0x62, 0x62, 0x62, 0x62, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                       0x02, 0x00, 0x00, 0x00, 0x13, 0x50, 0x6E, 0x03, 0xA6, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00,
+                       0x00, 0x00, 0x05, 0x63, 0x63, 0x63, 0x63, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+                       0x00, 0x00, 0x00, 0x13, 0xAB, 0xF3, 0xF2, 0xEE, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00,
+                       0x00, 0x05, 0x64, 0x64, 0x64, 0x64, 0x64, 0x00, 0x00, 0x00};
+
+    TBuffer buffer((char*)reference, sizeof(reference));
+    TKafkaReadable readable(buffer);
+
+    Cerr << ">>>>> Buffer size: " << buffer.Size() << Endl;
+
+    TRequestHeaderData header;
+    header.Read(readable, 2);
+
+    TProduceRequestData result;
+    result.Read(readable, header.RequestApiVersion);
+
+    UNIT_ASSERT_EQUAL(result.Acks, -1);
+    UNIT_ASSERT_EQUAL(result.TimeoutMs, 30000);
+
+    auto& r0 = *result.TopicData[0].PartitionData[0].Records;
+    UNIT_ASSERT_EQUAL(r0.BaseOffset, 0);
+    UNIT_ASSERT_EQUAL(r0.BatchLength, 0);
+    UNIT_ASSERT_EQUAL(r0.PartitionLeaderEpoch, -1);
+    UNIT_ASSERT_EQUAL(r0.Magic, 2);
+    UNIT_ASSERT_EQUAL(r0.Crc, 0);
+    UNIT_ASSERT_EQUAL(r0.Attributes, 0);
+    UNIT_ASSERT_EQUAL(r0.LastOffsetDelta, 0);
+    UNIT_ASSERT_EQUAL(r0.BaseTimestamp, 0);
+    UNIT_ASSERT_EQUAL(r0.MaxTimestamp, -1);
+    UNIT_ASSERT_EQUAL(r0.ProducerId, -1);
+    UNIT_ASSERT_EQUAL(r0.ProducerEpoch, -1);
+    UNIT_ASSERT_EQUAL(r0.BaseSequence, -1);
+
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records.size(), (size_t)4);
+
+    //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
+    UNIT_ASSERT_EQUAL(r0.Records[0].Value, TKafkaRawBytes("aaaaa", 5));
+    UNIT_ASSERT_EQUAL(r0.Records[0].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].OffsetDelta, 0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[0].TimestampDelta, 0);
+
+    //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
+    UNIT_ASSERT_EQUAL(r0.Records[1].Value, TKafkaRawBytes("bbbbb", 5));
+    UNIT_ASSERT_EQUAL(r0.Records[1].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[1].OffsetDelta, 1);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[1].TimestampDelta, 0);
+
+    //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
+    UNIT_ASSERT_EQUAL(r0.Records[2].Value, TKafkaRawBytes("ccccc", 5));
+    UNIT_ASSERT_EQUAL(r0.Records[2].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[2].OffsetDelta, 2);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[2].TimestampDelta, 0);
+
+    //UNIT_ASSERT_EQUAL(r0.Records[0].Key, TKafkaRawBytes("", 0));
+    UNIT_ASSERT_EQUAL(r0.Records[3].Value, TKafkaRawBytes("ddddd", 5));
+    UNIT_ASSERT_EQUAL(r0.Records[3].Headers.size(), (size_t)0);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[3].OffsetDelta, 3);
+    UNIT_ASSERT_VALUES_EQUAL(r0.Records[3].TimestampDelta, 0);
 }
 
 void Print(std::string& sb) {
-    for(size_t i = 0; i < sb.length(); ++i) {
-        char c = sb.at(i);
-        if (i > 0) {
-            Cerr << ", ";
-        }
-        Cerr << "0x" << Hex(c >> 4) << Hex(c & 0x0F);
-    }
-    Cerr << Endl;
+    Cerr << Hex(sb.begin(), sb.end()) << Endl;
 }
 
 }

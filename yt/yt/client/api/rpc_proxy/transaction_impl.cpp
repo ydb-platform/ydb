@@ -41,6 +41,7 @@ TTransaction::TTransaction(
     EDurability durability,
     TDuration timeout,
     bool pingAncestors,
+    std::optional<std::string> pingerAddress,
     std::optional<TDuration> pingPeriod,
     std::optional<TStickyTransactionParameters> stickyParameters,
     i64 sequenceNumberSourceId,
@@ -55,6 +56,7 @@ TTransaction::TTransaction(
     , Durability_(durability)
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
+    , PingerAddress_(pingerAddress)
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
@@ -70,7 +72,7 @@ TTransaction::TTransaction(
     Proxy_.SetDefaultEnableLegacyRpcCodecs(config->EnableLegacyRpcCodecs);
 
     YT_LOG_DEBUG("%v (Type: %v, StartTimestamp: %v, Atomicity: %v, "
-        "Durability: %v, Timeout: %v, PingAncestors: %v, PingPeriod: %v, Sticky: %v, StickyProxyAddress: %v)",
+        "Durability: %v, Timeout: %v, PingAncestors: %v, PingerAddress: %v, PingPeriod: %v, Sticky: %v, StickyProxyAddress: %v)",
         capitalizedCreationReason,
         GetType(),
         GetStartTimestamp(),
@@ -78,6 +80,7 @@ TTransaction::TTransaction(
         GetDurability(),
         GetTimeout(),
         PingAncestors_,
+        PingerAddress_,
         PingPeriod_,
         /*sticky*/ stickyParameters.has_value(),
         StickyProxyAddress_);
@@ -419,9 +422,17 @@ void TTransaction::ModifyRows(
         }
     }
 
+    const auto& config = Connection_->GetConfig();
+
+    // Pure locks do not set usedStrongLocks by themselves. That causes row_legacy_read_locks to be used.
+    // And with row_legacy_read_locks used rpc proxy reconstructs exclusive locks using row values from attachments.
+    // With DoNotDropPureExclusiveLocks at least row_legacy_locks will be used.
+    usedStrongLocks |= config->DoNotDropPureExclusiveLocks;
+
     if (usedStrongLocks) {
         req->Header().set_protocol_version_minor(YTRpcModifyRowsStrongLocksVersion);
     }
+
     if (usedWideLocks) {
         req->RequireServerFeature(ERpcProxyFeature::WideLocks);
     }
@@ -429,6 +440,7 @@ void TTransaction::ModifyRows(
     for (const auto& modification : modifications) {
         rows.emplace_back(modification.Row);
         req->add_row_modification_types(static_cast<NProto::ERowModificationType>(modification.Type));
+
         if (usedWideLocks) {
             ToProto(req->add_row_locks(), modification.Locks);
         } else if (usedStrongLocks) {
@@ -442,6 +454,7 @@ void TTransaction::ModifyRows(
                     bitmap |= 1u << index;
                 }
             }
+
             req->add_row_legacy_read_locks(bitmap);
         }
     }
@@ -452,7 +465,6 @@ void TTransaction::ModifyRows(
         req->mutable_rowset_descriptor());
 
     TFuture<void> future;
-    const auto& config = Connection_->GetConfig();
     if (config->ModifyRowsBatchCapacity == 0) {
         ValidateActive();
         future = req->Invoke().As<void>();
@@ -936,12 +948,52 @@ TFuture<TDistributedWriteSessionWithCookies> TTransaction::StartDistributedWrite
         PatchTransactionId(options));
 }
 
+TFuture<void> TTransaction::PingDistributedWriteSession(
+    TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    ValidateActive();
+    return Client_->PingDistributedWriteSession(
+        std::move(session),
+        options);
+}
+
 TFuture<void> TTransaction::FinishDistributedWriteSession(
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
 {
     ValidateActive();
     return Client_->FinishDistributedWriteSession(
+        sessionWithResults,
+        options);
+}
+
+TFuture<TDistributedWriteFileSessionWithCookies> TTransaction::StartDistributedWriteFileSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options)
+{
+    ValidateActive();
+    return Client_->StartDistributedWriteFileSession(
+        path,
+        PatchTransactionId(options));
+}
+
+TFuture<void> TTransaction::PingDistributedWriteFileSession(
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& options)
+{
+    ValidateActive();
+    return Client_->PingDistributedWriteFileSession(
+        session,
+        options);
+}
+
+TFuture<void> TTransaction::FinishDistributedWriteFileSession(
+    const TDistributedWriteFileSessionWithResults& sessionWithResults,
+    const TDistributedWriteFileSessionFinishOptions& options)
+{
+    ValidateActive();
+    return Client_->FinishDistributedWriteFileSession(
         sessionWithResults,
         options);
 }

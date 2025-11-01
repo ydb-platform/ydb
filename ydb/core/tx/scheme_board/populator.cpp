@@ -562,6 +562,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         if (ev->Get()->PathId) {
             startPathId = ev->Get()->PathId;
+            MaxRequestedPathId = Max(MaxRequestedPathId, startPathId);
             it = Descriptions.lower_bound(startPathId);
         } else {
             it = Descriptions.begin();
@@ -860,6 +861,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         record.MutableMaxPathId()->SetOwnerId(MaxPathId.OwnerId);
         record.MutableMaxPathId()->SetLocalPathId(MaxPathId.LocalPathId);
+        record.MutableMaxRequestedPathId()->SetOwnerId(MaxRequestedPathId.OwnerId);
+        record.MutableMaxRequestedPathId()->SetLocalPathId(MaxRequestedPathId.LocalPathId);
 
         record.SetDelayedUpdatesCount(DelayedUpdates.size());
 
@@ -944,7 +947,8 @@ public:
             const ui64 maxPathId)
         : Owner(owner)
         , Generation(generation)
-        , MaxPathId(TPathId(owner, maxPathId))
+        , MaxPathId(owner, maxPathId)
+        , MaxRequestedPathId(owner, 0)
     {
         for (const auto& [pathId, twoPart] : twoPartDescriptions) {
             Descriptions.emplace(pathId, MakeOpaquePathDescription(twoPart));
@@ -1005,6 +1009,7 @@ private:
 
     TMap<TPathId, TOpaquePathDescription> Descriptions;
     TPathId MaxPathId;
+    TPathId MaxRequestedPathId;
 
     TDelayedUpdates DelayedUpdates;
 

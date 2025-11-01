@@ -23,6 +23,7 @@ message TEvPartitionAddress {
 
 message TEvGetAddressResponse {
     repeated TEvPartitionAddress Partitions = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
 }
 
 message TPartitionOffset {
@@ -68,6 +69,7 @@ message TEvMessage {
     reserved 2;
     uint32 PayloadId = 3;
     repeated uint64 Offsets = 4;
+    repeated uint64 WatermarksUs = 5;
 }
 
 message TEvMessageBatch {
@@ -79,7 +81,7 @@ message TEvMessageBatch {
 
 message TPartitionStatistics {
     uint32 PartitionId = 1;
-    uint64 NextMessageOffset = 2;
+    optional uint64 NextMessageOffset = 2;
 }
 
 message TEvStatistics {

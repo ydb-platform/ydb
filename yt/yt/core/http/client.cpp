@@ -264,9 +264,13 @@ private:
             request->SetHeaders(headers);
         }
 
+        auto urlPath = TString(urlRef.Path);
+        if (urlPath.empty()) {
+            urlPath = "/";
+        }
         auto requestPath = (urlRef.RawQuery.empty() && Config_->OmitQuestionMarkForEmptyQuery)
-            ? TString(urlRef.Path)
-            : Format("%v?%v", urlRef.Path, urlRef.RawQuery);
+            ? urlPath
+            : Format("%v?%v", urlPath, urlRef.RawQuery);
         request->WriteRequest(method, requestPath);
 
         return {std::move(request), std::move(response)};

@@ -72,8 +72,6 @@ BELONGS ya.make
         absl/debugging/internal/stacktrace_riscv-inl.inc [3:13]
         absl/debugging/internal/utf8_for_code_point.cc [3:13]
         absl/debugging/internal/utf8_for_code_point.h [3:13]
-        absl/hash/internal/low_level_hash.cc [3:13]
-        absl/hash/internal/low_level_hash.h [3:13]
         absl/hash/internal/weakly_mixed_integer.h [3:13]
         absl/log/internal/append_truncated.h [3:13]
         absl/log/internal/fnmatch.cc [3:13]
@@ -82,10 +80,12 @@ BELONGS ya.make
         absl/log/internal/nullguard.cc [3:13]
         absl/log/internal/vlog_config.cc [3:13]
         absl/log/internal/vlog_config.h [3:13]
+        absl/log/log_entry.cc [3:13]
         absl/log/log_sink.cc [3:13]
         absl/numeric/bits.h [3:13]
         absl/numeric/internal/bits.h [3:13]
         absl/numeric/internal/representation.h [3:13]
+        absl/profiling/hashtable.h [3:13]
         absl/profiling/internal/exponential_biased.cc [3:13]
         absl/profiling/internal/exponential_biased.h [3:13]
         absl/random/internal/mock_validators.h [3:13]
@@ -209,7 +209,6 @@ BELONGS ya.make
         absl/base/internal/low_level_alloc.cc [3:13]
         absl/base/internal/low_level_alloc.h [3:13]
         absl/base/internal/low_level_scheduling.h [3:13]
-        absl/base/internal/nullability_deprecated.h [3:13]
         absl/base/internal/per_thread_tls.h [3:13]
         absl/base/internal/pretty_function.h [3:13]
         absl/base/internal/raw_logging.cc [3:13]
@@ -667,7 +666,20 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-exception.LICENSE
     Files with this license:
-        absl/synchronization/mutex.h [317:317]
+        absl/synchronization/mutex.h [332:332]
+
+KEEP     Apache-2.0           af4e5af4263ce9dd5e3b09d15d50a801
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        absl/profiling/hashtable.cc [3:14]
+        absl/profiling/internal/profile_builder.cc [3:14]
+        absl/profiling/internal/profile_builder.h [3:14]
 
 KEEP     Apache-2.0           cac6cbe8ed5a3da569f7c01e4e486688
 BELONGS ya.make

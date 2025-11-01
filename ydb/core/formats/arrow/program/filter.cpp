@@ -104,8 +104,8 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
     AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
                                                      "input", inputColumns.front()->GetRecordsCount());
     if (context.GetLimit()) {
-        context.MutableResources().AddFilter(
-            filter.Cut(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse()));
+        context.MutableResources().AddFilter(filter);
+        context.MutableResources().CutFilter(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());
     } else {
         context.MutableResources().AddFilter(filter);
     }

@@ -2,6 +2,8 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query49.tpl and seed 1819994127
+$todecimal_15_4 = ($x) -> { return $todecimal($x, '15', '4'); };
+$zero_15_4 = $todecimal_15_4(0);
 
 $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank from
  (select
@@ -19,10 +21,10 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
  	,rank() over (order by currency_ratio) as currency_rank
  	from
  	(	select ws.ws_item_sk as item
- 		,(sum(coalesce($todecimal(wr.wr_return_quantity, 15, 4),$todecimal(0,15,4)))/
- 		sum(coalesce($todecimal(ws.ws_quantity, 15, 4),$todecimal(0,15,4)))) as return_ratio
- 		,(sum(coalesce($todecimal(wr.wr_return_amt, 15, 4),$todecimal(0,15,4)))/
- 		sum(coalesce($todecimal(ws.ws_net_paid, 15, 4),$todecimal(0,15,4)))) as currency_ratio
+ 		,(sum(coalesce($todecimal_15_4(wr.wr_return_quantity),$zero_15_4))/
+ 		sum(coalesce($todecimal_15_4(ws.ws_quantity),$zero_15_4))) as return_ratio
+ 		,(sum(coalesce($todecimal_15_4(wr.wr_return_amt),$zero_15_4))/
+ 		sum(coalesce($todecimal_15_4(ws.ws_net_paid),$zero_15_4))) as currency_ratio
  		from
  		 {{web_sales}} ws
          left join {{web_returns}} wr
@@ -63,10 +65,10 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
  	from
  	(	select
  		cs.cs_item_sk as item
- 		,(sum(coalesce($todecimal(cr.cr_return_quantity,15,4),$todecimal(0,15,4)))/
- 		sum(coalesce($todecimal(cs.cs_quantity,15,4),$todecimal(0,15,4)))) as return_ratio
- 		,(sum(coalesce($todecimal(cr.cr_return_amount,15,4),$todecimal(0,15,4)))/
- 		sum(coalesce($todecimal(cs.cs_net_paid,15,4),$todecimal(0,15,4)))) as currency_ratio
+ 		,(sum(coalesce($todecimal_15_4(cr.cr_return_quantity),$zero_15_4))/
+ 		sum(coalesce($todecimal_15_4(cs.cs_quantity),$zero_15_4))) as return_ratio
+ 		,(sum(coalesce($todecimal_15_4(cr.cr_return_amount),$zero_15_4))/
+ 		sum(coalesce($todecimal_15_4(cs.cs_net_paid),$zero_15_4))) as currency_ratio
  		from
  		{{catalog_sales}} cs
         left outer join {{catalog_returns}} cr
@@ -106,10 +108,10 @@ $non_unique = (select  channel, item, return_ratio, return_rank, currency_rank f
  	,rank() over (order by currency_ratio) as currency_rank
  	from
  	(	select sts.ss_item_sk as item
- 		,(sum(coalesce($todecimal(sr.sr_return_quantity,15,4),$todecimal(0,15,4)))/
-        sum(coalesce($todecimal(sts.ss_quantity,15,4),$todecimal(0,15,4)))) as return_ratio
- 		,(sum(coalesce($todecimal(sr.sr_return_amt,15,4),$todecimal(0,15,4)))/
-        sum(coalesce($todecimal(sts.ss_net_paid,15,4),$todecimal(0,15,4)))) as currency_ratio
+ 		,(sum(coalesce($todecimal_15_4(sr.sr_return_quantity),$zero_15_4))/
+        sum(coalesce($todecimal_15_4(sts.ss_quantity),$zero_15_4))) as return_ratio
+ 		,(sum(coalesce($todecimal_15_4(sr.sr_return_amt),$zero_15_4))/
+        sum(coalesce($todecimal_15_4(sts.ss_net_paid),$zero_15_4))) as currency_ratio
  		from
  		{{store_sales}} sts
         left outer join {{store_returns}} sr

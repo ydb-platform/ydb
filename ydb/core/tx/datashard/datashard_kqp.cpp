@@ -668,31 +668,6 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
         if (!brokenLocks.empty()) {
             return {false, std::move(brokenLocks)};
         }
-
-        // We need to form decision readsets for all other participants
-        for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
-            if (dstTabletId == origin) {
-                // Don't send readsets to ourselves
-                continue;
-            }
-
-            if (hasArbiter && !isArbiter && dstTabletId != kqpLocks->GetArbiterShard()) {
-                // Non-arbiter shards only send locks to the arbiter
-                continue;
-            }
-
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from " << origin << " to " << dstTabletId);
-
-            auto key = std::make_pair(origin, dstTabletId);
-            NKikimrTx::TReadSetData data;
-            data.SetDecision(NKikimrTx::TReadSetData::DECISION_COMMIT);
-
-            TString bodyStr;
-            bool ok = data.SerializeToString(&bodyStr);
-            Y_ENSURE(ok, "Failed to serialize readset from " << key.first << " to " << key.second);
-
-            outReadSets[key] = std::move(bodyStr);
-        }
     } else {
         Y_ENSURE(!isArbiter, "Arbiter is not in the sending shards set");
     }
@@ -755,13 +730,76 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
         }
 
         if (aborted) {
+            awaitingDecisions.clear();
             return {false, {}};
         }
     } else {
         Y_ENSURE(!isArbiter, "Arbiter is not in the receiving shards set");
     }
 
+    if (sendLocks) {
+        // We need to form decision readsets for all other participants
+        for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
+            if (dstTabletId == origin) {
+                // Don't send readsets to ourselves
+                continue;
+            }
+
+            if (hasArbiter && !isArbiter && dstTabletId != kqpLocks->GetArbiterShard()) {
+                // Non-arbiter shards only send locks to the arbiter
+                continue;
+            }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send commit decision from " << origin << " to " << dstTabletId);
+
+            auto key = std::make_pair(origin, dstTabletId);
+            NKikimrTx::TReadSetData data;
+            data.SetDecision(NKikimrTx::TReadSetData::DECISION_COMMIT);
+
+            TString bodyStr;
+            bool ok = data.SerializeToString(&bodyStr);
+            Y_ENSURE(ok, "Failed to serialize readset from " << key.first << " to " << key.second);
+
+            outReadSets[key] = std::move(bodyStr);
+        }
+    }
+
     return {true, {}};
+}
+
+void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    NKikimrTx::TReadSetData::EDecision decision, ui64 origin)
+{
+    if (kqpLocks && NeedValidateLocks(kqpLocks->GetOp())) {
+        bool sendLocks = SendLocks(*kqpLocks, origin);
+
+        if (sendLocks && !kqpLocks->GetReceivingShards().empty()) {
+            const bool hasArbiter = KqpLocksHasArbiter(kqpLocks);
+            const bool isArbiter = KqpLocksIsArbiter(origin, kqpLocks);
+
+            NKikimrTx::TReadSetData data;
+            data.SetDecision(decision);
+
+            TString bodyStr;
+            bool ok = data.SerializeToString(&bodyStr);
+            Y_ENSURE(ok, "Failed to serialize a generic decision readset");
+
+            for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
+                if (dstTabletId == origin) {
+                    // Don't send readsets to ourselves
+                    continue;
+                }
+
+                if (hasArbiter && !isArbiter && dstTabletId != kqpLocks->GetArbiterShard()) {
+                    // Non-arbiter shards only send locks to the arbiter
+                    continue;
+                }
+
+                auto key = std::make_pair(origin, dstTabletId);
+                outReadSets[key] = bodyStr;
+            }
+        }
+    }
 }
 
 void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks) {

@@ -24,6 +24,7 @@ void TGRpcYdbImportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         #NAME, logger, getCounterBlock("import", #NAME))->Run();
 
     ADD_REQUEST(ImportFromS3, ImportFromS3Request, ImportFromS3Response, DoImportFromS3Request, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+    ADD_REQUEST(ImportFromFs, ImportFromFsRequest, ImportFromFsResponse, DoImportFromFsRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
     ADD_REQUEST(ListObjectsInS3Export, ListObjectsInS3ExportRequest, ListObjectsInS3ExportResponse, DoListObjectsInS3ExportRequest, TAuditMode::NonModifying());
     ADD_REQUEST(ImportData, ImportDataRequest, ImportDataResponse, DoImportDataRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
 

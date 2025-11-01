@@ -122,7 +122,7 @@ message ImportFromS3Response {
     Ydb.Operations.Operation operation = 1;
 }
 
-/// File system (FS)
+// File system (FS)
 message ImportFromFsSettings {
     message Item {
         /* YDB tables in FS are stored in a directory structure (see ydb_export.proto).
@@ -142,6 +142,7 @@ message ImportFromFsSettings {
 
     // Base path on FS where the export is located
     // Path to the mounted directory in the case of NFS
+    // Must be an absolute path
     // Example: /mnt/exports
     string base_path = 1 [(required) = true];
 

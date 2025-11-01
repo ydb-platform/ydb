@@ -25,6 +25,7 @@ void TGRpcYdbExportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, DoExportToYtRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
     ADD_REQUEST(ExportToS3, ExportToS3Request, ExportToS3Response, DoExportToS3Request, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+    ADD_REQUEST(ExportToFs, ExportToFsRequest, ExportToFsResponse, DoExportToFsRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
 #undef ADD_REQUEST
 }
 

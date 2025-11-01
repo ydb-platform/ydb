@@ -71,6 +71,10 @@ inputs:
     type: string
     required: false
     description: "Telegram alert chat"
+  ydb_qa_config:
+    type: string
+    required: false
+    description: "YDB QA configuration (JSON)"
 
 outputs:
   success:
@@ -148,6 +152,7 @@ runs:
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
+        YDB_QA_CONFIG: ${{ inputs.ydb_qa_config }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
@@ -281,6 +286,35 @@ runs:
           done
         fi
 
+        # Scripts to checkout from main
+        MAIN_SCRIPTS=(
+          ".github/scripts/analytics/upload_tests_results.py"
+          ".github/scripts/analytics/ydb_wrapper.py"
+          ".github/scripts/send_build_stats.py"
+          ".github/scripts/get_build_diff.py"
+          ".github/scripts/get_current_build_size.py"
+          ".github/scripts/get_main_build_size.py"
+          ".github/scripts/check_ydb_qa_config.py"
+        )
+        
+        # Ensure main is available (may be missing in shallow clone)
+        if ! git rev-parse --verify main >/dev/null 2>&1; then
+          git fetch origin main:main --depth=1 2>/dev/null || true
+        fi
+        
+        # For each script: if unchanged in PR - use from main
+        # git checkout main -- "$script" doesn't change HEAD, only files in working directory
+        for script in "${MAIN_SCRIPTS[@]}"; do
+          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
+            git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script"
+          else
+            chmod +x "$script" && echo "✅ $script (PR version)"
+          fi
+        done
+        
+        # Check YDB configuration (after checkout from main)
+        python3 .github/scripts/check_ydb_qa_config.py || true
+
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)
           params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
@@ -309,26 +343,8 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          case $GITHUB_EVENT_NAME in
-            workflow_dispatch)
-              TESTMO_RUN_NAME="${{ github.run_id }} manual"
-              ;;
-            pull_request | pull_request_target)
-              TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-              ;;
-            schedule)
-              TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-              ;;
-            push)
-              TESTMO_RUN_NAME="${{ github.run_id }} POST"
-              ;;
-            *)
-              TESTMO_RUN_NAME="${{ github.run_id }}"
-              ;;
-          esac
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
-            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
           else
             IS_RETRY=0
           fi
@@ -482,9 +498,31 @@ runs:
           fi
 
           # upload tests results to YDB
-          # TODO: remove/rename TESTMO_RUN_NAME variable
-          ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          # Формируем имя для upload на основе типа события и попытки
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              run_name="${{ github.run_id }}_manual"
+              ;;
+            pull_request | pull_request_target)
+              pr_number="${{ github.event.number }}"
+              if [ -n "$pr_number" ]; then
+                run_name="${{ github.run_id }}_PR_${pr_number}"
+              else
+                run_name="${{ github.run_id }}_PR"
+              fi
+              ;;
+            schedule)
+              run_name="${{ github.run_id }}_schedule"
+              ;;
+            push)
+              run_name="${{ github.run_id }}_POST"
+              ;;
+            *)
+              run_name="${{ github.run_id }}"
+              ;;
+          esac
+          run_name="${run_name}_attempt_${RETRY}"
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break

@@ -259,8 +259,7 @@ def main():
     concurrent_mode = args.concurrent_mode
 
     # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:        
+    with YDBWrapper() as ydb_wrapper:        
         if not ydb_wrapper.check_credentials():
             return 1
         
@@ -670,7 +669,6 @@ def main():
 
         # Create table and bulk upsert using ydb_wrapper
         create_tables(ydb_wrapper, table_path)
-        full_path = f"{ydb_wrapper.database_path}/{table_path}"
 
         chunk_size = 40000
 
@@ -708,8 +706,7 @@ def main():
             .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         )
         
-        # Используем bulk_upsert_batches для агрегированной статистики
-        ydb_wrapper.bulk_upsert_batches(full_path, prepared_for_update_rows, column_types, chunk_size)
+        ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_update_rows, column_types, chunk_size)
 
         end_time = time.time()
         print(f'monitor data upserted: {end_time - start_upsert_time}')

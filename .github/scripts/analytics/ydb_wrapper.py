@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-import configparser
 import datetime
+import inspect
+import json
 import os
+import sys
 import time
 import uuid
 import ydb
@@ -12,37 +14,47 @@ from contextlib import contextmanager
 class YDBWrapper:
     """Обертка для работы с YDB с логированием статистики"""
     
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None):
-        if config_path is None:
-            dir = os.path.dirname(__file__)
-            config_path = f"{dir}/../../config/ydb_qa_db.ini"
+    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False):
+        # Приоритет: YDB_QA_CONFIG env > config file (JSON)
+        # По умолчанию логи идут в stdout (как было раньше)
+        # Если silent=True, логи идут в stderr (для скриптов, вызываемых из других скриптов)
+        self._log_stream = sys.stderr if silent else sys.stdout
         
-        self.config = configparser.ConfigParser()
-        self.config.read(config_path)
+        ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
         
-        # Основная база данных
-        self.database_endpoint = self.config["QA_DB"]["DATABASE_ENDPOINT"]
-        self.database_path = self.config["QA_DB"]["DATABASE_PATH"]
-        
-        # Таймаут подключения
-        self._connection_timeout = int(os.environ.get("YDB_CONNECTION_TIMEOUT", 
-                                                      self.config["QA_DB"].get("CONNECTION_TIMEOUT", "15")))
-        
-        # База данных для статистики
-        self.stats_endpoint = self.config["STATISTICS_DB"]["DATABASE_ENDPOINT"]
-        self.stats_path = self.config["STATISTICS_DB"]["DATABASE_PATH"]
-        self.stats_table = self.config["STATISTICS_DB"]["STATISTICS_TABLE"]
+        if ydb_qa_config_env:
+            # Парсим JSON из ENV
+            try:
+                config_dict = json.loads(ydb_qa_config_env)
+                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+                
+            except (json.JSONDecodeError, KeyError) as e:
+                raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
+        else:
+            # Fallback к JSON файлу для локальной разработки
+            if config_path is None:
+                dir_path = os.path.dirname(__file__)
+                config_path = f"{dir_path}/../../config/ydb_qa_db.json"
+            
+            # Загружаем JSON конфиг
+            try:
+                with open(config_path, 'r') as f:
+                    config_dict = json.load(f)
+                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+            except FileNotFoundError:
+                raise RuntimeError(f"Config file not found: {config_path}")
+            except json.JSONDecodeError as e:
+                raise RuntimeError(f"Invalid JSON config file: {e}")
         
         # Настройки статистики
-        if enable_statistics is None:
-            enable_statistics = os.environ.get("YDB_ENABLE_STATISTICS", "true").lower() in ("true", "1", "yes")
-        
         self._enable_statistics = enable_statistics
         self._cluster_version = None
         self._session_id = str(uuid.uuid4())
         
-        # Сохраняем script_name для всех операций
-        self._script_name = script_name or "unknown_script"
+        # Автоматически определяем script_name если не передан
+        if script_name is None:
+            script_name = self._get_caller_script_name()
+        self._script_name = script_name
         
         # GitHub Action info - получаем один раз
         self._github_info = self._get_github_action_info()
@@ -66,6 +78,79 @@ class YDBWrapper:
         else:
             self._log("info", "Statistics logging disabled")
     
+    def _load_config_from_dict(self, config_dict: dict, enable_statistics: bool = None):
+        """Загрузка конфигурации из словаря"""
+        dbs = config_dict["databases"]
+        main = dbs["main"]
+        stats = dbs.get("statistics", {})
+        variables = config_dict.get("variables", {})
+        flags = config_dict.get("flags", {})
+        
+        # Автоматический маппинг полей
+        config_mapping = {
+            'database_endpoint': main["endpoint"],
+            'database_path': main["path"],
+            '_connection_timeout': main.get("connection_timeout", 60),
+            '_main_db_tables': main.get("tables", {}),
+            'stats_endpoint': stats.get("endpoint", main["endpoint"]),
+            'stats_path': stats.get("path", main["path"]),
+            '_stats_connection_timeout': stats.get("connection_timeout",60),
+            'stats_table': stats.get("tables", {}).get("query_statistics", "analytics/query_statistics"),
+            '_stats_db_tables': stats.get("tables", {}),
+            'ydbd_path': variables.get("ydbd_path", "ydb/apps/ydbd/ydbd")
+        }
+        
+        for key, value in config_mapping.items():
+            setattr(self, key, value)
+        
+        # Enable statistics из flags (по умолчанию True)
+        if enable_statistics is None:
+            enable_statistics = flags.get("enable_statistics", True)
+        
+        return enable_statistics
+    
+    def _get_caller_script_name(self) -> str:
+        """Автоматическое определение имени скрипта, вызвавшего YDBWrapper"""
+        try:
+            # Получаем стек вызовов
+            stack = inspect.stack()
+            
+            # Ищем первый фрейм, который находится вне ydb_wrapper.py
+            for frame_info in stack:
+                frame_filename = frame_info.filename
+                
+                # Пропускаем текущий файл (ydb_wrapper.py)
+                if 'ydb_wrapper.py' not in frame_filename:
+                    # Получаем имя файла без пути, но с расширением
+                    script_name = os.path.basename(frame_filename)
+                    return script_name
+            
+            # Если не нашли, используем дефолтное значение
+            return "unknown_script"
+            
+        except Exception:
+            # В случае ошибки возвращаем дефолтное значение
+            return "unknown_script"
+    
+    def _make_full_path(self, table_path: str) -> str:
+        """Преобразование относительного пути в полный (с database_path)
+        
+        Args:
+            table_path: Относительный путь к таблице
+            
+        Returns:
+            Полный путь к таблице
+        """
+        # Если путь уже полный (начинается с database_path), возвращаем как есть
+        if table_path.startswith(self.database_path):
+            return table_path
+        
+        # Убираем ведущий слеш если есть
+        table_path = table_path.lstrip('/')
+        
+        # Добавляем database_path
+        return f"{self.database_path}/{table_path}"
+    
     def __enter__(self):
         """Контекстный менеджер - вход"""
         return self
@@ -74,18 +159,14 @@ class YDBWrapper:
         """Контекстный менеджер - выход"""
         pass  # Больше не нужно останавливать потоки
     
-    def close(self):
-        """Корректное завершение работы"""
-        pass  # Больше не нужно останавливать потоки
-    
     def _log(self, level: str, message: str, details: str = ""):
         """Универсальное логирование"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         icons = {"start": "🚀", "progress": "⏳", "success": "✅", "error": "❌", "info": "ℹ️", "warning": "⚠️", "stats": "📊"}
         if details:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}")
+            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}", file=self._log_stream)
         else:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}")
+            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}", file=self._log_stream)
     
     def _setup_credentials(self):
         """Настройка учетных данных YDB"""
@@ -99,7 +180,7 @@ class YDBWrapper:
     def check_credentials(self):
         """Проверка наличия учетных данных YDB"""
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-            print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+            print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=self._log_stream)
             return False
         
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
@@ -175,14 +256,14 @@ class YDBWrapper:
             # Настраиваем credentials
             self._setup_credentials()
             
-            # Подключаемся к базе статистики с тем же таймаутом, что и для основной базы
+            # Подключаемся к базе статистики
             driver = ydb.Driver(
                 endpoint=self.stats_endpoint,
                 database=self.stats_path,
                 credentials=ydb.credentials_from_env_variables()
             )
             try:
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
+                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
                 tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
                 table_client = ydb.TableClient(driver, tc_settings)
                 scan_query = ydb.ScanQuery("SELECT 1 as test", {})
@@ -256,7 +337,7 @@ class YDBWrapper:
             )
             try:
                 # Подключаемся к базе статистики
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
+                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
                 # Создаем таблицу статистики если не существует
                 self._ensure_stats_table_exists(driver)
                 
@@ -295,7 +376,7 @@ class YDBWrapper:
                 driver.stop()
                 
         except TimeoutError as e:
-            self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._connection_timeout}s)")
+            self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._stats_connection_timeout}s)")
             self._stats_available = False
             return False
         except Exception as e:
@@ -530,7 +611,15 @@ class YDBWrapper:
         return self._execute_with_logging("scan_query_with_metadata", operation, query, None)
     
     def create_table(self, table_path: str, create_sql: str):
-        """Создание таблицы с логированием"""
+        """Создание таблицы с логированием
+        
+        Args:
+            table_path: Относительный путь к таблице (например, 'test_results/test_runs')
+            create_sql: SQL для создания таблицы
+        """
+        # Преобразуем в полный путь для YDB (если еще не полный)
+        full_path = self._make_full_path(table_path)
+        
         def operation(driver):
             def callee(session):
                 session.execute_scheme(create_sql)
@@ -543,12 +632,18 @@ class YDBWrapper:
     
     def bulk_upsert(self, table_path: str, rows: List[Dict[str, Any]], 
                    column_types: ydb.BulkUpsertColumns):
-        """Выполнение bulk upsert с логированием"""
+        """Выполнение bulk upsert с логированием
+        
+        Args:
+            table_path: Относительный путь к таблице (например, 'test_results/test_runs')
+        """
+        # Преобразуем в полный путь для YDB
+        full_path = self._make_full_path(table_path)
         rows_count = len(rows) if rows else 0
         
         def operation(driver):
             table_client = ydb.TableClient(driver)
-            table_client.bulk_upsert(table_path, rows, column_types)
+            table_client.bulk_upsert(full_path, rows, column_types)
             return rows_count  # Возвращаем количество строк для статистики
         
         return self._execute_with_logging("bulk_upsert", operation, f"BULK_UPSERT to {table_path}", table_path)
@@ -558,11 +653,14 @@ class YDBWrapper:
         """Выполнение bulk upsert с разбивкой на batches и агрегированной статистикой
         
         Args:
-            table_path: Путь к таблице
+            table_path: Относительный путь к таблице (например, 'test_results/test_runs')
             all_rows: Все данные для вставки
             column_types: Типы колонок
             batch_size: Размер batch (по умолчанию 1000)
         """
+        # Преобразуем в полный путь для YDB
+        full_path = self._make_full_path(table_path)
+        
         start_time = time.time()
         total_rows = len(all_rows)
         
@@ -586,7 +684,7 @@ class YDBWrapper:
                 
                 for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
                     batch_rows = all_rows[start_idx:start_idx + batch_size]
-                    table_client.bulk_upsert(table_path, batch_rows, column_types)
+                    table_client.bulk_upsert(full_path, batch_rows, column_types)
                     
                     # Логируем прогресс каждые 10 batches или для последнего
                     if batch_num % 10 == 0 or start_idx + batch_size >= total_rows:
@@ -628,9 +726,26 @@ class YDBWrapper:
             )
             raise
     
-    def get_session_id(self) -> str:
-        """Получение ID текущей сессии"""
-        return self._session_id
+    def execute_dml(self, query: str, parameters: Dict[str, Any] = None, query_name: str = None):
+        """Выполнение DML запроса (INSERT/UPDATE/DELETE) с параметрами
+        
+        Args:
+            query: SQL запрос с DECLARE параметрами
+            parameters: Словарь параметров {$param_name: value}
+            query_name: Имя запроса для логирования
+        """
+        def operation(driver):
+            def callee(session):
+                prepared_query = session.prepare(query)
+                with session.transaction() as tx:
+                    tx.execute(prepared_query, parameters or {}, commit_tx=True)
+                    return 1  # Успешное выполнение
+            
+            with ydb.SessionPool(driver) as pool:
+                return pool.retry_operation_sync(callee)
+        
+        return self._execute_with_logging("dml_query", operation, query, None, query_name)
+    
     
     def _get_github_action_info(self) -> dict:
         """Получение информации о GitHub Action если скрипт запущен в GitHub Actions"""
@@ -673,6 +788,46 @@ class YDBWrapper:
             return normalized
             
         return table_path
+    
+    def get_table_path(self, table_name: str, database: str = "main") -> str:
+        """Получить путь к таблице из конфигурации
+        
+        Args:
+            table_name: Имя таблицы (например, 'test_results')
+            database: База данных ('main' или 'statistics')
+        
+        Returns:
+            Путь к таблице относительно базы данных
+        
+        Raises:
+            KeyError: Если таблица не найдена в конфигурации
+        """
+        if database == "main":
+            if table_name not in self._main_db_tables:
+                raise KeyError(f"Table '{table_name}' not found in main_database.tables config")
+            return self._main_db_tables[table_name]
+        elif database == "statistics":
+            if table_name not in self._stats_db_tables:
+                raise KeyError(f"Table '{table_name}' not found in statistics_database.tables config")
+            return self._stats_db_tables[table_name]
+        else:
+            raise ValueError(f"Unknown database: {database}. Use 'main' or 'statistics'")
+    
+    def get_available_tables(self, database: str = "main") -> dict:
+        """Получить словарь всех доступных таблиц
+        
+        Args:
+            database: База данных ('main' или 'statistics')
+        
+        Returns:
+            Словарь {table_name: table_path}
+        """
+        if database == "main":
+            return self._main_db_tables.copy()
+        elif database == "statistics":
+            return self._stats_db_tables.copy()
+        else:
+            raise ValueError(f"Unknown database: {database}")
     
     def get_cluster_info(self) -> Dict[str, Any]:
         """Получение информации о кластере и статистике (без создания нового подключения)"""

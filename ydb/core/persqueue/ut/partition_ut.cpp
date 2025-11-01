@@ -3340,6 +3340,8 @@ Y_UNIT_TEST_F(DifferentWriteTxBatchingOptions, TPartitionTxTestHelper) {
     DBGTRACE_LOG("");
     EmulateKVTablet();
     DBGTRACE_LOG("");
+    EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx1, true);
     DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx2, true);
@@ -3364,6 +3366,8 @@ Y_UNIT_TEST_F(DifferentWriteTxBatchingOptions, TPartitionTxTestHelper) {
     //WaitBatchCompletion(1+1);
     DBGTRACE_LOG("");
     ExpectNoTxPredicateReply();
+    DBGTRACE_LOG("");
+    EmulateKVTablet();
     DBGTRACE_LOG("");
     EmulateKVTablet();
     DBGTRACE_LOG("");

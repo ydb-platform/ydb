@@ -186,3 +186,24 @@ The following table shows aggregated partition metrics for the topic. The maximu
 | `topic.partition.committed_lag_messages_max`<br/>`GAUGE`, pieces | The maximum (across all partitions) difference between the last partition offset and the recorded partition offset.<br/>Метки:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
 | `topic.partition.committed_read_lag_milliseconds_max`<br/>`GAUGE`, milliseconds | The maximum (across all partitions) difference between the current time and the recording time of the last recorded message.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
 | `topic.partition.end_to_end_lag_milliseconds_max`<br/>`GAUGE`, milliseconds | The difference between the current time and the minimum creation time among all messages read in the last minute in all partitions.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
+| `topic.partition.lag_messages_max`<br/>`GAUGE`, pieces | The maximum difference (across all partitions) of the last offset in the partition and the last subtracted offset.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
+| `topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, milliseconds | The difference between the current time and the minimum recording time among all messages read in the last minute in all partitions.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
+| `topic.partition.read.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum idle time (how long the partition was not read) for all partitions.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
+| `topic.partition.read.lag_milliseconds_max`<br/>`GAUGE`, milliseconds | The maximum difference between the recording time and the creation time among all messages read in the last minute.<br/>Label:<br/>- _topic_ – topic name.<br/>- _consumer_ – name of the consumer |
+| `topic.partition.write.lag_milliseconds_max`<br/>`GAUGE`, milliseconds | The maximum difference between the recording time and the creation time among all messages recorded in the last minute.<br/>Label:<br/>- _topic_ – topic name |
+| `topic.partition.write.speed_limit_bytes_per_second`<br/>`GAUGE`, bytes per second | Write quota in bytes per second per partition.<br/>Label:<br/>- _topic_ – topic name |
+| `topic.partition.write.throttled_nanoseconds_max`<br/>`GAUGE`, nanoseconds | Maximum write throttling time (waiting on quota) for all partitions. In the limit, if `topic.partition.write.throttled_nanoseconds_max` = 10^9, then this means that the entire second was waited on the quota<br/>Label:<br/>- _topic_ – topic name |
+| `topic.partition.write.bytes_per_day_max`<br/>`GAUGE`, bytes | The maximum number of bytes written over the last 24 hours for all partitions.<br/>Label:<br/>- _topic_ – topic name |
+| `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last hour, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
+| `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last minute, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
+| `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum time the partition is idle for recording.br/>Label:<br/>- _topic_ – topic name |
+
+## Resource pool  metrics {#resource_pools}
+
+| Metric name<br/>Type<br/>units of measurement | Description<br/>Labels |
+| ----- | ----- |
+| `kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, pieces | Average database load, based on this metric `DATABASE_LOAD_CPU_THRESHOLD` works |
+| `kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, pieces | Limit on the number of simultaneously running requests |
+| `kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, pieces | The current number of concurrent requests. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |
+| `kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, pieces | The size of the queue of requests waiting to be executed |
+| `kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, pieces | The number of requests waiting in the execution queue. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |

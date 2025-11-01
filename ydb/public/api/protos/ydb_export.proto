@@ -182,18 +182,19 @@ message EncryptionSettings {
     }
 }
 
-/// NFS
-message ExportToNfsSettings {
+/// File system (FS)
+message ExportToFsSettings {
     message Item {
         // Database path to a table to be exported
         string source_path = 1 [(required) = true];
 
-        /* The tables are exported to one or more files in NFS.
+        /* The tables are exported to one or more files in FS.
         The files are saved to the destination_path directory. */
         string destination_path = 2 [(required) = true];
     }
 
-    // Base path on mounted NFS where to write export
+    // Base path on FS where to write export
+    // Path to the mounted directory in the case of NFS
     // Example: /mnt/exports
     string base_path = 1 [(required) = true];
     
@@ -212,22 +213,22 @@ message ExportToNfsSettings {
     string compression = 5;
 }
 
-message ExportToNfsResult {
+message ExportToFsResult {
 }
 
-message ExportToNfsMetadata {
-    ExportToNfsSettings settings = 1;
+message ExportToFsMetadata {
+    ExportToFsSettings settings = 1;
     ExportProgress.Progress progress = 2;
     repeated ExportItemProgress items_progress = 3;
 }
 
-message ExportToNfsRequest {
+message ExportToFsRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    ExportToNfsSettings settings = 2 [(required) = true];
+    ExportToFsSettings settings = 2 [(required) = true];
 }
 
-message ExportToNfsResponse {
-    // operation.result = ExportToNfsResult
-    // operation.metadata = ExportToNfsMetadata
+message ExportToFsResponse {
+    // operation.result = ExportToFsResult
+    // operation.metadata = ExportToFsMetadata
     Ydb.Operations.Operation operation = 1;
 }

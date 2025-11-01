@@ -122,16 +122,16 @@ message ImportFromS3Response {
     Ydb.Operations.Operation operation = 1;
 }
 
-/// NFS
-message ImportFromNfsSettings {
+/// File system (FS)
+message ImportFromFsSettings {
     message Item {
-        /* YDB tables in NFS are stored in a directory structure (see ydb_export.proto).
+        /* YDB tables in FS are stored in a directory structure (see ydb_export.proto).
            The directory contains:
              * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
              * '/scheme.pb' - object with information about scheme, indexes, etc;
              * '/permissions.pb' - object with information about ACL and owner;
              * '/metadata.json' - object with metadata about the backup.
-           The path in NFS is specified relative to base_path.
+           The path in FS is specified relative to base_path.
            Example: "my_export/table1"
         */
         string source_path = 1 [(required) = true];
@@ -140,7 +140,8 @@ message ImportFromNfsSettings {
         string destination_path = 2 [(required) = true];
     }
 
-    // Base path on mounted NFS where the export is located
+    // Base path on FS where the export is located
+    // Path to the mounted directory in the case of NFS
     // Example: /mnt/exports
     string base_path = 1 [(required) = true];
 
@@ -160,23 +161,23 @@ message ImportFromNfsSettings {
     bool skip_checksum_validation = 6;
 }
 
-message ImportFromNfsResult {
+message ImportFromFsResult {
 }
 
-message ImportFromNfsMetadata {
-    ImportFromNfsSettings settings = 1;
+message ImportFromFsMetadata {
+    ImportFromFsSettings settings = 1;
     ImportProgress.Progress progress = 2;
     repeated ImportItemProgress items_progress = 3;
 }
 
-message ImportFromNfsRequest {
+message ImportFromFsRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    ImportFromNfsSettings settings = 2 [(required) = true];
+    ImportFromFsSettings settings = 2 [(required) = true];
 }
 
-message ImportFromNfsResponse {
-    // operation.result = ImportFromNfsResult
-    // operation.metadata = ImportFromNfsMetadata
+message ImportFromFsResponse {
+    // operation.result = ImportFromFsResult
+    // operation.metadata = ImportFromFsMetadata
     Ydb.Operations.Operation operation = 1;
 }
 

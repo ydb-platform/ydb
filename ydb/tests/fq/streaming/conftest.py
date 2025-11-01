@@ -1,11 +1,13 @@
 import os
 import logging
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 import ydb
 import yatest.common
+import pytest
 
 logger = logging.getLogger(__name__)
 
@@ -30,33 +32,32 @@ class YdbClient:
         return self.session_pool.execute_with_retries_async(statement)
 
 
-class StreamingImportTestBase(object):
-    @classmethod
-    def setup_class(cls):
-        cls._setup_ydb()
+@pytest.fixture(scope="module")
+def kikimr(request):
 
-    @classmethod
-    def teardown_class(cls):
-        cls.ydb_client.stop()
-        cls.cluster.stop()
+    class Kikimr:
+        def __init__(self, client, cluster):
+            self.YdbClient = client
+            self.Cluster = cluster
 
-    @classmethod
-    def _get_ydb_config(cls):
+    def get_ydb_config():
         config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True
             },
             query_service_config={"available_external_data_sources": ["Ydb"]},
             table_service_config={},
-            nodes=2,
-            default_clusteradmin="root@builtin"
+            default_clusteradmin="root@builtin",
+            use_in_memory_pdisks=False
         )
 
         config.yaml_config["log_config"]["default_level"] = 8
 
         query_service_config = config.yaml_config.setdefault("query_service_config", {})
         query_service_config["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
+        query_service_config["enable_match_recognize"] = True
 
         database_connection = query_service_config.setdefault("streaming_queries", {}).setdefault("external_storage", {}).setdefault("database_connection", {})
         database_connection["endpoint"] = os.getenv("YDB_ENDPOINT")
@@ -64,18 +65,23 @@ class StreamingImportTestBase(object):
 
         return config
 
-    @classmethod
-    def _setup_ydb(cls):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
-        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+    ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+    logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
-        config = cls._get_ydb_config()
-        cls.cluster = KiKiMR(config)
-        cls.cluster.start()
+    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
 
-        node = cls.cluster.nodes[1]
-        cls.ydb_client = YdbClient(
-            database=f"/{config.domain_name}",
-            endpoint=f"grpc://{node.host}:{node.port}"
-        )
-        cls.ydb_client.wait_connection()
+    config = get_ydb_config()
+    cluster = KiKiMR(config)
+    cluster.start()
+
+    node = cluster.nodes[1]
+    ydb_client = YdbClient(
+        database=f"/{config.domain_name}",
+        endpoint=f"grpc://{node.host}:{node.port}"
+    )
+    ydb_client.wait_connection()
+
+    yield Kikimr(ydb_client, cluster)
+    ydb_client.stop()
+    cluster.stop()

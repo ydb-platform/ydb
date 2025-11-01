@@ -34,6 +34,10 @@ bool TDeadline::operator<(const TDeadline& other) const noexcept {
     return TimePoint_ < other.TimePoint_;
 }
 
+bool TDeadline::operator<=(const TDeadline& other) const noexcept {
+    return TimePoint_ <= other.TimePoint_;
+}
+
 bool TDeadline::operator==(const TDeadline& other) const noexcept {
     return TimePoint_ == other.TimePoint_;
 }

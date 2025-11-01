@@ -352,6 +352,7 @@ runs:
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
+          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           monitor_memory() {
@@ -371,7 +372,7 @@ runs:
           ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+            --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
 
@@ -391,10 +392,6 @@ runs:
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
-
-          # generate junit for test_bloat.py (minimal conversion from report.json)
-          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
-          .github/scripts/tests/report_to_junit_for_bloat.py --report $CURRENT_REPORT --junit $CURRENT_JUNIT_XML_PATH || true
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true

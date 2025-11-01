@@ -132,7 +132,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly junitparser
 
     - name: Setup cache
       shell: bash
@@ -392,8 +392,12 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
+          # generate junit for test_bloat.py (minimal conversion from report.json)
+          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
+          .github/scripts/tests/report_to_junit_for_bloat.py --report $CURRENT_REPORT --junit $CURRENT_JUNIT_XML_PATH || true
+
           # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
 
           if [ $RC -ne 0 ]; then

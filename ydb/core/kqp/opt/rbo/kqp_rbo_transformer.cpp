@@ -324,7 +324,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     }
 
                     auto joinKind = TString(joinType);
-                    ToCamelCase(joinKind);
+                    ToCamelCase(joinKind.MutRef());
 
                     // clang-format off
                     joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())

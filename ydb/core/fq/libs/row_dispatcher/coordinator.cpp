@@ -59,7 +59,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     static constexpr ui64 PrintStatePeriodSec = 300;
     static constexpr ui64 PrintStateToLogSplitSize = 64000;
-    static constexpr TDuration NodesManagerRetryPeriod = TDuration::Seconds(1);
+    static constexpr TDuration NodesManagerRetryPeriod = TDuration::Seconds(10);
 
     struct TTopicKey {
         TString Endpoint;

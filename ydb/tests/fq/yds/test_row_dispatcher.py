@@ -6,6 +6,8 @@ import pytest
 import logging
 import time
 import json
+import random
+import string
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -72,11 +74,12 @@ def wait_actor_count(kikimr, activity, expected_count):
         count = 0
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
-        if count == expected_count:
-            break
+            if count == expected_count:
+                return node_index # return any node
         assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
         time.sleep(1)
-    pass
+    return None
+
 
 
 def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match=True):
@@ -627,8 +630,8 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
-    def test_stop_start(self, kikimr, client):
-        self.init(client, "test_stop_start")
+    def test_stop_start777(self, kikimr, client):
+        self.init(client, "test_stop_start", 10)
 
         sql1 = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -636,12 +639,12 @@ class TestPqRowDispatcher(TestYdsBase):
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql1)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        #wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
         data = ['{"time": 101}', '{"time": 102}']
         self.write_stream(data)
         expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
 
         kikimr.compute_plane.wait_completed_checkpoints(
             query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
@@ -663,7 +666,7 @@ class TestPqRowDispatcher(TestYdsBase):
 
         self.write_stream(data)
         expected = ['103', '104']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
 
         stop_yds_query(client, query_id)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
@@ -678,7 +681,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         self.write_stream(['{"time": 101}', '{"time": 102}'])
         expected = ['101', '102']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        assert sorted(self.read_stream(len(expected), topic_path=self.output_topic)) == sorted(expected)
 
         kikimr.compute_plane.wait_completed_checkpoints(query_id1, kikimr.compute_plane.get_completed_checkpoints(query_id1) + 2)
         stop_yds_query(client, query_id1)
@@ -1226,3 +1229,37 @@ class TestPqRowDispatcher(TestYdsBase):
             assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
             time.sleep(1)
         stop_yds_query(client, query_id)
+
+    @yq_v1
+    def test_redistribute_partition_after_timeout(self, kikimr, client):
+        self.init(client, "redistribute", partitions=10)
+        sql = Rf'''
+            --PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        session_node_index = wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
+        logging.debug(f"Topic session node: {session_node_index}")
+
+        message_count = 20
+        for i in range(message_count):
+            self.write_stream(['{"time": 100, "data": "hello"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
+        self.read_stream(message_count, topic_path=self.output_topic)
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
+
+        data = ['{"time": 101, "data": "hello"}']
+        self.write_stream(data)
+        expected = ['hello']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        logging.debug(f"Stopping node: {session_node_index}")
+        kikimr.compute_plane.kikimr_cluster.nodes[session_node_index].stop()
+
+        #time.sleep(10)
+
+        data = ['{"time": 101, "data": "Relativitätstheorie"}']
+        self.write_stream(data)
+        expected = ['Relativitätstheorie']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected

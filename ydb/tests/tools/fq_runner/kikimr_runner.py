@@ -363,15 +363,15 @@ class BaseTenant(abc.ABC):
         return self.get_checkpoint_coordinator_metric(query_id, "CompletedCheckpoints",
                                                       expect_counters_exist=expect_counters_exist)
 
-    def wait_completed_checkpoints(self, query_id, checkpoints_count,
+    def wait_completed_checkpoints(self, query_id, expected,
                                    timeout=plain_or_under_sanitizer_wrapper(30, 150),
                                    expect_counters_exist=False):
         deadline = time.time() + timeout
         while True:
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
-            if completed >= checkpoints_count:
+            if completed >= expected:
                 break
-            assert time.time() < deadline, "Wait zero checkpoint failed, actual completed: " + str(completed)
+            assert time.time() < deadline, "Wait checkpoint failed, actual current: " + str(completed) + ", expected" + str(expected)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),

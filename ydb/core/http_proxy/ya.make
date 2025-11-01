@@ -7,6 +7,8 @@ ADDINCL(
 SRCS(
     auth_factory.cpp
     auth_factory.h
+    auth_actors.cpp
+    auth_actors.h
     custom_metrics.h
     discovery_actor.cpp
     discovery_actor.h

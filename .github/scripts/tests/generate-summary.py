@@ -166,7 +166,18 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description), is_timeout)
+        return cls(
+            classname=classname,
+            name=name,
+            status=status,
+            log_urls=log_urls,
+            elapsed=elapsed,
+            count_of_passed=0,
+            owners='',
+            status_description=status_description,
+            is_sanitizer_issue=is_sanitizer_issue(status_description),
+            is_timeout=is_timeout
+        )
 
 
 class TestSummaryLine:

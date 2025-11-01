@@ -12,6 +12,16 @@ import sys
 from xml.etree import ElementTree as ET
 
 
+def is_timeout_error(testcase):
+    """Check if a testcase failed due to timeout."""
+    return testcase.get('status') == 'FAILED' and testcase.get('error_type') == 'TIMEOUT'
+
+
+def is_regular_failure(testcase):
+    """Check if a testcase failed for a non-timeout reason."""
+    return testcase.get('status') == 'FAILED' and testcase.get('error_type') != 'TIMEOUT'
+
+
 def convert_report_to_junit(report_path, junit_path):
     """
     Convert a build results report (JSON) to JUnit XML format.
@@ -62,8 +72,8 @@ def convert_report_to_junit(report_path, junit_path):
         testcases = suite_data['testcases']
         
         suite_tests = len(testcases)
-        suite_failures = sum(1 for tc in testcases if tc.get('status') == 'FAILED' and tc.get('error_type') != 'TIMEOUT')
-        suite_errors = sum(1 for tc in testcases if tc.get('status') == 'FAILED' and tc.get('error_type') == 'TIMEOUT')
+        suite_failures = sum(1 for tc in testcases if is_regular_failure(tc))
+        suite_errors = sum(1 for tc in testcases if is_timeout_error(tc))
         suite_skipped = sum(1 for tc in testcases if tc.get('status') == 'SKIPPED')
         suite_time = sum(tc.get('duration', 0) for tc in testcases)
         
@@ -78,6 +88,7 @@ def convert_report_to_junit(report_path, junit_path):
         
         # Add testcase elements
         for testcase in testcases:
+            # Note: path separator is '/' because these are test paths, not filesystem paths
             classname = f"{suite_data['path']}/{suite_data['name']}"
             subtest_name = testcase.get('subtest_name', testcase.get('name', 'unknown'))
             

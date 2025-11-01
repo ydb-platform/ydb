@@ -239,7 +239,6 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
 
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
-
         // The type of the column could be changed after aggregation.
         if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
             const auto& resultColName = it->second.first;

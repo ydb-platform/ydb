@@ -899,7 +899,8 @@
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "ColumnOrder", "Type": "TCoAtomList"}
             ]
         },
         {

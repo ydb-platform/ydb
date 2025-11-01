@@ -773,7 +773,9 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     return strBuilder;
 }
 
-TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos) : IUnaryOperator(EOperator::Root, pos, input) {}
+TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TString> columnOrder) : 
+    IUnaryOperator(EOperator::Root, pos, input), 
+    ColumnOrder(columnOrder) {}
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 

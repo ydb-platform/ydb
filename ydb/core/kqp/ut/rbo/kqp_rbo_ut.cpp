@@ -527,14 +527,11 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 set TablePathPrefix = "/Root/";
                 select sum(t1.a) from t1 group by t1.b, t1.c;
             )",
-            /*
-            invalid column order in result
             R"(
                 --!syntax_pg
                 set TablePathPrefix = "/Root/";
                 select sum(t1.c), t1.b from t1 group by t1.b order by t1.b;
             )",
-            */
         };
 
         std::vector<std::string> results = {

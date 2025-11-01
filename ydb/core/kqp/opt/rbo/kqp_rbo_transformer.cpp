@@ -196,6 +196,8 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TExprNode::TPtr sort, TExprCont
 TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
     Y_UNUSED(typeCtx);
 
+    TVector<TString> finalColumnOrder;
+
     auto setItems = GetSetting(node->Head(), "set_items")->TailPtr();
     TVector<TExprNode::TPtr> setItemsResults;
     for (ui32 i = 0; i < setItems->ChildrenSize(); ++i) {
@@ -467,6 +469,8 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
             // clang-format on
         }
 
+        finalColumnOrder.clear();
+
         for (auto resultItem : result->Child(1)->Children()) {
             auto column = resultItem->Child(0);
             TString columnName = TString(column->Content());
@@ -559,6 +563,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 resultElementCounters[columnName] = 1;
             }
 
+            finalColumnOrder.push_back(columnName);
             auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
 
             // clang-format off
@@ -631,9 +636,16 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         opResult = BuildSort(opResult, sort, ctx);
     }
 
+    TVector<TCoAtom> columnAtomList;
+    for (auto c : finalColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, node->Pos()).Value(c).Done());
+    }
+    auto columnOrder = Build<TCoAtomList>(ctx, node->Pos()).Add(columnAtomList).Done().Ptr();
+
     // clang-format off
     return Build<TKqpOpRoot>(ctx, node->Pos())
         .Input(opResult)
+        .ColumnOrder(columnOrder)
     .Done().Ptr();
     // clang-format on
 }
@@ -648,6 +660,7 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx,
                 .Input(root.Cast().Input())
                 .Count(take.Count())
             .Build()
+            .ColumnOrder(root.Cast().ColumnOrder())
         .Done().Ptr();
         // clang-format on
     } else {

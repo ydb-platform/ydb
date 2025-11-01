@@ -435,7 +435,7 @@ class TOpLimit : public IUnaryOperator {
 
 class TOpRoot : public IUnaryOperator {
   public:
-    TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos);
+    TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TString> columnOrder);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     void ComputeParents();
@@ -447,6 +447,7 @@ class TOpRoot : public IUnaryOperator {
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
+    TVector<TString> ColumnOrder;
 
     struct Iterator {
         struct IteratorItem {

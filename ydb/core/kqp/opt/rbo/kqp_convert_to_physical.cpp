@@ -1216,6 +1216,12 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
     int lastStageIdx = stageIds[stageIds.size() - 1];
     auto lastStage = finalizedStages.at(lastStageIdx);
 
+    TVector<TCoAtom> columnAtomList;
+    for (auto c : root.ColumnOrder) {
+        columnAtomList.push_back(Build<TCoAtom>(ctx, root.Pos).Value(c).Done());
+    }
+    auto columnOrder = Build<TCoAtomList>(ctx, root.Pos).Add(columnAtomList).Done().Ptr();
+
     // clang-format off
     // wrap in DqResult
     auto dqResult = Build<TDqCnResult>(ctx, root.Pos)
@@ -1223,7 +1229,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             .Stage(lastStage)
             .Index().Build("0")
         .Build()
-        .ColumnHints().Build()
+        .ColumnHints(columnOrder)
     .Done().Ptr();
     // clang-format on
 

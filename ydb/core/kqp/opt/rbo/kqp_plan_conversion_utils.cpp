@@ -44,7 +44,13 @@ TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
 TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto opRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
-    auto res = TOpRoot(rootInput, node->Pos());
+    TVector<TString> columnOrder;
+
+    for (auto c : opRoot.ColumnOrder()) {
+        columnOrder.push_back(c.StringValue());
+    }
+
+    auto res = TOpRoot(rootInput, node->Pos(), columnOrder);
     res.Node = node;
     res.PlanProps = PlanProps;
     return res;

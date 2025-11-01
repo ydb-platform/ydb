@@ -19,7 +19,7 @@ TString ToHighlightJSClass(EUnitKind kind) {
         case EUnitKind::BindParameterIdentifier:
             return "variable";
         case EUnitKind::OptionIdentifier:
-            return "variable.constant";
+            return "";
         case EUnitKind::TypeIdentifier:
             return "type";
         case EUnitKind::FunctionIdentifier:
@@ -77,7 +77,9 @@ NJson::TJsonValue ToHighlightJSPattern(const TUnit& unit, const TRangePattern& p
     json["begin"] = RE2::QuoteMeta(pattern.BeginPlain);
     json["end"] = RE2::QuoteMeta(pattern.EndPlain);
     if (pattern.EscapeRegex) {
-        json["contains"]["begin"] = *pattern.EscapeRegex;
+        json["contains"].AppendValue(NJson::TJsonMap{
+            {"begin", *pattern.EscapeRegex},
+        });
     }
     return json;
 }

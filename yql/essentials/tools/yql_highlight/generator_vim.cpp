@@ -133,7 +133,7 @@ TVector<TStringBuf> ToVimGroups(EUnitKind kind) {
         case EUnitKind::BindParameterIdentifier:
             return {"Define"};
         case EUnitKind::OptionIdentifier:
-            return {"Keyword"};
+            return {"Identifier"};
         case EUnitKind::TypeIdentifier:
             return {"Type"};
         case EUnitKind::FunctionIdentifier:

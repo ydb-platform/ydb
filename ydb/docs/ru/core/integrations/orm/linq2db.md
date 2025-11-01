@@ -15,15 +15,18 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 - dotnet CLI
 
   ```bash
+  dotnet add package Community.Ydb.Linq2db
   dotnet add package linq2db
+  dotnet add package Ydb.Sdk
   ```
 
 - csproj (PackageReference)
 
   ```xml
   <ItemGroup>
-    <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
-  </ItemGroup>
+  <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
+  <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
+  <PackageReference Include="Ydb.Sdk" Version="$(YdbSdkVersion)" />  </ItemGroup>
   ```
 
 {% endlist %}
@@ -39,14 +42,11 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 - C#
 
   ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-  using LinqToDB.DataProvider.Ydb;
-
   // Вариант 1: быстрая инициализация по строке подключения
   using var db = YdbTools.CreateDataConnection(
       "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>"
   );
+  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
 
   // Вариант 2: через DataOptions
   var options = new DataOptions()
@@ -56,7 +56,7 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
           BulkCopyType: BulkCopyType.ProviderSpecific,   // дефолтный режим BulkCopy
           UseParametrizedDecimal: true                   // Decimal(p,s) в DDL
       ));
-
+  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
   using var db2 = new DataConnection(options);
   ```
 

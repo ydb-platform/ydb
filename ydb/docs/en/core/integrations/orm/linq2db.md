@@ -15,15 +15,18 @@ Add dependencies:
 - dotnet CLI
 
   ```bash
+  dotnet add package Community.Ydb.Linq2db  
   dotnet add package linq2db
+  dotnet add package Ydb.Sdk
   ```
 
 - csproj (PackageReference)
 
   ```xml
   <ItemGroup>
-    <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
-  </ItemGroup>
+  <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
+  <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
+  <PackageReference Include="Ydb.Sdk" Version="$(YdbSdkVersion)" />  </ItemGroup>
   ```
 
 {% endlist %}
@@ -39,14 +42,11 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
 - C#
 
   ```csharp
-  using LinqToDB;
-  using LinqToDB.Data;
-  using LinqToDB.DataProvider.Ydb;
-
   // Option 1: quick initialization via connection string
   using var db = YdbTools.CreateDataConnection(
       "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>"
   );
+    DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
 
   // Option 2: via DataOptions
   var options = new DataOptions()
@@ -56,7 +56,7 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
           BulkCopyType: BulkCopyType.ProviderSpecific,   // default BulkCopy mode
           UseParametrizedDecimal: true                   // Decimal(p,s) in DDL
       ));
-
+  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
   using var db2 = new DataConnection(options);
   ```
 

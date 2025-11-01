@@ -21,6 +21,7 @@ using TRegex = TString;
 struct TRange {
     TRegex Begin;
     TRegex End;
+    TMaybe<TRegex> Escape;
 };
 
 struct TMatcher {
@@ -78,6 +79,8 @@ TString ToTextMateGroup(EUnitKind kind) {
             return "string.interpolated";
         case EUnitKind::BindParameterIdentifier:
             return "variable.parameter";
+        case EUnitKind::OptionIdentifier:
+            return "support.constant";
         case EUnitKind::TypeIdentifier:
             return "entity.name.type";
         case EUnitKind::FunctionIdentifier:
@@ -101,18 +104,14 @@ TString ToTextMateName(EUnitKind kind) {
     return ToString(kind);
 }
 
-TMaybe<NTextMate::TMatcher> TextMateMultilinePattern(const TUnit& unit) {
-    auto range = unit.RangePattern;
-    if (!range) {
-        return Nothing();
-    }
-
+NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, const TRangePattern& range) {
     return NTextMate::TMatcher{
         .Name = ToTextMateName(unit.Kind),
         .Group = ToTextMateGroup(unit.Kind),
         .Pattern = NTextMate::TRange{
-            .Begin = RE2::QuoteMeta(range->Begin),
-            .End = RE2::QuoteMeta(range->End),
+            .Begin = RE2::QuoteMeta(range.BeginPlain),
+            .End = RE2::QuoteMeta(range.EndPlain),
+            .Escape = range.EscapeRegex,
         },
     };
 }
@@ -142,8 +141,8 @@ NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
         for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
             language.Matchers.emplace_back(ToTextMatePattern(unit, pattern));
         }
-        if (auto textmate = TextMateMultilinePattern(unit)) {
-            language.Matchers.emplace_back(*textmate);
+        for (const TRangePattern& range : unit.RangePatterns) {
+            language.Matchers.emplace_back(TextMateMultilinePattern(unit, range));
         }
     }
 
@@ -160,6 +159,12 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
         } else if constexpr (std::is_same_v<T, NTextMate::TRange>) {
             json["begin"] = pattern.Begin;
             json["end"] = pattern.End;
+            if (pattern.Escape) {
+                json["patterns"].AppendValue(NJson::TJsonMap{
+                    {"name", "constant.character.escape.untitled"},
+                    {"match", *pattern.Escape},
+                });
+            }
         } else {
             static_assert(false);
         }

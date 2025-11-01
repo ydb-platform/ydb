@@ -3200,7 +3200,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/Join1", {
-            .ExpectedReads = UseSink ? 18 : 9, // without sink: precompute
+            .ExpectedReads = 9,
         });
 
         AssertTableStats(result, "/Root/Join2", {
@@ -3253,7 +3253,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/Test", {
-            .ExpectedReads = UseSink ? 2 : 1, // without sink: precompute
+            .ExpectedReads = 1,
             .ExpectedDeletes = 2,
         });
 

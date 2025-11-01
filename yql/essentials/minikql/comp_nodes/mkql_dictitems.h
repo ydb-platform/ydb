@@ -8,5 +8,5 @@ IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFacto
 IComputationNode* WrapDictKeys(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

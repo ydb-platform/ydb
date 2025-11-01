@@ -7,6 +7,7 @@ SRCS(
     kqp_rbo_rules.cpp
     kqp_convert_to_physical.cpp
     kqp_plan_conversion_utils.cpp
+    kqp_rbo_type_ann.cpp
 )
 
 PEERDIR(

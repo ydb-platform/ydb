@@ -43,12 +43,13 @@ private:
 public:
     std::shared_ptr<TFetchingScript> GetSourcesAggregationScript() const {
         if (!SourcesAggregationScript) {
-            auto aggrProc = GetReadMetadata()->GetProgram().GetChainVerified()->GetResultsAggregationProcessor();
-            if (!aggrProc) {
+            auto graph = GetReadMetadata()->GetProgram().GetGraphOptional();
+            if (!graph || !graph->GetResultsAggregationProcessor()) {
                 SourcesAggregationScript = nullptr;
             } else {
                 // TODO: fix me, temporary disabled
                 SourcesAggregationScript = nullptr;
+                // auto aggrProc = GetReadMetadata()->GetProgram().GetChainVerified()->GetResultsAggregationProcessor();
                 // NCommon::TFetchingScriptBuilder builder(*this);
                 // builder.AddStep(std::make_shared<TInitializeSourceStep>());
                 // builder.AddStep(std::make_shared<TStepAggregationSources>(aggrProc));

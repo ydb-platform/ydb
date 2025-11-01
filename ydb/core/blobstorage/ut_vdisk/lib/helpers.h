@@ -125,8 +125,8 @@ NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks
                              ui32 collectStep, TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep,
                              TAutoPtr<TVector<NKikimr::TLogoBlobID>> doNotKeep);
 
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo);
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf);
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, bool sync=false);
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf, bool sync=false);
 NActors::IActor *CreateWaitForSync(const NActors::TActorId &notifyID, TConfiguration *conf);
 NActors::IActor *CreateCheckDbEmptyness(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo,
                                         bool expectEmpty);

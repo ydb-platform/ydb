@@ -260,7 +260,7 @@ class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignState
         defaultRingGroup = get_ring_group(self.do_request_config(), storageName)
         self.check_failed({"ReconfigStateStorage": {}}, "New configuration is not defined")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": []}}},
-                          f"New {storageName} configuration RingGroups is not filled in")
+                          f"New {storageName} configuration is not filled in")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"Ring": {"Node": [1]}}}},
                           f"New {storageName} configuration Ring option is not allowed, use RingGroups")
         self.check_failed({"ReconfigStateStorage": {f"{storageName}Config": {"RingGroups": [defaultRingGroup, {"Ring": [{"Node": [4]}]}]}}},

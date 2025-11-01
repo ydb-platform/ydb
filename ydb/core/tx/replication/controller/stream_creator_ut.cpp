@@ -30,7 +30,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.CreateTable("/Root", *MakeTableDescription(tableDesc));
 
         env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(), env.GetPathId("/Root"),
+            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
             1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table, "/Root/Table", "/Root/Replica"
         ));
         {

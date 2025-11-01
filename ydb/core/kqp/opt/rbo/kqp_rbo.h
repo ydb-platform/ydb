@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_rbo_context.h"
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 
@@ -19,8 +20,7 @@ class IRule {
   public:
     IRule(TString name, bool parentRecompute = true) : RuleName(name), RequiresParentRecompute(parentRecompute) {}
 
-    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                              TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config, TPlanProps &props) = 0;
+    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
@@ -36,12 +36,9 @@ class TSimplifiedRule : public IRule {
   public:
     TSimplifiedRule(TString name, bool parentRecompute = true) : IRule(name, parentRecompute) {}
 
-    virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TExprContext &ctx,
-                                                          const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                                                          const TKikimrConfiguration::TPtr &config, TPlanProps &props) = 0;
+    virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
-    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TExprContext &ctx, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                              TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config, TPlanProps &props) override;
+    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 class TRuleBasedOptimizer;
@@ -54,7 +51,7 @@ class TRuleBasedOptimizer;
  */
 class IRBOStage {
   public:
-    virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) = 0;
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
     virtual ~IRBOStage() = default;
 };
 
@@ -63,11 +60,10 @@ class IRBOStage {
  */
 class TRuleBasedStage : public IRBOStage {
   public:
-    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules, bool requiresRebuild) : Rules(rules), RequiresRebuild(requiresRebuild) {}
-    virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) override;
+    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {}
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 
     TVector<std::shared_ptr<IRule>> Rules;
-    bool RequiresRebuild;
 };
 
 /**
@@ -75,28 +71,25 @@ class TRuleBasedStage : public IRBOStage {
  */
 class ISinglePassStage : public IRBOStage {
   public:
-    virtual void RunStage(TRuleBasedOptimizer *optimizer, TOpRoot &root, TExprContext &ctx) override = 0;
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override = 0;
 };
 
 /**
  * A rule based optimizer is a collection of rule-based and global stages
  */
 class TRuleBasedOptimizer {
-    friend class IRBOStage;
-
   public:
     TRuleBasedOptimizer(TVector<std::shared_ptr<IRBOStage>> stages, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                        TTypeAnnotationContext &typeCtx, const TKikimrConfiguration::TPtr &config,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole)
-        : Stages(stages), KqpCtx(kqpCtx), TypeCtx(typeCtx), Config(config), TypeAnnTransformer(typeAnnTransformer),
+                        TTypeAnnotationContext &typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole)
+        : Stages(stages), KqpCtx(*kqpCtx), TypeCtx(typeCtx), RBOTypeAnnTransformer(rboTypeAnnTransformer), TypeAnnTransformer(typeAnnTransformer),
           PeepholeTransformer(peephole) {}
 
     TExprNode::TPtr Optimize(TOpRoot &root, TExprContext &ctx);
 
     TVector<std::shared_ptr<IRBOStage>> Stages;
-    const TIntrusivePtr<TKqpOptimizeContext> &KqpCtx;
+    const TKqpOptimizeContext &KqpCtx;
     TTypeAnnotationContext &TypeCtx;
-    const TKikimrConfiguration::TPtr &Config;
+    TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnTransformer;
     TAutoPtr<IGraphTransformer> PeepholeTransformer;
 };
@@ -105,9 +98,8 @@ class TRuleBasedOptimizer {
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
  * we convert it into a final physical representation that directly correpsonds to the exection plan
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotationContext &types,
-                                  TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peepholeTransformer,
-                                  TKikimrConfiguration::TPtr config);
+TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
+                                  TAutoPtr<IGraphTransformer> peepholeTransformer);
 
 } // namespace NKqp
 } // namespace NKikimr

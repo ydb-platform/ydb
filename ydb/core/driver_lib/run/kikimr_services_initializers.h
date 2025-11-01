@@ -22,7 +22,7 @@
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
@@ -588,6 +588,13 @@ public:
 class THealthCheckInitializer : public IKikimrServicesInitializer {
 public:
     THealthCheckInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TCountersInfoProviderInitializer : public IKikimrServicesInitializer {
+public:
+    TCountersInfoProviderInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };

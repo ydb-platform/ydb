@@ -42,6 +42,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
@@ -398,16 +399,25 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         });
         opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&OperationId).DefaultValue("dummy_op");
         opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument().Handler0([this]() {
-            if (EQPlayerMode::Replay == QPlayerMode) {
-                throw yexception() << "replay and capture options can't be used simultaneously";
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
             }
             QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
+        });
+        opts.AddLongOption("capture-full", "Keep actual data needed for query run (input tables & attached files)").NoArgument().Handler0([this]() {
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
+            }
+            QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::Full;
         });
         opts.AddLongOption("replay", "Read query metadata from QStorage").NoArgument().Handler0([this]() {
-            if (EQPlayerMode::Capture == QPlayerMode) {
-                throw yexception() << "replay and capture options can't be used simultaneously";
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
             }
             QPlayerMode = EQPlayerMode::Replay;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
         });
         opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
             GatewaysPatch = TFileInput(file).ReadAll();
@@ -451,14 +461,22 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
             try {
-                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+                auto reader = QPlayerStorage_->MakeReader(OperationId, {});
+                if (Mode == ERunMode::Run) {
+                    // Check replay data to contain full capture
+                    if (HasFullCapture(reader)) {
+                        QPlayerCaptureMode = EQPlayerCaptureMode::Full;
+                    }
+                }
+
+                QPlayerContext = TQContext(std::move(reader), QPlayerCaptureMode);
             } catch (...) {
                 throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
             }
             ProgramFile = "-replay-";
             ProgramText = "";
-        } else if (EQPlayerMode::Capture == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}));
+        } else {
+            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
     if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
@@ -470,6 +488,10 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
 
     if (Mode >= ERunMode::Validate && GatewayTypes.empty()) {
         throw yexception() << "At least one gateway from the list " << JoinSeq(",", SupportedGateways_).Quote() << " must be specified";
+    }
+
+    if (Mode == ERunMode::Run && QPlayerMode == EQPlayerMode::Replay && QPlayerCaptureMode != EQPlayerCaptureMode::Full) {
+        throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
     }
 
     if (!GatewaysConfig) {
@@ -579,9 +601,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     }
     IModuleResolver::TPtr moduleResolver;
     TModuleResolver::TModuleChecker moduleChecker;
-    if (RunOptions_.TestLexers || RunOptions_.TestComplete || RunOptions_.TestSyntaxAmbiguities) {
+    if (RunOptions_.TestLexers ||
+        RunOptions_.TestSqlFormat ||
+        RunOptions_.TestComplete ||
+        RunOptions_.TestSyntaxAmbiguities)
+    {
         moduleChecker = [lexers, parsers,
                          testLexers = RunOptions_.TestLexers,
+                         testFormat = RunOptions_.TestSqlFormat,
                          testComplete = RunOptions_.TestComplete,
                          testSyntaxAmbiguities = RunOptions_.TestSyntaxAmbiguities,
                          clusters = ClusterMapping_](const TString& query, const TString& fileName, TExprContext& ctx) {
@@ -598,7 +625,7 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                 }
             }
 
-            if (testComplete || testSyntaxAmbiguities) {
+            if (testComplete || testSyntaxAmbiguities || testFormat) {
                 google::protobuf::Arena arena;
 
                 NSQLTranslation::TTranslationSettings settings;
@@ -618,9 +645,19 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
                     return false;
                 }
 
-                TIssues issues;
-                if (!NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
+                if (TIssues issues; testComplete && !NSQLComplete::CheckComplete(query, *ast.Root, issues)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Completion failed");
+                    for (const auto& i : issues) {
+                        issue.AddSubIssue(MakeIntrusive<TIssue>(i));
+                    }
+
+                    ctx.AddError(issue);
+                    return false;
+                }
+
+                constexpr bool isIdempotencyChecked = true;
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, settings, issues, isIdempotencyChecked)) {
+                    auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
                     }
@@ -729,8 +766,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
+    }
+
+    for (auto& factoryFn : RemoteLayersFactories_) {
+        auto result = factoryFn();
+        factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
     int result = DoRun(factory);
@@ -761,6 +804,11 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     }
     program->SetUseTableMetaFromGraph(RunOptions_.UseMetaFromGrpah);
     program->SetValidateOptions(RunOptions_.ValidateMode);
+    if (RunOptions_.EnableLineage) {
+        program->SetEnableLineage();
+    }
+
+    program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
     if (RunOptions_.ProgramType != EProgramType::SExpr) {
@@ -785,39 +833,17 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             fail = true;
         }
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
-            TString formattedProgramText;
-            NYql::TIssues issues;
-            NSQLTranslationV1::TLexers lexers;
-            lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-            lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-            NSQLTranslationV1::TParsers parsers;
-            parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-            parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-            auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-            if (!formatter->Format(RunOptions_.ProgramText, formattedProgramText, issues)) {
+            TIssues issues;
+            constexpr bool isIdempotencyChecked = true;
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), settings, issues, isIdempotencyChecked)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
-                return -1;
-            }
-
-            auto frmProgram = factory.Create("formatted SQL", formattedProgramText);
-            if (!frmProgram->ParseSql(settings)) {
-                frmProgram->PrintErrorsTo(*RunOptions_.ErrStream);
-                return -1;
-            }
-
-            TStringStream srcQuery, frmQuery;
-
-            program->AstRoot()->PrettyPrintTo(srcQuery, PRETTY_FLAGS);
-            frmProgram->AstRoot()->PrettyPrintTo(frmQuery, PRETTY_FLAGS);
-            if (srcQuery.Str() != frmQuery.Str()) {
-                *RunOptions_.ErrStream << "source query's AST and formatted query's AST are not same" << Endl;
                 return -1;
             }
         }
         if (!fail && RunOptions_.TestLexers && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            if (!NSQLTranslationV1::CheckLexers({}, RunOptions_.ProgramText, issues)) {
+            if (!NSQLTranslationV1::CheckLexers({}, program->GetSourceCode(), issues)) {
                 *RunOptions_.ErrStream << "Lexers mismatched" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -825,11 +851,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         }
         if (!fail && RunOptions_.TestComplete && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
-            if (!NSQLComplete::CheckComplete(
-                    RunOptions_.ProgramText,
-                    program->ExprRoot(),
-                    program->ExprCtx(),
-                    issues)) {
+            if (!NSQLComplete::CheckComplete(program->GetSourceCode(), *program->AstRoot(), issues)) {
                 *RunOptions_.ErrStream << "Completion failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;
@@ -856,7 +878,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             NYql::TIssues issues;
             google::protobuf::Message* message = NSQLTranslation::SqlAST(
                 translators,
-                RunOptions_.ProgramText,
+                program->GetSourceCode(),
                 RunOptions_.ProgramFile,
                 issues,
                 NSQLTranslation::SQL_MAX_PARSER_ERRORS,
@@ -988,6 +1010,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     RunOptions_.PrintInfo("");
     RunOptions_.PrintInfo("Done");
+
+    program->CommitFullCapture();
 
     return 0;
 }

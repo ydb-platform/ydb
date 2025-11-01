@@ -58,7 +58,7 @@ TString ToVim(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern
     vim << R"(")";
 
     // Prevent a range pattern conflict
-    if (unit.RangePattern) {
+    if (!unit.RangePatterns.empty()) {
         SubstGlobal(vim, "|\\n", "");
     }
 
@@ -75,6 +75,8 @@ TString ToVimName(EUnitKind kind) {
             return "yqlQuotedIdentifier";
         case EUnitKind::BindParameterIdentifier:
             return "yqlBindParameterIdentifier";
+        case EUnitKind::OptionIdentifier:
+            return "yqlOptionIdentifier";
         case EUnitKind::TypeIdentifier:
             return "yqlTypeIdentifier";
         case EUnitKind::FunctionIdentifier:
@@ -96,20 +98,27 @@ TString ToVimName(EUnitKind kind) {
 
 TString VimRangeEscaped(TString range) {
     SubstGlobal(range, "*", "\\*");
+    SubstGlobal(range, "\"", "\\\"");
+    SubstGlobal(range, "\\@", "@");
     return range;
 }
 
 void PrintRules(IOutputStream& out, const TUnit& unit) {
     TString name = ToVimName(unit.Kind);
+
+    for (const auto& range : std::ranges::reverse_view(unit.RangePatterns)) {
+        out << "syntax region " << name << "Multiline" << " "
+            << "start=\"" << VimRangeEscaped(range.BeginPlain) << "\" ";
+        if (range.EscapeRegex) {
+            out << "skip=\"" << VimRangeEscaped(*range.EscapeRegex) << "\" ";
+        }
+        out << "end=\"" << VimRangeEscaped(range.EndPlain) << "\"";
+        out << '\n';
+    }
+
     for (const auto& pattern : std::ranges::reverse_view(unit.Patterns)) {
         out << "syn match " << ToVimName(unit.Kind) << " "
             << ToVim(unit, pattern) << '\n';
-    }
-    if (auto range = unit.RangePattern) {
-        out << "syntax region " << name << "Multiline" << " "
-            << "start=\"" << VimRangeEscaped(range->Begin) << "\" "
-            << "end=\"" << VimRangeEscaped(range->End) << "\""
-            << '\n';
     }
 }
 
@@ -123,6 +132,8 @@ TVector<TStringBuf> ToVimGroups(EUnitKind kind) {
             return {"Special", "Underlined"};
         case EUnitKind::BindParameterIdentifier:
             return {"Define"};
+        case EUnitKind::OptionIdentifier:
+            return {"Keyword"};
         case EUnitKind::TypeIdentifier:
             return {"Type"};
         case EUnitKind::FunctionIdentifier:

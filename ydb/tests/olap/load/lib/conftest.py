@@ -17,7 +17,7 @@ from time import time
 from typing import Optional, Union
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
+from ydb.tests.olap.lib.allure_utils import allure_test_description, parallel_allure_test_description, NodeErrors
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -558,7 +558,11 @@ class LoadSuiteBase:
             raise Exception(result.warning_message)
 
     @classmethod
-    def setup_class(cls) -> None:
+    def perform_verification(cls) -> None:
+        """
+        Выполняет _Verification проверку кластера.
+        Может быть переопределена в наследниках для изменения момента выполнения.
+        """
         cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
@@ -577,6 +581,11 @@ class LoadSuiteBase:
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
+
+    @classmethod
+    def setup_class(cls) -> None:
+        # Выполняем _Verification в setup_class по умолчанию (для обратной совместимости)
+        cls.perform_verification()
 
     @classmethod
     def teardown_class(cls) -> None:
@@ -829,6 +838,40 @@ class LoadSuiteBase:
             workload_result=result,
             workload_params=workload_params,
             use_node_subcols=use_node_subcols,
+        )
+
+    def _create_parallel_allure_report(self, result, workload_name, workload_params, node_errors, verify_errors, execution_result):
+        """Формирует allure-отчёт по результатам workload"""
+        end_time = time()
+        start_time = result.start_time if result.start_time else end_time - 1
+        additional_table_strings = {}
+        if workload_params.get('actual_duration') is not None:
+            actual_duration = workload_params['actual_duration']
+            planned_duration = workload_params.get('planned_duration', getattr(self, 'timeout', 0))
+            actual_minutes = int(actual_duration) // 60
+            actual_seconds = int(actual_duration) % 60
+            planned_minutes = int(planned_duration) // 60
+            planned_seconds = int(planned_duration) % 60
+            additional_table_strings['execution_time'] = f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
+        if 'total_iterations' in workload_params and 'total_threads' in workload_params:
+            total_iterations = workload_params['total_iterations']
+            total_threads = workload_params['total_threads']
+            if total_iterations == 1 and total_threads > 1:
+                additional_table_strings['execution_mode'] = f"Single iteration with {total_threads} parallel threads"
+            elif total_iterations > 1:
+                avg_threads = workload_params.get('avg_threads_per_iteration', 1)
+                additional_table_strings['execution_mode'] = f"{total_iterations} iterations with avg {avg_threads:.1f} threads per iteration"
+        parallel_allure_test_description(
+            suite=type(self).suite(),
+            test=workload_name,
+            start_time=start_time,
+            end_time=end_time,
+            addition_table_strings=additional_table_strings,
+            node_errors=node_errors,
+            verify_errors=verify_errors,
+            workload_result=result,
+            workload_params=workload_params,
+            execution_result=execution_result
         )
 
     def _handle_final_status(self, result, workload_name, node_errors):

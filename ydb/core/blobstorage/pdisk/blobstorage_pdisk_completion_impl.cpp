@@ -104,6 +104,7 @@ void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
         auto res = MakeHolder<TEvLogResult>(NKikimrProto::CORRUPTED,
             NKikimrBlobStorage::StatusIsValid, ErrorReason, PDisk->Keeper.GetLogChunkCount());
         logWrite->Replied = true;
+        res->Results.emplace_back(logWrite->Lsn, logWrite->Cookie);
         actorSystem->Send(logWrite->Sender, res.Release());
         PDisk->Mon.WriteLog.CountResponse();
     }
@@ -310,7 +311,7 @@ void TCompletionChunkReadPart::Release(TActorSystem *actorSystem) {
 }
 
 TCompletionChunkRead::TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce)
+            ui64 chunkNonce, IRcBufAllocator* alloc)
     : TCompletionAction()
     , PDisk(pDisk)
     , Read(read)
@@ -338,7 +339,7 @@ TCompletionChunkRead::TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRe
         ? read->Size
         : read->Size + read->Offset % sectorSize;
     size_t tailroom = AlignUp<size_t>(newSize, sectorSize) - newSize;
-    CommonBuffer = TBufferWithGaps(read->Offset, newSize, tailroom);
+    CommonBuffer = TBufferWithGaps(read->Offset, alloc->AllocPageAlignedRcBuf(newSize, tailroom));
 }
 
 TCompletionChunkRead::~TCompletionChunkRead() {

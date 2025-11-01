@@ -4,6 +4,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/discovery
     ydb/core/engine/minikql
+    ydb/core/kqp/common/events
+    ydb/core/kqp/federated_query
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
@@ -58,6 +60,7 @@ SRCS(
     tx_heartbeat.cpp
     tx_init.cpp
     tx_init_schema.cpp
+    tx_resolve_database_result.cpp
     tx_resolve_resource_id_result.cpp
     tx_resolve_secret_result.cpp
     tx_worker_error.cpp

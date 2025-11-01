@@ -55,7 +55,7 @@ public:
         : TActor{&TThis::StateWork}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Uploader(request.GetScanSettings())
+        , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Request(std::move(request))
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
@@ -92,7 +92,7 @@ public:
             };
             {
                 Ydb::Type type;
-                type.set_type_id(TokenType);
+                NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
             }
             for (const auto& column : table.KeyColumnIds) {
@@ -140,14 +140,14 @@ public:
 
         TVector<TCell> uploadKey(::Reserve(key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
-        
+
         TString text((*row).at(0).AsBuf());
         auto tokens = Analyze(text, TextAnalyzers);
         for (const auto& token : tokens) {
             uploadKey.clear();
             uploadKey.push_back(TCell(token));
             uploadKey.insert(uploadKey.end(), key.begin(), key.end());
-            
+
             uploadValue.clear();
             size_t index = 1; // skip text column
             for (auto dataColumn : Request.GetDataColumns()) {

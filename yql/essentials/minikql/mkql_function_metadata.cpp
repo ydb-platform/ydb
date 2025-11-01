@@ -6,11 +6,12 @@ namespace NMiniKQL {
 
 TKernelFamilyBase::TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions)
     : TKernelFamily(functionOptions)
-{}
+{
+}
 
 const TKernel* TKernelFamilyBase::FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const {
     std::vector<NUdf::TDataTypeId> args(argTypes, argTypes + argTypesCount);
-    auto it = KernelMap_.find({ args, returnType });
+    auto it = KernelMap_.find({args, returnType});
     if (it == KernelMap_.end()) {
         return nullptr;
     }
@@ -31,5 +32,5 @@ void TKernelFamilyBase::Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NU
     KernelMap_.emplace(std::make_pair(argTypes, returnType), std::move(kernel));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

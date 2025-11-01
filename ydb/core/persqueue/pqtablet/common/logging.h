@@ -7,6 +7,7 @@ namespace NKikimr::NPQ {
 
 inline TString LogPrefix() { return {}; }
 
+#define PQ_LOG(priority, stream) LOG_LOG_S(*NActors::TlsActivationContext, priority, NKikimrServices::PERSQUEUE, LogPrefix() << stream)
 #define PQ_LOG_T(stream) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream)
 #define PQ_LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream)
 #define PQ_LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << stream)

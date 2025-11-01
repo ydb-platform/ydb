@@ -1589,7 +1589,17 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
             // TODO: consider replacing Member -> SqlPlainColumn
             callable = Reliable_ && !UseSource_ ? "Member" : "SqlColumn";
         }
-        Node_ = Y(callable, "row", ColumnExpr_ ? Y("EvaluateAtom", ColumnExpr_) : BuildQuotedAtom(Pos_, *GetColumnName()));
+
+        TNodePtr ref = ColumnExpr_
+                           ? Y("EvaluateAtom", ColumnExpr_)
+                           : BuildQuotedAtom(Pos_, *GetColumnName());
+
+        if (IsYqlRef_) {
+            Node_ = Y("YqlColumnRef", ref);
+        } else {
+            Node_ = Y(callable, "row", ref);
+        }
+
         if (UseSource_) {
             YQL_ENSURE(Source_);
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Source_));
@@ -1610,6 +1620,10 @@ void TColumnNode::ResetAsReliable() {
 
 void TColumnNode::SetAsNotReliable() {
     Reliable_ = false;
+}
+
+void TColumnNode::SetAsYqlRef() {
+    IsYqlRef_ = true;
 }
 
 void TColumnNode::SetUseSource() {
@@ -1640,6 +1654,7 @@ TNodePtr TColumnNode::DoClone() const {
     copy->Reliable_ = Reliable_;
     copy->UseSource_ = UseSource_;
     copy->UseSourceAsColumn_ = UseSourceAsColumn_;
+    copy->IsYqlRef_ = IsYqlRef_;
     return copy;
 }
 
@@ -1693,6 +1708,14 @@ TNodePtr BuildColumnOrType(TPosition pos, const TString& column) {
     TString source = "";
     bool maybeType = true;
     return new TColumnNode(pos, column, source, maybeType);
+}
+
+TNodePtr BuildYqlColumnRef(TPosition pos) {
+    TString source = "";
+    bool maybeType = true;
+    auto* node = new TColumnNode(pos, /* column = */ "", source, maybeType);
+    node->SetAsYqlRef();
+    return node;
 }
 
 ITableKeys::ITableKeys(TPosition pos)
@@ -3125,11 +3148,20 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
                 ExtraMem_ = MakeAtomFromExpression(Pos_, ctx, arg);
             } else if (arg->GetLabel() == "Depends") {
                 if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
-                                                          NYql::MakeLangVersion(2025, 3), ctx.Settings.BackportMode)) {
+                                                          NYql::MakeLangVersion(2025, 3), ctx.Settings.BackportMode))
+                {
                     ctx.Error() << "Udf: named argument Depends is not available before version 2025.03";
                     return false;
                 }
                 Depends_.push_back(arg);
+            } else if (arg->GetLabel() == "Layers") {
+                if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
+                                                          NYql::MakeLangVersion(2025, 4), ctx.Settings.BackportMode))
+                {
+                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.04";
+                    return false;
+                }
+                Layers_ = arg;
             } else {
                 ctx.Error() << "Udf: unexpected named argument: " << arg->GetLabel();
                 return false;
@@ -3165,7 +3197,7 @@ const TVector<TNodePtr>& TUdfNode::GetDepends() const {
 }
 
 TNodePtr TUdfNode::BuildOptions() const {
-    if (Cpu_.Empty() && ExtraMem_.Empty()) {
+    if (Cpu_.Empty() && ExtraMem_.Empty() && !Layers_) {
         return nullptr;
     }
 
@@ -3176,6 +3208,11 @@ TNodePtr TUdfNode::BuildOptions() const {
 
     if (!ExtraMem_.Empty()) {
         options = L(options, Q(Y(Q("extraMem"), ExtraMem_.Build())));
+    }
+
+    if (Layers_) {
+        // layer path can be taken from table
+        options = L(options, Q(Y(Q("layers"), Y("EvaluateExpr", Layers_))));
     }
 
     return Q(options);

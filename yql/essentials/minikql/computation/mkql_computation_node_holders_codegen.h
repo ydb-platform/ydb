@@ -4,9 +4,9 @@
 
 #ifndef MKQL_DISABLE_CODEGEN
 namespace llvm {
-    class Value;
-    class BasicBlock;
-}
+class Value;
+class BasicBlock;
+} // namespace llvm
 #endif
 
 namespace NKikimr {
@@ -18,7 +18,7 @@ class TMemoryUsageInfo;
 struct TCodegenContext;
 #endif
 
-struct TContainerCacheOnContext : private TNonCopyable {
+struct TContainerCacheOnContext: private TNonCopyable {
     TContainerCacheOnContext(TComputationMutables& mutables);
 
     NUdf::TUnboxedValuePod NewArray(TComputationContext& ctx, ui64 size, NUdf::TUnboxedValue*& items) const;
@@ -31,8 +31,7 @@ struct TContainerCacheOnContext : private TNonCopyable {
 //////////////////////////////////////////////////////////////////////////////
 // TNodeFactory
 //////////////////////////////////////////////////////////////////////////////
-class TNodeFactory: private TNonCopyable
-{
+class TNodeFactory: private TNonCopyable {
 public:
     TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& mutables);
 
@@ -47,9 +46,9 @@ public:
     IComputationNode* CreateOptionalNode(IComputationNode* item) const;
 
     IComputationNode* CreateDictNode(
-            std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
-            const TKeyTypes& types, bool isTuple, TType* encodedType,
-            NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, NUdf::ICompare::TPtr compare, bool isSorted) const;
+        std::vector<std::pair<IComputationNode*, IComputationNode*>>&& items,
+        const TKeyTypes& types, bool isTuple, TType* encodedType,
+        NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, NUdf::ICompare::TPtr compare, bool isSorted) const;
 
     IComputationNode* CreateVariantNode(IComputationNode* item, ui32 index) const;
 

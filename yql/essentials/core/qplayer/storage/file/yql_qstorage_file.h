@@ -10,4 +10,4 @@ struct TFileQStorageSettings {
 
 IQStoragePtr MakeFileQStorage(const TString& folder = {}, const TFileQStorageSettings& settings = {});
 
-};
+}; // namespace NYql

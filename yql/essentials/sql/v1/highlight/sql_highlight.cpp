@@ -1,10 +1,11 @@
 #include "sql_highlight.h"
 
+#include "data_language_json.h"
+
 #include <yql/essentials/sql/v1/lexer/regex/regex.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
 #include <util/generic/algorithm.h>
@@ -57,9 +58,14 @@ TUnit MakeUnit<EUnitKind::Keyword>(Syntax& s) {
     using NSQLReflect::TLexerGrammar;
 
     TUnit unit = {.Kind = EUnitKind::Keyword};
+
     for (const auto& keyword : s.Grammar->KeywordNames) {
         const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
         unit.Patterns.push_back(CaseInsensitive(content));
+    }
+
+    for (const TString& type : LoadHints()) {
+        unit.Patterns.emplace_back(CaseInsensitive(type));
     }
 
     unit.Patterns = {Merged(std::move(unit.Patterns))};
@@ -86,7 +92,7 @@ TUnit MakeUnit<EUnitKind::QuotedIdentifier>(Syntax& s) {
         .Kind = EUnitKind::QuotedIdentifier,
         .Patterns = {
             {s.Get("ID_QUOTED")},
-        },
+            {s.Concat({"COMMAT", "ID_PLAIN"})}},
         .IsPlain = false,
     };
 }
@@ -103,11 +109,25 @@ TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
 }
 
 template <>
+TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
+    return {
+        .Kind = EUnitKind::OptionIdentifier,
+        .Patterns = {
+            {
+                .Body = TStringBuilder()
+                        << s.Get("ID_PLAIN") << "(\\." << s.Get("ID_PLAIN") << ")?",
+                .Before = TStringBuilder() << "PRAGMA" << s.Get("WS"),
+                .IsCaseInsensitive = true,
+            },
+        },
+    };
+}
+
+template <>
 TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
     TVector<NSQLTranslationV1::TRegexPattern> types;
-    NJson::TJsonValue json = NJson::ReadJsonFastTree(NResource::Find("types.json"));
-    for (const NJson::TJsonValue& value : json.GetArraySafe()) {
-        types.emplace_back(CaseInsensitive(value["name"].GetStringSafe()));
+    for (const TString& type : LoadTypes()) {
+        types.emplace_back(CaseInsensitive(type));
     }
 
     return {
@@ -148,6 +168,8 @@ TUnit MakeUnit<EUnitKind::Literal>(Syntax& s) {
             {s.Get("REAL")},
             {s.Get("INTEGER_VALUE")},
             {s.Get("DIGITS")},
+            {.Body = "TRUE", .IsCaseInsensitive = true},
+            {.Body = "FALSE", .IsCaseInsensitive = true},
         },
     };
 }
@@ -156,13 +178,14 @@ template <>
 TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
+        .RangePatterns = {
+            {R"(')", R"(')", R"re(\\.)re"},
+            {R"(")", R"(")", R"re(\\.)re"},
+            {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
+        },
         .Patterns = {{s.Get("STRING_VALUE")}},
         .PatternsANSI = TVector<TRegexPattern>{
             TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
-        },
-        .RangePattern = TRangePattern{
-            .Begin = R"(@@)",
-            .End = R"(@@)",
         },
         .IsPlain = false,
     };
@@ -172,12 +195,9 @@ template <>
 TUnit MakeUnit<EUnitKind::Comment>(Syntax& s) {
     return {
         .Kind = EUnitKind::Comment,
+        .RangePatterns = {{R"(/*)", R"(*/)"}},
         .Patterns = {{s.Get("COMMENT")}},
         .PatternsANSI = Nothing(),
-        .RangePattern = TRangePattern{
-            .Begin = R"(/*)",
-            .End = R"(*/)",
-        },
         .IsPlain = false,
     };
 }
@@ -218,13 +238,14 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
     THighlighting h;
     h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::OptionIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::BindParameterIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Identifier>(s));
-    h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::StringLiteral>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Whitespace>(s));
 
@@ -247,6 +268,9 @@ void Out<NSQLHighlight::EUnitKind>(IOutputStream& out, NSQLHighlight::EUnitKind 
             break;
         case NSQLHighlight::EUnitKind::BindParameterIdentifier:
             out << "bind-parameter-identifier";
+            break;
+        case NSQLHighlight::EUnitKind::OptionIdentifier:
+            out << "option-identifier";
             break;
         case NSQLHighlight::EUnitKind::TypeIdentifier:
             out << "type-identifier";

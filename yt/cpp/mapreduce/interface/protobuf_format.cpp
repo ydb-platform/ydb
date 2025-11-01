@@ -237,7 +237,6 @@ EWrapperOneofFlag::Enum OptionToOneofFlag(TOneofOption option)
     return std::visit(TVisitor(), option);
 }
 
-
 template <typename T, typename TOptionToFlag>
 void SetOption(TMaybe<T>& option, T newOption, TOptionToFlag optionToFlag)
 {
@@ -493,6 +492,18 @@ private:
     THashSet<const Descriptor*> ActiveVertices_;
     TStack<const Descriptor*> Stack_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GetOneofName(const ::google::protobuf::OneofDescriptor* descriptor)
+{
+    auto nameFromExtension = descriptor->options().GetExtension(variant_field_name);
+    if (nameFromExtension.empty()) {
+        return FromProto<TString>(descriptor->name());
+    } else {
+        return nameFromExtension;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1102,19 +1113,36 @@ NTi::TTypePtr CreateStruct(TStringBuf fieldName, TVector<TMember> members)
 
 TMaybe<TVector<TString>> InferColumnFilter(const ::google::protobuf::Descriptor& descriptor)
 {
-    auto isOtherColumns = [] (const ::google::protobuf::FieldDescriptor& field) {
-        return GetFieldOptions(&field).Type == EProtobufType::OtherColumns;
+    auto isOtherColumns = [] (const ::google::protobuf::FieldDescriptor* field) {
+        return GetFieldOptions(field).Type == EProtobufType::OtherColumns;
+    };
+    auto isEmbeddedColumn = [] (const ::google::protobuf::FieldDescriptor* field) {
+        return GetFieldOptions(field).SerializationMode == EProtobufSerializationMode::Embedded;
     };
 
     TVector<TString> result;
     result.reserve(descriptor.field_count());
     for (int i = 0; i < descriptor.field_count(); ++i) {
-        const auto& field = *descriptor.field(i);
+        auto field = descriptor.field(i);
         if (isOtherColumns(field)) {
             return {};
         }
-        result.push_back(GetColumnName(field));
+        if (isEmbeddedColumn(field) && field->message_type() != nullptr) {
+            auto embeddedFilter = InferColumnFilter(*field->message_type());
+            if (!embeddedFilter) {
+                return {};
+            }
+            result.insert(result.end(), embeddedFilter->begin(), embeddedFilter->end());
+        } else {
+            result.push_back(GetColumnName(*field));
+        }
     }
+
+    for (int i = 0; i < descriptor.real_oneof_decl_count(); ++i) {
+        const auto* oneof = descriptor.oneof_decl(i);
+        result.push_back(GetOneofName(oneof));
+    }
+
     return result;
 }
 

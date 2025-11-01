@@ -130,7 +130,7 @@ public:
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
-        bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
+        const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -153,7 +153,7 @@ public:
         , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
 
@@ -161,15 +161,12 @@ public:
             BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
         }
 
-        EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
-        TasksGraph.GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
-        TasksGraph.GetMeta().Database = Database;
         TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
-        TasksGraph.GetMeta().StreamResult = streamResult;
+        TasksGraph.GetMeta().StatsMode = Request.StatsMode;
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
@@ -257,7 +254,7 @@ protected:
 
         TasksGraph.GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
         for (const auto& [shardId, nodeId] : TasksGraph.GetMeta().ShardIdToNodeId) {
-            ShardsOnNode[nodeId].push_back(shardId);
+            TasksGraph.GetMeta().ShardsOnNode[nodeId].push_back(shardId);
             ParticipantNodes.emplace(nodeId);
             if (TxManager) {
                 TxManager->AddParticipantNode(nodeId);
@@ -267,7 +264,7 @@ protected:
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
             sb << "Shards on nodes: " << Endl;
-            for (auto& pair : ShardsOnNode) {
+            for (auto& pair : TasksGraph.GetMeta().ShardsOnNode) {
                 sb << "  node " << pair.first << ": [";
                 if (pair.second.size() <= 20) {
                     sb << JoinSeq(", ", pair.second) << "]" << Endl;
@@ -608,7 +605,7 @@ protected:
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
 
-        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+        if (IsSchedulable()) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
@@ -664,8 +661,7 @@ protected:
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
-        TasksGraph.FillKqpTasksGraphStages(Request.Transactions);
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph);
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         LOG_T("Got request, become WaitResolveState");
@@ -707,7 +703,7 @@ protected:
     }
 
     void InvalidateNode(ui64 node) {
-        for (auto tablet : ShardsOnNode[node]) {
+        for (auto tablet : TasksGraph.GetMeta().ShardsOnNode[node]) {
             auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
             this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
@@ -810,7 +806,7 @@ protected:
                     for (auto& task : record.GetNotStartedTasks()) {
                         if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
                               and ev->Sender.NodeId() != SelfId().NodeId()) {
-                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), SelfId());
+                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
                         }
                     }
                     break;
@@ -1201,6 +1197,12 @@ protected:
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
+        if (IsSchedulable()) {
+            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+            removeQueryEvent->QueryId = TxId;
+            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
+        }
+
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
@@ -1277,6 +1279,12 @@ protected:
         return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
     }
 
+    inline bool IsSchedulable() const {
+        const auto& databaseId = GetUserRequestContext()->DatabaseId;
+        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
+        return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
+    }
+
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
@@ -1315,8 +1323,6 @@ protected:
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
 
-    TMap<ui64, TVector<ui64>> ShardsOnNode;
-
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";
 
@@ -1339,7 +1345,6 @@ protected:
     THashSet<ui32> ParticipantNodes;
 
     bool AlreadyReplied = false;
-    bool EnableReadsMerge = false;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const bool VerboseMemoryLimitException;
@@ -1368,7 +1373,7 @@ private:
 
 IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
-    TKqpRequestCounters::TPtr counters, bool streamResult, const TExecuterConfig& executerConfig,
+    TKqpRequestCounters::TPtr counters, const TExecuterConfig& executerConfig,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,

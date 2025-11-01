@@ -1,5 +1,6 @@
 #include "read_balancer.h"
 #include "read_balancer__balancing.h"
+#include "read_balancer__mlp_balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 #include "read_balancer_log.h"
@@ -49,6 +50,7 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , StatsReportRound(0)
     {
         Balancer = std::make_unique<TBalancer>(*this);
+        MLPBalancer = std::make_unique<TMLPBalancer>(*this);
     }
 
 struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
@@ -617,9 +619,12 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     THolder<TConsumerLabeledCounters> labeledConsumerCounters;
     using TPartitionKeyCompactionCounters = TProtobufTabletLabeledCounters<EPartitionKeyCompactionLabeledCounters_descriptor>;
     THolder<TPartitionKeyCompactionCounters> compactionCounters;
+    using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
+    THolder<TPartitionExtendedLabeledCounters> extendedLabeledCounters;
     labeledCounters.Reset(new TPartitionLabeledCounters("topic", 0, DatabasePath));
     labeledConsumerCounters.Reset(new TConsumerLabeledCounters("topic|x|consumer", 0, DatabasePath));
     compactionCounters.Reset(new TPartitionKeyCompactionCounters("topic", 0, DatabasePath));
+    extendedLabeledCounters.Reset(new TPartitionExtendedLabeledCounters("topic", 0, DatabasePath));
 
     if (AggregatedCounters.empty()) {
         for (ui32 i = 0; i < labeledCounters->GetCounters().Size(); ++i) {
@@ -630,6 +635,13 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             AggregatedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
         }
     }
+    if (AggregatedExtendedCounters.empty()) {
+        for (ui32 i = 0; i < extendedLabeledCounters->GetCounters().Size(); ++i) {
+            TString name = extendedLabeledCounters->GetNames()[i];
+            AggregatedExtendedCounters.push_back(name.empty() ? nullptr : DynamicCounters->GetExpiringNamedCounter("name", name, false));
+        }
+    }
+
     if (TabletConfig.GetEnableCompactification()) {
         if (AggregatedCompactionCounters.empty()) {
             for (ui32 i = 0; i < compactionCounters->GetCounters().Size(); ++i) {
@@ -660,6 +672,7 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
     ui64 milliSeconds = TAppData::TimeProvider->Now().MilliSeconds();
 
     THolder<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
+    THolder<TTabletLabeledCountersBase> aggrExtended(new TTabletLabeledCountersBase);
     THolder<TTabletLabeledCountersBase> compactionAggr(new TTabletLabeledCountersBase);
 
     for (auto it = AggregatedStats.Stats.begin(); it != AggregatedStats.Stats.end(); ++it) {
@@ -669,6 +682,13 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
             labeledCounters->GetCounters()[i] = it->second.Counters.GetValues(i);
         }
         aggr->AggregateWith(*labeledCounters);
+
+        for (ui32 i = 0; i < it->second.Counters.GetExtendedCounters().ValuesSize()
+                         && i < extendedLabeledCounters->GetCounters().Size(); ++i
+        ) {
+            extendedLabeledCounters->GetCounters()[i] = it->second.Counters.GetExtendedCounters().GetValues(i);
+        }
+        aggrExtended->AggregateWith(*extendedLabeledCounters);
 
         if (TabletConfig.GetEnableCompactification()) {
             for (ui32 i = 0; i < it->second.Counters.GetCompactionCounters().ValuesSize() && i < compactionCounters->GetCounters().Size(); ++i) {
@@ -700,6 +720,17 @@ void TPersQueueReadBalancer::UpdateCounters(const TActorContext& ctx) {
         }
         AggregatedCounters[i]->Set(val);
     }
+    for (ui32 i = 0; aggrExtended->HasCounters() && i < aggrExtended->GetCounters().Size(); ++i) {
+        if (!AggregatedExtendedCounters[i])
+            continue;
+        const auto& type = aggrExtended->GetCounterType(i);
+        auto val = aggrExtended->GetCounters()[i].Get();
+        if (type == TLabeledCounterOptions::CT_TIMELAG) {
+            val = val <= milliSeconds ? milliSeconds - val : 0;
+        }
+        AggregatedExtendedCounters[i]->Set(val);
+    }
+
 
     for (ui32 i = 0; i < compactionAggr->GetCounters().Size() && i < AggregatedCompactionCounters.size(); ++i) {
         if (!AggregatedCompactionCounters[i]) {
@@ -1080,6 +1111,75 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
     }
 }
 
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
+    MLPBalancer->Handle(ev);
+}
+
+STFUNC(TPersQueueReadBalancer::StateInit) {
+    auto ctx(ActorContext());
+    TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
+
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
+        HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
+        HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        // From kafka
+        HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+        HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
+        default:
+            StateInitImpl(ev, SelfId());
+            break;
+    }
+}
+
+STFUNC(TPersQueueReadBalancer::StateWork) {
+    auto ctx(ActorContext());
+    TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
+
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
+        HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+        HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
+        HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
+        HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+        HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        HFunc(TEvPersQueue::TEvStatusResponse, Handle);
+        HFunc(TEvPQ::TEvStatsWakeup, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvPersQueue::TEvStatus, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
+        HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+        HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
+        HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
+        HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
+        HFunc(TEvPQ::TEvBalanceConsumer, Handle);
+        // From kafka
+        HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+        HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
+        // from PQ
+        HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+        // from TPartitionScaleRequest
+        HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
+        // from MirrorDescriber
+        HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
+        // MLP
+        hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
+        default:
+            HandleDefaultEvents(ev, SelfId());
+            break;
+    }
+}
 
 } // NPQ
 } // NKikimr

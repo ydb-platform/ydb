@@ -1,5 +1,5 @@
 #include "mkql_ifpresent.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -7,24 +7,27 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsMultiOptional>
-class TIfPresentWrapper : public TMutableCodegeneratorNode<TIfPresentWrapper<IsMultiOptional>> {
-using TBaseComputation = TMutableCodegeneratorNode<TIfPresentWrapper<IsMultiOptional>>;
+template <bool IsMultiOptional>
+class TIfPresentWrapper: public TMutableCodegeneratorNode<TIfPresentWrapper<IsMultiOptional>> {
+    using TBaseComputation = TMutableCodegeneratorNode<TIfPresentWrapper<IsMultiOptional>>;
+
 public:
     TIfPresentWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
-        IComputationNode* missingBranch)
+                      IComputationNode* missingBranch)
         : TBaseComputation(mutables, kind)
         , Optional(optional)
         , Item(item)
         , PresentBranch(presentBranch)
         , MissingBranch(missingBranch)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
             const auto optional = Optional->GetValue(ctx);
-            if (optional)
+            if (optional) {
                 Item->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
+            }
 
             return (optional ? PresentBranch : MissingBranch)->GetValue(ctx).Release();
         } else {
@@ -89,24 +92,27 @@ private:
     IComputationNode* const MissingBranch;
 };
 
-template<bool IsMultiOptional>
-class TFlowIfPresentWrapper : public TStatelessFlowCodegeneratorNode<TFlowIfPresentWrapper<IsMultiOptional>> {
-using TBaseComputation = TStatelessFlowCodegeneratorNode<TFlowIfPresentWrapper<IsMultiOptional>>;
+template <bool IsMultiOptional>
+class TFlowIfPresentWrapper: public TStatelessFlowCodegeneratorNode<TFlowIfPresentWrapper<IsMultiOptional>> {
+    using TBaseComputation = TStatelessFlowCodegeneratorNode<TFlowIfPresentWrapper<IsMultiOptional>>;
+
 public:
     TFlowIfPresentWrapper(EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
-        IComputationNode* missingBranch)
+                          IComputationNode* missingBranch)
         : TBaseComputation(nullptr, kind)
         , Optional(optional)
         , Item(item)
         , PresentBranch(presentBranch)
         , MissingBranch(missingBranch)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
             const auto optional = Optional->GetValue(ctx);
-            if (optional)
+            if (optional) {
                 Item->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
+            }
 
             return (optional ? PresentBranch : MissingBranch)->GetValue(ctx).Release();
         } else {
@@ -171,24 +177,27 @@ private:
     IComputationNode* const MissingBranch;
 };
 
-template<bool IsMultiOptional>
-class TWideIfPresentWrapper : public TStatelessWideFlowCodegeneratorNode<TWideIfPresentWrapper<IsMultiOptional>> {
-using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideIfPresentWrapper<IsMultiOptional>>;
+template <bool IsMultiOptional>
+class TWideIfPresentWrapper: public TStatelessWideFlowCodegeneratorNode<TWideIfPresentWrapper<IsMultiOptional>> {
+    using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideIfPresentWrapper<IsMultiOptional>>;
+
 public:
     TWideIfPresentWrapper(IComputationNode* optional, IComputationExternalNode* item, IComputationWideFlowNode* presentBranch,
-        IComputationWideFlowNode* missingBranch)
+                          IComputationWideFlowNode* missingBranch)
         : TBaseComputation(nullptr)
         , Optional(optional)
         , Item(item)
         , PresentBranch(presentBranch)
         , MissingBranch(missingBranch)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
             const auto optional = Optional->GetValue(ctx);
-            if (optional)
+            if (optional) {
                 Item->SetValue(ctx, optional.GetOptionalValueIf<IsMultiOptional>());
+            }
 
             return (optional ? PresentBranch : MissingBranch)->FetchValues(ctx, output);
         } else {
@@ -288,7 +297,7 @@ private:
     IComputationWideFlowNode* const MissingBranch;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
@@ -304,15 +313,17 @@ IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFacto
         const auto missWide = dynamic_cast<IComputationWideFlowNode*>(missingBranch);
 
         if (presWide && missWide) {
-            if (multiOptional)
+            if (multiOptional) {
                 return new TWideIfPresentWrapper<true>(optional, itemArg, presWide, missWide);
-            else
+            } else {
                 return new TWideIfPresentWrapper<false>(optional, itemArg, presWide, missWide);
+            }
         } else if (!presWide && !missWide) {
-            if (multiOptional)
+            if (multiOptional) {
                 return new TFlowIfPresentWrapper<true>(GetValueRepresentation(type), optional, itemArg, presentBranch, missingBranch);
-            else
+            } else {
                 return new TFlowIfPresentWrapper<false>(GetValueRepresentation(type), optional, itemArg, presentBranch, missingBranch);
+            }
         }
     } else if (multiOptional) {
         return new TIfPresentWrapper<true>(ctx.Mutables, GetValueRepresentation(type), optional, itemArg, presentBranch, missingBranch);
@@ -323,5 +334,5 @@ IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFacto
     THROW yexception() << "Wrong signature.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

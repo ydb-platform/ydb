@@ -185,7 +185,7 @@ i64 CmdGetOffset(const ui32 partition, const TString& user, const TMaybe<i64>& e
                     if (ctime == Max<i64>()) {
                         UNIT_ASSERT(resp.GetCreateTimestampMS() + 86'000'000 < TAppData::TimeProvider->Now().MilliSeconds());
                     } else {
-                        UNIT_ASSERT_EQUAL((i64)resp.GetCreateTimestampMS(), ctime);
+                        UNIT_ASSERT_VALUES_EQUAL_C((i64)resp.GetCreateTimestampMS(), ctime, resp.DebugString());
                     }
                 }
             }
@@ -995,7 +995,8 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
         return false;
     }
     if (settings.Timeout) {
-        UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+            NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::OK), result->Record.DebugString());
         UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdReadResult());
         auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
         UNIT_ASSERT_EQUAL(res.ResultSize(), 0);
@@ -1248,6 +1249,21 @@ THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(T
     runtime.SendToPipe(balancerId, sender, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
 
     return runtime.GrabEdgeEvent<TEvPersQueue::TEvPeriodicTopicStats>(TDuration::Seconds(2));
+}
+
+void CmdRunCompaction(TTestActorRuntime& runtime,
+                      ui64 tabletId,
+                      const TActorId& sender,
+                      const ui32 partition)
+{
+    auto event = MakeHolder<TEvPQ::TEvForceCompaction>(partition);
+    runtime.SendToPipe(tabletId, sender, event.Release(), 0, GetPipeConfigWithRetries());
+}
+
+void CmdRunCompaction(const ui32 partition,
+                      TTestContext& tc)
+{
+    CmdRunCompaction(*tc.Runtime, tc.TabletId, tc.Edge, partition);
 }
 
 } // namespace NKikimr::NPQ

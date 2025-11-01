@@ -1,7 +1,7 @@
 #include "mkql_withcontext.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/parser/pg_wrapper/interface/context.h>
 
@@ -12,14 +12,16 @@ namespace NMiniKQL {
 
 namespace {
 
-class TWithContextWrapper : public TMutableComputationNode<TWithContextWrapper> {
+class TWithContextWrapper: public TMutableComputationNode<TWithContextWrapper> {
     typedef TMutableComputationNode<TWithContextWrapper> TBaseComputation;
+
 public:
     TWithContextWrapper(TComputationMutables& mutables, const std::string_view& contextType, IComputationNode* arg)
         : TBaseComputation(mutables)
         , Arg(arg)
         , ContextType(contextType)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto prev = TlsAllocState->CurrentContext;
@@ -42,7 +44,7 @@ private:
     const std::string_view ContextType;
 };
 
-struct TState : public TComputationValue<TState> {
+struct TState: public TComputationValue<TState> {
     TState(TMemoryUsageInfo* memInfo, const std::string_view& contextType)
         : TComputationValue(memInfo)
         , ContextType(contextType)
@@ -58,8 +60,9 @@ struct TState : public TComputationValue<TState> {
     }
 
     void Detach(const bool cleanup) {
-        if (cleanup)
+        if (cleanup) {
             Cleanup();
+        }
 
         Scope.Detach();
         TlsAllocState->CurrentContext = PrevContext;
@@ -68,6 +71,7 @@ struct TState : public TComputationValue<TState> {
     ~TState() {
         Cleanup();
     }
+
 private:
     void Cleanup() {
         if (Ctx) {
@@ -83,15 +87,17 @@ private:
     void* PrevContext = nullptr;
 };
 
-class TWithContextFlowWrapper : public TStatefulFlowCodegeneratorNode<TWithContextFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TWithContextFlowWrapper>;
+class TWithContextFlowWrapper: public TStatefulFlowCodegeneratorNode<TWithContextFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TWithContextFlowWrapper>;
+
 public:
     TWithContextFlowWrapper(TComputationMutables& mutables, const std::string_view& contextType,
-        EValueRepresentation kind, IComputationNode* flow)
+                            EValueRepresentation kind, IComputationNode* flow)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Any)
         , Flow(flow)
         , ContextType(contextType)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
         if (!stateValue.HasValue()) {
@@ -134,17 +140,17 @@ public:
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto attachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Attach>());
-        const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType }, false);
+        const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto attachFuncPtr = CastInst::Create(Instruction::IntToPtr, attachFunc, PointerType::getUnqual(attachFuncType), "attach", block);
-        CallInst::Create(attachFuncType, attachFuncPtr, { stateArg }, "", block);
+        CallInst::Create(attachFuncType, attachFuncPtr, {stateArg}, "", block);
 
         const auto value = GetNodeValue(Flow, ctx, block);
         const auto finish = IsFinish(value, block, context);
 
         const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Detach>());
-        const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType, finish->getType() }, false);
+        const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType, finish->getType()}, false);
         const auto detachFuncPtr = CastInst::Create(Instruction::IntToPtr, detachFunc, PointerType::getUnqual(detachFuncType), "detach", block);
-        CallInst::Create(detachFuncType, detachFuncPtr, { stateArg, finish }, "", block);
+        CallInst::Create(detachFuncType, detachFuncPtr, {stateArg, finish}, "", block);
 
         return value;
     }
@@ -162,17 +168,19 @@ private:
     const std::string_view ContextType;
 };
 
-class TWithContextWideFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper>;
+class TWithContextWideFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWithContextWideFlowWrapper>;
+
 public:
     TWithContextWideFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
-        const std::string_view& contextType)
+                                const std::string_view& contextType)
         : TBaseComputation(mutables, flow, EValueRepresentation::Any)
         , Flow(flow)
         , ContextType(contextType)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (!stateValue.HasValue()) {
             MakeState(ctx, stateValue);
         }
@@ -216,9 +224,9 @@ public:
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
         const auto attachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Attach>());
-        const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType }, false);
+        const auto attachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType}, false);
         const auto attachFuncPtr = CastInst::Create(Instruction::IntToPtr, attachFunc, PointerType::getUnqual(attachFuncType), "attach", block);
-        CallInst::Create(attachFuncType, attachFuncPtr, { stateArg }, "", block);
+        CallInst::Create(attachFuncType, attachFuncPtr, {stateArg}, "", block);
 
         auto getres = GetNodeValues(Flow, ctx, block);
 
@@ -244,12 +252,12 @@ public:
         const auto finish = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, getres.first, ConstantInt::get(getres.first->getType(), static_cast<i32>(EFetchResult::Finish)), "finish", block);
 
         const auto detachFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Detach>());
-        const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), { statePtrType, finish->getType() }, false);
+        const auto detachFuncType = FunctionType::get(Type::getVoidTy(context), {statePtrType, finish->getType()}, false);
         const auto detachFuncPtr = CastInst::Create(Instruction::IntToPtr, detachFunc, PointerType::getUnqual(detachFuncType), "detach", block);
-        CallInst::Create(detachFuncType, detachFuncPtr, { stateArg, finish }, "", block);
+        CallInst::Create(detachFuncType, detachFuncPtr, {stateArg, finish}, "", block);
 
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
-            getres.second[idx] = [idx, arrayPtr, arrayType, indexType, valueType] (const TCodegenContext& ctx, BasicBlock*& block) {
+            getres.second[idx] = [idx, arrayPtr, arrayType, indexType, valueType](const TCodegenContext& ctx, BasicBlock*& block) {
                 Y_UNUSED(ctx);
                 const auto itemPtr = GetElementPtrInst::CreateInBounds(arrayType, arrayPtr, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx)}, (TString("ptr_") += ToString(idx)).c_str(), block);
                 return new LoadInst(valueType, itemPtr, (TString("item_") += ToString(idx)).c_str(), block);
@@ -272,7 +280,7 @@ private:
     const std::string_view ContextType;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapWithContext(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto contextTypeData = AS_VALUE(TDataLiteral, callable.GetInput(0));
@@ -290,5 +298,5 @@ IComputationNode* WrapWithContext(TCallable& callable, const TComputationNodeFac
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

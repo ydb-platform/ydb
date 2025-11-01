@@ -14,7 +14,7 @@ namespace NYql {
 
 namespace {
 
-class TWriterBase : public IQWriter {
+class TWriterBase: public IQWriter {
 protected:
     TWriterBase(TFsPath& path, TInstant writtenAt)
         : Path_(path)
@@ -52,7 +52,7 @@ protected:
     const TInstant WrittenAt_;
 };
 
-class TBufferedWriter : public TWriterBase {
+class TBufferedWriter: public TWriterBase {
 public:
     TBufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings)
         : TWriterBase(path, writtenAt)
@@ -99,7 +99,7 @@ private:
     const IQWriterPtr Writer_;
 };
 
-class TUnbufferedWriter : public TWriterBase {
+class TUnbufferedWriter: public TWriterBase {
 public:
     TUnbufferedWriter(TFsPath& path, TInstant writtenAt, const TQWriterSettings& settings, bool alwaysFlushIndex)
         : TWriterBase(path, writtenAt)
@@ -120,7 +120,7 @@ public:
     }
 
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             Y_ENSURE(!Committed_);
             if (!Overflow_) {
                 if (Keys_.emplace(key).second) {
@@ -149,7 +149,7 @@ public:
     }
 
     NThreading::TFuture<void> Commit() final {
-        with_lock(Mutex_) {
+        with_lock (Mutex_) {
             if (Overflow_) {
                 throw yexception() << "Overflow of qwriter";
             }
@@ -179,7 +179,7 @@ private:
     bool Overflow_ = false;
 };
 
-class TStorage : public IQStorage {
+class TStorage: public IQStorage {
 public:
     TStorage(const TString& folder, const TFileQStorageSettings& settings)
         : Folder_(folder)
@@ -275,10 +275,10 @@ private:
     const TFileQStorageSettings Settings_;
 };
 
-}
+} // namespace
 
 IQStoragePtr MakeFileQStorage(const TString& folder, const TFileQStorageSettings& settings) {
     return std::make_shared<TStorage>(folder, settings);
 }
 
-};
+}; // namespace NYql

@@ -541,25 +541,18 @@ TJobTraceEvent ParseJobTraceEvent(const TNode& node)
     return result;
 }
 
-std::vector<TJobTraceEvent> THttpRawClient::GetJobTrace(
+IFileReaderPtr THttpRawClient::GetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
     TMutationId mutationId;
     THttpHeader header("GET", "get_job_trace");
-    header.MergeParameters(NRawClient::SerializeParamsForGetJobTrace(operationId, options));
-    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header);
-    auto resultNode = NodeFromYsonString(responseInfo->GetResponse());
-
-    const auto& traceEventNodesList = resultNode.AsList();
-
-    std::vector<TJobTraceEvent> result;
-    result.reserve(traceEventNodesList.size());
-    for (const auto& traceEventNode : traceEventNodesList) {
-        result.push_back(ParseJobTraceEvent(traceEventNode));
-    }
-
-    return result;
+    header.MergeParameters(NRawClient::SerializeParamsForGetJobTrace(operationId, jobId, options));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return MakeIntrusive<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadFile(

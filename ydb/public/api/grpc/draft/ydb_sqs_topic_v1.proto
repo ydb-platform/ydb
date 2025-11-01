@@ -1,0 +1,29 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.SqsTopic.V1;
+
+import "ydb/public/api/protos/draft/ymq.proto";
+
+option java_package = "com.yandex.ydb.sqs_topic.V1.";
+
+service SqsTopicService {
+    rpc SqsTopicGetQueueUrl(Ydb.Ymq.V1.GetQueueUrlRequest) returns (Ydb.Ymq.V1.GetQueueUrlResponse);
+    rpc SqsTopicCreateQueue(Ydb.Ymq.V1.CreateQueueRequest) returns (Ydb.Ymq.V1.CreateQueueResponse);
+    rpc SqsTopicSendMessage(Ydb.Ymq.V1.SendMessageRequest) returns (Ydb.Ymq.V1.SendMessageResponse);
+    rpc SqsTopicReceiveMessage(Ydb.Ymq.V1.ReceiveMessageRequest) returns (Ydb.Ymq.V1.ReceiveMessageResponse);
+    rpc SqsTopicGetQueueAttributes(Ydb.Ymq.V1.GetQueueAttributesRequest) returns (Ydb.Ymq.V1.GetQueueAttributesResponse);
+    rpc SqsTopicListQueues(Ydb.Ymq.V1.ListQueuesRequest) returns (Ydb.Ymq.V1.ListQueuesResponse);
+    rpc SqsTopicDeleteMessage(Ydb.Ymq.V1.DeleteMessageRequest) returns (Ydb.Ymq.V1.DeleteMessageResponse);
+    rpc SqsTopicPurgeQueue(Ydb.Ymq.V1.PurgeQueueRequest) returns (Ydb.Ymq.V1.PurgeQueueResponse);
+    rpc SqsTopicDeleteQueue(Ydb.Ymq.V1.DeleteQueueRequest) returns (Ydb.Ymq.V1.DeleteQueueResponse);
+    rpc SqsTopicChangeMessageVisibility(Ydb.Ymq.V1.ChangeMessageVisibilityRequest) returns (Ydb.Ymq.V1.ChangeMessageVisibilityResponse);
+    rpc SqsTopicSetQueueAttributes(Ydb.Ymq.V1.SetQueueAttributesRequest) returns (Ydb.Ymq.V1.SetQueueAttributesResponse);
+    rpc SqsTopicSendMessageBatch(Ydb.Ymq.V1.SendMessageBatchRequest) returns (Ydb.Ymq.V1.SendMessageBatchResponse);
+    rpc SqsTopicDeleteMessageBatch(Ydb.Ymq.V1.DeleteMessageBatchRequest) returns (Ydb.Ymq.V1.DeleteMessageBatchResponse);
+    rpc SqsTopicChangeMessageVisibilityBatch(Ydb.Ymq.V1.ChangeMessageVisibilityBatchRequest) returns (Ydb.Ymq.V1.ChangeMessageVisibilityBatchResponse);
+    rpc SqsTopicListDeadLetterSourceQueues(Ydb.Ymq.V1.ListDeadLetterSourceQueuesRequest) returns (Ydb.Ymq.V1.ListDeadLetterSourceQueuesResponse);
+    rpc SqsTopicListQueueTags(Ydb.Ymq.V1.ListQueueTagsRequest) returns (Ydb.Ymq.V1.ListQueueTagsResponse);
+    rpc SqsTopicTagQueue(Ydb.Ymq.V1.TagQueueRequest) returns (Ydb.Ymq.V1.TagQueueResponse);
+    rpc SqsTopicUntagQueue(Ydb.Ymq.V1.UntagQueueRequest) returns (Ydb.Ymq.V1.UntagQueueResponse);
+}

@@ -1094,6 +1094,7 @@ message TReqBuildSnapshot
     optional NYT.NProto.TGuid cell_id = 1;
     optional bool set_read_only = 2 [default = false];
     optional bool wait_for_snapshot_completion = 3 [default = true];
+    optional bool enable_automaton_read_only_barrier = 4 [default = true];
 }
 
 message TRspBuildSnapshot
@@ -2055,6 +2056,7 @@ message TReqAlterTable
     optional ETableSchemaModification schema_modification = 5;
     optional NYT.NChaosClient.NProto.TReplicationProgress replication_progress = 6;
     optional NYT.NProto.TGuid schema_id = 7;
+    optional uint64 clip_timestamp = 8;
 
     optional TTransactionalOptions transactional_options = 100;
     optional TMutatingOptions mutating_options = 103;
@@ -2236,6 +2238,8 @@ message TReqPartitionTables
     optional bool adjust_data_weight_per_partition = 9;
 
     optional bool enable_cookies = 10;
+
+    optional bool omit_inaccessible_rows = 13;
 
     optional TTransactionalOptions transactional_options = 100;
 
@@ -2664,27 +2668,6 @@ message TRspGetJobStderr
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetJobTrace
-{
-    oneof operation_id_or_alias {
-        NYT.NProto.TGuid operation_id = 1;
-        string operation_alias = 2;
-    }
-    optional NYT.NProto.TGuid job_id = 3;
-    optional NYT.NProto.TGuid trace_id = 4;
-    optional int64 from_event_index = 5;
-    optional int64 to_event_index = 6;
-    optional int64 from_time = 7;
-    optional int64 to_time = 8;
-}
-
-message TRspGetJobTrace
-{
-    repeated TJobTraceEvent events = 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 message TReqGetJobFailContext
 {
     oneof operation_id_or_alias {
@@ -2910,6 +2893,24 @@ message TWriteTableMeta
 }
 
 message TRspWriteTable
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetJobTrace
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    required NYT.NProto.TGuid job_id = 3;
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional int64 from_time = 5;
+    optional int64 to_time = 6;
+}
+
+message TRspGetJobTrace
 {
 }
 
@@ -3723,6 +3724,54 @@ message TReqWriteTableFragment
 message TRspWriteTableFragment
 {
     required bytes signed_write_result = 1; // YSON-serialized TSignedWriteFragmentResultPtr
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Distributed file client
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStartDistributedWriteFileSession
+{
+    required bytes path = 1; // RichYPath
+    required int32 cookie_count = 2;
+    optional int64 timeout = 3;
+
+    optional TTransactionalOptions transactional_options = 100;
+}
+
+message TRspStartDistributedWriteFileSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteFileSessionPtr
+    repeated bytes signed_cookies = 2; // vector of YSON-serialized TSignedDistributedWriteFileCookiePtr
+}
+
+message TReqPingDistributedWriteFileSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteFileSessionPtr
+}
+
+message TRspPingDistributedWriteFileSession
+{
+}
+
+message TReqFinishDistributedWriteFileSession
+{
+    required bytes signed_session = 1; // YSON-serialized TSignedDistributedWriteFileSessionPtr
+    repeated bytes signed_write_results = 2; // vector of YSON-serialized TSignedWriteFileFragmentResultPtr
+}
+
+message TRspFinishDistributedWriteFileSession
+{
+}
+
+message TReqWriteFileFragment
+{
+    required bytes signed_cookie = 1; // YSON-serialized TSignedWriteFileFragmentCookiePtr
+}
+
+message TRspWriteFileFragment
+{
+    required bytes signed_write_result = 1; // YSON-serialized TSignedWriteFileFragmentResultPtr
 }
 
 ///////////////////////////////////////////////////////////////////////////////

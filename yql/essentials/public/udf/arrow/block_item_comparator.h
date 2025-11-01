@@ -26,7 +26,7 @@ public:
 UDF_ASSERT_TYPE_SIZE(IBlockItemComparator, 8);
 
 template <typename TDerived, bool Nullable>
-class TBlockItemComparatorBase : public IBlockItemComparator {
+class TBlockItemComparatorBase: public IBlockItemComparator {
 public:
     const TDerived* Derived() const {
         return static_cast<const TDerived*>(this);
@@ -78,8 +78,7 @@ public:
             if (lhs) {
                 if (rhs) {
                     return Derived()->DoLess(lhs, rhs);
-                }
-                else {
+                } else {
                     return false;
                 }
             } else {
@@ -96,7 +95,7 @@ public:
 };
 
 template <typename T, bool Nullable>
-class TFixedSizeBlockItemComparator : public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<T, Nullable>, Nullable> {
+class TFixedSizeBlockItemComparator: public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<T, Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         if constexpr (std::is_integral<T>::value && sizeof(T) < sizeof(i64)) {
@@ -132,7 +131,7 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemComparator<NYql::NDecimal::TInt128, Nullable> : public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<NYql::NDecimal::TInt128, Nullable>, Nullable> {
+class TFixedSizeBlockItemComparator<NYql::NDecimal::TInt128, Nullable>: public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<NYql::NDecimal::TInt128, Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         auto l = lhs.GetInt128();
@@ -154,7 +153,7 @@ public:
 };
 
 template <typename TStringType, bool Nullable>
-class TStringBlockItemComparator : public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
+class TStringBlockItemComparator: public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef().Compare(rhs.AsStringRef());
@@ -187,8 +186,8 @@ public:
     }
 };
 
-template<typename TTzType, bool Nullable>
-class TTzDateBlockItemComparator : public TBlockItemComparatorBase<TTzDateBlockItemComparator<TTzType, Nullable>, Nullable> {
+template <typename TTzType, bool Nullable>
+class TTzDateBlockItemComparator: public TBlockItemComparatorBase<TTzDateBlockItemComparator<TTzType, Nullable>, Nullable> {
     using TLayout = typename TDataType<TTzType>::TLayout;
 
 public:
@@ -218,13 +217,13 @@ public:
     }
 };
 
-
 template <bool Nullable>
-class TTupleBlockItemComparator : public TBlockItemComparatorBase<TTupleBlockItemComparator<Nullable>, Nullable> {
+class TTupleBlockItemComparator: public TBlockItemComparatorBase<TTupleBlockItemComparator<Nullable>, Nullable> {
 public:
     TTupleBlockItemComparator(TVector<std::unique_ptr<IBlockItemComparator>>&& children)
         : Children_(std::move(children))
-    {}
+    {
+    }
 
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
@@ -267,11 +266,12 @@ private:
     const TVector<std::unique_ptr<IBlockItemComparator>> Children_;
 };
 
-class TExternalOptionalBlockItemComparator : public TBlockItemComparatorBase<TExternalOptionalBlockItemComparator, true> {
+class TExternalOptionalBlockItemComparator: public TBlockItemComparatorBase<TExternalOptionalBlockItemComparator, true> {
 public:
     TExternalOptionalBlockItemComparator(std::unique_ptr<IBlockItemComparator> inner)
         : Inner_(std::move(inner))
-    {}
+    {
+    }
 
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return Inner_->Compare(lhs.GetOptionalValue(), rhs.GetOptionalValue());
@@ -289,4 +289,4 @@ private:
     std::unique_ptr<IBlockItemComparator> Inner_;
 };
 
-}
+} // namespace NYql::NUdf

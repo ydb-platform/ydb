@@ -57,7 +57,6 @@ private:
 
     size_t FetchRequestCurrentPartitionIndex;
     ui64 FetchRequestCurrentReadTablet;
-    ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
     bool ProcessingFinished = false;
     THolder<TEvPQ::TEvFetchResponse> Response;
@@ -123,6 +122,7 @@ public:
             fetchInfo->Record.SetOffset(p.Offset);
             fetchInfo->Record.SetDeadline(deadline);
             fetchInfo->Record.SetCookie(i);
+            fetchInfo->Record.SetClientId(Settings.Consumer);
             TopicInfo[topicPath].HasDataRequests[p.Partition] = fetchInfo;
 
             PartitionStatus[i] = EPartitionStatus::Unprocessed;
@@ -175,7 +175,11 @@ public:
             topics.insert(part.Topic);
         }
 
-        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, std::move(topics)));
+        NDescriber::TDescribeSettings settings = {
+            .UserToken = Settings.UserToken,
+            .AccessRights = NACLib::EAccessRights::SelectRow
+        };
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, std::move(topics), settings));
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
@@ -184,15 +188,6 @@ public:
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
                 case NDescriber::EStatus::SUCCESS: {
-                    if (!CheckAccess(*info.SecurityObject)) {
-                        return SendReplyAndDie(
-                                CreateErrorReply(
-                                    Ydb::StatusIds::UNAUTHORIZED,
-                                    TStringBuilder() << "Access denied for topic: " << topicPath
-                                ), ctx
-                        );
-                    }
-
                     auto& topicInfo = TopicInfo[topicPath];
                     topicInfo.PQInfo = info.Info;
                     topicInfo.RealPath = std::move(info.RealPath);
@@ -201,7 +196,7 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            Ydb::StatusIds::SCHEME_ERROR,
+                            info.Status == NDescriber::EStatus::UNAUTHORIZED ? Ydb::StatusIds::UNAUTHORIZED : Ydb::StatusIds::SCHEME_ERROR,
                             NDescriber::Description(topicPath, info.Status)
                         ),
                         ctx
@@ -220,55 +215,6 @@ public:
 
 
     void OnMetadataReceived(const TActorContext& ctx) {
-        if (!AppData(ctx)->KafkaProxyConfig.GetAutoCreateConsumersEnable()) {
-            return OnTopicAltered(ctx);
-        }
-
-        if (Settings.Consumer == NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
-            return OnTopicAltered(ctx);
-        }
-
-        for (auto& [topicPath, info]: TopicInfo) {
-            if (HasConsumer(info.PQInfo->Description.GetPQTabletConfig(), Settings.Consumer)) {
-                continue;
-            }
-
-            EnsureYdbProxy();
-
-            const auto settings = NYdb::NTopic::TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(Settings.Consumer)
-                .EndAddConsumer();
-
-            Send(YdbProxy, new NReplication::TEvYdbProxy::TEvAlterTopicRequest(topicPath, settings));
-            ++PendingAlterTopicResponses;
-        }
-
-        if (PendingAlterTopicResponses == 0) {
-            return OnTopicAltered(ctx);
-        }
-
-        Become(&TPQFetchRequestActor::StateAlterTopics);
-    }
-
-    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
-        NYdb::TStatus& result = ev->Get()->Result;
-        auto logLevel = result.GetStatus() == NYdb::EStatus::SUCCESS ? NActors::NLog::PRI_DEBUG :NActors::NLog::PRI_INFO;
-        LOG(logLevel, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus());
-
-        --PendingAlterTopicResponses;
-        if (PendingAlterTopicResponses == 0) {
-            OnTopicAltered(ctx);
-        }
-    }
-
-    STRICT_STFUNC(StateAlterTopics,
-        HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
-        HFunc(TEvents::TEvWakeup, Handle);
-        CFunc(NActors::TEvents::TSystem::Poison, Die);
-    )
-
-    void OnTopicAltered(const TActorContext& ctx) {
         for (auto& [name, info]: TopicInfo) {
             ProcessTopicMetadata(name, info, ctx);
         }
@@ -536,6 +482,7 @@ public:
                 fetchInfo->Record.SetPartition(p.Partition);
                 fetchInfo->Record.SetOffset(p.Offset);
                 fetchInfo->Record.SetCookie(i);
+                fetchInfo->Record.SetClientId(Settings.Consumer);
                 fetchInfo->Record.SetDeadline(0);
 
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
@@ -587,13 +534,6 @@ public:
             }
         }
         return readBytesSize;
-    }
-
-    bool CheckAccess(const TSecurityObject& access) {
-        if (Settings.UserToken == nullptr) {
-            return true;
-        }
-        return access.CheckAccess(NACLib::EAccessRights::SelectRow, *Settings.UserToken);
     }
 
     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {

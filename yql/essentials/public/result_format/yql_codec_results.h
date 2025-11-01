@@ -96,5 +96,5 @@ private:
 private:
     NYson::TYsonConsumerBase& Writer_;
 };
-}
-}
+} // namespace NResult
+} // namespace NYql

@@ -130,7 +130,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
-    optional bool UseRingQueue = 19;
+    optional bool UseRingQueue = 19 [default = true];
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -146,6 +146,11 @@ message TStaticNameserviceConfig {
         NS_FIXED = 1;       // static table lookup
         NS_NODE_BROKER = 2; // nodebroker based
         NS_EXTERNAL = 3;    // may be paired with external discovery
+    }
+
+    enum EDnsResolverType {
+        ARES = 0;
+        LIBC = 1;
     }
 
     message TEndpoint {
@@ -177,6 +182,7 @@ message TStaticNameserviceConfig {
     optional ENameserviceType Type = 5;
     optional bool KeepSocket = 6 [default = true];
     optional bool ForceTcp = 7 [default = false];
+    optional EDnsResolverType DnsResolverType = 8 [default = ARES];
 }
 
 message TDynamicNameserviceConfig {
@@ -846,6 +852,7 @@ message THttpProxyConfig {
     optional bool YandexCloudMode = 11 [default = false];
     optional bool DataStreamsEnabled = 12 [default = true];
     optional bool YmqEnabled = 13 [default = false];
+    optional bool SqsTopicEnabled = 14 [default = false];
 }
 
 message TS3ProxyResolverConfig {
@@ -1148,80 +1155,33 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
-message TExternalStorage {
-    optional string Endpoint = 1;
-    optional string Database = 2;
-    optional string OAuthFile = 3;
-    optional string Token = 4;
-    optional string TablePrefix = 5;
-    optional string CertificateFile = 6;
-    optional string IamEndpoint = 7;
-    optional string SaKeyFile = 8;
-    optional bool UseLocalMetadataService = 9;
-    optional uint32 ClientTimeoutSec = 10;
-    optional uint32 OperationTimeoutSec = 11;
-    optional uint32 CancelAfterSec = 12;
-    optional bool UseSsl = 13;
-    optional uint32 TableClientMaxActiveSessions = 14;
-}
-
-message TSharedReadingConfig {
-    message TJsonParserConfig {
-        optional uint64 BatchSizeBytes = 1;  // default 1 MiB
-        optional uint64 BatchCreationTimeoutMs = 2;
-        optional uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
-    }
-
-    message TCompileServiceConfig {
-        optional uint64 ParallelCompilationLimit = 1;  // 1 by default
-    }
-
-    message TCoordinatorConfig {
-        optional TExternalStorage Database = 1;
-        optional string CoordinationNodePath = 2;
-        optional bool LocalMode = 3;
-    }
-
-    optional bool Enabled = 1;
-    optional uint64 TimeoutBeforeStartSessionSec = 2;
-    optional uint64 SendStatusPeriodSec = 3;
-    optional uint64 MaxSessionUsedMemory = 4;
-    optional bool WithoutConsumer = 5;
-    optional TJsonParserConfig JsonParser = 7;
-    optional TCompileServiceConfig CompileService = 8;
-    optional TCoordinatorConfig Coordinator = 6;
-}
-
-message TCheckpointsConfig {
-    message TStateStorageLimitsConfig {
-        optional uint64 MaxGraphCheckpointsSizeBytes = 1;
-        optional uint64 MaxTaskStateSizeBytes = 2;
-        optional uint64 MaxRowSizeBytes = 3;
-    }
-
-    message TCheckpointGcConfig {
-        optional bool Enabled = 1;
-    }
-
-    message TLocalStorage {
-        optional string TablePrefix = 1;
-    }
-
-    optional bool Enabled = 1;
-    oneof Storage {
-        TExternalStorage ExternalStorage = 2;
-        TLocalStorage LocalStorage = 3;
-    }
-    optional TCheckpointGcConfig CheckpointGarbageConfig = 4;
-    optional TStateStorageLimitsConfig StateStorageLimits = 5;
-    optional uint64 CheckpointingPeriodMillis = 6 [default = 30000];
-    optional uint64 MaxInflight = 7;
-    optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
-}
-
 message TStreamingQueriesConfig {
-    optional uint64 MaxQueryExecutions = 1 [default = 30];
-    optional bool PrivateSystemTables = 2 [default = true];
+    message TExternalStorageConfig {
+        message TConnectionSettings {
+            optional string Endpoint = 1;
+            optional string Database = 2;
+            optional string TokenFile = 3;
+            optional string SaKeyFile = 4;
+            optional bool UseLocalMetadataService = 5;
+            optional bool UseSsl = 6;
+            optional string CaCertFile = 7;
+            optional string IamEndpoint = 8;
+            optional string Login = 9;
+            optional string PasswordFile = 10;
+        }
+
+        optional uint32 QueryTimeoutSec = 1;
+        optional uint32 MaxActiveQuerySessions = 2;
+        optional string PathPrefix = 3;
+        optional TConnectionSettings DatabaseConnection = 4;
+    }
+
+    message TExternalTopicsSettings {
+        optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
+    }
+
+    optional TExternalStorageConfig ExternalStorage = 1;
+    optional TExternalTopicsSettings TopicSdkSettings = 2;
 }
 
 message TQueryServiceConfig {
@@ -1249,9 +1209,10 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
-    optional TCheckpointsConfig CheckpointsConfig = 24;
-    optional TStreamingQueriesConfig StreamingQueries = 25;
-    optional TSharedReadingConfig SharedReading = 26;
+    reserved 24;
+    reserved 25;
+    reserved 26;
+    optional TStreamingQueriesConfig StreamingQueries = 27;
 }
 
 // Config describes immediate controls and allows
@@ -1667,6 +1628,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 50,
             DefaultValue: 10 }];
+        optional uint64 GarbageThresholdToRunFullCompactionPerMille = 36 [(ControlOptions) = {
+            Description: "Maximal allowed fraction from vdisk fare share of garbage before compaction would be triggered. If value = 0 - compaction would run after every defragmentation quantum",
+            MinValue: 0,
+            MaxValue: 300,
+            DefaultValue: 0 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1774,6 +1740,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 DefragThrottlerBytesRate = 37 [(ControlOptions) = {
+            Description: "Rate bytes in 1 second for requests (sum of write and read) in defragmentation throttler",
+            MinValue: 0,
+            MaxValue: 10000000000, // 10 GB/s
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1782,6 +1754,12 @@ message TImmediateControlsConfig {
             MinValue: 8,
             MaxValue: 4096,
             DefaultValue: 256 }];
+
+        optional uint64 MaxTxInFly = 2 [(ControlOptions) = {
+            Description: "Maximum tx queue size for all tablets",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 10000 }];
     }
 
     message TDSProxyControls {
@@ -1886,7 +1864,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 2,
             DefaultValue: 0 }];
-
+        optional uint64 CommonStaticLogChunks = 6 [(ControlOptions) = {
+            Description: "Special reserve of log chunks on the PDisk with static groups",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 70 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2280,8 +2262,8 @@ message THiveConfig {
     optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
     optional string CutHistoryAllowList = 79 [default = "DataShard"];
     optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
-    optional uint64 ScaleOutWindowSize = 81 [default = 15]; // buckets
-    optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
+    optional uint64 ScaleOutWindowSize = 81 [default = 10]; // buckets
+    optional uint64 ScaleInWindowSize = 82 [default = 60]; // buckets
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
@@ -2389,6 +2371,16 @@ message TColumnShardConfig {
     optional uint64 BadPortionSizeLimit = 51 [default = 524288];
     optional uint64 BadPortionsLimit = 52;
     optional uint64 InFlightLocksRangesBytesLimit = 53 [default = 1073741824];
+    optional bool CombineChunksInResult = 54 [default = true];
+    optional bool EnableDiagnostics = 55 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = true];
+
+    message TStatistics {
+        optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];
+        optional uint32 ReportExecutorStatisticsPeriodMs = 2 [default = 60000];
+    }
+
+    optional TStatistics Statistics = 57;
 }
 
 message TSchemeShardConfig {
@@ -2719,6 +2711,28 @@ message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
 
+message TAwsClientConfig {
+    message TLogConfig {
+        // Equivalent of Aws::Utils::Logging::LogLevel.
+        // Off = 0 (default)
+        // Fatal = 1
+        // Error = 2
+        // Warn = 3
+        // Info = 4
+        // Debug = 5
+        // Trace = 6
+        optional int32 LogLevel = 1;
+
+        // By default, logs will be written to standard output if they are enabled.
+        // To write to a file in the format YYYY-MM-DD-HH.log, specify the filename prefix.
+        // The resulting log file is '<FilenamePrefix> + YYYY-MM-DD-HH.log'
+        optional string FilenamePrefix = 2;
+    }
+
+    // Logging options
+    optional TLogConfig LogConfig = 1;
+}
+
 message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
@@ -2726,6 +2740,7 @@ message TMetadataCacheConfig {
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
     optional uint32 DrainTimeoutSeconds = 2;
+    optional uint32 CheckForStopIntervalMilliseconds = 3;
 }
 
 message TBridgeConfig {
@@ -2876,6 +2891,9 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+
+    // Built-in AWS client options (used, for example, to interact with S3).
+    optional TAwsClientConfig AwsClientConfig = 116;
 }
 
 message TYdbVersion {

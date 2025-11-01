@@ -1,10 +1,8 @@
 import hashlib
-import json
 import os
 import shutil
 
 from .constants import (
-    PNPM_PRE_LOCKFILE_FILENAME,
     LOCAL_PNPM_INSTALL_HASH_FILENAME,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
@@ -15,17 +13,11 @@ from .utils import (
     build_build_backup_lockfile_path,
     build_pre_lockfile_path,
     build_ws_config_path,
-    build_pnpm_store_path,
 )
 from .pnpm_workspace import PnpmWorkspace
 from ..base import BasePackageManager, PackageManagerError
-from ..base.constants import (
-    NODE_MODULES_WORKSPACE_BUNDLE_FILENAME,
-    PACKAGE_JSON_FILENAME,
-    PNPM_LOCKFILE_FILENAME,
-)
+from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 from ..base.node_modules_bundler import bundle_node_modules
-from ..base.package_json import PackageJson
 from ..base.timeit import timeit
 from ..base.utils import (
     b_rooted,
@@ -33,7 +25,7 @@ from ..base.utils import (
     build_nm_path,
     build_nm_store_path,
     build_pj_path,
-    init_nots_path,
+    build_pnpm_store_path,
     s_rooted,
 )
 
@@ -161,9 +153,9 @@ class PnpmPackageManager(BasePackageManager):
         """
         return cls.load_lockfile(build_lockfile_path(dir_path))
 
-    @staticmethod
-    def get_pnpm_store():
-        return build_pnpm_store_path()
+    @timeit
+    def _get_pnpm_store(self):
+        return build_pnpm_store_path(self.build_root)
 
     @timeit
     def _get_file_hash(self, path: str):
@@ -177,59 +169,17 @@ class PnpmPackageManager(BasePackageManager):
         return sha256.hexdigest()
 
     @timeit
-    def _create_local_node_modules(self, nm_store_path: str, store_dir: str, virtual_store_dir: str):
-        """
-        Creates ~/.nots/nm_store/$MODDIR/node_modules folder (with installed packages and .pnpm/virtual-store)
-        Should be used after build for local development ($SOURCE_DIR/node_modules should be a symlink to this folder).
-        But now it is also a workaround to provide valid node_modules structure in the parent folder of virtual-store
-        It is needed for fixing custom module resolvers (like in tsc, webpack, etc...), which are trying to find modules in the parents directories
-        """
-        # provide files required for `pnpm install`
-        pj = PackageJson.load(os.path.join(self.build_path, PACKAGE_JSON_FILENAME))
-        required_files = [
-            PACKAGE_JSON_FILENAME,
-            PNPM_LOCKFILE_FILENAME,
-            *list(pj.bins_iter()),
-            *pj.get_pnpm_patched_dependencies().values(),
-        ]
-        for f in required_files:
-            src = os.path.join(self.build_path, f)
-            if os.path.exists(src):
-                dst = os.path.join(nm_store_path, f)
-                try:
-                    os.remove(dst)
-                except FileNotFoundError:
-                    pass
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copy(src, dst)
-        self._run_pnpm_install(store_dir, virtual_store_dir, nm_store_path, True)
-        # Write node_modules.json to prevent extra `pnpm install` running 1
-        with open(os.path.join(nm_store_path, "node_modules.json"), "w") as f:
-            pre_pnpm_lockfile_hash = self._get_file_hash(build_pre_lockfile_path(self.build_path))
-            json.dump({PNPM_PRE_LOCKFILE_FILENAME: {"hash": pre_pnpm_lockfile_hash}}, f)
-
-    @timeit
     def create_node_modules(self, yatool_prebuilder_path=None, local_cli=False, nm_bundle=False, original_lf_path=None):
         """
         Creates node_modules directory according to the lockfile.
         """
-        init_nots_path(self.build_root, local_cli)
-
         ws = self._prepare_workspace(local_cli)
 
         self._copy_pnpm_patches()
 
         # Pure `tier 0` logic - isolated stores in the `build_root` (works in `distbuild` and `CI autocheck`)
-        store_dir = self.get_pnpm_store()
+        store_dir = self._get_pnpm_store()
         virtual_store_dir = self._nm_path(VIRTUAL_STORE_DIRNAME)
-
-        # Local mode optimizations (run from the `ya tool nots`)
-        if local_cli:
-            nm_store_path = build_nm_store_path(self.module_path)
-            # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm
-            virtual_store_dir = os.path.join(build_nm_path(nm_store_path), VIRTUAL_STORE_DIRNAME)
-
-            self._create_local_node_modules(nm_store_path, store_dir, virtual_store_dir)
 
         self._run_pnpm_install(store_dir, virtual_store_dir, self.build_path, local_cli)
 
@@ -274,6 +224,7 @@ class PnpmPackageManager(BasePackageManager):
                 "--no-verify-store-integrity",
                 "--prefer-offline" if local_cli else "--offline",
                 "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
+                "--config.preferSymlinkedExecutables=true",
                 "--package-import-method",
                 "hardlink",
                 # "--registry" will be set later inside self._exec_command()
@@ -289,8 +240,12 @@ class PnpmPackageManager(BasePackageManager):
         if local_cli:
             files_to_hash = [build_pre_lockfile_path(self.build_path)]
             paths_to_exist = [build_nm_path(cwd)]
-            hash_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME)
-            mutex_file = os.path.join(build_nm_store_path(self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME)
+            hash_file = os.path.join(
+                build_nm_store_path(self.build_root, self.module_path), LOCAL_PNPM_INSTALL_HASH_FILENAME
+            )
+            mutex_file = os.path.join(
+                build_nm_store_path(self.build_root, self.module_path), LOCAL_PNPM_INSTALL_MUTEX_FILENAME
+            )
             os.makedirs(os.path.dirname(mutex_file), exist_ok=True)
             execute_cmd_hashed = hashed_by_files(files_to_hash, paths_to_exist, hash_file)(execute_install_cmd)
             execute_hashed_cmd_exclusively = sync_mutex_file(mutex_file)(execute_cmd_hashed)

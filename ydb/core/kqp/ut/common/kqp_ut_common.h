@@ -40,6 +40,14 @@ extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
+struct TTestLogSettings {
+    NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
+    std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
+    bool Freeze = false;
+
+    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
+};
+
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
 private:
     void InitDefaultConfig() {
@@ -88,6 +96,7 @@ public:
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
     bool EnableStorageProxy = false;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+    std::optional<TTestLogSettings> LogSettings;
 
     TKikimrSettings() {
         InitDefaultConfig();
@@ -128,6 +137,7 @@ public:
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
     TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
+    TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -170,11 +180,14 @@ public:
     NYdb::TDriver* GetDriverMut() { return Driver.Get(); }
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
-    NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }
     Tests::TClient& GetTestClient() const { return *Client; }
     Tests::TServer& GetTestServer() const { return *Server; }
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
+
+    NYdb::NScheme::TSchemeClient GetSchemeClient(NYdb::TCommonClientSettings settings = NYdb::TCommonClientSettings()) const {
+        return NYdb::NScheme::TSchemeClient(*Driver, settings);
+    }
 
     NYdb::NTable::TTableClient GetTableClient(
         NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const {
@@ -207,7 +220,7 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
+    bool SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;

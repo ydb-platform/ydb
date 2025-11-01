@@ -17,8 +17,8 @@ constexpr ui64 ArrowSizeForArena = (TAllocState::POOL_PAGE_SIZE >> 2);
 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
-TAllocPageHeader TAllocState::EmptyPageHeader = { 0, 0, 0, 0, nullptr, nullptr };
-TAllocState::TCurrentPages TAllocState::EmptyCurrentPages = { &TAllocState::EmptyPageHeader, &TAllocState::EmptyPageHeader };
+TAllocPageHeader TAllocState::EmptyPageHeader = {0, 0, 0, 0, nullptr, nullptr};
+TAllocState::TCurrentPages TAllocState::EmptyCurrentPages = {&TAllocState::EmptyPageHeader, &TAllocState::EmptyPageHeader};
 
 void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
     Left = root;
@@ -31,7 +31,7 @@ void TAllocState::TListEntry::Unlink() noexcept {
     Clear();
 }
 
-TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
+TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters& counters, bool supportsSizedAllocators)
     : TAlignedPagePool(location, counters)
 #ifndef NDEBUG
     , DefaultMemInfo(MakeIntrusive<TMemoryUsageInfo>("default"))
@@ -49,7 +49,7 @@ TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAligne
 }
 
 void TAllocState::CleanupPAllocList(TListEntry* root) {
-    for (auto curr = root->Right; curr != root; ) {
+    for (auto curr = root->Right; curr != root;) {
         auto next = curr->Right;
         auto size = ((TMkqlPAllocHeader*)curr)->Size;
         auto fullSize = size + sizeof(TMkqlPAllocHeader);
@@ -61,7 +61,7 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 }
 
 void TAllocState::CleanupArrowList(TListEntry* root) {
-    for (auto curr = root->Right; curr != root; ) {
+    for (auto curr = root->Right; curr != root;) {
         auto next = curr->Right;
         if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
             free(curr);
@@ -95,7 +95,7 @@ void TAllocState::KillAllBoxed() {
 
     {
         const auto root = &OffloadedBlocksRoot;
-        for (auto curr = root->Right; curr != root; ) {
+        for (auto curr = root->Right; curr != root;) {
             auto next = curr->Right;
             free(curr);
             curr = next;
@@ -124,7 +124,8 @@ void TAllocState::InvalidateMemInfo() {
 }
 
 Y_NO_SANITIZE("address") Y_NO_SANITIZE("memory")
-size_t TAllocState::GetDeallocatedInPages() const {
+size_t
+TAllocState::GetDeallocatedInPages() const {
     size_t deallocated = 0;
     for (auto x : AllPages_) {
         auto currPage = (TAllocPageHeader*)x;
@@ -143,14 +144,14 @@ void TAllocState::LockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
 
     void* obj;
     if (value.IsString()) {
-       obj = value.AsStringRef().Data();
+        obj = value.AsStringRef().Data();
     } else if (value.IsBoxed()) {
-       obj = value.AsBoxed().Get();
+        obj = value.AsBoxed().Get();
     } else {
-       return;
+        return;
     }
 
-    auto [it, isNew] = LockedObjectsRefs.emplace(obj, TLockInfo{ 0, 0 });
+    auto [it, isNew] = LockedObjectsRefs.emplace(obj, TLockInfo{0, 0});
     if (isNew) {
         it->second.OriginalRefs = value.LockRef();
     }
@@ -165,18 +166,18 @@ void TAllocState::UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
 
     void* obj;
     if (value.IsString()) {
-       obj = value.AsStringRef().Data();
+        obj = value.AsStringRef().Data();
     } else if (value.IsBoxed()) {
-       obj = value.AsBoxed().Get();
+        obj = value.AsBoxed().Get();
     } else {
-       return;
+        return;
     }
 
     auto it = LockedObjectsRefs.find(obj);
     Y_ABORT_UNLESS(it != LockedObjectsRefs.end());
     if (--it->second.Locks == 0) {
-       value.UnlockRef(it->second.OriginalRefs);
-       LockedObjectsRefs.erase(it);
+        value.UnlockRef(it->second.OriginalRefs);
+        LockedObjectsRefs.erase(it);
     }
 }
 
@@ -190,7 +191,6 @@ void TScopedAlloc::Acquire() {
         PgAcquireThreadContext(MyState_.MainContext);
     } else {
         Y_ABORT_UNLESS(TlsAllocState == &MyState_, "Mismatch allocator in thread");
-
     }
     ++AttachedCount_;
 }
@@ -231,10 +231,12 @@ void* MKQLAllocSlow(size_t sz, TAllocState* state, const EMemorySubPool mPool) {
     return ret;
 }
 
-void MKQLFreeSlow(TAllocPageHeader* header, TAllocState *state, const EMemorySubPool mPool) noexcept {
+void MKQLFreeSlow(TAllocPageHeader* header, TAllocState* state, const EMemorySubPool mPool) noexcept {
     Y_DEBUG_ABORT_UNLESS(state);
     Y_DEBUG_ABORT_UNLESS(header->MyAlloc == state, "%s", (TStringBuilder() << "wrong allocator was used; "
-        "allocated with: " << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo()).data());
+                                                                              "allocated with: "
+                                                                           << header->MyAlloc->GetDebugInfo() << " freed with: " << TlsAllocState->GetDebugInfo())
+                                                             .data());
     state->ReturnBlock(header, header->Capacity);
     if (header == state->CurrentPages[(TMemorySubPoolIdx)mPool]) {
         state->CurrentPages[(TMemorySubPoolIdx)mPool] = &TAllocState::EmptyPageHeader;

@@ -1,11 +1,9 @@
 LIBRARY()
 
-ENABLE(YQL_STYLE_CPP)
-
 PEERDIR(
     yql/essentials/utils
     yql/essentials/parser/proto_ast/collect_issues
-    yql/essentials/parser/proto_ast/gen/v1_proto_split
+    yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
 )
 
 SRCS(
@@ -16,8 +14,6 @@ SRCS(
 END()
 
 RECURSE(
-    antlr3
-    antlr3_ansi
     antlr4
     antlr4_ansi
 )

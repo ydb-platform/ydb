@@ -742,8 +742,9 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
     void ProcessPendingStopTablet();
     void ProcessPendingResumeTablet();
-    bool IsAllowedPile(TBridgePileId pile) const;
+    bool IsPrimaryPile(TBridgePileId pile) const; // NOTE: this counts promoted pile as primary
     TBridgePileInfo& GetPile(TBridgePileId pileId);
+    const TBridgePileInfo* FindPile(TBridgePileId pileId) const;
     void UpdatePiles();
 
     ui32 GetEventPriority(IEventHandle* ev);

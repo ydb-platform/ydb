@@ -11,7 +11,7 @@ TRetryPolicyItem::TRetryPolicyItem(ui64 retryCount, ui64 retryLimit, TDuration r
     , BackoffPeriod(backoffPeriod)
 {}
 
-TRetryPolicyItem TRetryPolicyItem::FromProto(Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& retryState) {
+std::optional<TRetryPolicyItem> TRetryPolicyItem::FromProto(Ydb::StatusIds::StatusCode status, const NKikimrKqp::TScriptExecutionRetryState& retryState) {
     for (const auto& mapping : retryState.GetRetryPolicyMapping()) {
         for (const auto mappingStatus : mapping.GetStatusCode()) {
             if (mappingStatus != status) {
@@ -35,7 +35,7 @@ TRetryPolicyItem TRetryPolicyItem::FromProto(Ydb::StatusIds::StatusCode status, 
         }
     }
 
-    return TRetryPolicyItem();
+    return std::nullopt;
 }
 
 TRetryLimiter::TRetryLimiter(ui64 retryCount, TInstant retryCounterUpdatedAt, double retryRate)

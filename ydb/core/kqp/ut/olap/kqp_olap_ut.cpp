@@ -1861,6 +1861,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString output = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(output, results[i]);
         }
+
+        std::vector<TString> notPushedQueries = {
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT jsonDoc, JSON_VALUE(jsonDoc, "$.\"a.b.c\"")
+                FROM `/Root/foo`
+                where b == 1;
+            )"
+        };
+
+        for (ui32 i = 0; i < notPushedQueries.size(); ++i) {
+            const auto query = notPushedQueries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapProjections") == std::string::npos, TStringBuilder() << "Projections pushed down. Query: " << query);
+            UNIT_ASSERT_C(ast.find("KqpOlapProjection") == std::string::npos, TStringBuilder() << "Projection pushed down. Query: " << query);
+        }
     }
 
     // Unit tests for datetime pushdowns in query service
@@ -4742,6 +4765,51 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
             CompareYson(result, R"([[2u]])");
+        }
+    }
+
+    Y_UNIT_TEST(PredicateWithTimestampParameter) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE `/Root/tmp_olap` (
+                    Key Uint32 NOT NULL,
+                    Value Timestamp NOT NULL,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                INSERT INTO `/Root/tmp_olap` (Key, Value) VALUES
+                (1, Timestamp('2021-01-01T00:00:00Z'))
+            )";
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                DECLARE $flag1 AS Timestamp;
+                SELECT * FROM tmp_olap WHERE Value >= $flag1;
+            )";
+
+            auto params = TParamsBuilder()
+                .AddParam("$flag1")
+                    .Timestamp(TInstant::ParseIso8601("2021-01-01T00:00:00Z"))
+                    .Build()
+                .Build();
+
+            auto result = client.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetResultSet(0).RowsCount() == 1, result.GetIssues().ToString());
         }
     }
 

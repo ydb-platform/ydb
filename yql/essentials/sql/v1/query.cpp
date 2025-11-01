@@ -848,7 +848,65 @@ public:
                 ctx.Error(Pos_) << "Expecting expression as argument";
                 return nullptr;
             }
-            return Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
+
+            auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
+            if (ctx.PragmaUseTablePrefixForEach) {
+                TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
+                if (prefixPath) {
+                    partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
+                }
+            }
+            return partitionList;
+        } else if (func == "partitions" || func == "partitionsstrict") {
+            auto requiredLangVer = MakeLangVersion(2025, 4);
+            if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer, requiredLangVer, ctx.Settings.BackportMode)) {
+                auto str = FormatLangVersion(requiredLangVer);
+                YQL_ENSURE(str);
+                ctx.Error(Pos_) << "PARTITIONS table function is not available before language version " << *str;
+                return nullptr;
+            }
+
+            const size_t minArgs = 2;
+            const size_t maxArgs = 3;
+            if (Args_.size() < minArgs || Args_.size() > maxArgs) {
+                ctx.Error(Pos_) << Func_ << " requires from " << minArgs << " to " << maxArgs << " arguments, but got: " << Args_.size();
+                return nullptr;
+            }
+
+            if (ctx.DiscoveryMode) {
+                ctx.Error(Pos_, TIssuesIds::YQL_NOT_ALLOWED_IN_DISCOVERY) << "PARTITIONS is not allowed in Discovery mode";
+                return nullptr;
+            }
+
+            for (auto& arg : Args_) {
+                if (arg.HasAt) {
+                    ctx.Error(Pos_) << "Temporary tables are not supported here";
+                    return nullptr;
+                }
+
+                if (!arg.View.empty()) {
+                    ctx.Error(Pos_) << "Use the last argument of " << Func_ << " to specify a VIEW." << Endl
+                                    << "Possible arguments are: prefix, pattern, view.";
+                    return nullptr;
+                }
+
+                ExtractTableName(ctx, arg);
+            }
+
+            auto path = ctx.GetPrefixedPath(Service_, Cluster_, Args_[0].Id);
+            if (!path) {
+                return nullptr;
+            }
+            TNodePtr key = Y("Key", Q(Y(Q("table"), Y("String", path))));
+            if (Args_.size() == maxArgs) {
+                auto& lastArg = Args_.back();
+                if (!lastArg.Id.Empty()) {
+                    key = L(key, Q(Y(Q("view"), Y("String", lastArg.Id.Build()))));
+                }
+            }
+
+            TDeferredAtom pattern = Args_[1].Id;
+            return Y(func.EndsWith("strict") ? "MrPartitionsStrict" : "MrPartitions", key, pattern.Build());
         }
 
         ctx.Error(Pos_) << "Unknown table name preprocessor: " << Func_;
@@ -1226,19 +1284,24 @@ public:
             opts = L(opts, Q(Y(Q("columnsDefaultValues"), Q(columnsDefaultValueSettings))));
         }
 
-        if (Table_.Service == RtmrProviderName) {
+        if (Table_.Service == YtProviderName || Table_.Service == RtmrProviderName) {
             if (!Params_.PkColumns.empty() && !Params_.PartitionByColumns.empty()) {
                 ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
                 return false;
             }
         } else {
             if (!Params_.OrderByColumns.empty()) {
-                ctx.Error() << "ORDER BY is supported only for " << RtmrProviderName << " provider";
+                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " or " << RtmrProviderName << " provider.";
                 return false;
             }
         }
 
         if (!Params_.PkColumns.empty()) {
+            if (Table_.Service == YtProviderName) {
+                ctx.Error() << "PRIMARY KEY is not supported by " << YtProviderName << " provider.";
+                return false;
+            }
+
             auto primaryKey = Y();
             for (auto& col : Params_.PkColumns) {
                 primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name));
@@ -1251,6 +1314,11 @@ public:
         }
 
         if (!Params_.PartitionByColumns.empty()) {
+            if (Table_.Service == YtProviderName) {
+                ctx.Error() << "PARTITION BY is not supported by " << YtProviderName << " provider.";
+                return false;
+            }
+
             auto partitionBy = Y();
             for (auto& col : Params_.PartitionByColumns) {
                 partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name));
@@ -1833,6 +1901,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -1953,6 +2022,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -3282,6 +3352,11 @@ public:
                                                            BuildQuotedAtom(Pos_, "CostBasedOptimizer"), BuildQuotedAtom(Pos_, ctx.CostBasedOptimizer))));
                 }
 
+                if (ctx.CostBasedOptimizerVersion) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                                                           BuildQuotedAtom(Pos_, "CostBasedOptimizerVersion"), BuildQuotedAtom(Pos_, ToString(*ctx.CostBasedOptimizerVersion)))));
+                }
+
                 if (ctx.JsonQueryReturnsJsonDocument.Defined()) {
                     TString pragmaName = "DisableJsonQueryReturnsJsonDocument";
                     if (*ctx.JsonQueryReturnsJsonDocument) {
@@ -3496,7 +3571,7 @@ public:
             for (ui32 i = 0; i < Values_.size(); ++i) {
                 Node_ = L(Node_, Values_[i].Build());
             }
-        } else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("SetFileOption") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs") || Name_ == TStringBuf("SetPackageVersion")) {
+        } else if (Name_ == TStringBuf("AddFileByUrl") || Name_ == TStringBuf("SetFileOption") || Name_ == TStringBuf("AddFolderByUrl") || Name_ == TStringBuf("ImportUdfs") || Name_ == TStringBuf("SetPackageVersion") || Name_ == TStringBuf("Layer")) {
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Name_));
             for (ui32 i = 0; i < Values_.size(); ++i) {
                 Node_ = L(Node_, Values_[i].Build());

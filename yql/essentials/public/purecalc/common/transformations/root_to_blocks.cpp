@@ -59,7 +59,6 @@ public:
 
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeRootToBlocks(
     bool acceptsBlocks,
-    EProcessorMode processorMode
-) {
+    EProcessorMode processorMode) {
     return new TRootToBlocks(acceptsBlocks, processorMode);
 }

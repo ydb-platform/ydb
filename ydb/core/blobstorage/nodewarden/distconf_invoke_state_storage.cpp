@@ -3,7 +3,7 @@
 
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/nodestate.h>
-
+#include <ydb/core/config/validation/validators.h>
 
 namespace NKikimr::NStorage {
 
@@ -113,6 +113,8 @@ namespace NKikimr::NStorage {
         }
         if (cmd.GetEnableSelfHealStateStorage()) {
             SelfHealStateStorage(cmd.GetWaitForConfigStep(), true, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
+        } else {
+            Finish(TResult::OK, std::nullopt);
         }
     }
 
@@ -324,7 +326,7 @@ namespace NKikimr::NStorage {
             if (newSSConfig.HasRing()) {
                 throw TExError() << "New " << name << " configuration Ring option is not allowed, use RingGroups";
             }
-            const auto error = VerifyConfigCompatibility(name, *(config.*configMutableFunc)(), newSSConfig);
+            const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, *(config.*configMutableFunc)(), newSSConfig);
             if(!error.empty()) {
                 throw TExError() << error;
             }

@@ -5,6 +5,8 @@
 
 #include <openssl/sha.h>
 
+#include <functional>
+
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
@@ -15,6 +17,7 @@
 #include <unordered_map>
 #include <map>
 #include <string>
+#include <variant>
 
 namespace NKikimr::NYamlConfig {
 
@@ -67,38 +70,6 @@ public:
     TMap<TString, TLabelValueSet> NotIn;
 };
 
-struct TYamlConfigModel {
-    struct TSelectorModel {
-        TString Description;
-        TSelector Selector;
-        NFyaml::TNodeRef Config;
-    };
-
-    const NFyaml::TDocument& Doc;
-    NFyaml::TNodeRef Config;
-    TMap<TString, TLabelType> AllowedLabels;
-    TVector<TSelectorModel> Selectors;
-};
-
-/**
- * Collects all labels present in document
- * For Open labels gathers all labels from all selectors
- * For Closed labels additionally validates that there is no additional labels
- */
-TMap<TString, TLabelType> CollectLabels(NFyaml::TDocument& doc);
-
-/**
- * Parses config and fills corresponding struct
- */
-TYamlConfigModel ParseConfig(NFyaml::TDocument& doc);
-
-/**
- * Generates config for specific set of labels applying all matching selectors
- */
-TDocumentConfig Resolve(
-    const NFyaml::TDocument& doc,
-    const TSet<TNamedLabel>& labels);
-
 /**
  * TLabel is a representation of label for config resolution
  *
@@ -134,6 +105,87 @@ struct TLabel {
     }
 };
 
+struct TIncompatibilityRule {
+    struct TLabelPattern {
+        TString Name;
+        std::variant<std::monostate, THashSet<TString>> Values;
+        bool Negated = false;
+        
+        bool Matches(const TLabel& label, const TString& actualLabelName) const;
+    };
+    
+    TVector<TLabelPattern> Patterns;
+    TString RuleName;
+    
+    enum class ESource {
+        BuiltIn,
+        UserDefined
+    };
+    ESource Source = ESource::BuiltIn;
+};
+
+class TIncompatibilityRules {
+public:
+    static constexpr const char* UNSET_LABEL_MARKER = "$unset";
+    static constexpr const char* EMPTY_LABEL_MARKER = "$empty";
+    
+    static TIncompatibilityRules GetDefaultRules();
+    
+    void AddRule(TIncompatibilityRule rule);
+    void RemoveRule(const TString& ruleName);
+    
+    bool IsCompatible(const TVector<TLabel>& combination,
+                     const TVector<std::pair<TString, TSet<TLabel>>>& labelNames) const;
+    
+    bool IsCompatible(const TMap<TString, TString>& labels) const;
+    
+    void MergeWith(const TIncompatibilityRules& userRules);
+    
+    size_t GetRuleCount() const { return RulesByName.size(); }
+    size_t GetDisabledCount() const { return DisabledRules.size(); }
+
+    bool HasRules() const { return !RulesByName.empty() || !DisabledRules.empty(); }
+
+private:
+    TMap<TString, TIncompatibilityRule> RulesByName;
+    THashSet<TString> DisabledRules;
+    
+    friend TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root);
+};
+
+struct TYamlConfigModel {
+    struct TSelectorModel {
+        TString Description;
+        TSelector Selector;
+        NFyaml::TNodeRef Config;
+    };
+
+    const NFyaml::TDocument& Doc;
+    NFyaml::TNodeRef Config;
+    TMap<TString, TLabelType> AllowedLabels;
+    TVector<TSelectorModel> Selectors;
+    TIncompatibilityRules IncompatibilityRules;
+};
+
+/**
+ * Collects all labels present in document
+ * For Open labels gathers all labels from all selectors
+ * For Closed labels additionally validates that there is no additional labels
+ */
+TMap<TString, TLabelType> CollectLabels(NFyaml::TDocument& doc);
+
+/**
+ * Parses config and fills corresponding struct
+ */
+TYamlConfigModel ParseConfig(NFyaml::TDocument& doc);
+
+/**
+ * Generates config for specific set of labels applying all matching selectors
+ */
+TDocumentConfig Resolve(
+    const NFyaml::TDocument& doc,
+    const TSet<TNamedLabel>& labels);
+
 struct TResolvedConfig {
     TVector<TString> Labels;
     TMap<TSet<TVector<TLabel>>, TDocumentConfig> Configs;
@@ -143,6 +195,13 @@ struct TResolvedConfig {
  * Generates configs for all label combinations
  */
 TResolvedConfig ResolveAll(NFyaml::TDocument& doc);
+
+/**
+ * Generates unique resolved documents without materializing label combinations
+ */
+void ResolveUniqueDocs(
+    NFyaml::TDocument& doc,
+    const std::function<void(TDocumentConfig&&)>& onDocument);
 
 /**
  * Calculates hash of resolved config

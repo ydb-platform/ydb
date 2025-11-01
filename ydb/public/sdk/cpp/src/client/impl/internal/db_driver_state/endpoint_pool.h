@@ -46,8 +46,9 @@ public:
     static constexpr std::int32_t GetLocalityShift();
 
 private:
-    bool IsLocalEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
-                         const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
+    bool IsPreferredEndpoint(const Ydb::Discovery::EndpointInfo& endpoint,
+                             const std::string& selfLocation,
+                             const std::unordered_map<std::string, Ydb::Bridge::PileState>& pileStates) const;
     EPileState GetPileState(const Ydb::Bridge::PileState::State& state) const;
 
 private:

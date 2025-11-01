@@ -45,8 +45,6 @@ public:
         // TODO(cherepashka): remove default value and move upper.
         const IInvokerPtr& invoker = NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker());
 
-    void EnsureStarted();
-
     TFuture<TValue> Get(const TKey& key);
     TExtendedGetResult GetExtended(const TKey& key);
     TFuture<std::vector<TErrorOr<TValue>>> GetMany(const std::vector<TKey>& keys);
@@ -109,6 +107,9 @@ private:
     const NLogging::TLogger Logger_;
     const NConcurrency::TPeriodicExecutorPtr ExpirationExecutor_;
     const NConcurrency::TPeriodicExecutorPtr RefreshExecutor_;
+    const int ShardCount_ = 1;
+
+    std::atomic<bool> Started_ = false;
 
     struct TEntry
         : public TRefCounted
@@ -136,15 +137,28 @@ private:
     };
 
     using TEntryPtr = TIntrusivePtr<TEntry>;
+    using TEntryMap = THashMap<TKey, TEntryPtr>;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
-    THashMap<TKey, TEntryPtr> Map_;
+    struct TShard
+    {
+        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, EntryMapSpinLock);
+        TEntryMap EntryMap;
+
+        TShard() = default;
+        TShard(TShard&& other) = default;
+        TShard(const TShard& other);
+    };
+
+    std::vector<TShard> MapShards_;
+    std::atomic<int> EntryCount_ = 0;
 
     TAtomicIntrusivePtr<TAsyncExpiringCacheConfig> Config_;
 
     NProfiling::TCounter HitCounter_;
     NProfiling::TCounter MissedCounter_;
     NProfiling::TGauge SizeCounter_;
+
+    void EnsureStarted();
 
     void SetResult(
         const TWeakPtr<TEntry>& weakEntry,
@@ -172,7 +186,8 @@ private:
         const TKey& key,
         EEraseReason reason);
 
-    void Erase(THashMap<TKey, TEntryPtr>::iterator it);
+    void Add(TEntryMap& mapShard, const TKey& key, const TEntryPtr& entry);
+    void Erase(TEntryMap& mapShard, TEntryMap::iterator it);
 
     void DeleteExpiredItems();
     void RefreshAllItems();
@@ -183,7 +198,23 @@ private:
         const TKey& key,
         const TAsyncExpiringCacheConfigPtr& config);
 
-    TPromise<TValue> GetPromise(const TEntryPtr& entry) noexcept;
+    TPromise<TValue> GetPromise(const TKey& key, const TEntryPtr& entry) noexcept;
+
+    struct TItem
+    {
+        const TKey* Key;
+        int RequestIndex;
+    };
+    std::vector<std::vector<TItem>> SortKeysByShards(const std::vector<TKey>& keys) const;
+    int GetShardIndex(const TKey& key) const;
+
+    NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock> MakeReaderGuardForKey(const TKey& key);
+
+    std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShard(int shardIndex);
+    std::pair<NThreading::TReaderGuard<NThreading::TReaderWriterSpinLock>, const TEntryMap&> LockAndGetReadableShardForKey(const TKey& key);
+
+    std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShard(int shardIndex);
+    std::pair<NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>, TEntryMap&> LockAndGetWritableShardForKey(const TKey& key);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

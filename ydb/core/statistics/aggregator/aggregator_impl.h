@@ -55,7 +55,7 @@ private:
     struct TTxResolve;
     struct TTxDatashardScanResponse;
     struct TTxFinishTraversal;
-    struct TTxScheduleTrasersal;
+    struct TTxScheduleTraversal;
     struct TTxAggregateStatisticsResponse;
     struct TTxResponseTabletDistribution;
     struct TTxAckTimeout;
@@ -349,6 +349,7 @@ private:
     TString GetNavigateTypeString() const;
 
     TString NavigateAnalyzeOperationId;
+    TString NavigateDatabase;
     TPathId NavigatePathId;
 
     // alternate between forced and scheduled traversals
@@ -358,6 +359,7 @@ private: // stored in local db
 
     TString ForceTraversalOperationId;
 
+    TString TraversalDatabase;
     TPathId TraversalPathId;
     bool TraversalIsColumnTable = false;
     TSerializedCellVec TraversalStartKey;
@@ -404,6 +406,7 @@ private: // stored in local db
     };
     struct TForceTraversalOperation {
         TString OperationId;
+        TString DatabaseName;
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;

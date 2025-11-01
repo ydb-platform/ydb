@@ -83,7 +83,7 @@ namespace NTest {
                 const TTabletCommand &cmd = AllMocks.Next();
                 if (cmd.LogoBlobsCmd) {
                     LogoBlobs.push_back(*cmd.LogoBlobsCmd);
-                    logoBlobsTotalBytes += LogoBlobRecSizeof + cmd.LogoBlobsCmd->Key.LogoBlobID().BlobSize();
+                    logoBlobsTotalBytes += LogoBlobRecSizeof + cmd.LogoBlobsCmd->GetKey().LogoBlobID().BlobSize();
                 }
                 if (cmd.BarriersCmd) {
                     Barriers.push_back(*cmd.BarriersCmd);
@@ -129,8 +129,8 @@ namespace NTest {
             TTrackableVector<typename TSst::TRec> linearIndex(TMemoryConsumer(TestCtx->GetVCtx()->SstIndex));
 
             while (it != end && totalBytes < requiredBytes) {
-                linearIndex.emplace_back(it->Key, it->MemRec);
-                totalBytes += sizeof(TKey) + sizeof(TMemRec) + DataSize(it->Key);
+                linearIndex.emplace_back(it->GetKey(), it->GetMemRec());
+                totalBytes += sizeof(TKey) + sizeof(TMemRec) + DataSize(it->GetKey());
                 ++it;
             }
 

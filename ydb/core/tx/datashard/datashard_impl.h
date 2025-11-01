@@ -2136,6 +2136,7 @@ public:
     void StopFindSubDomainPathId();
     void StartFindSubDomainPathId(bool delayFirstRequest = true);
 
+    bool NeedToWatchSubDomainPathId();
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 
@@ -3348,13 +3349,16 @@ protected:
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
     }
 
+    TDuration GetStatsReportInterval(const TAppData&) const;
+
     void SendPeriodicTableStats(const TActorContext &ctx) {
         if (StatisticsDisabled)
             return;
 
-        TInstant now = AppData(ctx)->TimeProvider->Now();
+        auto* appData = AppData(ctx);
+        TInstant now = appData->TimeProvider->Now();
 
-        if (LastDbStatsReportTime + gDbStatsReportInterval > now)
+        if (LastDbStatsReportTime + GetStatsReportInterval(*appData) > now)
             return;
 
         auto* resourceMetrics = Executor()->GetResourceMetrics();

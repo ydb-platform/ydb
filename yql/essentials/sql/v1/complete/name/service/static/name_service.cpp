@@ -139,6 +139,8 @@ public:
                   "Resource",
                   "Tagged",
                   "Callable",
+                  "Linear",
+                  "DynamicLinear",
               }, NormalizeName))
         , ParameterizedTypes_(BuildNameIndex(
               {
@@ -189,6 +191,7 @@ public:
                   "WalkFolders",
                   "EACH",
                   "PARTITION_LIST",
+                  "PARTITIONS",
               }, NormalizeName))
     {
     }

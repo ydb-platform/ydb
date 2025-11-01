@@ -585,7 +585,7 @@ def check_resource(fields, unit, *args):
 def ktlint(fields, unit, *args):
     ruleset_dict = df.KtlintRuleset.value(unit, [], [])
     if ruleset_dict:
-        ruleset = ruleset_dict[df.KtlintRuleset.KEY]
+        ruleset = ruleset_dict
         unit.ondepends(ruleset)
         args = (*args, "DEPENDS", ruleset)
 
@@ -873,14 +873,14 @@ def onadd_pytest_bin(fields, unit, *args):
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
     yt_spec = df.YtSpec.from_unit(unit, flat_args, spec_args)
-    if yt_spec and yt_spec[df.YtSpec.KEY]:
-        unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
+    if yt_spec:
+        unit.ondata_files(deserialize_list(yt_spec))
 
     dart_record = create_dart_record(fields, unit, flat_args, spec_args)
     if not dart_record:
         return
     if yt_spec:
-        dart_record |= yt_spec
+        dart_record[df.YtSpec.KEY] = yt_spec
 
     data = dump_test(unit, dart_record)
     if data:
@@ -936,12 +936,12 @@ def onjava_test(fields, unit, *args):
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
     yt_spec = df.YtSpec.from_unit_list_var(unit, (), {})
-    unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
+    unit.ondata_files(deserialize_list(yt_spec))
 
     dart_record = create_dart_record(fields, unit, (), {})
     if not dart_record:
         return
-    dart_record |= yt_spec
+    dart_record[df.YtSpec.KEY] = yt_spec
 
     data = dump_test(unit, dart_record)
     if data:
@@ -1016,15 +1016,15 @@ def onsetup_exectest(fields, unit, *args):
         unit.ondata_files(_common.get_norm_unit_path(unit))
 
     yt_spec = df.YtSpec.from_unit(unit, (), {})
-    if yt_spec and yt_spec[df.YtSpec.KEY]:
-        unit.ondata_files(deserialize_list(yt_spec[df.YtSpec.KEY]))
+    if yt_spec:
+        unit.ondata_files(deserialize_list(yt_spec))
 
     dart_record = create_dart_record(fields, unit, (), {})
     if not dart_record:
         return
     dart_record[df.ScriptRelPath.KEY] = 'exectest'
     if yt_spec:
-        dart_record |= yt_spec
+        dart_record[df.YtSpec.KEY] = yt_spec
 
     data = dump_test(unit, dart_record)
     if data:
@@ -1056,7 +1056,7 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "NAME": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "CONFIG_TYPE": 1,
@@ -1097,7 +1097,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "NAME": 1,
         "WRAPPER_SCRIPT": 1,
         "DEPENDS": unlimited,
-        "CONFIGS": 1,
+        "DEFAULT_CONFIGS": 1,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "FLAKE_MIGRATIONS_CONFIG": 1,
@@ -1114,6 +1114,44 @@ def on_add_py_linter_check(fields, unit, *args):
         return
     dart_record[df.ScriptRelPath.KEY] = 'custom_lint'
 
+    data = dump_test(unit, dart_record)
+    if data:
+        unit.set_property(["DART_DATA", data])
+
+
+@df.with_fields(
+    (
+        df.TestFiles.from_macro_args,
+        df.LintConfigs.custom_explicit_configs,
+    )
+    + LINTER_FIELDS_BASE
+)
+def on_add_custom_explicit_linter_check(fields, unit, *args):
+    if unit.get("TIDY") == "yes":
+        return
+    no_lint_value = _common.get_no_lint_value(unit)
+    if no_lint_value in ("none", "none_internal"):
+        return
+    unlimited = -1
+    keywords = {
+        "NAME": 1,
+        "WRAPPER_SCRIPT": 1,
+        "FILES": unlimited,
+        "DEPENDS": unlimited,
+        "FILE_PROCESSING_TIME": 1,
+        "EXTRA_PARAMS": unlimited,
+        "DEFAULT_CONFIGS": 1,
+        "GLOBAL_RESOURCES": unlimited,
+    }
+    _, spec_args = _common.sort_by_keywords(keywords, args)
+    name = spec_args['NAME'][0]
+    global_resources = consts.LINTER_TO_GLOBAL_RESOURCES.get(name, ())
+    for resource, _ in global_resources:
+        unit.onpeerdir(resource)
+    dart_record = create_dart_record(fields, unit, (), spec_args)
+    if not dart_record:
+        return
+    dart_record[df.ScriptRelPath.KEY] = 'custom_lint'
     data = dump_test(unit, dart_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -1501,7 +1539,7 @@ def go_bench(fields, unit, *args):
         "FORK_TESTS": 0,
     }
     flat_args, spec_args = _common.sort_by_keywords(keywords, args)
-    tags = df.Tag.from_macro_args_and_unit(unit, flat_args, spec_args)[df.Tag.KEY]
+    tags = df.Tag.from_macro_args_and_unit(unit, flat_args, spec_args)
 
     if "ya:run_go_benchmark" not in tags:
         return

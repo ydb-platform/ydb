@@ -326,6 +326,8 @@ type_name_enum: ENUM LESS type_name_tag (COMMA type_name_tag)* COMMA? GREATER;
 type_name_resource: RESOURCE LESS type_name_tag GREATER;
 type_name_tagged: TAGGED LESS type_name_or_bind COMMA type_name_tag GREATER;
 type_name_callable: CALLABLE LESS LPAREN callable_arg_list? COMMA? (LBRACE_SQUARE callable_arg_list RBRACE_SQUARE)? RPAREN ARROW type_name_or_bind GREATER;
+type_name_linear: LINEAR LESS type_name_or_bind GREATER;
+type_name_dynamiclinear: DYNAMICLINEAR LESS type_name_or_bind GREATER;
 
 type_name_composite:
   ( type_name_optional
@@ -341,6 +343,8 @@ type_name_composite:
   | type_name_resource
   | type_name_tagged
   | type_name_callable
+  | type_name_linear
+  | type_name_dynamiclinear
   ) QUESTION*;
 
 type_name:
@@ -655,7 +659,7 @@ drop_streaming_query_stmt: DROP STREAMING QUERY (IF EXISTS)? object_ref;
 
 create_view_stmt: CREATE VIEW (IF NOT EXISTS)? object_ref
     create_object_features?
-    AS select_stmt
+    AS (select_stmt | DO BEGIN define_action_or_subquery_body END DO)
 ;
 
 drop_view_stmt: DROP VIEW (IF EXISTS)? object_ref;
@@ -1439,6 +1443,7 @@ keyword_as_compat:
   | DESCRIBE
   | DETACH
   | DIRECTORY
+  | DYNAMICLINEAR
   | DISABLE
   | DISCARD
   // | DO
@@ -1497,6 +1502,7 @@ keyword_as_compat:
   // | LEFT
   | LEGACY
   | LIKE
+  | LINEAR
   | LOCAL
   | LOGIN
   | MANAGE
@@ -1671,6 +1677,7 @@ keyword_compat: (
   | DESCRIBE
   | DETACH
   | DIRECTORY
+  | DYNAMICLINEAR
   | DISABLE
   | DISCARD
   | DO
@@ -1729,6 +1736,7 @@ keyword_compat: (
   | LEFT
   | LEGACY
   | LIKE
+  | LINEAR
   | LOCAL
   | LOGIN
   | MANAGE
@@ -2018,6 +2026,7 @@ DESCRIBE: D E S C R I B E;
 DETACH: D E T A C H;
 DICT: D I C T;
 DIRECTORY: D I R E C T O R Y;
+DYNAMICLINEAR: D Y N A M I C L I N E A R;
 DISABLE: D I S A B L E;
 DISCARD: D I S C A R D;
 DISTINCT: D I S T I N C T;
@@ -2095,6 +2104,7 @@ LEFT: L E F T;
 LEGACY: L E G A C Y;
 LIKE: L I K E;
 LIMIT: L I M I T;
+LINEAR: L I N E A R;
 LIST: L I S T;
 LOCAL: L O C A L;
 LOGIN: L O G I N;

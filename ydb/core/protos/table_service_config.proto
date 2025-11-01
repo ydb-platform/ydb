@@ -435,4 +435,6 @@ message TTableServiceConfig {
     optional bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = 104 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
 };

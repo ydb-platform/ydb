@@ -9,7 +9,7 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/cluster_mapping.h>
 
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -53,6 +53,7 @@ struct TScopedState: public TThrRefBase {
     bool StrictJoinKeyTypes = false;
     bool UnicodeLiterals = false;
     bool WarnUntypedStringLiterals = false;
+    bool SimplePgByDefault = false;
     TNamedNodesMap NamedNodes;
 
     struct TLocal {
@@ -84,6 +85,12 @@ enum class EColumnRefState {
     MatchRecognizeMeasures,
     MatchRecognizeDefine,
     MatchRecognizeDefineAggregate,
+};
+
+enum class EYqlSelectMode {
+    Disable,
+    Auto,
+    Force,
 };
 
 class TContext {
@@ -328,6 +335,7 @@ public:
     bool DqEngineEnable = false;
     bool DqEngineForce = false;
     TString CostBasedOptimizer;
+    TMaybe<ui32> CostBasedOptimizerVersion;
     TMaybe<bool> JsonQueryReturnsJsonDocument;
     TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
     TMaybe<bool> AnsiRankForNullableKeys = true;
@@ -392,8 +400,8 @@ public:
     bool StrictWarningAsError = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
-
     TMaybe<TString> Engine;
+    EYqlSelectMode YqlSelectMode = EYqlSelectMode::Disable;
 };
 
 class TColumnRefScope {

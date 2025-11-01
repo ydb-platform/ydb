@@ -53,6 +53,7 @@ public:
     size_t GetCount() const {
         return Cache_.Size();
     }
+
 private:
     struct TEntry {
         TIntrusivePtr<ICacheObj> Obj;
@@ -70,6 +71,4 @@ private:
     TAdaptiveLock Lock_;
 };
 
-} // NYql
-
-
+} // namespace NYql

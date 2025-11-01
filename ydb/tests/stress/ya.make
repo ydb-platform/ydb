@@ -18,4 +18,5 @@ RECURSE(
     topic
     topic_kafka
     transfer
+    viewer
 )

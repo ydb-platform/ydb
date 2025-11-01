@@ -1,16 +1,18 @@
 #include "construct_join_graph.h"
 #include <algorithm>
+#include <ydb/library/yql/dq/comp_nodes/type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/utils/utils.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
-TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
+TRuntimeNode BuildBlockJoin(TDqProgramBuilder& pgmBuilder, EJoinKind joinKind, TRuntimeNode leftList,
                             TArrayRef<const ui32> leftKeyColumns, const TVector<ui32>& leftKeyDrops,
-                            TRuntimeNode rightList, TArrayRef<const ui32> rightKeyColumns,
-                            const TVector<ui32>& rightKeyDrops, bool rightAny) {
+                            TRuntimeNode rightList,
+                            TArrayRef<const ui32> rightKeyColumns, const TVector<ui32>& rightKeyDrops, bool rightAny) {
     const auto leftStream = ToWideStream(pgmBuilder, leftList);
     const auto rightBlockList = ToBlockList(pgmBuilder, rightList);
 
@@ -59,28 +61,57 @@ bool IsBlockJoin(ETestedJoinAlgo kind) {
     return kind == ETestedJoinAlgo::kBlockHash || kind == ETestedJoinAlgo::kBlockMap;
 }
 
-THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, TInnerJoinDescription descr) {
+THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr) {
 
-    const EJoinKind kInnerJoin = EJoinKind::Inner;
     const bool scalar = !IsBlockJoin(algo);
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
 
-    TVector<TType* const> resultTypesArr;
-    TVector<const ui32> leftRenames, rightRenames;
-    for (ui32 idx = 0; idx < std::ssize(descr.LeftSource.ColumnTypes); ++idx) {
-        resultTypesArr.push_back(descr.LeftSource.ColumnTypes[idx]);
-        leftRenames.push_back(idx);
-        leftRenames.push_back(idx);
-    }
-    for (ui32 idx = 0; idx < std::ssize(descr.RightSource.ColumnTypes); ++idx) {
-        if (std::ranges::all_of(descr.RightSource.KeyColumnIndexes,
-                                [idx](ui32 keyColumnIdx) { return keyColumnIdx != idx; })) {
-            rightRenames.push_back(idx);
-            rightRenames.push_back(resultTypesArr.size());
-            resultTypesArr.push_back(descr.RightSource.ColumnTypes[idx]);
+    ;
+    TGraceJoinRenames renames;
+    if (descr.CustomRenames) {
+        renames = TGraceJoinRenames::FromDq(*descr.CustomRenames);
+    } else {
+        if (joinKind != EJoinKind::RightOnly && joinKind != EJoinKind::RightSemi) {
+            for (int colIndex = 0; colIndex < std::ssize(descr.LeftSource.ColumnTypes); ++colIndex) {
+                renames.Left.push_back(colIndex);
+                renames.Left.push_back(colIndex);
+            }
+        }
+        if (joinKind != EJoinKind::LeftOnly && joinKind != EJoinKind::LeftSemi) {
+            for (int colIndex = 0; colIndex < std::ssize(descr.RightSource.ColumnTypes); ++colIndex) {
+                renames.Right.push_back(colIndex);
+                renames.Right.push_back(colIndex + std::ssize(descr.LeftSource.ColumnTypes));
+            }
         }
     }
+
+    const TVector<TType*> resultTypesArr = [&] {
+        TVector<TType*> arr;
+        TDqUserRenames dqRenames = FromGraceFormat(renames);
+        for (auto rename : dqRenames) {
+            if (rename.Side == EJoinSide::kLeft) {
+                auto* resType = descr.LeftSource.ColumnTypes[rename.Index];
+                arr.push_back([&] {
+                    if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
+                        return pb.NewOptionalType(resType);
+                    } else {
+                        return resType;
+                    }
+                }());
+            } else {
+                auto* resType = descr.RightSource.ColumnTypes[rename.Index];
+                arr.push_back([&] {
+                    if (ForceRightOptional(joinKind) && !resType->IsOptional()) {
+                        return pb.NewOptionalType(resType);
+                    } else {
+                        return resType;
+                    }
+                }());
+            }
+        }
+        return arr;
+    }();
 
     struct TJoinArgs {
         TRuntimeNode Left;
@@ -139,9 +170,9 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
 
         case ETestedJoinAlgo::kScalarGrace: {
 
-            return dqPb.FromFlow(dqPb.GraceJoin(ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin,
+            return dqPb.FromFlow(dqPb.GraceJoin(ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind,
                                                 descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
-                                                leftRenames, rightRenames, dqPb.NewFlowType(multiResultType)));
+                                                renames.Left, renames.Right, dqPb.NewFlowType(multiResultType)));
         }
         case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
             Y_ABORT_IF(descr.RightSource.KeyColumnIndexes.size() > 1,
@@ -173,7 +204,7 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
                                                                  std::ssize(descr.RightSource.ColumnTypes) -
                                                                      descr.RightSource.KeyColumnIndexes.size());
             TRuntimeNode mapJoinSomething =
-                pb.MapJoinCore(source, rightDict, kInnerJoin, descr.LeftSource.KeyColumnIndexes, scalarMapRenames.Left,
+                pb.MapJoinCore(source, rightDict, joinKind, descr.LeftSource.KeyColumnIndexes, scalarMapRenames.Left,
                                scalarMapRenames.Right, pb.NewFlowType(pb.NewTupleType(resultTypesArr)));
 
             return ToWideStream(
@@ -183,22 +214,25 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
         }
         case ETestedJoinAlgo::kBlockMap: {
             TVector<ui32> kEmptyColumnDrops;
-            TVector<ui32> kRightDroppedColumns;
-            std::copy(descr.RightSource.KeyColumnIndexes.begin(), descr.RightSource.KeyColumnIndexes.end(),
-                      std::back_inserter(kRightDroppedColumns));
 
-            return BuildBlockJoin(pb, kInnerJoin, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
-                                  args.Right, descr.RightSource.KeyColumnIndexes, kRightDroppedColumns, false);
+            return BuildBlockJoin(dqPb, joinKind, args.Left, descr.LeftSource.KeyColumnIndexes, kEmptyColumnDrops,
+                                  args.Right, descr.RightSource.KeyColumnIndexes, kEmptyColumnDrops, false);
         }
         case ETestedJoinAlgo::kBlockHash: {
-            return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), kInnerJoin,
+            TVector<TType*> blockResultTypes;
+            for (TType* type : resultTypesArr) {
+                blockResultTypes.push_back(pb.NewBlockType(type, TBlockType::EShape::Many));
+            }
+            blockResultTypes.push_back(dqPb.LastScalarIndexBlock());
+            return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), joinKind,
                                         descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
-                                        pb.NewStreamType(multiResultType));
+                                        renames.Left, renames.Right,
+                                        pb.NewStreamType(pb.NewMultiType(blockResultTypes)));
         }
         case ETestedJoinAlgo::kScalarHash: {
             return pb.FromFlow(dqPb.DqScalarHashJoin(
-                ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), kInnerJoin, descr.LeftSource.KeyColumnIndexes,
-                descr.RightSource.KeyColumnIndexes, pb.NewFlowType(multiResultType)));
+                ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind, descr.LeftSource.KeyColumnIndexes,
+                descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType)));
         }
         default:
             Y_ABORT("unreachable");
@@ -207,13 +241,12 @@ THolder<IComputationGraph> ConstructInnerJoinGraphStream(ETestedJoinAlgo algo, T
     return graphFrom(wideStream);
 }
 
-i32 ResultColumnCount(ETestedJoinAlgo algo, TInnerJoinDescription descr) {
+i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr) {
     /*
     +1 in block case because
     yql/essentials/minikql/comp_nodes/mkql_block_map_join.cpp:TBlockJoinState::GetOutputWidth();
      */
-    return IsBlockJoin(algo) + std::ssize(descr.LeftSource.ColumnTypes) + std::ssize(descr.RightSource.ColumnTypes) -
-           std::ssize(descr.LeftSource.KeyColumnIndexes);
+    return IsBlockJoin(algo) + std::ssize(descr.LeftSource.ColumnTypes) + std::ssize(descr.RightSource.ColumnTypes);
 }
 
 } // namespace NKikimr::NMiniKQL

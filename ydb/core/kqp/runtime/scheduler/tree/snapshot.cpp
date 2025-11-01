@@ -25,10 +25,14 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     if (IsPool()) {
         Demand = 0;
         Usage = 0;
+        BurstUsage = 0;
+        BurstThrottle = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
             child->UpdateBottomUp(totalLimit);
             Demand += child->Demand;
             Usage += child->Usage;
+            BurstUsage += child->BurstUsage;
+            BurstThrottle += child->BurstThrottle;
         });
     }
 
@@ -77,6 +81,7 @@ void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
         // TODO: stable sort children by weight
 
         auto leftFairShare = FairShare;
+        allowFairShareOverlimit = allowFairShareOverlimit && (leftFairShare > 0);
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {
@@ -128,6 +133,7 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
 {
     if (counters) {
         Counters = TPoolCounters();
+        Counters->AdjustedSatisfaction = counters->AdjustedSatisfaction;
         Counters->Satisfaction = counters->Satisfaction;
         Counters->Demand    = counters->Demand;
         Counters->FairShare = counters->FairShare;
@@ -136,9 +142,24 @@ TPool::TPool(const TPoolId& id, const std::optional<TPoolCounters>& counters, co
 
 void TPool::AccountSnapshotDuration(const TDuration& period) {
     if (Counters) {
-        Counters->FairShare->Add(FairShare * period.MicroSeconds());
-        Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
-        // TODO: calculate satisfaction as burst-usage increment / fair-share increment - for better precision
+        const auto fairShare = FairShare * period.MicroSeconds();
+
+        Counters->FairShare->Add(fairShare);
+
+        // TODO: later replace "classical" satisfaction with adjusted one
+        if (Satisfaction) {
+            Counters->Satisfaction->Set(Satisfaction.value_or(0) * 1'000'000);
+        } else {
+            Counters->Satisfaction->Set(-1);
+        }
+
+        if (auto adjustedFairShare = std::min(fairShare, BurstUsage + BurstThrottle)) {
+            float adjustedSatisfaction = BurstUsage / (float)adjustedFairShare;
+            Counters->AdjustedSatisfaction->Add(adjustedSatisfaction * period.MicroSeconds());
+        } else {
+            // by default adjusted satisfaction is always 1.0 - no matter what
+            Counters->AdjustedSatisfaction->Add(1.0 * period.MicroSeconds());
+        }
     }
     TTreeElement::AccountSnapshotDuration(period);
 }

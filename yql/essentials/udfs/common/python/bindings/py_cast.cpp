@@ -7,6 +7,7 @@
 #include "py_gil.h"
 #include "py_utils.h"
 #include "py_void.h"
+#include "py_linear.h"
 #include "py_resource.h"
 #include "py_stream.h"
 #include "py_struct.h"
@@ -899,6 +900,32 @@ NUdf::TUnboxedValue FromPyNull(
     throw yexception() << "Can't cast " << PyObjectRepr(value) << " to null.";
 }
 
+TPyObjectPtr ToPyLinear(
+    const TPyCastContext::TPtr& ctx,
+    const NUdf::TType* type,
+    const NUdf::TUnboxedValuePod& value)
+{
+    const NUdf::TLinearTypeInspector inspector(*ctx->PyCtx->TypeInfoHelper, type);
+    if (inspector.IsDynamic()) {
+        return ToPyDynamicLinear(ctx, inspector.GetItemType(), value);
+    }
+
+    return ToPyObject(ctx, inspector.GetItemType(), value);
+}
+
+NUdf::TUnboxedValue FromPyLinear(
+    const TPyCastContext::TPtr& ctx,
+    const NUdf::TType* type, PyObject* value)
+{
+    const NUdf::TLinearTypeInspector inspector(*ctx->PyCtx->TypeInfoHelper, type);
+    if (inspector.IsDynamic()) {
+        TPyObjectPtr valuePtr(value, TPyObjectPtr::ADD_REF);
+        return FromPyDynamicLinear(ctx, inspector.GetItemType(), valuePtr);
+    }
+
+    return FromPyObject(ctx, inspector.GetItemType(), value);
+}
+
 } // namespace
 
 TPyObjectPtr ToPyObject(
@@ -932,6 +959,8 @@ TPyObjectPtr ToPyObject(
             return ToPyVariant(ctx, type, value);
         case NUdf::ETypeKind::Null:
             return ToPyNull(ctx, type, value);
+        case NUdf::ETypeKind::Linear:
+            return ToPyLinear(ctx, type, value);
         default: {
             ::TStringBuilder sb;
             sb << "Failed to export: ";
@@ -972,6 +1001,8 @@ NUdf::TUnboxedValue FromPyObject(
             return FromPyVariant(ctx, type, value);
         case NUdf::ETypeKind::Null:
             return FromPyNull(ctx, type, value);
+        case NUdf::ETypeKind::Linear:
+            return FromPyLinear(ctx, type, value);
         default: {
             ::TStringBuilder sb;
             sb << "Failed to import: ";

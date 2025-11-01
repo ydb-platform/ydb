@@ -18,6 +18,8 @@ TString ToHighlightJSClass(EUnitKind kind) {
             return "symbol";
         case EUnitKind::BindParameterIdentifier:
             return "variable";
+        case EUnitKind::OptionIdentifier:
+            return "variable.constant";
         case EUnitKind::TypeIdentifier:
             return "type";
         case EUnitKind::FunctionIdentifier:
@@ -72,8 +74,11 @@ NJson::TJsonValue ToHighlightJSPattern(const TUnit& unit, const NSQLTranslationV
 NJson::TJsonValue ToHighlightJSPattern(const TUnit& unit, const TRangePattern& pattern) {
     NJson::TJsonMap json;
     json["className"] = ToHighlightJSClass(unit.Kind);
-    json["begin"] = RE2::QuoteMeta(pattern.Begin);
-    json["end"] = RE2::QuoteMeta(pattern.End);
+    json["begin"] = RE2::QuoteMeta(pattern.BeginPlain);
+    json["end"] = RE2::QuoteMeta(pattern.EndPlain);
+    if (pattern.EscapeRegex) {
+        json["contains"]["begin"] = *pattern.EscapeRegex;
+    }
     return json;
 }
 
@@ -88,8 +93,8 @@ NJson::TJsonValue ToHighlightJSContains(const THighlighting& highlighting) {
         for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
             array.AppendValue(ToHighlightJSPattern(unit, pattern));
         }
-        if (auto range = unit.RangePattern) {
-            array.AppendValue(ToHighlightJSPattern(unit, *range));
+        for (const TRangePattern& range : unit.RangePatterns) {
+            array.AppendValue(ToHighlightJSPattern(unit, range));
         }
     }
 

@@ -7,9 +7,6 @@
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 
-// TODO(vityaman): Migrate YDB to corrected version
-#define BindParamterIdentifier BindParameterIdentifier // NOLINT
-
 namespace NSQLHighlight {
 
 enum class EUnitKind {
@@ -17,6 +14,7 @@ enum class EUnitKind {
     Punctuation,
     QuotedIdentifier,
     BindParameterIdentifier,
+    OptionIdentifier,
     TypeIdentifier,
     FunctionIdentifier,
     Identifier,
@@ -28,15 +26,17 @@ enum class EUnitKind {
 };
 
 struct TRangePattern {
-    TString Begin;
-    TString End;
+    TString BeginPlain;
+    TString EndPlain;
+    TMaybe<TString> EscapeRegex;
 };
 
+// Range patterns are expected to be matched before others.
 struct TUnit {
     EUnitKind Kind;
+    TVector<TRangePattern> RangePatterns;
     TVector<NSQLTranslationV1::TRegexPattern> Patterns;
     TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
-    TMaybe<TRangePattern> RangePattern;
     bool IsPlain = true;
     bool IsCodeGenExcluded = false;
 };

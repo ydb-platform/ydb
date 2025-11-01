@@ -15,7 +15,7 @@
 
 namespace NYql::NJsonPath {
 
-class TJsonPath : public TSimpleRefCount<TJsonPath>, public TBuffer {
+class TJsonPath: public TSimpleRefCount<TJsonPath>, public TBuffer {
 };
 
 using TJsonPathPtr = TIntrusivePtr<TJsonPath>;
@@ -106,8 +106,8 @@ struct TJsonPathItem {
         TStartsWithPrefixOffset,
         NReWrapper::IRePtr,
         double,
-        bool
-    > Data;
+        bool>
+        Data;
 
     const TStringBuf GetString() const;
     const TVector<TArraySubscriptOffsets>& GetSubscripts() const;
@@ -126,7 +126,7 @@ struct TJsonPathItem {
     const TJsonPathPtr JsonPath;
 };
 
-class TJsonPathBuilder : public IAstNodeVisitor {
+class TJsonPathBuilder: public IAstNodeVisitor {
 public:
     TJsonPathBuilder()
         : Result_(new TJsonPath())
@@ -272,4 +272,4 @@ private:
     THashMap<TUint, TJsonPathItem> ItemCache_;
 };
 
-}
+} // namespace NYql::NJsonPath

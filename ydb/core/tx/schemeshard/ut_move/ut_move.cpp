@@ -1059,7 +1059,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         // Replace again - it previously crashed here when Dec/IncAliveChildren were incorrect
 
-        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index2", {"embedding"});
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "index2", {"prefix", "embedding"});
         env.TestWaitNotification(runtime, txId);
 
         TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "index2", "index1", true);
@@ -1067,11 +1067,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/index2"), {NLs::PathNotExist});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, NLs::IndexesCount(1)});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPrefixTable"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPrefixTable"),
+            { NLs::PathExist, NLs::CheckColumns(PrefixTable, {"prefix", IdColumn}, {}, {"prefix", IdColumn}, true) });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplLevelTable"),
             { NLs::PathExist, NLs::CheckColumns(LevelTable, {ParentColumn, IdColumn, CentroidColumn}, {}, {ParentColumn, IdColumn}, true) });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/index1/indexImplPostingTable"),
             { NLs::PathExist, NLs::CheckColumns(PostingTable, {ParentColumn, "key"}, {}, {ParentColumn, "key"}, true) });
+
+        // Drop - it also crashed here when the sequence wasn't moved correctly
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            IndexName: "index1"
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
 

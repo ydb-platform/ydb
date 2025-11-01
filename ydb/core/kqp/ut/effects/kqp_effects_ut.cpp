@@ -1002,6 +1002,205 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
             CompareYson(FormatResultSetYson(result.GetResultSet(1)), UseSecondaryIndex ? R"([[0u]])" : R"([[1u]])");
         }
     }
+
+    Y_UNIT_TEST_TWIN(EffectWithSelect, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+       {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/Rows` (
+                    k1 Uint64,
+                    k2 Uint64,
+                    v1 Uint64,
+                    v2 Uint64,
+                    PRIMARY KEY (k1, k2)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                INSERT INTO `/Root/Rows` (k1, k2, v1, v2) VALUES
+                    (1u, 1u, 1u, 1u),
+                    (1u, 2u, 2u, 2u),
+                    (1u, 3u, 3u, 3u);
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                DECLARE $rows AS List<
+                    Struct<
+                        k2: Uint64,
+                        v1: Uint64,
+                        v2: Uint64
+                    >
+                >;
+
+                $k2_by_k1 = (
+                    SELECT k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                $new_rows = (
+                    SELECT * FROM AS_TABLE($rows)
+                    WHERE k2 NOT IN COMPACT $k2_by_k1
+                );
+
+                SELECT COUNT(*) FROM $new_rows;
+
+                SELECT * FROM $new_rows LIMIT 1000;
+
+                UPSERT INTO `/Root/Rows`
+                SELECT $k AS k1, k2, v1, v2 FROM $new_rows;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                DECLARE $rows AS List<
+                    Struct<
+                        k2: Uint64,
+                        v1: Uint64,
+                        v2: Uint64
+                    >
+                >;
+
+                $k2_by_k1 = (
+                    SELECT k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                $new_rows = (
+                    SELECT * FROM AS_TABLE($rows)
+                    WHERE k2 NOT IN COMPACT $k2_by_k1
+                );
+
+                SELECT COUNT(*) FROM $new_rows;
+
+                SELECT * FROM $new_rows LIMIT 1000;
+
+                $other_transformation = (
+                    SELECT $k * 10 AS k1, k2, v1 + v2 AS v1, v1 * v2 AS v2 FROM $new_rows
+                );
+
+                UPSERT INTO `/Root/Rows`
+                SELECT * FROM $other_transformation;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                $deleted_rows = (
+                    SELECT k1, k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                SELECT COUNT(*) FROM $deleted_rows;
+
+                DELETE FROM `/Root/Rows` ON
+                SELECT * FROM $deleted_rows;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+    }
 }
 
 } // namespace NKqp

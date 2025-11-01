@@ -1,6 +1,7 @@
 #include "grpc_pq_schema.h"
 
 #include "actors/schema_actors.h"
+#include "actors/commit_offset_actor.h"
 #include "actors/events.h"
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
@@ -145,7 +146,7 @@ void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::N
     auto* p = ctx.release();
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
-    LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");
     f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
 }
 
@@ -165,6 +166,15 @@ void DoDescribePartitionRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikim
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe partition request");
     f.RegisterActor(new NGRpcProxy::V1::TDescribePartitionActor(p));
+}
+
+void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
+     auto p = dynamic_cast<TEvCommitOffsetRequest*>(ctx.release());
+
+    EnsureReq(p);
+
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Commit Offset request");
+    f.RegisterActor(new NKikimr::NGRpcProxy::V1::TCommitOffsetActor(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -200,7 +210,7 @@ void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityPr
 
 void DoPQDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f) {
     auto p = dynamic_cast<TEvPQDescribeTopicRequest*>(ctx.release());
-    
+
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Describe topic request");

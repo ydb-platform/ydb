@@ -277,6 +277,7 @@ python3 = NixSourceProject(
         "Python/**/*.c",
         "Python/**/*.h",
         "Python/**/*.S",
+        "Tools/i18n/*.py",
     ],
     copy_sources_except=[
         "Modules/_test*.c",

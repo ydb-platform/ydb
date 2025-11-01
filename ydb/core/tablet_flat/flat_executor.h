@@ -500,6 +500,7 @@ class TExecutor
 
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
+    TControlWrapper MaxTxInFly;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;

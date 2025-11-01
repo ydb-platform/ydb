@@ -7,5 +7,5 @@ namespace NMiniKQL {
 IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -49,7 +49,10 @@ public:
                 }
                 BuildLookup("index");
                 break;
-            default:
+            case EColumnRefState::Deny:
+            case EColumnRefState::Allow:
+            case EColumnRefState::AsStringLiteral:
+            case EColumnRefState::AsPgType:
                 ctx.Error(Pos_) << "Unexpected column reference state";
                 return false;
         }
@@ -155,7 +158,11 @@ public:
                             "Member",
                             BuildAtom(ctx.Pos(), VarMatchedVarsName),
                             Q(std::move(var))));
-                default:
+                case EColumnRefState::Deny:
+                case EColumnRefState::Allow:
+                case EColumnRefState::AsStringLiteral:
+                case EColumnRefState::AsPgType:
+                case EColumnRefState::MatchRecognizeDefineAggregate:
                     ctx.Error(Pos_) << "Unexpected column reference state";
                     return {};
             }

@@ -40,7 +40,7 @@ TString ReplaceHidden(TStringBuf input) {
     return res;
 }
 
-class TFormatRunner : public TCheckRunnerBase {
+class TFormatRunner: public TCheckRunnerBase {
 public:
     TString GetCheckName() const final {
         return "format";
@@ -48,12 +48,12 @@ public:
 
     TCheckResponse DoRun(const TChecksRequest& request) final {
         switch (request.Syntax) {
-        case ESyntax::SExpr:
-            return RunSExpr(request);
-        case ESyntax::PG:
-            return RunPg(request);
-        case ESyntax::YQL:
-            return RunYql(request);
+            case ESyntax::SExpr:
+                return RunSExpr(request);
+            case ESyntax::PG:
+                return RunPg(request);
+            case ESyntax::YQL:
+                return RunYql(request);
         }
     }
 
@@ -71,7 +71,7 @@ private:
     }
 
     TCheckResponse RunYql(const TChecksRequest& request) {
-        TCheckResponse res {.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = GetCheckName()};
         if (request.SyntaxVersion != 1) {
             res.Issues.AddIssue(TIssue({}, "Only SyntaxVersion 1 is supported"));
             return res;
@@ -122,8 +122,9 @@ private:
                 origSample.erase(origSample.size() - 1);
             }
 
-            auto issue = TIssue(origPos, TStringBuilder() <<
-                "Format mismatch, expected:\n" << ReplaceHidden(formattedSample) << "\nbut got:\n" << ReplaceHidden(origSample) << "\n");
+            auto issue = TIssue(origPos, TStringBuilder() << "Format mismatch, expected:\n"
+                                                          << ReplaceHidden(formattedSample) << "\nbut got:\n"
+                                                          << ReplaceHidden(origSample) << "\n");
             issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_WARNING, ESeverity::TSeverityIds_ESeverityId_S_WARNING);
             res.Issues.AddIssue(issue);
         }
@@ -132,11 +133,11 @@ private:
     }
 };
 
-}
+} // namespace
 
 std::unique_ptr<ICheckRunner> MakeFormatRunner() {
     return std::make_unique<TFormatRunner>();
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

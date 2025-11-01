@@ -159,6 +159,18 @@ class TestSettingsValidation(SolomonReadingTestBase):
         """
         self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")
 
+        query = """
+            SELECT * FROM local_solomon.settings_validation WITH (
+                selectors = @@{cluster="settings_validation", service="my_service", test_type="setting_validation"}@@,
+
+                from = "1970-01-01T00:00:00Z",
+                to = "9999-01-01T00:00:01Z"
+            )
+        """
+        result, error = self.execute_query(query)
+        assert error is None
+        assert len(result[0].rows) == 0
+
         drop_source_query = """
             DROP EXTERNAL DATA SOURCE local_solomon;
         """
@@ -549,6 +561,18 @@ class TestSettingsValidation(SolomonReadingTestBase):
             )
         """
         self.check_query_error(query, "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsampling.grid_interval is specified")
+
+        query = """
+            SELECT * FROM local_monitoring.my_service WITH (
+                selectors = @@{test_type="setting_validation"}@@,
+
+                from = "1970-01-01T00:00:00Z",
+                to = "9999-01-01T00:00:01Z"
+            )
+        """
+        result, error = self.execute_query(query)
+        assert error is None
+        assert len(result[0].rows) == 0
 
         drop_source_query = """
             DROP EXTERNAL DATA SOURCE local_monitoring;

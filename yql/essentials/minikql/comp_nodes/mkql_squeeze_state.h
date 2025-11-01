@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-enum class ESqueezeState : ui8 {
+enum class ESqueezeState: ui8 {
     Idle = 0,
     Work,
     Finished,
@@ -24,8 +24,7 @@ struct TSqueezeState {
         IComputationNode* outSave,
         IComputationExternalNode* inLoad,
         IComputationNode* outLoad,
-        const TType* stateType
-    );
+        const TType* stateType);
 
     TSqueezeState(const TSqueezeState& state);
 
@@ -54,7 +53,7 @@ private:
     mutable THolder<TValuePacker> Packer;
 };
 
-class TSqueezeCodegenValue : public TComputationValue<TSqueezeCodegenValue> {
+class TSqueezeCodegenValue: public TComputationValue<TSqueezeCodegenValue> {
 public:
     using TBase = TComputationValue<TSqueezeCodegenValue>;
 
@@ -79,5 +78,5 @@ private:
     TSqueezeState State;
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

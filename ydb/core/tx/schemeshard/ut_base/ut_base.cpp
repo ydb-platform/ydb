@@ -11993,9 +11993,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
 
+            // Incremental backup directory contains Table1, DirA, and __ydb_backup_meta
             TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s", incrBackupDirName)), {
                 NLs::PathExist,
-                NLs::ChildrenCount(2),
+                NLs::ChildrenCount(3),
                 NLs::Finished,
             });
 

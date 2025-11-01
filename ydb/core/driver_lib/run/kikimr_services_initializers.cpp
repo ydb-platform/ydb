@@ -1501,7 +1501,7 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
         }
     }
 
-    tabletSetup = MakeTabletSetupInfo(tabletType, workPoolId, appData->SystemPoolId);
+    tabletSetup = MakeTabletSetupInfo(tabletType, tabletInfo->BootType, workPoolId, appData->SystemPoolId);
 
     if (tabletInfo->TabletType == TTabletTypes::TypeInvalid) {
         tabletInfo->TabletType = tabletType;
@@ -1530,6 +1530,9 @@ void TBootstrapperInitializer::InitializeServices(
                 const bool standby = boot.HasStandBy() && boot.GetStandBy();
                 if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
                     TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
+                    if (boot.HasBootType()) {
+                        info->BootType = BootTypeFromProto(boot.GetBootType());
+                    }
 
                     auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
 

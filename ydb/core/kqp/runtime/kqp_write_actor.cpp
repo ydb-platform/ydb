@@ -1461,6 +1461,7 @@ public:
             const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
             std::vector<TPathWriteInfo> writes,
             std::vector<TPathLookupInfo> lookups,
+            TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> keyColumns,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Cookie(cookie)
         , DeleteCookie(deleteCookie)
@@ -1469,12 +1470,21 @@ public:
         , OperationType(operationType)
         , Alloc(std::move(alloc)) {
 
+        for (const auto& keyColumn : keyColumns) {
+            NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
+            KeyColumnTypes.push_back(typeInfo);
+        }
+
         for (const auto& write : writes) {
             AFL_ENSURE(write.Projection || write.WriteActor->GetTableId().PathId == pathId);
             PathWriteInfo[write.WriteActor->GetTableId().PathId] = write;
         }
         for (const auto& lookup : lookups) {
             PathLookupInfo[lookup.Lookup->GetTableId().PathId] = lookup;
+
+            if (lookup.Lookup->GetTableId().PathId == PathId) {
+                AFL_ENSURE(lookup.Lookup->GetKeyColumnTypes().size() == KeyColumnTypes.size());
+            }
         }
     }
 
@@ -1549,21 +1559,21 @@ private:
             auto& lookupInfo = lookupInfoIt->second;
             AFL_ENSURE(lookupInfo.KeyIndexes.empty());
 
-            const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
-
             for (const auto& batch : ProcessBatches) {
                 Memory -= batch->GetMemory();
             }
 
-            ProcessCells = GetSortedUniqueRows(ProcessBatches, keyColumnTypes);
+            // TODO: Move GetSortedUniqueRows to write stage
+            ProcessCells = GetSortedUniqueRows(ProcessBatches, KeyColumnTypes);
             for (size_t index = 0; index < ProcessCells.size(); ++index) {
                 const auto& row = ProcessCells[index];
-                KeyToIndex[row.first(keyColumnTypes.size())] = index;
+                KeyToIndex[row.first(KeyColumnTypes.size())] = index;
                 Memory += EstimateSize(row);
             }
 
+            AFL_ENSURE(!ProcessCells.empty());
             lookupInfo.Lookup->AddLookupTask(
-                Cookie, CutColumns(ProcessCells, keyColumnTypes.size()));
+                Cookie, CutColumns(ProcessCells, KeyColumnTypes.size()));
 
             State = EState::LOOKUP_MAIN_TABLE;
             return true;
@@ -1577,38 +1587,29 @@ private:
         
         if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes.
-            // In this case unique indexes keys are subsets of main table key.
+            // In this case unique indexes keys are subsets of main table key or operation is INSERT.
             AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE);
 
             for (auto& [pathId, lookupInfo] : PathLookupInfo) {
                 AFL_ENSURE(pathId != PathId);
-                std::vector<std::vector<TCell>> cells;
+                
+                TUniqueSecondaryKeyCollector collector(
+                    KeyColumnTypes,
+                    lookupInfo.Lookup->GetKeyColumnTypes(),
+                    lookupInfo.KeyIndexes);
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
-                        cells.emplace_back();
-                        for (const auto& index : lookupInfo.KeyIndexes) {
-                            if (row[index].IsNull()) {
-                                // In case on unique indexes NULL != NULL,
-                                // so we don't need to check if rows with NULLs are unique. 
-                                cells.pop_back();
-                                break;
-                            }
-                            cells.back().push_back(row[index]);
+                        if (!collector.AddRow(row)) {
+                            AFL_ENSURE(false);// TODO: error
                         }
                     }
                 }
 
-                // todo: check in table only first + check unique inside batch for neighbours after lookup
-
-                std::vector<TConstArrayRef<TCell>> cellRefs;
-                cellRefs.reserve(cells.size());
-                for (const auto& row : cells) {
-                    cellRefs.push_back(row);
-                }
+                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
 
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
-                    cellRefs,
+                    std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
                     /* fail on existing row*/
                     OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
             }
@@ -1636,11 +1637,10 @@ private:
         const size_t lookupColumnsCount = lookupInfo.Lookup->LookupColumnsCount(Cookie);
         auto rowsBatcher = CreateRowsBatcher(ProcessCells[0].size() + lookupColumnsCount, Alloc);
 
-        const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
         lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-            AFL_ENSURE(cells.size() > keyColumnTypes.size());
-            const auto key = cells.first(keyColumnTypes.size());
-            const auto readCells = cells.last(cells.size() - keyColumnTypes.size());
+            AFL_ENSURE(cells.size() > KeyColumnTypes.size());
+            const auto key = cells.first(KeyColumnTypes.size());
+            const auto readCells = cells.last(cells.size() - KeyColumnTypes.size());
 
             AFL_ENSURE(lookupColumnsCount == readCells.size());
 
@@ -1707,39 +1707,23 @@ private:
 
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.DeleteKeyIndexes.size());
 
-                std::vector<std::vector<TCell>> cells;
-                for (size_t writeRowIndex = 0; writeRowIndex < writeRows.size(); ++writeRowIndex) {
-                    const auto& row = writeRows[writeRowIndex];
+                // TODO: skip initial unchanged rows.
+                TUniqueSecondaryKeyCollector collector(
+                        KeyColumnTypes,
+                        lookupInfo.Lookup->GetKeyColumnTypes(),
+                        lookupInfo.KeyIndexes);
 
-                    // TODO: skip unchanged rows
-
-                    cells.emplace_back();
-                    for (const auto& index : lookupInfo.KeyIndexes) {
-                        AFL_ENSURE(index < row.size());
-                        const auto& cell = row[index];
-
-                        if (cell.IsNull()) {
-                            // In case on unique indexes NULL != NULL,
-                            // so we don't need to check if rows with NULLs are unique. 
-                            cells.pop_back();
-                            break;
-                        }
-
-                        cells.back().push_back(cell);
+                for (const auto& row : writeRows) {
+                    if (!collector.AddRow(row)) {
+                        AFL_ENSURE(false);// TODO: error
                     }
                 }
 
-                // todo: check uniq here ? Or maybe after lookup ?
-
-                std::vector<TConstArrayRef<TCell>> cellRefs;
-                cellRefs.reserve(cells.size());
-                for (const auto& row : cells) {
-                    cellRefs.push_back(row);
-                }
+                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
 
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
-                    cellRefs,
+                    std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
                     /* fail on existing row*/
                     false);
             }
@@ -1766,7 +1750,7 @@ private:
             }
         }
 
-
+        //TODO: check unique
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId) {
@@ -1847,6 +1831,7 @@ private:
     const i64 Priority;
     const TPathId PathId;
     const NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
+    std::vector<NScheme::TTypeInfo> KeyColumnTypes;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     EState State = EState::BUFFERING;
@@ -2687,7 +2672,7 @@ public:
                 (settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !settings.LookupColumns.empty())
                     ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
                     : settings.OperationType,
-                std::move(settings.KeyColumns),
+                settings.KeyColumns,
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
@@ -2707,6 +2692,7 @@ public:
                     settings.OperationType,
                     std::move(writes),
                     std::move(lookups),
+                    settings.KeyColumns,
                     Alloc
                 });
         } else {
@@ -2802,6 +2788,9 @@ public:
         TVector<ui64> finishedCookies;
         for (auto& [cookie, writeTask] : WriteTasks) {
             writeTask.Process();
+            //if (writeTask.IsError()) {
+                // TODO: RuntimeError
+            //}
             if (writeTask.IsFinished()) {
                 finishedCookies.push_back(cookie);
             }

@@ -1198,6 +1198,82 @@ std::vector<TConstArrayRef<TCell>> CutColumns(
     return result;
 }
 
+TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
+    const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
+    const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
+    const TConstArrayRef<ui32> secondaryKeyColumns)
+        : PrimaryKeyColumnTypes(primaryKeyColumnTypes)
+        , SecondaryKeyColumnTypes(secondaryKeyColumnTypes)
+        , SecondaryKeyColumns(secondaryKeyColumns) {
+}
+
+bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
+    bool rowHasNull = false;
+    {
+        Cells.emplace_back();
+        Cells.back().reserve(SecondaryKeyColumns.size());
+        for (const auto& index : SecondaryKeyColumns) {
+            if (row[index].IsNull()) {
+                // In case on unique indexes NULL != NULL,
+                // so we don't need to check if rows with NULLs are unique. 
+                Cells.pop_back();
+                rowHasNull = true;
+                break;
+            }
+            Cells.back().push_back(row[index]);
+        }
+    }
+
+    const auto& primaryKey = row.first(PrimaryKeyColumnTypes.size());
+    const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
+
+    if (rowHasNull) {
+        // Can't conflict with other keys
+        if (iterPrimary != PrimaryToSecondary.end()) {
+            const auto& oldSecondaryKey = iterPrimary->second;
+            SecondaryToPrimary.erase(oldSecondaryKey);
+            PrimaryToSecondary.erase(primaryKey);
+        }
+    } else {
+        const auto& secondaryKey = Cells.back();
+        const auto iterSecondary = SecondaryToPrimary.find(secondaryKey);
+
+        if (iterSecondary != SecondaryToPrimary.end()
+                && 0 == CompareTypedCellVectors(
+                            iterSecondary->second.data(),
+                            primaryKey.data(),
+                            PrimaryKeyColumnTypes.data(),
+                            PrimaryKeyColumnTypes.size())) {
+            // Error: duplicate secondary key
+            return false;
+        }
+
+        if (iterPrimary != PrimaryToSecondary.end()) {
+            const auto& oldSecondaryKey = iterPrimary->second;
+            if (0 == CompareTypedCellVectors(
+                    secondaryKey.data(),
+                    oldSecondaryKey.data(),
+                    SecondaryKeyColumnTypes.data(),
+                    SecondaryKeyColumnTypes.size())) {
+                // Nothing changed. Skip this row.
+                return true;
+            }
+            SecondaryToPrimary.erase(oldSecondaryKey);
+        }
+
+        PrimaryToSecondary[primaryKey] = secondaryKey;
+        SecondaryToPrimary[secondaryKey] = primaryKey;
+
+        UniqueCellsSet.insert(secondaryKey);
+    }
+
+    return true;
+}
+
+THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> TUniqueSecondaryKeyCollector::BuildUniqueSecondaryKeys() && {
+    return std::move(UniqueCellsSet);
+}
+
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::vector<ui32> readIndex) {

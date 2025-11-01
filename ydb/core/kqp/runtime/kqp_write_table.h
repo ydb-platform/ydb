@@ -101,6 +101,28 @@ std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
 
+class TUniqueSecondaryKeyCollector {
+public:
+    TUniqueSecondaryKeyCollector(
+        const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
+        const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
+        const TConstArrayRef<ui32> secondaryKeyColumns);
+
+    bool AddRow(const TConstArrayRef<TCell> row);
+
+    THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> BuildUniqueSecondaryKeys() &&;
+
+private:
+    const TConstArrayRef<NScheme::TTypeInfo> PrimaryKeyColumnTypes;
+    const TConstArrayRef<NScheme::TTypeInfo> SecondaryKeyColumnTypes;
+    const TConstArrayRef<ui32> SecondaryKeyColumns;
+
+    std::vector<std::vector<TCell>> Cells;
+    THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> UniqueCellsSet;
+    THashMap<TConstArrayRef<TCell>, TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
+    THashMap<TConstArrayRef<TCell>, TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
+};
+
 class IShardedWriteController : public TThrRefBase {
 public:
     virtual void OnPartitioningChanged(

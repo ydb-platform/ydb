@@ -42,39 +42,6 @@ def iter_report_results(report_path: str) -> Iterator[Dict[str, Any]]:
                 yield result
 
 
-def get_test_results(report_path: str) -> List[Dict[str, Any]]:
-    """
-    Get all test results from a build results report.
-    
-    Args:
-        report_path: Path to report.json file or directory
-        
-    Returns:
-        List of test result dictionaries
-    """
-    return list(iter_report_results(report_path))
-
-
-def is_test_failed(result: Dict[str, Any]) -> bool:
-    """Check if a test result represents a failure."""
-    return result.get('status') == 'FAILED'
-
-
-def is_test_timeout(result: Dict[str, Any]) -> bool:
-    """Check if a test result represents a timeout."""
-    return result.get('error_type') == 'TIMEOUT'
-
-
-def is_test_skipped(result: Dict[str, Any]) -> bool:
-    """Check if a test result was skipped."""
-    return result.get('status') == 'SKIPPED'
-
-
-def is_test_passed(result: Dict[str, Any]) -> bool:
-    """Check if a test passed."""
-    return result.get('status') == 'OK'
-
-
 def get_test_name(result: Dict[str, Any]) -> str:
     """
     Get the full test name from a result.
@@ -90,12 +57,3 @@ def get_test_name(result: Dict[str, Any]) -> str:
         return f"{path}/{name}::{subtest}"
     return f"{path}/{name}"
 
-
-def get_test_duration(result: Dict[str, Any]) -> float:
-    """Get test duration in seconds."""
-    return result.get('duration', 0.0)
-
-
-def get_test_snippet(result: Dict[str, Any]) -> str:
-    """Get test error snippet/message."""
-    return result.get('rich-snippet', result.get('snippet', ''))

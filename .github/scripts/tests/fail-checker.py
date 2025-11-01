@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from typing import List
-from report_utils import iter_report_results, is_test_failed, is_test_timeout, get_test_name
+from report_utils import iter_report_results, get_test_name
 
 
 def check_for_fail(paths: List[str], output_path: str):
@@ -11,8 +11,8 @@ def check_for_fail(paths: List[str], output_path: str):
         for result in iter_report_results(path):
             test_name = get_test_name(result)
             
-            if is_test_failed(result):
-                if is_test_timeout(result):
+            if result.get('status') == 'FAILED':
+                if result.get('error_type') == 'TIMEOUT':
                     error_list.append((test_name, path))
                 else:
                     failed_list.append((test_name, path))

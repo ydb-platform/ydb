@@ -47,14 +47,6 @@ void YqlErrorListener::reportAmbiguity(
     size_t ruleIndex = dfa.atnStartState->ruleIndex;
     std::string_view ruleName = recognizer->getRuleNames()[ruleIndex];
 
-    if ( // FIXME(YQL-20410): It is a known ambiguity, remove it when
-         // an expression (x NOT NULL) is a syntax error.
-        ruleName == "xor_subexpr" ||
-        // Known ambiguity, on ANTLR3 syntactic predicates were used.
-        ruleName == "neq_subexpr") {
-        return;
-    }
-
     TokenStream* tokens = recognizer->getTokenStream();
     Token* start = tokens->get(startIndex);
     Token* stop = tokens->get(stopIndex);

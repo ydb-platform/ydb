@@ -1029,6 +1029,8 @@ TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer);
+void UpdateConfigUpdateTracer(
+    IConfigUpdateTracer& ConfigUpdateTracer);
 
 NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
 
@@ -1603,15 +1605,24 @@ public:
             return;
         }
 
+        const TString& sourceAddress = cfgResult->GetSourceAddress();
         NKikimrConfig::TAppConfig yamlConfig;
         NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
 
         yamlConfig.SetYamlConfigEnabled(true);
-        auto* lbl = yamlConfig.AddLabels();
-        lbl->SetName("config_source");
-        lbl->SetValue("seed_nodes");
+        Labels["config_source"] = "seed_nodes";
+        AddLabelToAppConfig("config_source", Labels["config_source"]);
+        
+        if (sourceAddress) {
+            Labels["config_source_address"] = sourceAddress;
+            AddLabelToAppConfig("config_source_address", Labels["config_source_address"]);
+        }
 
-        ApplyActualDynConfigFromYaml(yamlConfig, Nothing());
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        UpdateConfigUpdateTracer(ConfigUpdateTracer);
+
+        Logger.Out() << "Successfully applied dynamic config from seed nodes" << Endl;
+        ApplyConfigForNode(yamlConfig);
     }
 };
 

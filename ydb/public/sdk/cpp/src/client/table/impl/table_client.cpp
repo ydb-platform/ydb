@@ -78,8 +78,8 @@ NThreading::TFuture<void> TTableClient::TImpl::Stop() {
     return Drain();
 }
 
-void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout) {
-    Connections_->ScheduleOneTimeTask(std::move(fn), timeout);
+void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration delay) {
+    Connections_->ScheduleDelayedTask(std::move(fn), delay);
 }
 
 void TTableClient::TImpl::StartPeriodicSessionPoolTask() {
@@ -286,14 +286,18 @@ void TTableClient::TImpl::StartPeriodicHostScanTask() {
 }
 
 TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSettings& settings) {
-    using namespace NSessionPool;
+    auto rpcSettings = TRpcRequestSettings::Make(settings);
+    rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
 
-    class TTableClientGetSessionCtx : public IGetSessionCtx {
+    class TTableClientGetSessionCtx : public NSessionPool::IGetSessionCtx {
     public:
-        TTableClientGetSessionCtx(std::shared_ptr<TTableClient::TImpl> client, TDuration clientTimeout)
+        TTableClientGetSessionCtx(std::shared_ptr<TTableClient::TImpl> client,
+                                  const TCreateSessionSettings& createSessionSettings,
+                                  const TRpcRequestSettings& rpcSettings)
             : Promise(NewPromise<TCreateSessionResult>())
             , Client(client)
-            , ClientTimeout(clientTimeout)
+            , CreateSessionSettings(createSessionSettings)
+            , RpcSettings(rpcSettings)
         {}
 
         TAsyncCreateSessionResult GetFuture() {
@@ -321,10 +325,21 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
         }
 
         void ReplyNewSession() override {
-            TCreateSessionSettings settings;
-            settings.ClientTimeout(ClientTimeout);
-            const auto& sessionResult = Client->CreateSession(settings, false);
-            sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(Promise, Client, settings, 0, true));
+            const auto& sessionResult = Client->CreateSession(CreateSessionSettings, RpcSettings, false);
+            sessionResult.Subscribe(TSession::TImpl::GetSessionInspector(Promise, Client, CreateSessionSettings, RpcSettings, 0, true));
+        }
+
+        void ScheduleOnDeadlineWaiterCleanup() override {
+            Client->Connections_->ScheduleDelayedTask(
+                [client = Client]() {
+                    client->SessionPool_.ClearOldWaiters();
+                },
+                GetDeadline()
+            );
+        }
+
+        TDeadline GetDeadline() const override {
+            return std::min(RpcSettings.Deadline, TDeadline::AfterDuration(NSessionPool::MAX_WAIT_SESSION_TIMEOUT));
         }
 
     private:
@@ -334,12 +349,14 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
                 promise.SetValue(std::move(val));
             }, TDeadline::Duration::zero());
         }
+
         NThreading::TPromise<TCreateSessionResult> Promise;
         std::shared_ptr<TTableClient::TImpl> Client;
-        const TDuration ClientTimeout;
+        const TCreateSessionSettings CreateSessionSettings;
+        const TRpcRequestSettings RpcSettings;
     };
 
-    auto ctx = std::make_unique<TTableClientGetSessionCtx>(shared_from_this(), settings.ClientTimeout_);
+    auto ctx = std::make_unique<TTableClientGetSessionCtx>(shared_from_this(), settings, rpcSettings);
     auto future = ctx->GetFuture();
     SessionPool_.GetSession(std::move(ctx));
     return future;
@@ -357,15 +374,14 @@ i64 TTableClient::TImpl::GetCurrentPoolSize() const {
     return SessionPool_.GetCurrentPoolSize();
 }
 
-TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessionSettings& settings, bool standalone,
-    std::string preferredLocation)
+TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessionSettings& settings,
+                                                             const TRpcRequestSettings& rpcSettings,
+                                                             bool standalone)
 {
     auto request = MakeOperationRequest<Ydb::Table::CreateSessionRequest>(settings);
 
     auto createSessionPromise = NewPromise<TCreateSessionResult>();
     auto self = shared_from_this();
-    auto rpcSettings = TRpcRequestSettings::Make(settings, TEndpointKey(preferredLocation, 0));
-    rpcSettings.Header.push_back({NYdb::YDB_CLIENT_CAPABILITIES, NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER});
 
     auto createSessionExtractor = [createSessionPromise, self, standalone]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
@@ -394,8 +410,6 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
         rpcSettings);
-
-    std::weak_ptr<TDbDriverState> state = DbDriverState_;
 
     return createSessionPromise.GetFuture();
 }

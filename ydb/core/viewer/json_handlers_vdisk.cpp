@@ -15,7 +15,7 @@ void InitVDiskStatJsonHandler(TJsonHandlers& handlers) {
     });
     yaml.SetParameters(TJsonVDiskStat::GetParameters());
     yaml.SetResponseSchema(TJsonVDiskStat::GetSchema());
-    handlers.AddHandler("/vdisk/vdiskstat", new TJsonHandler<TJsonVDiskStat>(yaml));
+    handlers.AddHandler("/vdisk/vdiskstat", new TJsonHandler<TJsonVDiskStat>(yaml), 2);
 }
 
 void InitVDiskGetBlobJsonHandler(TJsonHandlers& handlers) {
@@ -27,7 +27,7 @@ void InitVDiskGetBlobJsonHandler(TJsonHandlers& handlers) {
     });
     yaml.SetParameters(TJsonGetBlob::GetParameters());
     yaml.SetResponseSchema(TJsonGetBlob::GetSchema());
-    handlers.AddHandler("/vdisk/getblob", new TJsonHandler<TJsonGetBlob>(yaml));
+    handlers.AddHandler("/vdisk/getblob", new TJsonHandler<TJsonGetBlob>(yaml), 2);
 }
 
 void InitVDiskBlobIndexStatJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -39,7 +39,7 @@ void InitVDiskBlobIndexStatJsonHandler(TJsonHandlers& jsonHandlers) {
     });
     yaml.SetParameters(TJsonBlobIndexStat::GetParameters());
     yaml.SetResponseSchema(TJsonBlobIndexStat::GetSchema());
-    jsonHandlers.AddHandler("/vdisk/blobindexstat", new TJsonHandler<TJsonBlobIndexStat>(yaml));
+    jsonHandlers.AddHandler("/vdisk/blobindexstat", new TJsonHandler<TJsonBlobIndexStat>(yaml), 2);
 }
 
 void InitVDiskEvictJsonHandler(TJsonHandlers& handlers) {

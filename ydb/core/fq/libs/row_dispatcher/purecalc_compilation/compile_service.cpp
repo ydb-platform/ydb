@@ -42,7 +42,7 @@ public:
         , Request(std::move(request))
     {}
 
-    [[maybe_unused]] static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_ACTOR";
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_ACTOR";
 
     void Bootstrap() {
         Y_DEFER {
@@ -117,7 +117,7 @@ public:
         , Counters(counters)
     {}
 
-    [[maybe_unused]] static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_SERVICE";
+    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_COMPILE_SERVICE";
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);

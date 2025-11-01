@@ -236,6 +236,7 @@ message TClickHouseClusterConfig {
     optional string Id = 13;
     repeated string GroupAllowed = 14;
     optional bool ForceUseBalancer = 15 [default = false];
+    optional bool JsonFormatHeader = 16 [default = false];
 }
 
 message TClickHouseGatewayConfig {

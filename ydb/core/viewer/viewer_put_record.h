@@ -38,7 +38,6 @@ private:
     std::optional<i64> Partition;
     TString Message;
     TString Key;
-    ui32 Cookie = 1;
     TVector<TMetadataItem> Metadata;
     ui64 TabletId;
     TActorId WriteActorId;
@@ -86,7 +85,7 @@ public:
             }
         }
 
-        SchemeCacheResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::EAccessRights::UpdateRow, Cookie);
+        SchemeCacheResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::EAccessRights::UpdateRow);
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
@@ -96,7 +95,6 @@ public:
         auto* partitionRequest = request.MutablePartitionRequest();
         partitionRequest->SetTopic(TopicPath);
         partitionRequest->SetPartition(*Partition);
-        partitionRequest->SetCookie(Cookie);
         partitionRequest->SetIsDirectWrite(true);
 
         NKikimrPQClient::TDataChunk proto;
@@ -138,12 +136,14 @@ public:
             return;
         }
         if (SchemeCacheResponse->IsError()) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + SchemeCacheResponse->GetError()));
+            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + SchemeCacheResponse->GetError()));
+            return RequestDone();
         }
         auto navigate = *SchemeCacheResponse->Get()->Request;
         auto& info = navigate.ResultSet.front();
         if (info.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
+            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
+            return RequestDone();
         }
 
         const auto& pqDescription = info.PQGroupInfo->Description;
@@ -169,7 +169,8 @@ public:
             }
         }
         if (!partitionFound) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "Partition not found."));
+            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "Partition not found."));
+            return RequestDone();
         }
         NPQ::TPartitionWriterOpts opts;
         opts.WithDeduplication(false)
@@ -180,7 +181,7 @@ public:
 
         auto writeEvent = FormWriteRequest();
         WriteResponse = MakeRequest<NPQ::TEvPartitionWriter::TEvWriteResponse>(WriteActorId, writeEvent.Release());
-        RequestDone();
+        return RequestDone();
     }
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr) {
@@ -192,29 +193,22 @@ public:
             return;
         }
         if (WriteResponse->IsError()) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "Write request finished with error: " + WriteResponse->GetError()));
+            ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Write request finished with error: " + WriteResponse->GetError()));
+            return RequestDone();
         }
         auto r = WriteResponse->Get();
-        const auto& resp = r->Record.GetPartitionResponse();
-        auto cookie = resp.GetCookie();
-        if (cookie != Cookie) {
-            return ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
-        }
         if (r->IsSuccess()) {
-            RequestDone();
+            return RequestDone();
         } else {
             auto error = r->GetError();
             TString reason = r->GetError().Reason;
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", reason));
+            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", reason));
+            return RequestDone();
         }
     }
 
-    void HandleAccepting(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr request) {
-        auto r = request->Get();
-        auto cookie = r->Cookie;
-        if (cookie != Cookie) {
-            return ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteAccepted Handler."));
-        }
+    void HandleAccepting(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr) {
+        return;
     }
 
     void HandleDisconnected(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr, const TActorContext&) {

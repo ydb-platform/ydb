@@ -84,7 +84,7 @@ void TConsumerActor::Bootstrap() {
     auto* readWAL = request->Record.AddCmdReadRange();
     readWAL->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
     readWAL->MutableRange()->SetIncludeFrom(true);
-    readWAL->MutableRange()->SetTo(MinWALKey(PartitionId, Config.GetName()));
+    readWAL->MutableRange()->SetTo(MaxWALKey(PartitionId, Config.GetName()));
     readWAL->MutableRange()->SetIncludeTo(true);
     readWAL->SetIncludeData(true);
 
@@ -456,11 +456,11 @@ void TConsumerActor::Persist() {
         auto* del = request->Record.AddCmdDeleteRange();
         del->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
         del->MutableRange()->SetIncludeFrom(true);
-        del->MutableRange()->SetTo(MinWALKey(PartitionId, Config.GetName()));
+        del->MutableRange()->SetTo(MaxWALKey(PartitionId, Config.GetName()));
         del->MutableRange()->SetIncludeTo(true);
 
         NextWALIndex = 0;
-        LOG_E("Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size());
+        LOG_D("Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size());
     } else {
         NKikimrPQ::TMLPStorageWAL wal;
         batch.SerializeTo(wal);
@@ -471,7 +471,7 @@ void TConsumerActor::Persist() {
         if (write->GetValue().size() < 1000) {
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }
-        LOG_E("WAL Count: " << batch.AffectedMessageCount() << " Size: " << write->GetValue().size());
+        LOG_D("WAL Count: " << batch.AffectedMessageCount() << " Size: " << write->GetValue().size());
     }
 
     Send(TabletActorId, std::move(request));

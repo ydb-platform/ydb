@@ -80,13 +80,13 @@ struct TItemSerializer {
 
 template<typename TMsg>
 struct TItemDeserializer {
-    bool Deserilize(const char*& data, const char* end, TMsg& msg) {
+    bool Deserialize(const char*& data, const char* end, TMsg& msg) {
         if (data + sizeof(TMsg) > end) {
             return false;
         }
 
         memcpy(&msg, data, sizeof(TMsg));  // TODO BIGENDIAN/LOWENDIAN
-        data += sizeof(TStorage::TMessage);
+        data += sizeof(TMsg);
 
         return true;
     }
@@ -107,13 +107,13 @@ template<>
 struct TItemDeserializer<TSnapshotMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
-    bool Deserilize(const char*& data, const char* end, TSnapshotMessage& msg) {
-        if (data + sizeof(TAddedMessage) > end) {
+    bool Deserialize(const char*& data, const char* end, TSnapshotMessage& msg) {
+        if (data + sizeof(msg.Common.Value) + 1 > end) {
             return false;
         }
 
         memcpy(&msg.Common.Value, data, sizeof(msg.Common.Value));  // TODO BIGENDIAN/LOWENDIAN
-        data += sizeof(TStorage::TMessage);
+        data += sizeof(msg.Common.Value);
 
         ui64 delta;
         VarintDeserialize(data, delta);
@@ -139,13 +139,13 @@ template<>
 struct TItemDeserializer<TAddedMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
-    bool Deserilize(const char*& data, const char* end, TAddedMessage& msg) {
+    bool Deserialize(const char*& data, const char* end, TAddedMessage& msg) {
         if (data + sizeof(TAddedMessage) > end) {
             return false;
         }
 
         memcpy(&msg.MessageGroup.Value, data, sizeof(msg.MessageGroup.Value));  // TODO BIGENDIAN/LOWENDIAN
-        data += sizeof(TStorage::TMessage);
+        data += sizeof(msg.MessageGroup.Value);
 
         ui64 delta;
         VarintDeserialize(data, delta);
@@ -163,7 +163,7 @@ struct TSerializer {
     TItemSerializer<TMsg> ItemSerializer;
 
     void Reserve(size_t size) {
-        Buffer.reserve(size * sizeof(TStorage::TMessage));
+        Buffer.reserve(size * sizeof(TMsg));
     }
 
     void Add(const TMsg& message) {
@@ -184,7 +184,7 @@ struct TDeserializer {
     }
 
     bool Next(TMsg& message) {
-        return ItemDeserializer.Deserilize(Data, End, message);
+        return ItemDeserializer.Deserialize(Data, End, message);
     }
 };
 
@@ -224,7 +224,7 @@ struct TDeserializerWithOffset {
         LastOffset += delta;
         offset = LastOffset;
 
-        return ItemDeserializer.Deserilize(Data, End, message);
+        return ItemDeserializer.Deserialize(Data, End, message);
     }
 };
 

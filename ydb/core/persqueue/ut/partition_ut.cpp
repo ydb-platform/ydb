@@ -3205,6 +3205,10 @@ Y_UNIT_TEST_F(ConflictingSrcIdTxAndWritesDifferentBatches, TPartitionTxTestHelpe
     DBGTRACE_LOG("");
     SendKvResponse();
     DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx3);
     //DBGTRACE_LOG("");
     //WaitBatchCompletion(3);

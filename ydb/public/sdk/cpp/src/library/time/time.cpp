@@ -52,16 +52,15 @@ TDeadline TDeadline::operator-(const Duration& duration) const noexcept {
 
 TDeadline::TimePoint TDeadline::SafeSum(TDeadline::TimePoint timePoint, TDeadline::Duration duration) noexcept {
     if (duration > TDeadline::Duration::zero()) {
-        if (duration > TDeadline::TimePoint::max() - timePoint) {
+        if (timePoint > TDeadline::TimePoint::max() - duration) {
             return TDeadline::TimePoint::max();
         }
-        return timePoint + duration;
     } else {
-        if (-duration > timePoint - TDeadline::TimePoint::min()) {
+        if (TDeadline::TimePoint::min() - duration > timePoint) {
             return TDeadline::TimePoint::min();
         }
-        return timePoint - duration;
     }
+    return timePoint + duration;
 }
 
 } // namespace NYdb

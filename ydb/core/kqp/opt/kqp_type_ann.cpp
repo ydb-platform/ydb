@@ -1800,8 +1800,8 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Return type: List<String>
-    auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    // Return type: List<String or Utf8>
+    auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
     auto listType = ctx.MakeType<TListExprType>(stringType);
     node->SetTypeAnn(listType);
     
@@ -2225,6 +2225,17 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
+TStatus AnnotatePgExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto expr = node->Child(TKqpPgExprSublink::idx_Expr);
+    auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto valueType = itemType->GetItems()[0]->GetItemType();
+    if (!valueType->IsOptionalOrNull()) {
+        valueType = ctx.MakeType<TOptionalExprType>(valueType);
+    }
+    node->SetTypeAnn(valueType);
     return TStatus::Ok;
 }
 
@@ -2674,6 +2685,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpTableSinkSettings::Match(input.Get())) {
                 return AnnotateTableSinkSettings(input, ctx);
+            }
+
+            if (TKqpPgExprSublink::Match(input.Get())) {
+                return AnnotatePgExprSublink(input, ctx);
             }
 
             if (TKqpOpRead::Match(input.Get())) {

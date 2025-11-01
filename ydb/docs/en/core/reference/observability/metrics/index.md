@@ -170,6 +170,7 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `topic.write.message_size_bytes`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in bytes. It shows the number of messages which size falls within the boundaries of the interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the write time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 
+
 ## Aggregated metrics of topic partitions {#topics_partitions}
 
 The following table shows aggregated partition metrics for the topic. The maximum and minimum values ​​are calculated for all partitions of a given topic.
@@ -207,3 +208,4 @@ The following table shows aggregated partition metrics for the topic. The maximu
 | `kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, pieces | The current number of concurrent requests. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |
 | `kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, pieces | The size of the queue of requests waiting to be executed |
 | `kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, pieces | The number of requests waiting in the execution queue. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |
+

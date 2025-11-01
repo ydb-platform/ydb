@@ -515,6 +515,7 @@ private:
                                     .Columns<TCoVoid>().Build()
                                     .Ranges<TCoVoid>().Build()
                                     .Stat<TCoVoid>().Build()
+                                    .QLFilter<TCoVoid>().Build()
                                 .Build()
                             .Build()
                             .Settings<TCoNameValueTupleList>()
@@ -1364,6 +1365,7 @@ private:
                                     .Columns<TCoVoid>().Build()
                                     .Ranges<TCoVoid>().Build()
                                     .Stat<TCoVoid>().Build()
+                                    .QLFilter<TCoVoid>().Build()
                                 .Done()
                             );
                             prevPaths.erase(prevPaths.begin(), prevPaths.begin() + count);
@@ -1970,6 +1972,7 @@ private:
                                                         .Columns<TCoVoid>().Build()
                                                         .Ranges<TCoVoid>().Build()
                                                         .Stat<TCoVoid>().Build()
+                                                        .QLFilter<TCoVoid>().Build()
                                                     .Build()
                                                 .Build()
                                                 .Settings().Build()

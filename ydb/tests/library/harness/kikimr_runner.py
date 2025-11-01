@@ -385,9 +385,23 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
-    def _get_token(self):
-        result = self.__call_ydb_cli(['--user', 'root', '--no-password', 'auth', 'get-token', '--force'], use_certs=True, use_database=True)
-        return result.std_out.decode('utf-8').strip()
+    def _get_token(self, timeout=30, interval=2):
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout:
+            try:
+                result = self.__call_ydb_cli(['--user', 'root', '--no-password', 'auth', 'get-token', '--force'], use_database=True)
+                token = result.std_out.decode('utf-8').strip()
+                if token:
+                    logger.info("Successfully got token")
+                    return token
+                else:
+                    raise Exception("Got empty token")
+
+            except Exception as e:
+                last_exception = e
+                time.sleep(interval)
+        raise last_exception
 
     def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
         if self.__configurator.protected_mode:
@@ -401,10 +415,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             full_command += ["--server", server]
             if self.__configurator.protected_mode:
                 full_command += ['--ca-file', self.__configurator.grpc_tls_ca_path]
+        if self.root_token is not None:
+            token_file = tempfile.NamedTemporaryFile(dir=self.__configurator.working_dir, delete=False)
+            token_file.write(self.root_token.encode('utf-8'))
+            token_file.close()
+            full_command += ["--token-file", token_file.name]
         full_command += cmd
 
         env = None
-        token = token or self.root_token or self.__configurator.default_clusteradmin
+        token = token or self.__configurator.default_clusteradmin
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token
@@ -427,7 +446,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True, use_certs=False, use_database=False):
+    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True, use_database=False):
         if self.__configurator.protected_mode:
             endpoint = 'grpcs://{server}:{port}'.format(server=self.server, port=self.nodes[1].grpc_ssl_port)
         else:
@@ -437,15 +456,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         if use_database:
             full_command += ['--database', '/{}'.format(self.domain_name)]
-        if use_certs:
+        if self.__configurator.protected_mode:
             full_command += ['--ca-file', self.__configurator.grpc_tls_ca_path]
-            full_command += ['--client-cert-file', self.__configurator.grpc_tls_cert_path]
-            full_command += ['--client-cert-key-file', self.__configurator.grpc_tls_key_path]
 
         full_command += ['-y'] + cmd
 
         env = None
-        token = token or self.root_token or self.__configurator.default_clusteradmin
+        token = token or self.__configurator.default_clusteradmin
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token

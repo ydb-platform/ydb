@@ -42,7 +42,7 @@ private:
     YDB_ACCESSOR(bool, UseLocalMetadataService, false);
     YDB_ACCESSOR_DEF(TString, IamEndpoint);
     YDB_ACCESSOR(ui64, MaxActiveQuerySessions, 50); // 50 - default in TSessionPoolSettings
-    YDB_ACCESSOR_DEF(TDuration, ClientTimeout);
+    YDB_ACCESSOR(TDuration, ClientTimeout, TDuration::Max());
     YDB_ACCESSOR_DEF(TDuration, OperationTimeout);
     YDB_ACCESSOR_DEF(TDuration, CancelAfter);
 };

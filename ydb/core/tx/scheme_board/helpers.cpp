@@ -72,7 +72,7 @@ TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult &record) {
 
     const auto& domainKey = pathDescription.GetDomainDescription().GetDomainKey();
 
-    return TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId());
+    return TDomainId::FromDomainKey(domainKey);
 }
 
 TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record) {

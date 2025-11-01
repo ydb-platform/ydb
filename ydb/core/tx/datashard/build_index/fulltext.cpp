@@ -92,7 +92,7 @@ public:
             };
             {
                 Ydb::Type type;
-                type.set_type_id(TokenType);
+                NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
             }
             for (const auto& column : table.KeyColumnIds) {

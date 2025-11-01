@@ -44,6 +44,7 @@ extern const std::string TabletBalancerUserName;
 extern const std::string PermissionCacheUserName;
 extern const std::string ReplicatedTableTrackerUserName;
 extern const std::string ChunkReplicaCacheUserName;
+extern const std::string SignatureKeysmithUserName;
 
 extern const std::string EveryoneGroupName;
 extern const std::string UsersGroupName;

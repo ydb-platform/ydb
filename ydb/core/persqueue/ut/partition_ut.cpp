@@ -3795,6 +3795,10 @@ Y_UNIT_TEST_F(ConflictingCommitProccesAfterRollback, TPartitionTxTestHelper) {
     DBGTRACE_LOG("");
     SendKvResponse();
     DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx2);
     DBGTRACE_LOG("");
     ExpectNoCommitDone();

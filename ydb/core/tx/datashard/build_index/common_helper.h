@@ -212,7 +212,9 @@ private:
             Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/,
-            true /*writeToIndexImplTable*/);
+            true /*writeToIndexImplTable*/,
+            0 /*cookie*/,
+            TBackoff(ScanSettings.GetMaxBatchRetries(), TDuration::MilliSeconds(500), TDuration::Seconds(5)));
 
         UploaderId = TlsActivationContext->Register(actor);
     }

@@ -128,11 +128,11 @@ runs:
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
-        echo "LAST_JUNIT_REPORT_XML=$PUBLIC_DIR/last_junit.xml" >> $GITHUB_ENV
+        echo "LAST_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
 
     - name: Setup cache
       shell: bash
@@ -352,7 +352,6 @@ runs:
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
-          CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           monitor_memory() {
@@ -372,7 +371,7 @@ runs:
           ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+            --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
 
@@ -394,7 +393,7 @@ runs:
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --junit $CURRENT_JUNIT_XML_PATH --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          ./ydb/ci/build_bloat/test_bloat.py --report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
 
           if [ $RC -ne 0 ]; then
@@ -411,29 +410,11 @@ runs:
             break
           fi
 
-          # fix junit files (add links, logs etc)
-          # archive unitest reports (orig)
-          gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
-
-          # postprocess junit user_attributesreport
-          .github/scripts/tests/apply_user_properties_to_junit.py \
-          --test_dir="$TEST_META_INFO" \
-          --in_file="$CURRENT_JUNIT_XML_PATH" \
-          --out_file="$CURRENT_JUNIT_XML_PATH" || true
-
-          # postprocess junit report
-          .github/scripts/tests/transform_ya_junit.py -i \
-            -m .github/config/muted_ya.txt \
-            --ya_out "$YA_MAKE_OUT_DIR" \
-            --public_dir "$PUBLIC_DIR" \
-            --public_dir_url "$PUBLIC_DIR_URL" \
-            --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" \
-            "$CURRENT_JUNIT_XML_PATH"
-          cp $CURRENT_JUNIT_XML_PATH $LAST_JUNIT_REPORT_XML
+          # Store current report as last report
+          cp $CURRENT_REPORT $LAST_REPORT
 
           TESTS_RESULT=0
-          .github/scripts/tests/fail-checker.py "$CURRENT_JUNIT_XML_PATH" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+          .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
 
           IS_LAST_RETRY=0
@@ -472,7 +453,7 @@ runs:
               --comment_text_file summary_text.txt \
               $PR_ARG \
               --workflow_run_id "${{ github.run_id }}" \
-              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_JUNIT_XML_PATH"
+              "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
           fi
 
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
@@ -483,8 +464,10 @@ runs:
 
           # upload tests results to YDB
           # TODO: remove/rename TESTMO_RUN_NAME variable
+          # TODO: Update upload_tests_results.py to use report.json
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          # Temporarily disabled until upload_tests_results.py is updated to use report.json
+          # result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -541,7 +524,7 @@ runs:
       shell: bash
       run: |
         if [ $IS_TEST_RESULT_IGNORED == 0 ]; then
-          .github/scripts/tests/fail-checker.py "$LAST_JUNIT_REPORT_XML"
+          .github/scripts/tests/fail-checker.py "$LAST_REPORT"
         fi
 
     - name: show diff mute_ya.txt

@@ -5,9 +5,10 @@ val projectCodegenDir = "$projectBuildDir/{{ CODEGENS_DIRNAME }}"
 layout.buildDirectory = file(projectBuildDir)
 
 {%- if proto_template %}
-
-val mainProtosDir = layout.buildDirectory.dir("main_protos")
+{%      if prepareProtosTask %}
+val mainProtosDir = layout.buildDirectory.dir("gradle.protos/main")
+{%-     endif %}
 {%-     if extractLibrariesProtosTask %}
-val mainExtractedIncludeProtosDir = layout.buildDirectory.dir("extracted-include-protos/main")
+val mainIncludeProtosDir = layout.buildDirectory.dir("gradle.protos/include")
 {%-     endif %}
 {%- endif %}

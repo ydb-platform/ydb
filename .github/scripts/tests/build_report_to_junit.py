@@ -112,7 +112,7 @@ def convert_report_to_junit(report_path, junit_path):
                     # Use the first link if multiple are present
                     link_path = link_paths[0] if isinstance(link_paths, list) else link_paths
                     prop = ET.SubElement(props, 'property', {
-                        'name': f'link:{link_name}',
+                        'name': f'url:{link_name}',
                         'value': link_path
                     })
             

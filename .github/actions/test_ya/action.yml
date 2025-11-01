@@ -294,6 +294,7 @@ runs:
           ".github/scripts/get_build_diff.py"
           ".github/scripts/get_current_build_size.py"
           ".github/scripts/get_main_build_size.py"
+          ".github/scripts/check_ydb_qa_config.py"
         )
         
         # Ensure main is available (may be missing in shallow clone)
@@ -310,6 +311,9 @@ runs:
             chmod +x "$script" && echo "✅ $script (PR version)"
           fi
         done
+        
+        # Check YDB configuration (after checkout from main)
+        python3 .github/scripts/check_ydb_qa_config.py || true
 
         if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
           params+=(--bazel-remote-store)

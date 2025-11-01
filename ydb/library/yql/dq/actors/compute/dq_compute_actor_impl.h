@@ -855,7 +855,7 @@ protected:
         IDqInputChannel::TPtr Channel;
         bool HasPeer = false;
         const NDqProto::EWatermarksMode WatermarksMode;
-        const TDuration WatermarksIdleDelay = TDuration::Max();
+        const TDuration WatermarksIdleTimeout = TDuration::Max();
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
         i64 FreeSpace = 0;
@@ -866,12 +866,12 @@ protected:
                 ui32 srcStageId,
                 NDqProto::EWatermarksMode watermarksMode,
                 NDqProto::ECheckpointingMode checkpointingMode,
-                TDuration watermarksIdleDelay)
+                TDuration watermarksIdleTimeout)
             : LogPrefix(logPrefix)
             , ChannelId(channelId)
             , SrcStageId(srcStageId)
             , WatermarksMode(watermarksMode)
-            , WatermarksIdleDelay(watermarksIdleDelay)
+            , WatermarksIdleTimeout(watermarksIdleTimeout)
             , CheckpointingMode(checkpointingMode)
         {
         }
@@ -1663,12 +1663,12 @@ protected:
             } else {
                 for (auto& channel : inputDesc.GetChannels()) {
                     auto channelWatermarksMode = channel.GetWatermarksMode();
-                    TDuration watermarksIdleDelay = TDuration::Max();
+                    TDuration watermarksIdleTimeout = TDuration::Max();
                     if (channelWatermarksMode != NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED) {
                         watermarksMode = channelWatermarksMode;
                     }
-                    if (channel.HasWatermarksIdleDelayUs()) {
-                        watermarksIdleDelay = TDuration::MicroSeconds(channel.GetWatermarksIdleDelayUs());
+                    if (channel.HasWatermarksIdleTimeoutUs()) {
+                        watermarksIdleTimeout = TDuration::MicroSeconds(channel.GetWatermarksIdleTimeoutUs());
                     }
                     auto result = InputChannelsMap.emplace(
                         channel.GetId(),
@@ -1678,7 +1678,7 @@ protected:
                             channel.GetSrcStageId(),
                             channelWatermarksMode,
                             channel.GetCheckpointingMode(),
-                            watermarksIdleDelay)
+                            watermarksIdleTimeout)
                     );
                     YQL_ENSURE(result.second);
                 }
@@ -1736,13 +1736,13 @@ private:
         TInstant now = TInstant::Now();
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterAsyncInput(id, source.WatermarksIdleDelay, now);
+                WatermarksTracker.RegisterAsyncInput(id, source.WatermarksIdleTimeout, now);
             }
         }
 
         for (const auto& [id, channel] : InputChannelsMap) {
             if (channel.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterInputChannel(id, channel.WatermarksIdleDelay, now);
+                WatermarksTracker.RegisterInputChannel(id, channel.WatermarksIdleTimeout, now);
             }
         }
     }

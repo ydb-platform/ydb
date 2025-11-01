@@ -824,13 +824,13 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-    auto idleDelayUs = // TODO remove fallback
-        SourceParams.GetWatermarks().HasIdleDelayUs() ?
-        SourceParams.GetWatermarks().GetIdleDelayUs() :
+    auto idleTimeoutUs = // TODO remove fallback
+        SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
+        SourceParams.GetWatermarks().GetIdleTimeoutUs() :
         lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleDelayUs));
+            TDuration::MicroSeconds(idleTimeoutUs));
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {

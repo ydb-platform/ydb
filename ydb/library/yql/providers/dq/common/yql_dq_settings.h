@@ -50,7 +50,7 @@ struct TDqSettings {
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
         static constexpr bool EnableDqReplicate = false;
-        static constexpr ui64 WatermarksIdleDelayMs = 5000;
+        static constexpr ui64 WatermarksIdleTimeoutMs = 5000;
         static constexpr ui64 WatermarksGranularityMs = 1000;
         static constexpr ui64 WatermarksLateArrivalDelayMs = 5000;
         static constexpr ui64 ParallelOperationsLimit = 16;
@@ -124,7 +124,7 @@ public:
     NCommon::TConfSetting<TString, Static> WatermarksMode;
     NCommon::TConfSetting<bool, Static> WatermarksEnableIdlePartitions;
 
-    NCommon::TConfSetting<ui64, Static> WatermarksIdleDelayMs;
+    NCommon::TConfSetting<ui64, Static> WatermarksIdleTimeoutMs;
     NCommon::TConfSetting<ui64, Static> WatermarksGranularityMs;
     NCommon::TConfSetting<ui64, Static> WatermarksLateArrivalDelayMs;
     NCommon::TConfSetting<bool, Static> UseAggPhases;

@@ -136,7 +136,7 @@ class TestWatermarks(TestYdsBase):
             PRAGMA dq.WatermarksMode="default";
             PRAGMA dq.WatermarksGranularityMs="500";
             PRAGMA dq.WatermarksLateArrivalDelayMs="100";
-            PRAGMA dq.WatermarksIdleDelayMs="200";
+            PRAGMA dq.WatermarksIdleTimeoutMs="200";
             PRAGMA dq.WatermarksEnableIdlePartitions="true";
 
             $input =

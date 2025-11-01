@@ -16,12 +16,12 @@ public:
         TDuration granularity,
         bool idlePartitionsEnabled,
         TDuration lateArrivalDelay,
-        TDuration idleDelay,
+        TDuration idleTimeout,
         const TString& logPrefix)
         : Granularity_(granularity)
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
-        , IdleDelay_(idleDelay)
+        , IdleTimeout_(idleTimeout)
         , Impl_(logPrefix)
     {}
 
@@ -35,7 +35,7 @@ public:
     }
 
     bool RegisterPartition(const TPartitionKey& partitionKey, TInstant systemTime) {
-        return Impl_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleDelay_ : TDuration::Max());
+        return Impl_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleTimeout_ : TDuration::Max());
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
@@ -72,7 +72,7 @@ private:
     const TDuration Granularity_;
     const bool IdlePartitionsEnabled_;
     const TDuration LateArrivalDelay_;
-    const TDuration IdleDelay_;
+    const TDuration IdleTimeout_;
 
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };

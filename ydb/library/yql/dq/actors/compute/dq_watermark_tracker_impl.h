@@ -35,8 +35,8 @@ public:
 
         auto& data = it->second;
 
-        if (data.IdleDelay != TDuration::Max() && systemTime + data.IdleDelay > data.ExpiresAt) {
-            auto expiresAt = systemTime + data.IdleDelay;
+        if (data.IdleTimeout != TDuration::Max() && systemTime + data.IdleTimeout > data.ExpiresAt) {
+            auto expiresAt = systemTime + data.IdleTimeout;
             auto rec = ExpiresQueue_.extract(TExpiresQueueItem { data.ExpiresAt, it });
             if (rec.empty()) {
                 WATERMARK_LOG_T("Idle time for " << it->first << " expires at " << expiresAt);
@@ -64,7 +64,7 @@ public:
                 Y_DEBUG_ABORT_UNLESS(inserted);
             }
             data.Watermark = watermark;
-        } else if (data.IdleDelay != TDuration::Max()) {
+        } else if (data.IdleTimeout != TDuration::Max()) {
             auto [_, inserted] = WatermarksQueue_.emplace(data.Watermark, it);
             if (inserted) {
                 //updated = true;
@@ -76,16 +76,16 @@ public:
         return { updated ? RecalcWatermark() : Nothing(), updated } ;
     }
 
-    bool RegisterInput(const TInputKey& inputKey, TInstant systemTime, TDuration idleDelay) {
+    bool RegisterInput(const TInputKey& inputKey, TInstant systemTime, TDuration idleTimeout) {
         auto [it, inserted] = Data_.try_emplace(inputKey);
         if (!inserted) {
             return false;
         }
         auto& data = it->second;
         // data.Watermark = Nothing()
-        data.IdleDelay = idleDelay;
-        if (idleDelay != TDuration::Max()) {
-            data.ExpiresAt = systemTime + idleDelay;
+        data.IdleTimeout = idleTimeout;
+        if (idleTimeout != TDuration::Max()) {
+            data.ExpiresAt = systemTime + idleTimeout;
             auto [_, inserted] = ExpiresQueue_.emplace(data.ExpiresAt, it);
             Y_DEBUG_ABORT_UNLESS(inserted);
         }
@@ -104,7 +104,7 @@ public:
         auto& data = it->second;
         WatermarksQueue_.erase(TWatermarksQueueItem { data.Watermark, it });
         // note: erases nothing if input was idle
-        if (data.IdleDelay != TDuration::Max()) {
+        if (data.IdleTimeout != TDuration::Max()) {
             ExpiresQueue_.erase(TExpiresQueueItem { data.ExpiresAt, it });
             // note: erases nothing if input was idle
         }
@@ -119,7 +119,7 @@ public:
 
         for (auto it = ExpiresQueue_.begin(); it != ExpiresQueue_.end() && it->Time <= systemTime; ) {
            auto& [key, data] = *it->Iterator;
-           Y_DEBUG_ABORT_UNLESS (data.IdleDelay != TDuration::Max());
+           Y_DEBUG_ABORT_UNLESS (data.IdleTimeout != TDuration::Max());
            WATERMARK_LOG_T("Mark " << key << " idle: " << it->Time <<  " >= " << systemTime);
            auto removed = WatermarksQueue_.erase(TWatermarksQueueItem { data.Watermark, it->Iterator } );
            Y_DEBUG_ABORT_UNLESS(removed); // any partition in ExpiresQueue_ must have matching record in WatermarksQueue_
@@ -190,7 +190,7 @@ private:
     }
 
     struct TInputState {
-        TDuration IdleDelay = TDuration::Max(); // expiration delay or ::Max() if disabled
+        TDuration IdleTimeout = TDuration::Max(); // expiration delay or ::Max() if disabled
         TInstant ExpiresAt; // input will be marked idle and ignored at this time
         TMaybe<TInstant> Watermark;
     };
@@ -221,9 +221,9 @@ private:
     // tracked for idle-aware partitions
     // item->Iterator is a valid iterator into Data_
     // item->Iterator->ExpiresAt == item->Time
-    // item->Iterator->IdleDelay != TDuration::Max()
+    // item->Iterator->IdleTimeout != TDuration::Max()
     TSet<TWatermarksQueueItem> WatermarksQueue_;
-    // either item->Iterator->IdleDelay == TDuration::Max(), or matching item must be present in ExpiresQueue_
+    // either item->Iterator->IdleTimeout == TDuration::Max(), or matching item must be present in ExpiresQueue_
     // item->Iterator is a valid iterator into Data_
     // item->Iterator->Watermark == item->Time
     // TODO: replace both TSet with custom binary heap

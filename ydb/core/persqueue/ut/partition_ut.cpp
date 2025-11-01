@@ -3014,6 +3014,10 @@ Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionTxTestHelper) {
     DBGTRACE_LOG("");
     WaitCommitDone(tx1);
     DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx3);
     DBGTRACE_LOG("");
     WaitTxPredicateReply(tx5);

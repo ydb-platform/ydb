@@ -58,6 +58,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
 {
+    HandleInternalSettings(options.InternalSettings);
+
     // Prepare input struct types and extract all column names from inputs
     auto typeCtx = PrepareTypeContext(options.ModuleResolver);
 
@@ -133,6 +135,21 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         if (!OutputType_) {
             ythrow TCompileError("", GetIssues().ToString()) << "cannot deduce output schema";
         }
+    }
+}
+
+template <typename TBase>
+void TWorkerFactory<TBase>::HandleInternalSettings(const TInternalProgramSettings& settings) {
+    if (settings.NodesAllocationLimit) {
+        ExprContext_.NodesAllocationLimit = *settings.NodesAllocationLimit;
+    }
+
+    if (settings.StringsAllocationLimit) {
+        ExprContext_.StringsAllocationLimit = *settings.StringsAllocationLimit;
+    }
+
+    if (settings.RepeatTransformLimit) {
+        ExprContext_.RepeatTransformLimit = *settings.RepeatTransformLimit;
     }
 }
 

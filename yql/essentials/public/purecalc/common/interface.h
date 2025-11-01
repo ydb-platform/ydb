@@ -232,6 +232,18 @@ public:
 };
 
 /**
+ * Rarely used options for program factory.
+ */
+struct TInternalProgramSettings {
+    /// Nodes allocation limit
+    TMaybe<ui64> NodesAllocationLimit;
+    /// String allocation limit
+    TMaybe<ui64> StringsAllocationLimit;
+    /// Repeat transform limit
+    TMaybe<ui64> RepeatTransformLimit;
+};
+
+/**
  * General options for program factory.
  */
 struct TProgramFactoryOptions final {
@@ -273,6 +285,9 @@ public:
 
     /// Language version
     TLangVersion LangVer;
+
+    /// Tweaks
+    TInternalProgramSettings InternalSettings;
 
 public:
     TProgramFactoryOptions();

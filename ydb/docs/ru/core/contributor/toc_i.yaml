@@ -25,6 +25,8 @@ items:
     items:
      - name: Запуск таблеток
        href: hive-booting.md
+     - name: Управление группами хранения
+       href: hive-storage.md
   - name: DataShard
     items:
     - name: Локи и видимость изменений в транзакциях

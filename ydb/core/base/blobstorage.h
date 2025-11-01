@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_category.h"
+#include "boot_type.h"
 #include "events.h"
 #include "tablet_types.h"
 #include "logoblob.h"

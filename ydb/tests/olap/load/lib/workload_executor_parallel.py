@@ -17,6 +17,8 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 from ydb.tests.olap.load.lib.workload_executor import WorkloadTestBase
 
+from ydb.tests.stability.lib import deploy
+
 
 class ParallelWorkloadTestBase(LoadSuiteBase):
     """
@@ -239,11 +241,11 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 # workload
                 if nemesis:
                     # Устанавливаем флаг сразу при запуске nemesis потока
-                    self.__class__.base_executor._nemesis_started = True
+                    deploy._nemesis_started = True
                     logging.info("Nemesis flag set to True - will start in 15 seconds")
 
                     nemesis_thread = threading.Thread(
-                        target=self.__class__.base_executor._delayed_nemesis_start,
+                        target=deploy._delayed_nemesis_start,
                         args=(15,),  # 15 секунд задержки
                         daemon=False,  # Убираем daemon=True чтобы поток не прерывался
                     )

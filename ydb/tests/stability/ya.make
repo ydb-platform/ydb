@@ -1,4 +1,5 @@
 RECURSE(
     ydb
     tool
+    lib
 )

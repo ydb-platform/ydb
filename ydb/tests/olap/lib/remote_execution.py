@@ -418,11 +418,9 @@ def ensure_directory_with_permissions(host: str, path: str, raise_on_error: bool
     Создает директорию и устанавливает права 777
     """
     try:
-        if execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0:
-            return True
-        created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
-        if created_without_sudo:
-            return True
+        # created_without_sudo = execute_command(host, f"mkdir -p {path} && chmod 777 {path}", raise_on_error=False, timeout=10).exit_code == 0
+        # if created_without_sudo:
+        #     return True
         created_with_sudo = execute_command(host, f"sudo mkdir -p {path} && sudo chmod 777 {path}", raise_on_error=raise_on_error, timeout=10).exit_code == 0
         return created_with_sudo
     except Exception as e:
@@ -537,8 +535,8 @@ def deploy_binary(local_path: str, host: str, target_dir: str, make_executable: 
 
         # Делаем исполняемым
         if make_executable:
-            if execute_command(host, f"chmod +x {target_path}", raise_on_error=False).exit_code != 0:
-                execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=True)
+            if execute_command(host, f"chmod +x {target_path}", raise_on_error=False, timeout=10).exit_code != 0:
+                execute_command(host, f"sudo chmod +x {target_path}", raise_on_error=True, timeout=10)
 
         return {
             'name': binary_name,
@@ -578,7 +576,7 @@ def deploy_binaries_to_hosts(
         host_results = {}
 
         # Создаем директорию на хосте один раз
-        ensure_directory_with_permissions(host, target_dir, raise_on_error=True)
+        ensure_directory_with_permissions(host, target_dir, raise_on_error=False)
 
         # Копируем каждый бинарный файл
         for binary_file in binary_files:

@@ -239,20 +239,6 @@ namespace NYql {
                 auto select = source.mutable_select();
                 FillSelect(*select, dqSource, ctx);
                 
-                // TODO: remove this block as soon as the first part YQ-4730 is deployed
-                //
-                // Iceberg/Managed YDB (including YDB underlying Logging) supports access via IAM token.
-                // If exists, copy service account creds to obtain tokens during request execution phase.
-                // If exists, copy previously created token.
-                if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING, NYql::EGenericDataSourceKind::ICEBERG}, clusterConfig.kind())) {
-                    source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
-                    source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
-                    source.SetToken(State_->Types->Credentials->FindCredentialContent(
-                    "default_" + clusterConfig.name(),
-                    "default_generic",
-                    clusterConfig.GetToken()));
-                }
-
                 // We set token name to the protobuf message that will be received
                 // by the read actor during the execution phase.
                 // It will use token name to extract credentials from the secureParams.
@@ -384,20 +370,6 @@ namespace NYql {
                 Generic::TLookupSource source;
                 source.set_table(tableName);
                 *source.mutable_data_source_instance() = tableMeta->DataSourceInstance;
-
-                // TODO: remove this block as soon as first part YQ-4730 is deployed
-                //
-                // Managed YDB supports access via IAM token.
-                // If exist, copy service account creds to obtain tokens during request execution phase.
-                // If exists, copy previously created token.
-                if (clusterConfig.kind() == NYql::EGenericDataSourceKind::YDB) {
-                    source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
-                    source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
-                    source.SetToken(State_->Types->Credentials->FindCredentialContent(
-                        "default_" + clusterConfig.name(),
-                        "default_generic",
-                        clusterConfig.GetToken()));
-                }
 
                 // We set token name to the protobuf message that will be received
                 // by the lookup actor during the execution phase.

@@ -789,6 +789,7 @@ public:
     void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
+            std::map<TString, TString> secureParams;
             bool isValidParams = true;
             auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
             const auto& parameters = QueryState->GetYdbParameters();
@@ -796,6 +797,10 @@ public:
             QueryState->QueryData->ParseParameters(parameters);
 
             for (const auto& tx : QueryState->PreparedQuery->GetTransactions()) {
+                for (const auto& secretName : tx->GetSecretNames()) {
+                    secureParams.emplace(secretName, "");
+                }
+
                 txs.emplace_back(tx, QueryState->QueryData);
                 try {
                     QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
@@ -810,6 +815,7 @@ public:
                 auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
+                tasksGraph.GetMeta().SecureParams = std::move(secureParams);
 
                 // Resolve tables
                 {
@@ -871,7 +877,7 @@ public:
                     tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
                     // TODO: fill tasks count into result
                     // Cerr << tasksGraph.DumpToString();
-                } catch (const yexception&) {
+                } catch (const std::exception&) {
                     // TODO: send warning to user that we failed to estimate number of tasks.
                 }
             }

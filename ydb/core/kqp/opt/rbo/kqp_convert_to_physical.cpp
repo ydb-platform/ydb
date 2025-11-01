@@ -167,27 +167,31 @@ TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNo
 
     TVector<TExprNode::TPtr> keys;
     for (auto iu : join.GetLeftInput()->GetOutputIUs()) {
-        // clang-format off
-                auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
-                    .Name().Build(iu.GetFullName())
-                    .Value<TCoMember>()
-                        .Struct(leftArg)
-                        .Name().Build(iu.GetFullName())
-                    .Build()
-                .Done().Ptr();
-                // clang-forat on
-                keys.push_back(keyPtr);
-            }
+        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, left key: " << iu.GetFullName();
 
-            for (auto iu : join.GetRightInput()->GetOutputIUs()) {
-                // clang-format off
-                auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
-                    .Name().Build(iu.GetFullName())
-                    .Value<TCoMember>()
-                    .Struct(rightArg)
-                        .Name().Build(iu.GetFullName())
-                    .Build()
-                .Done().Ptr();
+        // clang-format off
+        auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(iu.GetFullName())
+            .Value<TCoMember>()
+                .Struct(leftArg)
+                .Name().Build(iu.GetFullName())
+            .Build()
+            .Done().Ptr();
+        // clang-format on
+        keys.push_back(keyPtr);
+    }
+
+    for (auto iu : join.GetRightInput()->GetOutputIUs()) {
+        YQL_CLOG(TRACE, CoreDq) << "Converting Cross Join, right key: " << iu.GetFullName();
+
+        // clang-format off
+        auto keyPtr = Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(iu.GetFullName())
+            .Value<TCoMember>()
+                .Struct(rightArg)
+                .Name().Build(iu.GetFullName())
+            .Build()
+            .Done().Ptr();
         // clang-format on
         keys.push_back(keyPtr);
     }
@@ -195,58 +199,58 @@ TExprNode::TPtr BuildCrossJoin(TOpJoin &join, TExprNode::TPtr leftInput, TExprNo
     // clang-format off
     // We have to `Condense` right input as single-element stream of lists (single list of all elements from the right),
     // because stream supports single iteration only
-            auto itemArg = Build<TCoArgument>(ctx, pos).Name("item").Done();
-            auto rightAsStreamOfLists = Build<TCoCondense1>(ctx, pos)
-                .Input<TCoToFlow>()
-                    .Input(rightInput)
-                    .Build()
-                .InitHandler()
-                    .Args({itemArg})
-                    .Body<TCoAsList>()
-                        .Add(itemArg)
-                        .Build()
-                    .Build()
-                .SwitchHandler()
-                    .Args({"item", "state"})
-                    .Body<TCoBool>()
-                        .Literal().Build("false")
-                        .Build()
-                    .Build()
-                .UpdateHandler()
-                    .Args({"item", "state"})
-                    .Body<TCoAppend>()
-                        .List("state")
-                        .Item("item")
-                    .Build()
+    auto itemArg = Build<TCoArgument>(ctx, pos).Name("item").Done();
+    auto rightAsStreamOfLists = Build<TCoCondense1>(ctx, pos)
+        .Input<TCoToFlow>()
+            .Input(rightInput)
+            .Build()
+        .InitHandler()
+            .Args({itemArg})
+            .Body<TCoAsList>()
+                .Add(itemArg)
                 .Build()
-            .Done();
+            .Build()
+        .SwitchHandler()
+            .Args({"item", "state"})
+            .Body<TCoBool>()
+                .Literal().Build("false")
+                .Build()
+            .Build()
+        .UpdateHandler()
+            .Args({"item", "state"})
+            .Body<TCoAppend>()
+                .List("state")
+                .Item("item")
+            .Build()
+        .Build()
+    .Done();
 
-            auto flatMap = Build<TCoFlatMap>(ctx, pos)
-                .Input(rightAsStreamOfLists)
+    auto flatMap = Build<TCoFlatMap>(ctx, pos)
+        .Input(rightAsStreamOfLists)
+        .Lambda()
+            .Args({"rightAsList"})
+            .Body<TCoFlatMap>()
+                .Input(leftInput)
                 .Lambda()
-                    .Args({"rightAsList"})
-                    .Body<TCoFlatMap>()
-                        .Input(leftInput)
+                    .Args({leftArg})
+                    .Body<TCoMap>()
+                        // here we have `List`, so we can iterate over it many times (for every `leftArg`)
+                        .Input("rightAsList")
                         .Lambda()
-                            .Args({leftArg})
-                            .Body<TCoMap>()
-                                // here we have `List`, so we can iterate over it many times (for every `leftArg`)
-                                .Input("rightAsList")
-                                .Lambda()
-                                    .Args({rightArg})
-                                    .Body<TCoAsStruct>()
-                                        .Add(keys)
-                                    .Build()
-                                .Build()
+                            .Args({rightArg})
+                            .Body<TCoAsStruct>()
+                                .Add(keys)
                             .Build()
                         .Build()
                     .Build()
                 .Build()
-            .Done().Ptr();
+            .Build()
+        .Build()
+    .Done().Ptr();
 
-            return Build<TCoFromFlow>(ctx, pos)
-                .Input(flatMap)
-            .Done().Ptr();
+    return Build<TCoFromFlow>(ctx, pos)
+        .Input(flatMap)
+    .Done().Ptr();
     // clang-format on
 }
 
@@ -1061,11 +1065,20 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<I
             stageArgs[opStageId].push_back(rightArg);
             TVector<TExprNode::TPtr> extendArgs{leftArg, rightArg};
 
-            // clang-format off
-            currentStageBody = Build<TCoExtend>(ctx, op->Pos)
-                .Add(extendArgs)
-            .Done().Ptr();
-            // clang-format on
+            if (unionAll->Ordered) {
+                // clang-format off
+                currentStageBody = Build<TCoOrderedExtend>(ctx, op->Pos)
+                    .Add(extendArgs)
+                .Done().Ptr();
+                // clang-format on
+            }
+            else {
+                // clang-format off
+                currentStageBody = Build<TCoExtend>(ctx, op->Pos)
+                    .Add(extendArgs)
+                .Done().Ptr();
+                // clang-format on
+            }
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;

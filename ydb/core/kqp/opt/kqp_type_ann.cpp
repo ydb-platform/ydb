@@ -2228,6 +2228,17 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
+TStatus AnnotatePgExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto expr = node->Child(TKqpPgExprSublink::idx_Expr);
+    auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto valueType = itemType->GetItems()[0]->GetItemType();
+    if (!valueType->IsOptionalOrNull()) {
+        valueType = ctx.MakeType<TOptionalExprType>(valueType);
+    }
+    node->SetTypeAnn(valueType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2674,6 +2685,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpTableSinkSettings::Match(input.Get())) {
                 return AnnotateTableSinkSettings(input, ctx);
+            }
+
+            if (TKqpPgExprSublink::Match(input.Get())) {
+                return AnnotatePgExprSublink(input, ctx);
             }
 
             if (TKqpOpRead::Match(input.Get())) {

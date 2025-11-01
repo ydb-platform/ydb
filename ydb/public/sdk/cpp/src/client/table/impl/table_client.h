@@ -55,8 +55,9 @@ public:
     i64 GetActiveSessionCount() const;
     i64 GetActiveSessionsLimit() const;
     i64 GetCurrentPoolSize() const;
-    TAsyncCreateSessionResult CreateSession(const TCreateSessionSettings& settings, bool standalone,
-        std::string preferredLocation = std::string());
+    TAsyncCreateSessionResult CreateSession(const TCreateSessionSettings& settings,
+                                            const TRpcRequestSettings& rpcSettings,
+                                            bool standalone);
     TAsyncKeepAliveResult KeepAlive(const TSession::TImpl* session, const TKeepAliveSettings& settings);
 
     TFuture<TStatus> CreateTable(Ydb::Table::CreateTableRequest&& request, const TCreateTableSettings& settings);

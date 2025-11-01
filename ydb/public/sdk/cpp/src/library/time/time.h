@@ -55,10 +55,15 @@ public:
     bool operator<(const TDeadline& other) const noexcept;
     bool operator==(const TDeadline& other) const noexcept;
 
+    TDeadline operator+(const Duration& duration) const noexcept;
+    TDeadline operator-(const Duration& duration) const noexcept;
+
 private:
     explicit TDeadline(TimePoint timePoint) noexcept
         : TimePoint_(timePoint)
     {}
+
+    static TimePoint SafeSum(TimePoint timePoint, Duration duration) noexcept;
 
     TimePoint TimePoint_;
 };

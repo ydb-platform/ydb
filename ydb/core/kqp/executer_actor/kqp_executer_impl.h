@@ -1269,7 +1269,7 @@ protected:
 
     bool RestoreTasksGraph() {
         if (Request.QueryPhysicalGraph) {
-            TasksGraph.RestoreTasksGraphInfo(*Request.QueryPhysicalGraph);
+            TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
         }
 
         return TasksGraph.GetMeta().IsRestored;

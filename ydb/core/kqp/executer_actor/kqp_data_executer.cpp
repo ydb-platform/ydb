@@ -1967,7 +1967,12 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = 0;
+
+        if (!graphRestored) {
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
+        }
+
         OnEmptyResult();
 
         TIssue validateIssue;

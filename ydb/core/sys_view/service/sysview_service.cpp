@@ -530,6 +530,7 @@ private:
     void RequestDatabaseName(TPathId pathId) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         request->ResultSet.push_back({});
 
         auto& entry = request->ResultSet.back();

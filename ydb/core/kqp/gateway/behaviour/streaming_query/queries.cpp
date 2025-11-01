@@ -564,7 +564,7 @@ protected:
         LOG_D("Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(Database);
+        request->DatabaseName = Database;
         request->UserToken = GetUserToken();
 
         auto& entry = request->ResultSet.emplace_back();

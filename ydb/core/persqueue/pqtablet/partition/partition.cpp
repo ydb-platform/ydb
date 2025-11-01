@@ -2276,7 +2276,7 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
 void TPartition::ProcessTxsAndUserActs(const TActorContext&)
 {
     if (KVWriteInProgress) {
-        LOG_D("Writing. Can't process transactions and user actions");
+        LOG_D("Writing. Can't process user action and tx events");
         return;
     }
 
@@ -2733,6 +2733,11 @@ void TPartition::RunPersist() {
     if (TryAddDeleteHeadKeysToPersistRequest()) {
         haveChanges = true;
     }
+
+    LOG_D("haveChanges=" << haveChanges <<
+          ", TxIdHasChanged=" << TxIdHasChanged <<
+          ", AffectedUsers.size=" << AffectedUsers.size() <<
+          ", ChangeConfig=" << (ChangeConfig ? 1 : 0));
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -3673,8 +3678,6 @@ void TPartition::ExecImmediateTx(TTransaction& t)
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& act,
                                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }

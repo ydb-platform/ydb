@@ -2373,6 +2373,13 @@ message TColumnShardConfig {
     optional bool CombineChunksInResult = 54 [default = true];
     optional bool EnableDiagnostics = 55 [default = true];
     optional bool EnableParallelCompaction = 56 [default = true];
+
+    message TStatistics {
+        optional uint32 ReportBaseStatisticsPeriodMs = 1 [default = 60000];
+        optional uint32 ReportExecutorStatisticsPeriodMs = 2 [default = 60000];
+    }
+
+    optional TStatistics Statistics = 57;
 }
 
 message TSchemeShardConfig {

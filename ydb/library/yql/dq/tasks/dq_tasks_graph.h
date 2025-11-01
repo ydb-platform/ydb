@@ -462,8 +462,6 @@ public:
                                 input.WatermarksIdleTimeoutUs = Max(input.WatermarksIdleTimeoutUs, channel.WatermarksIdleTimeoutUs);
                             }
                         }
-                        if (watermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
-                        }
                     }
                     task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, input.WatermarksIdleTimeoutUs);
                 }

@@ -1,37 +1,28 @@
 LIBRARY()
 
 SRCS(
-    datastreams_proxy.cpp
-    grpc_service.cpp
-    next_token.cpp
-    put_records_actor.cpp
-    shard_iterator.cpp
+    sqs_topic_proxy.cpp
+    utils.cpp
 )
 
 PEERDIR(
     ydb/library/grpc/server
-    ydb/library/cloud_permissions
     ydb/core/base
     ydb/core/client/server
     ydb/core/grpc_services
     ydb/core/mind
-    ydb/core/persqueue/public/list_topics
-    ydb/core/persqueue/public/partition_key_range
-    ydb/core/persqueue/public/write_meta
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/resources
-    ydb/public/sdk/cpp/src/client/datastreams
     ydb/services/datastreams/codes
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/persqueue_v1
+    ydb/services/sqs_topic/queue_url
     ydb/services/ydb
 )
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE(queue_url)

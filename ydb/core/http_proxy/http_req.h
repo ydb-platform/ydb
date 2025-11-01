@@ -2,7 +2,7 @@
 
 #include "events.h"
 
-#include <ydb/services/datastreams/datastreams_codes.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 
@@ -128,6 +128,7 @@ public:
 private:
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2DataStreamsProcessor;
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
+    THashMap<TString, THolder<IHttpRequestProcessor>> Name2SqsTopicProcessor;
 };
 
 NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);

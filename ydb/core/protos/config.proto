@@ -852,6 +852,7 @@ message THttpProxyConfig {
     optional bool YandexCloudMode = 11 [default = false];
     optional bool DataStreamsEnabled = 12 [default = true];
     optional bool YmqEnabled = 13 [default = false];
+    optional bool SqsTopicEnabled = 14 [default = false];
 }
 
 message TS3ProxyResolverConfig {

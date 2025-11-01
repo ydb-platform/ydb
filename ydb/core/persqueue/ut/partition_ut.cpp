@@ -2830,6 +2830,8 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionTxTestHelper)
     DBGTRACE_LOG("");
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
     DBGTRACE_LOG("");
+    EmulateKVTablet();
+    DBGTRACE_LOG("");
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
     DBGTRACE_LOG("");

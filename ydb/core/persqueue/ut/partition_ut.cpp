@@ -3559,6 +3559,10 @@ Y_UNIT_TEST_F(NonConflictingCommitsBatch, TPartitionTxTestHelper) {
     SendKvResponse();
 
     DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx1);
     DBGTRACE_LOG("");
     WaitCommitDone(tx2);

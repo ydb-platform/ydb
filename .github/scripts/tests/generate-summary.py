@@ -86,22 +86,16 @@ class TestResult:
     owners: str
     status_description: str
     is_sanitizer_issue: bool = False
-    is_timeout: bool = False
 
     @property
     def status_display(self):
-        status_str = {
+        return {
             TestStatus.PASS: "PASS",
             TestStatus.FAIL: "FAIL",
             TestStatus.ERROR: "ERROR",
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
-        
-        if self.is_timeout:
-            status_str += " (TIMEOUT)"
-        
-        return status_str
 
     @property
     def elapsed_display(self):
@@ -123,13 +117,6 @@ class TestResult:
     def from_junit(cls, testcase):
         classname, name = testcase.get("classname"), testcase.get("name")
         status_description = None
-        is_timeout = False
-        
-        # Check for timeout in error_type property
-        error_type = get_property_value(testcase, "error_type")
-        if error_type == "TIMEOUT":
-            is_timeout = True
-        
         if testcase.find("failure") is not None:
             status = TestStatus.FAIL
             if testcase.find("failure").text is not None:
@@ -166,18 +153,7 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(
-            classname=classname,
-            name=name,
-            status=status,
-            log_urls=log_urls,
-            elapsed=elapsed,
-            count_of_passed=0,
-            owners='',
-            status_description=status_description,
-            is_sanitizer_issue=is_sanitizer_issue(status_description),
-            is_timeout=is_timeout
-        )
+        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
 
 
 class TestSummaryLine:

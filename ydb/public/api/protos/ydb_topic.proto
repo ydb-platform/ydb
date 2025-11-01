@@ -882,7 +882,7 @@ message Consumer {
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
     optional google.protobuf.Duration default_processing_timeout = 11;
-
+    // The dedad letter policy for this consumer.
     optional DeadLetterPolicy dead_letter_policy = 12;
 }
 
@@ -917,6 +917,7 @@ message AlterConsumer {
     // it will be returned to the queue and sent for re-processing.
     google.protobuf.Duration set_default_processing_timeout = 10;
 
+    // Change dead letter policy.
     AlterDeadLetterPolicy alter_dead_letter_policy = 11;
 }
 

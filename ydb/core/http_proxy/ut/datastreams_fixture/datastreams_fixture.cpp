@@ -1,5 +1,7 @@
 #include "datastreams_fixture.h"
 
+#include <ydb/core/http_proxy/auth_actors.h>
+
 #include <util/system/env.h>
 
 #include <thread>

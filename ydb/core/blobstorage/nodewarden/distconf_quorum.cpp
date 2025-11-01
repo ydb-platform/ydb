@@ -2,6 +2,10 @@
 
 namespace NKikimr::NStorage {
 
+    std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+            const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
+            const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name);
+
     // generate set of mandatory pile ids for quorum
     THashSet<TBridgePileId> GetMandatoryPileIds(const NKikimrBlobStorage::TStorageConfig& config,
             const THashSet<TBridgePileId>& pileIdQuorumOverride) {
@@ -64,7 +68,22 @@ namespace NKikimr::NStorage {
 
     bool HasNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TNodeIdentifier> successful,
             const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
-            TStringStream *out) {
+            const TNodeWardenConfig& nwConfig, TStringStream *out, bool allowConfigQuorum) {
+        if (allowConfigQuorum) {
+            // calculate pseudo-quorum for all drives in static groups in seen nodes
+            THashSet<TNodeIdentifier> successfulNodes(successful.begin(), successful.end());
+            std::vector<TSuccessfulDisk> successfulDisks;
+            EnumerateConfigDrives(config, 0, [&](const TNodeIdentifier& node, const NKikimrBlobStorage::THostConfigDrive& drive) {
+                if (successfulNodes.contains(node)) {
+                    successfulDisks.emplace_back(node, drive.GetPath(), std::nullopt /* don't care about guids here */);
+                }
+            });
+            if (auto q = HasStorageQuorum(config, successfulDisks, bridgePileNameMap, singleBridgePileId, nwConfig,
+                    true, out, "config")) {
+                return *q;
+            }
+        }
+
         // prepare list of piles we want to examine
         auto status = PrepareStatusMap(config, singleBridgePileId);
 
@@ -192,7 +211,7 @@ namespace NKikimr::NStorage {
             const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
             STLOG(PRI_CRIT, BS_NODE, NWDC41, "configuration incorrect", (Error, error));
-            Y_DEBUG_ABORT("%s", error.c_str());
+            //Y_DEBUG_ABORT("%s", error.c_str());
             if (out) {
                 *out << ' ' << name << ':' << error;
             }

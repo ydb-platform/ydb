@@ -239,7 +239,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool acceptLocalQuorum,
             bool requireScepter, bool mindPrev, const NKikimrBlobStorage::TStorageConfig *propositionBase,
             bool fromBootstrap) {
-        if (!Self->HasConnectedNodeQuorum(mindPrev && config->HasPrevConfig() ? config->GetPrevConfig() : *config, acceptLocalQuorum)) {
+        if (!Self->HasConnectedNodeQuorum(*config, acceptLocalQuorum)) {
             throw TExError() << "No quorum to start propose/commit configuration";
         } else if (requireScepter && !Self->Scepter) {
             throw TExError() << "No scepter";

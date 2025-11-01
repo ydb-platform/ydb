@@ -168,16 +168,24 @@ public:
 
     virtual NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const = 0;
 
-    virtual IComputationNode* AddDependence(const IComputationNode* node) = 0;
+    // In the context "X depends on Y" this method adds node "X"
+    // (i.e. the argument node) as the *dependent* (the thing
+    // relying on smth) for the node "Y "(i.e. this).
+    virtual IComputationNode* AddDependent(const IComputationNode* node) = 0;
 
     virtual const IComputationNode* GetSource() const = 0;
 
     virtual void RegisterDependencies() const = 0;
 
     virtual ui32 GetIndex() const = 0;
-    virtual void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependencies) const = 0;
-    virtual ui32 GetDependencyWeight() const = 0;
-    virtual ui32 GetDependencesCount() const = 0;
+    virtual void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependents) const = 0;
+    virtual ui32 GetDependentWeight() const = 0;
+    virtual ui32 GetDependentsCount() const = 0;
+    // FIXME: Remove this method, when all the clients will be
+    // migrated to the renamed analogue GetDependentsCount.
+    ui32 GetDependencesCount() const {
+        return GetDependentsCount();
+    }
 
     virtual bool IsTemporaryValue() const = 0;
 

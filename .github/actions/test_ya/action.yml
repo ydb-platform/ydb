@@ -286,7 +286,7 @@ runs:
           done
         fi
 
-        #скрипты для checkout из main
+        # Scripts to checkout from main
         MAIN_SCRIPTS=(
           ".github/scripts/analytics/upload_tests_results.py"
           ".github/scripts/analytics/ydb_wrapper.py"
@@ -296,13 +296,13 @@ runs:
           ".github/scripts/get_main_build_size.py"
         )
         
-        # Убеждаемся, что main доступен (для shallow clone может отсутствовать)
+        # Ensure main is available (may be missing in shallow clone)
         if ! git rev-parse --verify main >/dev/null 2>&1; then
           git fetch origin main:main --depth=1 2>/dev/null || true
         fi
         
-        # Для каждого скрипта: если нет изменений в PR - берем из main
-        # git checkout main -- "$script" не меняет HEAD, только файлы в рабочей директории
+        # For each script: if unchanged in PR - use from main
+        # git checkout main -- "$script" doesn't change HEAD, only files in working directory
         for script in "${MAIN_SCRIPTS[@]}"; do
           if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
             git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script"

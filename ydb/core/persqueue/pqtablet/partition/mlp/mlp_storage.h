@@ -7,6 +7,7 @@
 #include <util/datetime/base.h>
 
 #include <deque>
+#include <set>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
@@ -78,7 +79,7 @@ public:
     private:
         TStorage* Storage;
 
-        std::unordered_set<ui64> ChangedMessages;
+        std::set<ui64> ChangedMessages;
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
         std::deque<ui64> DLQ;

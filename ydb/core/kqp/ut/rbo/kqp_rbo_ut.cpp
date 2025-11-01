@@ -512,6 +512,29 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 SET TablePathPrefix = "/Root/";
                 select t1.b, max(t1.a) from t1 group by t1.b order by t1.b;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select t1.b, count(t1.a) from t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select max(t1.b), min(t1.a) from t1;
+            )",
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select sum(t1.a) from t1 group by t1.b, t1.c;
+            )",
+            /*
+            invalid column order in result
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select sum(t1.c), t1.b from t1 group by t1.b order by t1.b;
+            )",
+            */
         };
 
         std::vector<std::string> results = {
@@ -520,13 +543,17 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["6"];["4"];["8"]])",
             R"([["1";"1"];["2";"0"]])",
             R"([["1";"3"];["2";"4"]])",
+            R"([["1";"2"];["2";"3"]])",
+            R"([["2";"0"]])",
+            R"([["6"];["4"]])",
+            R"([["4";"1"];["6";"2"]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            //Cerr << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            //Cout << "OUTPUT_RESULT " << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }

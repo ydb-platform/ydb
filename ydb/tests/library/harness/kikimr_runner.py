@@ -534,6 +534,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self._bootstrap_cluster(self_assembly_uuid="test-cluster")
 
         if self.__configurator.protected_mode:
+            time.sleep(5)
             self.root_token = self._get_token()
 
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management

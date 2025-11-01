@@ -225,21 +225,19 @@ void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadlin
             return;
         }
 
-        std::shared_ptr<IQueueClientContext> context;
-
-        if (!TryCreateContext(context)) {
-            // Shutting down, fn must handle it
-            fn();
-        } else {
-            // Enqueue to user pool
-            auto resp = new TSimpleCbResult(std::move(fn));
-            EnqueueResponse(resp);
-        }
+        // Enqueue to user pool
+        auto resp = new TSimpleCbResult(std::move(fn));
+        EnqueueResponse(resp);
     };
 
     std::shared_ptr<IQueueClientContext> context;
     if (!TryCreateContext(context)) {
-        fn();
+        cbLow(false);
+        return;
+    }
+
+    if (deadline <= TDeadline::Now()) {
+        cbLow(true);
         return;
     }
 

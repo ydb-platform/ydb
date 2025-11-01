@@ -4,8 +4,6 @@
 
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 
-#include <functional>
-
 
 namespace NYdb::inline Dev {
 

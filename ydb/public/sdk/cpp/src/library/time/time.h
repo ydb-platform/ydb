@@ -53,6 +53,7 @@ public:
     TimePoint GetTimePoint() const noexcept;
 
     bool operator<(const TDeadline& other) const noexcept;
+    bool operator<=(const TDeadline& other) const noexcept;
     bool operator==(const TDeadline& other) const noexcept;
 
     TDeadline operator+(const Duration& duration) const noexcept;

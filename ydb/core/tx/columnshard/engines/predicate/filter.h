@@ -390,6 +390,7 @@ class TRangesBuilder {
                 return std::nullopt;
             }
             auto columns = schema->field_names();
+            AFL_VERIFY(columns.size() >= NumColumns)("schema", columns.size())("predicate", NumColumns);
             columns.resize(NumColumns);
             return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false));
         }

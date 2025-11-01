@@ -32,11 +32,11 @@ public:
     }
 
     bool IsEmpty() const {
-        return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
+        return PredicateFrom.IsAll() && PredicateTo.IsAll();
     }
 
     bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
-        if (PredicateFrom.IsEmpty() || PredicateTo.IsEmpty()) {
+        if (PredicateFrom.IsAll() || PredicateTo.IsAll()) {
             return false;
         }
         return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&

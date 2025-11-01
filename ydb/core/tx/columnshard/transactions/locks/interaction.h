@@ -219,7 +219,7 @@ private:
     TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
         : IncludeState(includeState)
     {
-        if (!point.IsEmpty()) {
+        if (!point.IsAll()) {
             auto fields = schema->fields();
             fields.resize(point.NumColumns());
             auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);

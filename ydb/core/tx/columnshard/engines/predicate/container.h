@@ -42,7 +42,7 @@ public:
     }
 
     bool IsEqualPointTo(const TPredicateContainer& item) const {
-        if (IsEmpty() != item.IsEmpty()) {
+        if (IsAll() != item.IsAll()) {
             return false;
         }
         if (!Object) {
@@ -66,7 +66,7 @@ public:
         Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
     }
 
-    bool IsEmpty() const {
+    bool IsAll() const {
         return !Object;
     }
 

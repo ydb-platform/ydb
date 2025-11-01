@@ -2584,6 +2584,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     result, "workload_start_time", result.start_time
                 )
                 verify_errors = self.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
+                # OOM детали теперь собираются внутри check_nodes_diagnostics_with_timing()
                 node_errors = self.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )

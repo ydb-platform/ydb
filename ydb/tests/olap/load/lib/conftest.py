@@ -396,7 +396,7 @@ class LoadSuiteBase:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
         end = datetime.fromtimestamp(end_time, tz).strftime("%Y-%m-%d %H:%M:%S")
-        oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" --grep "Out of memory: Kill" --case-sensitive=false'
+        oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" --grep "invoked oom-killer" --case-sensitive=false'
         ooms = set()
         for h in hosts:
             exec = cls.execute_ssh(h, oom_cmd)
@@ -407,6 +407,96 @@ class LoadSuiteBase:
             else:
                 logging.error(f'Error while search OOMs on host {h}: {exec.stderr}')
         return ooms
+
+    @classmethod
+    def __get_oom_details(
+        cls,
+        hosts: set[str],
+        start_time: float,
+        end_time: float
+    ) -> dict[str, dict[str, str | dict[str, int]]]:
+        """Aggregates information about OOM (Out of Memory) events across hosts.
+
+        Collects and analyzes OOM events within specified time range,
+        grouping events by unique patterns and counting occurrences per host.
+
+        Args:
+            hosts: Set of target hostnames to analyze
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with OOM event patterns as keys and structured information as values:
+            {
+                "kikimr.User invoked oom-killer: gfp_mask=0xcc0(GFP_KERNEL), order=0": {
+                    "full_trace": "Full OOM log block with all details",
+                    "hosts_count": {
+                        "host1.example.com": 2,
+                        "host2.example.com": 1
+                    }
+                }
+            }
+        """
+        tz = timezone('Europe/Moscow')
+        start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
+        end = datetime.fromtimestamp(end_time + 10, tz).strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Используем grep -B/-A для получения контекста вокруг OOM события
+        # -B 50: 50 строк ДО (Call Trace, Hardware name, etc.)
+        # -A 100: 100 строк ПОСЛЕ (Memory cgroup stats, Killed process, oom_reaper)
+        oom_cmd = f'sudo journalctl -k -q --no-pager -S "{start}" -U "{end}" -n 50000 | grep -i "invoked oom-killer" -B 50 -A 100'
+        
+        oom_processes = {
+            h: cls.execute_ssh(h, oom_cmd)
+            for h in hosts
+        }
+
+        host_matches = defaultdict(lambda: [])
+        for h, exec in oom_processes.items():
+            exec.wait(check_exit_code=False)
+            if exec.returncode != 0:
+                logging.error(f'Error while processing OOM events on host {h}: {exec.stderr}')
+            else:
+                oom_stdout = exec.stdout
+                if oom_stdout:
+                    # grep с -B/-A разделяет группы через "--"
+                    # Разбиваем на блоки по разделителю
+                    blocks = oom_stdout.split('\n--\n')
+                    for full_block in blocks:
+                        if 'invoked oom-killer' in full_block:
+                            # Извлекаем строку с "invoked oom-killer" как паттерн
+                            oom_line = ''
+                            for line in full_block.split('\n'):
+                                if 'invoked oom-killer' in line:
+                                    oom_line = line
+                                    break
+                            # Увеличиваем до 150 символов для лучшей уникальности паттерна
+                            pattern = oom_line[:150] if oom_line else full_block[:150]
+                            host_matches[h].append((full_block.strip(), pattern))
+
+        oom_info = defaultdict(lambda: {
+            'full_trace': None,
+            'hosts_count': defaultdict(lambda: 0)
+        })
+
+        for host, oom_matches in host_matches.items():
+            # Оптимизация: используем Counter напрямую
+            counters = Counter(m[1] for m in oom_matches)
+            for pattern in counters.keys():
+                if pattern in oom_info:
+                    oom_info[pattern]['hosts_count'][host] = counters[pattern]
+                else:
+                    # Берем первый полный блок для паттерна
+                    full_trace = next((m[0] for m in oom_matches if m[1] == pattern), pattern)
+                    # Ограничиваем размер для Allure (первые 5000 символов)
+                    if len(full_trace) > 5000:
+                        full_trace = full_trace[:5000] + '\n... (truncated for display)'
+                    oom_info[pattern] = {
+                        'full_trace': full_trace,
+                        'hosts_count': {host: counters[pattern]}
+                    }
+
+        return oom_info
 
     @classmethod
     def __get_key_measurements_block(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str) -> str:
@@ -714,6 +804,34 @@ class LoadSuiteBase:
         return cls.__get_verify_fails(all_hosts, start_time, end_time)
 
     @classmethod
+    def check_nodes_oom_with_timing(cls, start_time: float, end_time: float):
+        """Aggregates information about OOM (Out of Memory) events across hosts.
+
+        Collects and analyzes OOM events within specified time range,
+        grouping events by unique patterns and counting occurrences per host.
+
+        Args:
+            start_time: Beginning of analysis time interval (Unix timestamp)
+            end_time: End of analysis time interval (Unix timestamp)
+
+        Returns:
+            Dictionary with OOM event patterns as keys and structured information as values:
+            {
+                "Out of memory: Kill process": {
+                    "full_trace": "Full OOM log entry",
+                    "hosts_count": {
+                        "host1.example.com": 2,
+                        "host2.example.com": 1
+                    }
+                }
+            }
+        """
+        if cls.__nodes_state is None:
+            return {}
+        all_hosts = {node.host for node in cls.__nodes_state.values()}
+        return cls.__get_oom_details(all_hosts, start_time, end_time)
+
+    @classmethod
     def check_nodes_diagnostics_with_timing(cls, result: YdbCliHelper.WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
         """
         Собирает диагностическую информацию о нодах с кастомным временным интервалом.
@@ -733,6 +851,7 @@ class LoadSuiteBase:
         # Собираем диагностическую информацию для всех хостов
         core_hashes = cls.__get_core_hashes_by_pod(all_hosts, start_time, end_time)
         ooms = cls.__get_hosts_with_omms(all_hosts, start_time, end_time)
+        oom_details = cls.__get_oom_details(all_hosts, start_time, end_time)
         hosts_with_sanitizer = cls.__get_sanitizer_events(all_hosts, start_time, end_time)
         hosts_with_verifies = cls.__count_verify_fails(all_hosts, start_time, end_time)
 
@@ -754,6 +873,17 @@ class LoadSuiteBase:
                 if node.host in hosts_with_sanitizer:
                     node_error.sanitizer_errors = hosts_with_sanitizer[node.host][0]
                     node_error.sanitizer_output = hosts_with_sanitizer[node.host][1]
+                # Добавляем детальную информацию об OOM (как у sanitizer)
+                if has_oom:
+                    # Собираем все OOM события для этого хоста
+                    oom_count = 0
+                    oom_outputs = []
+                    for pattern, oom_info in oom_details.items():
+                        if node.host in oom_info['hosts_count']:
+                            oom_count += oom_info['hosts_count'][node.host]
+                            oom_outputs.append(oom_info['full_trace'])
+                    node_error.oom_events = oom_count
+                    node_error.oom_output = '\n\n--- Next OOM event ---\n\n'.join(oom_outputs) if oom_outputs else None
                 node_errors.append(node_error)
 
                 # Добавляем ошибки в результат (cores и OOM - это errors)

@@ -77,7 +77,7 @@ namespace NKikimr {
                                      TEvBlobStorage::EvPhantomFlagStorageAddFlagsFromSnapshot>
         {
             TEvPhantomFlagStorageAddFlagsFromSnapshot(TPhantomFlags&& flags)
-                : Flags(std::forward<TPhantomFlags>(flags))
+                : Flags(std::move(flags))
             {}
 
             TPhantomFlags Flags;
@@ -93,7 +93,7 @@ namespace NKikimr {
                                      TEvBlobStorage::EvPhantomFlagStorageGetSnapshotResult>
         {
             TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlagStorageSnapshot&& snapshot)
-                : Snapshot(std::forward<TPhantomFlagStorageSnapshot>(snapshot))
+                : Snapshot(std::move(snapshot))
             {}
 
             TPhantomFlagStorageSnapshot Snapshot;

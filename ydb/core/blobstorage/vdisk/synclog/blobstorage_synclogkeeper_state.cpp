@@ -458,7 +458,7 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::AddFlagsToPhantomFlagStorage(TPhantomFlags&& flags) {
-            PhantomFlagStorageState.AddFlags(std::forward<TPhantomFlags>(flags));
+            PhantomFlagStorageState.AddFlags(std::move(flags));
         }
 
         TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {

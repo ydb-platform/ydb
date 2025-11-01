@@ -460,6 +460,7 @@ void TConsumerActor::Persist() {
         del->MutableRange()->SetIncludeTo(true);
 
         NextWALIndex = 0;
+        LOG_E("Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size());
     } else {
         NKikimrPQ::TMLPStorageWAL wal;
         batch.SerializeTo(wal);
@@ -470,6 +471,7 @@ void TConsumerActor::Persist() {
         if (write->GetValue().size() < 1000) {
             write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
         }
+        LOG_E("WAL Count: " << batch.AffectedMessageCount() << " Size: " << write->GetValue().size());
     }
 
     Send(TabletActorId, std::move(request));
@@ -540,7 +542,12 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), static_cast<ui32>(Hash(result.GetSourceId())));
+            Storage->AddMessage(
+                result.GetOffset(),
+                result.HasSourceId() && !result.GetSourceId().empty(),
+                static_cast<ui32>(Hash(result.GetSourceId())),
+                TInstant::MilliSeconds(result.GetWriteTimestampMS())
+            );
             ++messageCount;
         }
 

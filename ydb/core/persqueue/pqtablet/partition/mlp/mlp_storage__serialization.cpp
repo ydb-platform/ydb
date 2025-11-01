@@ -9,6 +9,24 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
+struct TSnapshotMessage {
+        union {
+            struct {
+                ui64 Status: 3;
+                ui64 Reserve: 3;
+                ui64 ReceiveCount: 10;
+                ui64 DeadlineDelta: 16;
+                ui64 HasMessageGroupId: 1;
+                ui64 MessageGroupIdHash: 31;
+            } Fields;
+            ui64 Value;
+
+            static_assert(sizeof(Value) == sizeof(Fields));
+        } Common;
+        ui32 WriteTimestampDelta;
+
+};
+
 struct TAddedMessage {
     union {
         struct {
@@ -18,16 +36,23 @@ struct TAddedMessage {
         ui32 Value;
 
         static_assert(sizeof(Value) == sizeof(Fields));
-    };
+    } MessageGroup;
     ui32 WriteTimestampDelta;
 };
 
 
 struct TMessageChange {
-    ui32 Status: 3;
-    ui32 Reserve: 3; 
-    ui32 ReceiveCount: 10;
-    ui32 DeadlineDelta: 16;
+    union {
+        struct {
+            ui32 Status: 3;
+            ui32 Reserve: 3;
+            ui32 ReceiveCount: 10;
+            ui32 DeadlineDelta: 16;
+        } Fields;
+        ui32 Value;
+
+        static_assert(sizeof(Value) == sizeof(Fields));
+    } Common;
 };
 
 static_assert(sizeof(TMessageChange) == sizeof(ui32));
@@ -48,7 +73,7 @@ void VarintDeserialize(const char*& data, ui64& value) {
 
 template<typename TMsg>
 struct TItemSerializer {
-    void Serialize(TString buffer, const TMsg& msg) {
+    void Serialize(TString& buffer, const TMsg& msg) {
         buffer.append(reinterpret_cast<const char*>(&msg), sizeof(TMsg));
     }
 };
@@ -68,13 +93,66 @@ struct TItemDeserializer {
 };
 
 template<>
-struct TItemSerializer<TAddedMessage> {
-    ui64 LastWriteTimestampDelta;
+struct TItemSerializer<TSnapshotMessage> {
+    ui64 LastWriteTimestampDelta = 0;
 
-    void Serialize(TString buffer, const TAddedMessage& msg) {
-        buffer.append(reinterpret_cast<const char*>(&msg.Value), sizeof(msg.Value));
+    void Serialize(TString& buffer, const TSnapshotMessage& msg) {
+        buffer.append(reinterpret_cast<const char*>(&msg.Common.Value), sizeof(msg.Common.Value));
         VarintSerialize(buffer, static_cast<ui64>(msg.WriteTimestampDelta - LastWriteTimestampDelta));
         LastWriteTimestampDelta = msg.WriteTimestampDelta;
+    }
+};
+
+template<>
+struct TItemDeserializer<TSnapshotMessage> {
+    ui64 LastWriteTimestampDelta = 0;
+
+    bool Deserilize(const char*& data, const char* end, TSnapshotMessage& msg) {
+        if (data + sizeof(TAddedMessage) > end) {
+            return false;
+        }
+
+        memcpy(&msg.Common.Value, data, sizeof(msg.Common.Value));  // TODO BIGENDIAN/LOWENDIAN
+        data += sizeof(TStorage::TMessage);
+
+        ui64 delta;
+        VarintDeserialize(data, delta);
+        LastWriteTimestampDelta += delta;
+        msg.WriteTimestampDelta = LastWriteTimestampDelta;
+
+        return true;
+    }
+};
+
+template<>
+struct TItemSerializer<TAddedMessage> {
+    ui64 LastWriteTimestampDelta = 0;
+
+    void Serialize(TString& buffer, const TAddedMessage& msg) {
+        buffer.append(reinterpret_cast<const char*>(&msg.MessageGroup.Value), sizeof(msg.MessageGroup.Value));
+        VarintSerialize(buffer, static_cast<ui64>(msg.WriteTimestampDelta - LastWriteTimestampDelta));
+        LastWriteTimestampDelta = msg.WriteTimestampDelta;
+    }
+};
+
+template<>
+struct TItemDeserializer<TAddedMessage> {
+    ui64 LastWriteTimestampDelta = 0;
+
+    bool Deserilize(const char*& data, const char* end, TAddedMessage& msg) {
+        if (data + sizeof(TAddedMessage) > end) {
+            return false;
+        }
+
+        memcpy(&msg.MessageGroup.Value, data, sizeof(msg.MessageGroup.Value));  // TODO BIGENDIAN/LOWENDIAN
+        data += sizeof(TStorage::TMessage);
+
+        ui64 delta;
+        VarintDeserialize(data, delta);
+        LastWriteTimestampDelta += delta;
+        msg.WriteTimestampDelta = LastWriteTimestampDelta;
+
+        return true;
     }
 };
 
@@ -88,7 +166,7 @@ struct TSerializer {
         Buffer.reserve(size * sizeof(TStorage::TMessage));
     }
 
-    void Add(const TStorage::TMessage& message) {
+    void Add(const TMsg& message) {
         ItemSerializer.Serialize(Buffer, message);
     }
 };
@@ -105,7 +183,7 @@ struct TDeserializer {
     {
     }
 
-    bool Next(TStorage::TMessage& message) {
+    bool Next(TMsg& message) {
         return ItemDeserializer.Deserilize(Data, End, message);
     }
 };
@@ -162,6 +240,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     FirstUncommittedOffset = FirstOffset;
     FirstUnlockedOffset = FirstOffset;
     BaseDeadline = TInstant::MilliSeconds(meta.GetBaseDeadlineMilliseconds());
+    BaseWriteTimestamp = TInstant::MilliSeconds(meta.GetBaseWriteTimestampMilliseconds());
 
     bool moveUnlockedOffset = true;
     bool moveUncommittedOffset = true;
@@ -225,7 +304,12 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
                 continue;
             }
 
-            AddMessage(offset, msg.Fields.HasMessageGroupId, msg.Fields.MessageGroupIdHash);
+            AddMessage(
+                offset,
+                msg.MessageGroup.Fields.HasMessageGroupId,
+                msg.MessageGroup.Fields.MessageGroupIdHash,
+                BaseWriteTimestamp + TDuration::Seconds(msg.WriteTimestampDelta)
+            );
         }
     }
 
@@ -240,9 +324,9 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
                 continue;
             }
 
-            message->Status = msg.Status;
-            message->DeadlineDelta = msg.DeadlineDelta;
-            message->ReceiveCount = msg.ReceiveCount;
+            message->Status = msg.Common.Fields.Status;
+            message->DeadlineDelta = msg.Common.Fields.DeadlineDelta;
+            message->ReceiveCount = msg.Common.Fields.ReceiveCount;
 
             // TODO metrics
         }
@@ -293,8 +377,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             auto* message = Storage->GetMessage(offset);
             if (message) {
                 TAddedMessage msg;
-                msg.Fields.HasMessageGroupId = message->HasMessageGroupId;
-                msg.Fields.MessageGroupIdHash = message->MessageGroupIdHash;
+                msg.MessageGroup.Fields.HasMessageGroupId = message->HasMessageGroupId;
+                msg.MessageGroup.Fields.MessageGroupIdHash = message->MessageGroupIdHash;
                 serializer.Add(offset, msg);
             }
         }
@@ -309,9 +393,9 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             auto* message = Storage->GetMessage(offset);
             if (message) {
                 TMessageChange msg;
-                msg.Status = message->Status;
-                msg.ReceiveCount = message->ReceiveCount;
-                msg.DeadlineDelta = message->DeadlineDelta;
+                msg.Common.Fields.Status = message->Status;
+                msg.Common.Fields.ReceiveCount = message->ReceiveCount;
+                msg.Common.Fields.DeadlineDelta = message->DeadlineDelta;
                 serializer.Add(offset, msg);
             }
         }

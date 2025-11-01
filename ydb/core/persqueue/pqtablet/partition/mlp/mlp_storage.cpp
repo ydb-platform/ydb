@@ -118,7 +118,7 @@ size_t TStorage::Compact() {
     return removed;
 }
 
-void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash) {
+void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     while (!Messages.empty() && offset > GetLastOffset()) {
@@ -153,12 +153,17 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
 
+    if (BaseWriteTimestamp == TInstant::Zero()) {
+        BaseWriteTimestamp = writeTimestamp;
+    }
+
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,
         .ReceiveCount = 0,
         .DeadlineDelta = 0,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
+        .WriteTimestampDelta = (writeTimestamp - BaseWriteTimestamp).Seconds()
     });
 
     Batch.AddNewMessage(offset);
@@ -315,6 +320,10 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
 }
 
 void TStorage::MoveBaseDeadline() {
+    if (Messages.empty()) {
+        return;
+    }
+
     auto now = TimeProvider->Now();
     auto deadlineDiff = (now - BaseDeadline).Seconds();
 
@@ -322,11 +331,15 @@ void TStorage::MoveBaseDeadline() {
         return;
     }
 
+    auto writeTimestampDiff = Messages.front().WriteTimestampDelta;
+    BaseWriteTimestamp += TDuration::Seconds(writeTimestampDiff);
+
     Batch.RequiredSnapshot = true;
 
     for (size_t i = 0; i < Messages.size(); ++i) {
         auto& message = Messages[i];
         message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
+        message.WriteTimestampDelta = message.WriteTimestampDelta > writeTimestampDiff ? message.WriteTimestampDelta - writeTimestampDiff : 0;
     }
 
     BaseDeadline = now;

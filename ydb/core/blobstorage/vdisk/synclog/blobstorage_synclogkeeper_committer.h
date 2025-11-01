@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_synclogdata.h"
+#include "blobstorage_synclog_context.h"
 
 namespace NKikimr {
     namespace NSyncLog {
@@ -92,12 +93,12 @@ namespace NKikimr {
             const ui64 RecoveryLogConfirmedLsn;
 
             TSyncLogKeeperCommitData(
-                    TSyncLogSnapshotPtr &&syncLogSnap,
+                    TSyncLogSnapshotPtr syncLogSnap,
                     TMemRecLogSnapshotPtr &&swapSnap,
                     TVector<ui32> &&chunksToDeleteDelayed,
                     TVector<ui32> &&chunksToDelete,
                     ui64 recoveryLogConfirmedLsn)
-                : SyncLogSnap(std::move(syncLogSnap))
+                : SyncLogSnap(syncLogSnap)
                 , SwapSnap(std::move(swapSnap))
                 , ChunksToDeleteDelayed(std::move(chunksToDeleteDelayed))
                 , ChunksToDelete(std::move(chunksToDelete))
@@ -127,7 +128,6 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // CreateSyncLogCommitter
         ////////////////////////////////////////////////////////////////////////////
-        class TSyncLogCtx;
         IActor *CreateSyncLogCommitter(
                 TIntrusivePtr<TSyncLogCtx> slCtx,
                 const TActorId &notifyID,

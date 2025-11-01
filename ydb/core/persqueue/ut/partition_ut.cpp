@@ -337,6 +337,8 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
     Ctx.ConstructInPlace();
     Finalizer.ConstructInPlace(*Ctx);
 
+    //Ctx->EnableDetailedPQLog = true;
+
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
 }
@@ -2195,6 +2197,11 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     SendCommitTx(step, txId);
 
     DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=0}}}});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
     DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -2381,6 +2388,11 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
     SendCalcPredicate(step, txId_2, client, 0, 5);
     DBGTRACE_LOG("");
     SendRollbackTx(step, txId_1);
+
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     DBGTRACE_LOG("");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});

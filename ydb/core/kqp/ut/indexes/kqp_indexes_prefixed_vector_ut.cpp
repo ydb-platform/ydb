@@ -763,6 +763,45 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoTestPrefixedVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `user`, `emb`, `data`) VALUES (91, "user_a", "\x03\x31\x03", "19") RETURNING `data`, `emb`, `user`, `pk`;)"), true, Covered);
     }
 
+    Y_UNIT_TEST(PrefixedVectorIndexIgnoreNewPrefix) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+
+        auto session = DoCreateTableForPrefixedVectorIndex(db, false);
+        DoCreatePrefixedVectorIndex(session, false, "", 2);
+
+        const TString originalPostingTable = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        const TString originalPrefixTable = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPrefixTable");
+
+        // Insert to the table with index should succeed
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, user, emb, data) VALUES
+                (101, "user_d", "\x03\x29\x03", "101")
+            )"));
+
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        // Index is not updated
+        const TString postingTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPostingTable");
+        UNIT_ASSERT_STRINGS_EQUAL(originalPostingTable, postingTable1_ins);
+        const TString prefixTable1_ins = ReadTablePartToYson(session, "/Root/TestTable/index/indexImplPrefixTable");
+        UNIT_ASSERT_STRINGS_EQUAL(originalPrefixTable, prefixTable1_ins);
+    }
+
 }
 
 }

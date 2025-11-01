@@ -39,6 +39,11 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
     using TCdcStream = TShardedTableOptions::TCdcStream;
 
+    struct CdcOperationCounts {
+        int Deletes = 0;
+        int Inserts = 0;
+    };
+
     static NKikimrPQ::TPQConfig DefaultPQConfig() {
         NKikimrPQ::TPQConfig pqConfig;
         pqConfig.SetEnabled(true);
@@ -266,6 +271,42 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         }
         
         return result;
+    }
+
+    CdcOperationCounts CountCdcOperations(const TString& backup) {
+        CdcOperationCounts counts;
+        size_t pos = 0;
+        
+        while ((pos = backup.find("bytes_value: \"", pos)) != TString::npos) {
+            pos += 14;
+            size_t endPos = backup.find("\"", pos);
+            if (endPos == TString::npos) break;
+            
+            TString metadataStr = backup.substr(pos, endPos - pos);
+            TString unescaped;
+            for (size_t i = 0; i < metadataStr.size(); ++i) {
+                if (metadataStr[i] == '\\' && i + 3 < metadataStr.size()) {
+                    ui8 val = ((metadataStr[i+1] - '0') << 6) | 
+                             ((metadataStr[i+2] - '0') << 3) | 
+                             (metadataStr[i+3] - '0');
+                    unescaped += static_cast<char>(val);
+                    i += 3;
+                } else {
+                    unescaped += metadataStr[i];
+                }
+            }
+            
+            auto metadata = ParseCdcMetadata(unescaped);
+            if (metadata.IsDelete) {
+                counts.Deletes++;
+            } else {
+                counts.Inserts++;
+            }
+            
+            pos = endPos + 1;
+        }
+        
+        return counts;
     }
 
     NKikimrChangeExchange::TChangeRecord MakeUpsertPartial(ui32 key, ui32 value, const TVector<ui32>& tags = {2}) {
@@ -2593,7 +2634,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
 
-        // Create table with one global sync index
         TShardedTableOptions opts;
         opts.Columns({
             {"key", "Uint32", true, false},
@@ -2604,7 +2644,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         });
         CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
 
-        // Create backup collection with incremental enabled
         ExecSQL(server, edgeActor, R"(
             CREATE BACKUP COLLECTION `MyCollection`
               ( TABLE `/Root/Table`
@@ -2615,21 +2654,9 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               );
             )", false);
 
-        // Perform full backup (creates CDC streams on main table and index tables)
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
-        
-        // Wait for CDC streams to be fully activated on all tables (including index tables)
         SimulateSleep(server, TDuration::Seconds(1));
 
-        // Debug: Verify CDC streams are created on both main table and index table
-        Cerr << "CDC_DEBUG: Checking CDC streams after full backup..." << Endl;
-        auto mainTableCdcCheck = Navigate(runtime, edgeActor, "/Root/Table");
-        Cerr << "CDC_DEBUG: Main table Navigate result Status=" << mainTableCdcCheck->ResultSet.size() << " entries" << Endl;
-        
-        auto indexTableCdcCheck = Navigate(runtime, edgeActor, "/Root/Table/ByValue/indexImplTable");
-        Cerr << "CDC_DEBUG: Index impl table Navigate result Status=" << indexTableCdcCheck->ResultSet.size() << " entries" << Endl;
-
-        // Insert initial data
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
                 (1, 100)
@@ -2638,53 +2665,31 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               ;
             )");
 
-        // Update row: (2, 200) -> (2, 250)
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES (2, 250);
             )");
 
-        // Delete row: (3, 300)
         ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=3;)");
 
-        // Insert new row: (4, 400)
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES (4, 400);
             )");
 
-        // Debug: Verify index table has data before backup
-        auto indexDataBeforeBackup = KqpSimpleExec(runtime, R"(
-            SELECT value, key FROM `/Root/Table/ByValue/indexImplTable`
-            ORDER BY value
-            )");
-        Cerr << "CDC_DEBUG: Index table data BEFORE incremental backup: " << indexDataBeforeBackup << Endl;
-        
-        // Debug: Check which tables are in datashard TableInfos
-        Cerr << "CDC_DEBUG: About to wait for CDC to capture changes..." << Endl;
-
-        // Wait for CDC streams to capture all changes (including on index tables)
         SimulateSleep(server, TDuration::Seconds(1));
 
-        // Take incremental backup
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
-        // Wait for backup operation to complete and CDC offload (including index tables)
         SimulateSleep(server, TDuration::Seconds(10));
 
-        // Find the incremental backup directory (timestamp-dependent)
         TString incrBackupDir = FindIncrementalBackupDir(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
         UNIT_ASSERT_C(!incrBackupDir.empty(), "Could not find incremental backup directory");
-        Cerr << "Found incremental backup directory: " << incrBackupDir << Endl;
 
-        // Verify main table backup contains correct data
         TString mainTablePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/Table";
         auto mainTableBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT key, value FROM `)" << mainTablePath << R"(`
             ORDER BY key
             )");
 
-        // Should contain: (1, NULL) - not changed but tombstone or no entry, (2, 250), (3, NULL), (4, 400)
-        // Actually, incremental backup only contains changes, so: (2, 250), (3, NULL - tombstone), (4, 400)
-        Cerr << "Main table backup: " << mainTableBackup << Endl;
         UNIT_ASSERT_C(mainTableBackup.find("uint32_value: 2") != TString::npos,
             "Main table backup should contain updated key 2");
         UNIT_ASSERT_C(mainTableBackup.find("uint32_value: 250") != TString::npos,
@@ -2696,20 +2701,12 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(mainTableBackup.find("uint32_value: 400") != TString::npos,
             "Main table backup should contain new value 400");
 
-        // Verify index backup table exists and contains correct data
         TString indexBackupPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByValue";
         auto indexBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << indexBackupPath << R"(`
             ORDER BY value
             )");
 
-        Cerr << "CDC_DEBUG: Index backup result: " << indexBackup << Endl;
-        
-        // Index should contain changes:
-        // - (200, 2) - old value deleted due to update
-        // - (250, 2) - new value from update
-        // - (300, 3) - tombstone for deleted row
-        // - (400, 4) - new insert
         UNIT_ASSERT_C(indexBackup.find("uint32_value: 200") != TString::npos,
             "Index backup should contain old value 200 (deleted)");
         UNIT_ASSERT_C(indexBackup.find("uint32_value: 250") != TString::npos,
@@ -2737,7 +2734,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
 
-        // Create table with covering index: ByAge on age, covering name
         TShardedTableOptions opts;
         opts.Columns({
             {"key", "Uint32", true, false},
@@ -2750,7 +2746,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         });
         CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
 
-        // Create backup collection with incremental enabled
         ExecSQL(server, edgeActor, R"(
             CREATE BACKUP COLLECTION `MyCollection`
               ( TABLE `/Root/Table`
@@ -2761,18 +2756,9 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               );
             )", false);
 
-        // Perform full backup (creates CDC streams on main table and index tables)
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
-        
-        // Wait for CDC streams to be fully activated on all tables (including index tables)
         SimulateSleep(server, TDuration::Seconds(1));
 
-        // Debug: Capture index implementation table state after full backup (should be empty)
-        auto indexImplTableInitial = KqpSimpleExec(runtime, R"(
-            SELECT * FROM `/Root/Table/ByAge/indexImplTable`
-            )");
-
-        // Insert initial data
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, salary) VALUES
                 (1, 'Alice', 30u, 5000u)
@@ -2780,79 +2766,34 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               ;
             )");
 
-        // Debug: Capture index implementation table after initial insert
-        auto indexImplTableAfterInsert = KqpSimpleExec(runtime, R"(
-            SELECT * FROM `/Root/Table/ByAge/indexImplTable`
-            )");
-
-        // Update covered column: name changes (should appear in index)
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, salary) VALUES (1, 'Alice2', 30u, 5000u);
             )");
 
-        // Update non-covered column: salary changes (should NOT appear in index backup as a separate change)
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, salary) VALUES (1, 'Alice2', 30u, 6000u);
             )");
 
-        // Update indexed column: age changes (creates tombstone for old + new entry)
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, salary) VALUES (2, 'Bob', 26u, 4000u);
             )");
 
-        // Delete row
         ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=2;)");
 
-        // Wait for CDC streams to capture all changes (including on index tables)
         SimulateSleep(server, TDuration::Seconds(1));
 
-        // Take incremental backup
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
-        // Wait for backup operation to complete and CDC offload (including index tables)
         SimulateSleep(server, TDuration::Seconds(10));
 
-        // Find the incremental backup directory (timestamp-dependent)
         TString incrBackupDir = FindIncrementalBackupDir(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
         UNIT_ASSERT_C(!incrBackupDir.empty(), "Could not find incremental backup directory");
-        Cerr << "Found incremental backup directory: " << incrBackupDir << Endl;
 
-        // Debug: Check main table backup first
-        TString mainTablePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/Table";
-        auto mainBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
-            SELECT * FROM `)" << mainTablePath << R"(`
-            )");
-        Cerr << "Main table backup: " << mainBackup << Endl;
-
-        // Verify index backup table exists and contains covered column data
         TString indexBackupPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByAge";
         auto indexBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << indexBackupPath << R"(`
             )");
 
-        // Debug: Check actual index implementation table
-        auto indexImplTableFinal = KqpSimpleExec(runtime, R"(
-            SELECT * FROM `/Root/Table/ByAge/indexImplTable`
-            )");
-
-        Cerr << "=== DEBUG: Index Tables State ===" << Endl;
-        Cerr << "1. After full backup (should be empty): " << indexImplTableInitial << Endl;
-        Cerr << "2. After initial insert (Alice, Bob): " << indexImplTableAfterInsert << Endl;
-        Cerr << "3. Final state (physical table): " << indexImplTableFinal << Endl;
-        Cerr << "4. Incremental backup (CDC captured): " << indexBackup << Endl;
-        Cerr << "=================================" << Endl;
-        
-        // Incremental backup should contain (with CDC compaction):
-        // - INSERT for (30, 1) with "Alice2" (final state after name update)
-        // - Tombstone (DELETE) for (25, 2) - Bob's old age entry, compacted with initial INSERT
-        // - Tombstone (DELETE) for (26, 2) - Bob's new age entry, compacted with INSERT from age change
-        // 
-        // Note: Bob's name won't appear because:
-        // - Initial INSERT (25, 2, "Bob") was compacted with DELETE (25, 2) → just tombstone
-        // - Age change INSERT (26, 2, "Bob") was compacted with DELETE (26, 2) → just tombstone
-        //
-        // The salary change should not create a separate index entry since salary is not indexed or covered
-        
         UNIT_ASSERT_C(indexBackup.find("uint32_value: 30") != TString::npos,
             "Index backup should contain age 30");
         UNIT_ASSERT_C(indexBackup.find("Alice") != TString::npos,
@@ -2861,53 +2802,14 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
             "Index backup should contain tombstone for age 25");
         UNIT_ASSERT_C(indexBackup.find("uint32_value: 26") != TString::npos,
             "Index backup should contain tombstone for age 26");
-        
-        // Verify tombstones have NULL for covering column (correct behavior for DELETEs)
-        // and INSERT has the actual covering column value
         UNIT_ASSERT_C(indexBackup.find("null_flag_value: NULL_VALUE") != TString::npos,
             "Index backup tombstones should have NULL for covering columns");
 
-        // Parse and verify CDC metadata
-        // The backup contains 3 records, let's verify their metadata
-        size_t pos = 0;
-        int deleteCount = 0;
-        int insertCount = 0;
+        auto counts = CountCdcOperations(indexBackup);
+        Cerr << "CDC metadata: " << counts.Deletes << " DELETEs, " << counts.Inserts << " INSERTs" << Endl;
         
-        while ((pos = indexBackup.find("bytes_value: \"", pos)) != TString::npos) {
-            pos += 14; // Skip 'bytes_value: "'
-            size_t endPos = indexBackup.find("\"", pos);
-            if (endPos == TString::npos) break;
-            
-            TString metadataStr = indexBackup.substr(pos, endPos - pos);
-            // Unescape the string
-            TString unescaped;
-            for (size_t i = 0; i < metadataStr.size(); ++i) {
-                if (metadataStr[i] == '\\' && i + 3 < metadataStr.size()) {
-                    // Octal escape \nnn
-                    ui8 val = ((metadataStr[i+1] - '0') << 6) | 
-                             ((metadataStr[i+2] - '0') << 3) | 
-                             (metadataStr[i+3] - '0');
-                    unescaped += static_cast<char>(val);
-                    i += 3;
-                } else {
-                    unescaped += metadataStr[i];
-                }
-            }
-            
-            auto metadata = ParseCdcMetadata(unescaped);
-            if (metadata.IsDelete) {
-                deleteCount++;
-            } else {
-                insertCount++;
-            }
-            
-            pos = endPos + 1;
-        }
-        
-        Cerr << "CDC metadata: " << deleteCount << " DELETEs, " << insertCount << " INSERTs" << Endl;
-        
-        UNIT_ASSERT_EQUAL_C(deleteCount, 2, "Should have 2 DELETE operations (tombstones for age 25 and 26)");
-        UNIT_ASSERT_EQUAL_C(insertCount, 1, "Should have 1 INSERT operation (for Alice2)");
+        UNIT_ASSERT_EQUAL_C(counts.Deletes, 2, "Should have 2 DELETE operations (tombstones for age 25 and 26)");
+        UNIT_ASSERT_EQUAL_C(counts.Inserts, 1, "Should have 1 INSERT operation (for Alice2)");
     }
 
     Y_UNIT_TEST(IncrementalBackupMultipleIndexes) {
@@ -2927,7 +2829,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
 
-        // Create table with 3 indexes: simple, covering, composite
         TShardedTableOptions opts;
         opts.Columns({
             {"key", "Uint32", true, false},
@@ -2943,7 +2844,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         });
         CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
 
-        // Create backup collection with incremental enabled
         ExecSQL(server, edgeActor, R"(
             CREATE BACKUP COLLECTION `MyCollection`
               ( TABLE `/Root/Table`
@@ -2954,17 +2854,9 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               );
             )", false);
 
-        // Perform full backup (creates CDC streams on main table and index tables)
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
-        
-        // Wait for SchemeBoard updates to propagate to KQP metadata cache.
-        // CDC stream creation increments table schema versions (v1 -> v2), which is published
-        // to SchemeBoard asynchronously. KQP needs time to refresh its metadata cache before
-        // we can query the tables (main + indexes). Without this wait, KQP will fail with
-        // "schema version mismatch during metadata loading" error.
         SimulateSleep(server, TDuration::Seconds(5));
 
-        // Insert initial data
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, city, salary) VALUES
                 (1, 'Alice', 30u, 'NYC', 5000u)
@@ -2972,51 +2864,33 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               ;
             )");
 
-        // Update name: affects ByName and ByCity
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, city, salary) VALUES (1, 'Alice2', 30u, 'NYC', 5000u);
             )");
 
-        // Update age: affects ByAge
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, city, salary) VALUES (2, 'Bob', 26u, 'LA', 4000u);
             )");
 
-        // Delete: affects all indexes
         ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=1;)");
 
-        // Insert new: affects all indexes
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, name, age, city, salary) VALUES (3, 'Carol', 28u, 'SF', 5500u);
             )");
 
-        // Debug: Verify index tables have data before backup
-        auto byNameIndexData = KqpSimpleExec(runtime, R"(
-            SELECT name, key FROM `/Root/Table/ByName/indexImplTable`
-            ORDER BY name
-            )");
-        Cerr << "ByName index table data BEFORE incremental backup: " << byNameIndexData << Endl;
-
-        // Wait for CDC streams to capture all changes (including on index tables)
         SimulateSleep(server, TDuration::Seconds(1));
 
-        // Take incremental backup
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
-        // Wait for backup operation to complete and CDC offload (including index tables)
         SimulateSleep(server, TDuration::Seconds(10));
 
-        // Find the incremental backup directory (timestamp-dependent)
         TString incrBackupDir = FindIncrementalBackupDir(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
         UNIT_ASSERT_C(!incrBackupDir.empty(), "Could not find incremental backup directory");
-        Cerr << "Found incremental backup directory: " << incrBackupDir << Endl;
 
-        // Verify ByName index backup
         TString byNamePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByName";
         auto byNameBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << byNamePath << R"(`
             )");
-        Cerr << "ByName index backup: " << byNameBackup << Endl;
         UNIT_ASSERT_C(byNameBackup.find("Alice") != TString::npos,
             "ByName backup should contain Alice (deleted)");
         UNIT_ASSERT_C(byNameBackup.find("Alice2") != TString::npos,
@@ -3024,12 +2898,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(byNameBackup.find("Carol") != TString::npos,
             "ByName backup should contain Carol (new)");
 
-        // Verify ByAge index backup (covering index with salary)
         TString byAgePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByAge";
         auto byAgeBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << byAgePath << R"(`
             )");
-        Cerr << "ByAge index backup: " << byAgeBackup << Endl;
         UNIT_ASSERT_C(byAgeBackup.find("uint32_value: 30") != TString::npos,
             "ByAge backup should contain age 30 (deleted)");
         UNIT_ASSERT_C(byAgeBackup.find("uint32_value: 25") != TString::npos || 
@@ -3040,12 +2912,10 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(byAgeBackup.find("uint32_value: 5500") != TString::npos,
             "ByAge backup should contain covered salary 5500");
 
-        // Verify ByCity index backup (composite key)
         TString byCityPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByCity";
         auto byCityBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << byCityPath << R"(`
             )");
-        Cerr << "ByCity index backup: " << byCityBackup << Endl;
         UNIT_ASSERT_C(byCityBackup.find("NYC") != TString::npos,
             "ByCity backup should contain NYC");
         UNIT_ASSERT_C(byCityBackup.find("Alice") != TString::npos,
@@ -3075,7 +2945,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         SetupLogging(runtime);
         InitRoot(server, edgeActor);
 
-        // Create table with one global sync index
         TShardedTableOptions opts;
         opts.Columns({
             {"key", "Uint32", true, false},
@@ -3086,7 +2955,6 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         });
         CreateShardedTable(server, edgeActor, "/Root", "Table", opts);
 
-        // Create backup collection with OmitIndexes: true
         ExecSQL(server, edgeActor, R"(
             CREATE BACKUP COLLECTION `MyCollection`
               ( TABLE `/Root/Table`
@@ -3098,10 +2966,8 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
               );
             )", false);
 
-        // Perform full backup
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection`;)", false);
 
-        // Insert and modify data
         ExecSQL(server, edgeActor, R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
                 (1, 100)
@@ -3116,43 +2982,34 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         ExecSQL(server, edgeActor, R"(DELETE FROM `/Root/Table` WHERE key=3;)");
 
-        // Take incremental backup
         ExecSQL(server, edgeActor, R"(BACKUP `MyCollection` INCREMENTAL;)", false);
 
         SimulateSleep(server, TDuration::Seconds(5));
 
-        // Verify main table backup exists
         auto mainTableBackup = KqpSimpleExec(runtime, R"(
             SELECT key, value FROM `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/Table`
             ORDER BY key
             )");
 
-        Cerr << "Main table backup (with OmitIndexes): " << mainTableBackup << Endl;
         UNIT_ASSERT_C(mainTableBackup.find("uint32_value: 2") != TString::npos,
             "Main table backup should exist with OmitIndexes flag");
         UNIT_ASSERT_C(mainTableBackup.find("uint32_value: 250") != TString::npos,
             "Main table backup should contain updated value");
 
-        // Verify index backup directory does NOT exist
-        // Attempt to query index backup table - should fail or return empty
         bool indexBackupExists = true;
         try {
             auto indexBackup = KqpSimpleExec(runtime, R"(
                 SELECT * FROM `/Root/.backups/collections/MyCollection/19700101000002Z_incremental/__ydb_backup_meta/indexes/Table/ByValue`
                 )");
-            // If we got here without exception, check if it's empty or doesn't exist
             if (indexBackup.empty() || indexBackup.find("ERROR") != TString::npos || 
                 indexBackup.find("not found") != TString::npos || indexBackup.find("doesn't exist") != TString::npos) {
                 indexBackupExists = false;
             }
-            Cerr << "Index backup query result (should not exist): " << indexBackup << Endl;
         } catch (...) {
-            // Expected - index backup table should not exist
             indexBackupExists = false;
         }
 
-        UNIT_ASSERT_C(!indexBackupExists,
-            "Index backup should NOT exist when OmitIndexes flag is set");
+        UNIT_ASSERT_C(!indexBackupExists, "Index backup should NOT exist when OmitIndexes flag is set");
     }
 
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)

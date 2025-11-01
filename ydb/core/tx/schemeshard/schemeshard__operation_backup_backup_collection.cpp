@@ -66,7 +66,10 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
-    bool omitIndexes = incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes();
+    
+    bool omitIndexes = bc->Description.GetOmitIndexes() || 
+                       (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
+    
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {

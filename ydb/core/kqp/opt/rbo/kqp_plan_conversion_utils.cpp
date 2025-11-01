@@ -1,10 +1,45 @@
 #include "kqp_plan_conversion_utils.h"
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NKikimr {
 namespace NKqp {
 
 using namespace NYql;
 using namespace NNodes;
+
+TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
+    auto lambda = TCoLambda(node);
+    auto lambdaBody = lambda.Body().Ptr();
+
+    auto exprSublinks = FindNodes(lambdaBody, [](const TExprNode::TPtr& n){return n->IsCallable("KqpPgExprSublink");});
+    if (exprSublinks.empty()) {
+        return node;
+    }
+    else {
+        TNodeOnNodeOwnedMap replaceMap;
+
+        for (auto link : exprSublinks) {
+            auto sublinkVar = TInfoUnit("_rbo_arg_" + std::to_string(PlanProps.InternalVarIdx++), true);
+            auto member = Build<TCoMember>(Ctx, lambda.Pos())
+                    .Struct(lambda.Args().Arg(0).Ptr())
+                    .Name<TCoAtom>().Value(sublinkVar.GetFullName()).Build()
+                    .Done().Ptr();
+            replaceMap[link.Get()] = member;
+            auto subplan = ExprNodeToOperator(TKqpPgExprSublink(link).Expr().Ptr());
+            PlanProps.ScalarSubplans.Add(sublinkVar, subplan);
+        }
+
+        TOptimizeExprSettings settings(&TypeCtx);
+        TExprNode::TPtr newLambdaBody;
+        RemapExpr(lambdaBody, newLambdaBody, replaceMap, Ctx, settings);
+
+        return Build<TCoLambda>(Ctx, lambda.Pos())
+            .Args(lambda.Args())
+            .Body(newLambdaBody)
+            .Done().Ptr();
+    }
+}
 
 TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto opRoot = TKqpOpRoot(node);
@@ -78,7 +113,9 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node)
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpFilter(TExprNode::TPtr node) {
     auto opFilter = TKqpOpFilter(node);
     auto input = ExprNodeToOperator(opFilter.Input().Ptr());
-    return std::make_shared<TOpFilter>(input, node->Pos(), opFilter.Lambda().Ptr());
+    auto lambda = opFilter.Lambda().Ptr();
+    auto newLambda = RemoveScalarSubplans(lambda);
+    return std::make_shared<TOpFilter>(input, node->Pos(), newLambda);
 }
 
 std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpJoin(TExprNode::TPtr node) {

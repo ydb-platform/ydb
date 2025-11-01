@@ -154,6 +154,79 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         }
     }
 
+    Y_UNIT_TEST(ScalarSubquery) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,	
+	            name	String,
+                primary key(id)	
+            );
+
+            CREATE TABLE `/Root/bar` (
+                id	Int64	NOT NULL,	
+	            lastname	String,
+                primary key(id)	
+            );
+        )").GetValueSync();
+
+        NYdb::TValueBuilder rowsTableFoo;
+        rowsTableFoo.BeginList();
+        for (size_t i = 0; i < 1; ++i) {
+            rowsTableFoo.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .EndStruct();
+        }
+        rowsTableFoo.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rowsTableFoo.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowsTableBar;
+        rowsTableBar.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rowsTableBar.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("lastname").String(std::to_string(i) + "_name")
+                .EndStruct();
+        }
+        rowsTableBar.EndList();
+
+        resultUpsert = db.BulkUpsert("/Root/bar", rowsTableBar.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queries = {
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT bar.id FROM bar where bar.id = (SELECT id FROM foo);
+            )"
+        };
+
+        // TODO: The order of result is not defined, we need order by to add more interesting tests.
+        std::vector<std::string> results = {
+            R"([["0"]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
     Y_UNIT_TEST(CrossInnerJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

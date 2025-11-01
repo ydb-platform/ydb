@@ -18,11 +18,15 @@ TIntervalPoint TIntervalPoint::From(
 
 TIntervalPoint TIntervalPoint::To(
     const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    i32 shift = container.IsInclude() ? 0 : -1;
-    if (container.NumColumns() < (ui32)pkSchema->num_fields()) {
-        shift = Max<i32>();
-    }
-
+    const i32 shift = [&]() {
+        if (container.IsAll() || container.NumColumns() < (ui32)pkSchema->num_fields()) {
+            return Max<i32>();
+        } else if (!container.IsInclude()) {
+            return -1;
+        } else {
+            return 0;
+        }
+    }();
     return TIntervalPoint(container, pkSchema, shift);
 }
 

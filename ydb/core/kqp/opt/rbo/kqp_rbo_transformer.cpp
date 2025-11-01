@@ -16,6 +16,7 @@ struct TJoinTableAliases {
 };
 
 THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count"};
+ui64 KqpUniqueAggColumnId{0};
 
 TJoinTableAliases GatherJoinAliasesLeftSideMultiInputs(const TVector<TInfoUnit> &joinKeys, const THashSet<TString> &processedInputs) {
     TJoinTableAliases joinAliases;
@@ -386,6 +387,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         }
 
         // FIXME: Group by key can be an expression, we need to handle this case
+        TVector<std::pair<TInfoUnit, TInfoUnit>> aggRenamesMap;
         TVector<TInfoUnit> groupByKeys;
         auto groupOps = GetSetting(setItem->Tail(), "group_exprs");
         if (groupOps) {
@@ -396,6 +398,9 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 TVector<TInfoUnit> keys;
                 GetAllMembers(body, keys);
                 groupByKeys.insert(groupByKeys.end(), keys.begin(), keys.end());
+                for (const auto &infoUnit : keys) {
+                    aggRenamesMap.push_back({infoUnit, infoUnit});
+                }
             }
         }
 
@@ -405,6 +410,8 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
 
         // This is a hack to enable convertion for aggregation columns.
         THashSet<TString> aggregationColumns;
+        THashSet<TString> columnNames;
+        bool needToRenameAggFields = false;
         // Collect PgAgg for each result item at first pass.
         TVector<TKqpOpAggregationTraits> aggTraitsList;
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
@@ -416,6 +423,21 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 TVector<TInfoUnit> originalColNames;
                 GetAllMembers(pgAgg, originalColNames);
                 Y_ENSURE(originalColNames.size() == 1, "Invalid column size for aggregation columns.");
+                const auto& originalColName = originalColNames.front();
+                auto renamedColName = originalColName;
+
+                // Rename agg column we will add a map to map same column to different renames.
+                if (columnNames.count(originalColName.GetFullName())) {
+                    TStringBuilder strBuilder;
+                    strBuilder << "_kqp_agg_input_";
+                    strBuilder << originalColName.ColumnName;
+                    strBuilder << "_";
+                    strBuilder << ToString(KqpUniqueAggColumnId++);
+                    renamedColName = TInfoUnit(originalColName.Alias, strBuilder);
+                    needToRenameAggFields = true;
+                }
+                aggRenamesMap.push_back({originalColName, renamedColName});
+                columnNames.insert(renamedColName.GetFullName());
 
                 // Result column name.
                 auto resultColName = TString(resultItem->Child(0)->Content());
@@ -427,7 +449,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 // clang-format off
                 auto aggregationTraits = Build<TKqpOpAggregationTraits>(ctx, node->Pos())
                     .OriginalColName<TCoAtom>()
-                        .Value(originalColNames.front().GetFullName())
+                        .Value(renamedColName.GetFullName())
                     .Build()
                     .AggregationFunction<TCoAtom>()
                         .Value(aggFuncName)
@@ -444,6 +466,35 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
 
         TExprNode::TPtr resultExpr = filterExpr;
         if (!aggTraitsList.empty()) {
+            if (needToRenameAggFields) {
+                TVector<TExprNode::TPtr> mapElements;
+                for (const auto &[colName, newColName] : aggRenamesMap) {
+                    // clang-format off
+                    mapElements.push_back(Build<TKqpOpMapElementRename>(ctx, node->Pos())
+                        .Input(resultExpr)
+                        .Variable()
+                            .Value(newColName.GetFullName())
+                        .Build()
+                        .From()
+                            .Value(colName.GetFullName())
+                        .Build()
+                    .Done().Ptr());
+                    // clang-format on
+                }
+
+                // clang-format off
+                resultExpr = Build<TKqpOpMap>(ctx, node->Pos())
+                    .Input(resultExpr)
+                    .MapElements()
+                        .Add(mapElements)
+                    .Build()
+                    .Project()
+                        .Value("false")
+                    .Build()
+                .Done().Ptr();
+                // clang-format on
+            }
+
             TVector<TCoAtom> keyColumns;
             for (const auto &column : groupByKeys) {
                 // clang-format off

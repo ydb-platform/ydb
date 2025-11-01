@@ -8,7 +8,8 @@ namespace NKikimr::NMiniKQL {
 struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
     std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
-    int NTuples{0};
+    int64_t NTuples{0};
+    int64_t AllocatedBytes() const;
 };
 
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;

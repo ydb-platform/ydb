@@ -12,7 +12,7 @@ namespace NKikimr::NMiniKQL {
 
 class IBlockLayoutConverter : private TNonCopyable {
 public:
-public:
+    using TPackResult = ::NKikimr::NMiniKQL::TPackResult;
     using TPtr = std::unique_ptr<IBlockLayoutConverter>;
 
 public:

@@ -339,26 +339,8 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          case $GITHUB_EVENT_NAME in
-            workflow_dispatch)
-              TESTMO_RUN_NAME="${{ github.run_id }} manual"
-              ;;
-            pull_request | pull_request_target)
-              TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-              ;;
-            schedule)
-              TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-              ;;
-            push)
-              TESTMO_RUN_NAME="${{ github.run_id }} POST"
-              ;;
-            *)
-              TESTMO_RUN_NAME="${{ github.run_id }}"
-              ;;
-          esac
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
-            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
           else
             IS_RETRY=0
           fi
@@ -512,9 +494,31 @@ runs:
           fi
 
           # upload tests results to YDB
-          # TODO: remove/rename TESTMO_RUN_NAME variable
-          ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          # Формируем имя для upload на основе типа события и попытки
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              run_name="${{ github.run_id }}_manual"
+              ;;
+            pull_request | pull_request_target)
+              pr_number="${{ github.event.number }}"
+              if [ -n "$pr_number" ]; then
+                run_name="${{ github.run_id }}_PR_${pr_number}"
+              else
+                run_name="${{ github.run_id }}_PR"
+              fi
+              ;;
+            schedule)
+              run_name="${{ github.run_id }}_schedule"
+              ;;
+            push)
+              run_name="${{ github.run_id }}_POST"
+              ;;
+            *)
+              run_name="${{ github.run_id }}"
+              ;;
+          esac
+          run_name="${run_name}_attempt_${RETRY}"
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break

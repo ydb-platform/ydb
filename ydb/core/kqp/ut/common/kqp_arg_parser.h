@@ -119,6 +119,14 @@ public:
         return Values_[key];
     }
 
+    std::string GetStringOrDefault(std::string key, std::string defaultValue) {
+        if (HasArg(key)) {
+            return GetString(key);
+        }
+
+        return defaultValue;
+    }
+
     template <typename TValue>
     auto GetArg(std::string key) {
         return ParseRangedValue<TValue>(GetString(key));

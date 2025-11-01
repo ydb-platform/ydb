@@ -333,6 +333,18 @@ public:
         }
     }
 
+    template <typename Lambda>
+    TRunningStatistics<TValue> Reject(Lambda &&shouldReject) const {
+        TRunningStatistics<TValue> stats;
+        IterateElements([&](TValue value) {
+            if (!shouldReject(value)) {
+                stats.AddValue(value);
+            }
+        });
+
+        return stats;
+    }
+
     TRunningStatistics<i64> operator-(TRunningStatistics rhsStats) const {
         TRunningStatistics<i64> stats;
         IterateElements([&](TValue lhs) {
@@ -398,7 +410,7 @@ private:
 };
 
 template <typename TValue>
-static std::string joinVector(const std::vector<TValue> &data) {
+static std::string joinVector(const std::vector<TValue> &data, std::string delimeter = ";") {
     if (data.empty()) {
         return "";
     }
@@ -407,7 +419,7 @@ static std::string joinVector(const std::vector<TValue> &data) {
     str += std::to_string(data[0]);
 
     for (ui32 i = 1; i < data.size(); ++ i) {
-        str += ";" + std::to_string(data[i]);
+        str += delimeter + std::to_string(data[i]);
     }
 
     return str;

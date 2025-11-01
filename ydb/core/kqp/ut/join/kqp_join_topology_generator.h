@@ -16,6 +16,48 @@ namespace NKikimr::NKqp {
 using TRNG = TSerializableMT19937;
 
 
+class TLexicographicalNameGenerator {
+public:
+    static std::string getName(unsigned ID, bool lowerCase = true) {
+        if (ID < Base_)
+            return std::string(1, fromDigit(ID, lowerCase));
+
+        ID -= Base_;
+
+        unsigned count = 1;
+        unsigned step = Base_;
+        for (; ID >= step;) {
+            ID -= step;
+            step *= step;
+            count *= 2;
+        }
+
+        std::string result(count, fromDigit(Base_ - 1, lowerCase));
+        return result + fromNumber(ID, result.size(), lowerCase);
+    }
+
+private:
+    static std::string fromNumber(unsigned number, unsigned size, bool lowerCase) {
+        std::string stringified = "";
+        for (unsigned i = 0; i < size; ++ i) {
+            stringified.push_back(fromDigit(number % Base_, lowerCase));
+            number /= Base_;
+        }
+
+        return std::string(stringified.rbegin(), stringified.rend());
+    }
+
+    static char fromDigit(unsigned value, bool lowerCase) {
+        assert(0 <= value && value < Base_);
+        return (lowerCase ? 'a' : 'A') + value;
+    }
+
+    static constexpr unsigned Base_ = 'z' - 'a' + 1;
+};
+
+
+
+
 struct TPitmanYorConfig {
     double Alpha;
     double Theta;
@@ -177,6 +219,15 @@ public:
 
     void SetupKeysPitmanYor(TRNG &mt, TPitmanYorConfig config);
 
+    ui32 GetEdges() {
+        ui32 numEdges = 0;
+        for (auto edges : AdjacencyList_) {
+            numEdges += edges.size();
+        }
+
+        return numEdges;
+    }
+
 public:
     struct TEdge {
         unsigned Target;
@@ -233,7 +284,7 @@ TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
 
 std::vector<int> MakeGraphicConnected(std::vector<int> degrees);
 
-void MCMCRandomize(TRNG &mt, TRelationGraph& graph, int numSwaps);
+void MCMCRandomize(TRNG &mt, TRelationGraph& graph);
 
 TRelationGraph GenerateLine(TRNG &rng, unsigned numNodes);
 TRelationGraph GenerateStar(TRNG &rng, unsigned numNodes);

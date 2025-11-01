@@ -10,46 +10,6 @@
 
 namespace NKikimr::NKqp {
 
-class TLexicographicalNameGenerator {
-public:
-    static std::string getName(unsigned ID, bool lowerCase = true) {
-        if (ID < Base_)
-            return std::string(1, fromDigit(ID, lowerCase));
-
-        ID -= Base_;
-
-        unsigned count = 1;
-        unsigned step = Base_;
-        for (; ID >= step;) {
-            ID -= step;
-            step *= step;
-            count *= 2;
-        }
-
-        std::string result(count, fromDigit(Base_ - 1, lowerCase));
-        return result + fromNumber(ID, result.size(), lowerCase);
-    }
-
-private:
-    static std::string fromNumber(unsigned number, unsigned size, bool lowerCase) {
-        std::string stringified = "";
-        for (unsigned i = 0; i < size; ++ i) {
-            stringified.push_back(fromDigit(number % Base_, lowerCase));
-            number /= Base_;
-        }
-
-        return std::string(stringified.rbegin(), stringified.rend());
-    }
-
-    static char fromDigit(unsigned value, bool lowerCase) {
-        assert(0 <= value && value < Base_);
-        return (lowerCase ? 'a' : 'A') + value;
-    }
-
-    static constexpr unsigned Base_ = 'z' - 'a' + 1;
-};
-
-
 static std::string getTableName(unsigned tableID) {
     return TLexicographicalNameGenerator::getName(tableID, /*lowerCase=*/false);
 }
@@ -659,9 +619,12 @@ TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees) {
     return graph;
 }
 
-void MCMCRandomize(TRNG &mt, TRelationGraph& graph, int numSwaps) {
+void MCMCRandomize(TRNG &mt, TRelationGraph& graph) {
     std::uniform_int_distribution<> nodeDist(0, graph.GetN() - 1);
     std::uniform_real_distribution<> probDist(0.0, 1.0);
+
+    ui32 numEdges = graph.GetEdges();
+    ui32 numSwaps = numEdges * log(numEdges);
 
     auto &adjacency = graph.GetAdjacencyList();
 
@@ -670,7 +633,7 @@ void MCMCRandomize(TRNG &mt, TRelationGraph& graph, int numSwaps) {
     const double CONNECTIVITY_PENALTY = 20.0;
     const int MAX_ATTEMPTS = numSwaps * 10;
 
-    int successfulSwaps = 0;
+    ui32 successfulSwaps = 0;
     int attempt = 0;
 
     while (attempt < MAX_ATTEMPTS && (successfulSwaps < numSwaps || !graph.IsConnected())) {

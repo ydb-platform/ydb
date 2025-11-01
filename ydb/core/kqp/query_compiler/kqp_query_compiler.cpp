@@ -1332,6 +1332,9 @@ private:
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
                     // collect lookup columns
                     TVector<TStringBuf> lookupColumns;
+
+                    std::vector<size_t> affectedIndexes;
+                    THashSet<size_t> affectedKeysIndexes;
                     {
                         THashSet<TStringBuf> columnsSet;
                         for (const auto& columnName : columns) {
@@ -1343,8 +1346,34 @@ private:
                             AFL_ENSURE(columnsSet.contains(columnName));
                         }
 
-                        THashSet<TStringBuf> lookupColumnsSet;
                         for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                            const auto& indexDescription = tableMeta->Indexes[index];
+
+                            if (indexDescription.Type == TIndexDescription::EType::GlobalSync
+                                || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
+                                const auto& implTable = tableMeta->ImplTables[index];
+                                
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
+                                    if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
+                                            return columnsSet.contains(column.first);
+                                        })) {
+                                            affectedIndexes.push_back(index);
+                                    }
+
+                                    if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
+                                            return columnsSet.contains(column);
+                                        })) {
+                                            affectedKeysIndexes.insert(index);
+                                    }
+                                } else {
+                                    affectedIndexes.push_back(index);
+                                    affectedKeysIndexes.insert(index);
+                                }
+                            }
+                        }
+
+                        THashSet<TStringBuf> lookupColumnsSet;
+                        for (size_t index : affectedIndexes) {
                             const auto& indexDescription = tableMeta->Indexes[index];
 
                             if (indexDescription.Type != TIndexDescription::EType::GlobalSync
@@ -1356,13 +1385,17 @@ private:
                             AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
                             for (const auto& columnName : implTable->KeyColumnNames) {
-                                if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                                    AFL_ENSURE(columnsSet.contains(columnName));
+                                } else if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
                                     lookupColumns.push_back(columnName);
                                 }
                             }
 
                             for (const auto& [columnName, _] : implTable->Columns) {
-                                if (!columnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
+                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                                    AFL_ENSURE(columnsSet.contains(columnName));
+                                } else if (!columnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
                                     lookupColumns.push_back(columnName);
                                 }
                             }
@@ -1378,9 +1411,8 @@ private:
                     }
 
                     // Fill indexes write settings
-                    for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                    for (size_t index : affectedIndexes) {
                         const auto& indexDescription = tableMeta->Indexes[index];
-
                         if (indexDescription.Type != TIndexDescription::EType::GlobalSync
                                && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
                             continue;
@@ -1392,7 +1424,10 @@ private:
                         auto indexSettings = settingsProto.AddIndexes();
                         FillTableId(*implTable, *indexSettings->MutableTable());
 
-                        indexSettings->SetIsUniq(indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique);
+                        indexSettings->SetIsUniq(
+                            indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique
+                            && settingsProto.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE
+                            && affectedKeysIndexes.contains(index));
 
                         for (const auto& columnName : implTable->KeyColumnNames) {
                             const auto columnMeta = implTable->Columns.FindPtr(columnName);

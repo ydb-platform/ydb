@@ -40,6 +40,16 @@ private:
         };
     };
 
+    struct TLookupState {
+        std::unique_ptr<TKqpStreamLookupWorker> Worker;
+        ui64 ReadsInflight = 0;
+        ui64 LookupColumnsCount = 0;
+
+        bool IsAllReadsFinished() const {
+            return ReadsInflight == 0;
+        }
+    };
+
 public:
     TKqpBufferLookupActor(TKqpBufferTableLookupSettings&& settings)
         : Settings(std::move(settings)) 
@@ -187,16 +197,36 @@ public:
             ).second);
     }
 
-    void AddLookupTask(ui64 cookie, bool uniqueCheck, const std::vector<TConstArrayRef<TCell>>& keys) override {
+    void AddLookupTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys) override {
         auto& state = CookieToLookupState.at(cookie);
         auto& worker = state.Worker;
 
-        AFL_ENSURE(state.ReadsInflight == 0); // Only one lookup task per cookie is allowed.
+        AFL_ENSURE(state.ReadsInflight == 0);
         AFL_ENSURE(state.Worker->AllRowsProcessed());
 
         for (const auto& key : keys) {
             worker->AddInputRow(key);
         }
+
+        StartLookupTask(cookie, state, false, false);
+    }
+
+    void AddUniqueCheckTask(ui64 cookie, const std::vector<TConstArrayRef<TCell>>& keys, bool immediateFail) override {
+        auto& state = CookieToLookupState.at(cookie);
+        auto& worker = state.Worker;
+
+        AFL_ENSURE(state.ReadsInflight == 0);
+        AFL_ENSURE(state.Worker->AllRowsProcessed());
+
+        for (const auto& key : keys) {
+            worker->AddInputRow(key);
+        }
+        
+        StartLookupTask(cookie, state, true, immediateFail);
+    }
+
+    void StartLookupTask(ui64 cookie, TLookupState& state, bool isUniqueCheck, bool uniqueFailOnRead) {
+        auto& worker = state.Worker;
         auto reads = worker->BuildRequests(Partitioning, ReadId);
 
         // lookup can't be overloaded
@@ -204,7 +234,7 @@ public:
 
         for (auto& [shardId, read] : reads) {
             ++state.ReadsInflight;
-            StartTableRead(cookie, shardId, uniqueCheck, std::move(read));
+            StartTableRead(cookie, shardId, isUniqueCheck, uniqueFailOnRead, std::move(read));
         }
     }
 
@@ -220,7 +250,9 @@ public:
 
     void ExtractResult(ui64 cookie, std::function<void(TConstArrayRef<TCell>)>&& callback) override {
         AFL_ENSURE(HasResult(cookie) || IsEmpty(cookie));
-        auto& worker = CookieToLookupState.at(cookie).Worker;
+        auto& state = CookieToLookupState.at(cookie);
+        auto& worker = state.Worker;
+
         // TODO: stats
         worker->ReadAllResult(callback);
         AFL_ENSURE(worker->AllRowsProcessed());
@@ -238,7 +270,7 @@ public:
         return CookieToLookupState.at(cookie).LookupColumnsCount;
     }
 
-    void StartTableRead(ui64 cookie, ui64 shardId, bool uniqueCheck, THolder<TEvDataShard::TEvRead> request) {
+    void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
 
@@ -256,16 +288,17 @@ public:
             record.MutableSnapshot()->SetStep(Settings.MvccSnapshot->GetStep());
             record.MutableSnapshot()->SetTxId(Settings.MvccSnapshot->GetTxId());
         } else {
-            // Unique index check has side effects, so it requires snapshot.
-            //AFL_ENSURE(!uniqueCheck);
+            // Unique index check is ensure, so it requires snapshot. TODO: if there is another read/ensure
+            //AFL_ENSURE(!isUniqueCheck);
         }
+        AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 
         AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);
         record.SetLockTxId(Settings.LockTxId);
         record.SetLockNodeId(Settings.LockNodeId);
         record.SetLockMode(Settings.LockMode);
 
-        if (uniqueCheck) {
+        if (isUniqueCheck) {
             record.SetTotalRowsLimit(1);
         }
 
@@ -306,7 +339,8 @@ public:
                 .LookupCookie = cookie,
                 .ShardId = shardId,
                 .LastSeqNo = 0,
-                .UniqueCheck = uniqueCheck,
+                .UniqueCheck = isUniqueCheck,
+                .FailOnUniqueCheck = failOnUniqueCheck,
                 .Blocked = false,
             }).second);
     }
@@ -459,7 +493,7 @@ public:
             CA_LOG_D("TEvReadAck was sent to shard: " << shardId);
         }
 
-        if (read.UniqueCheck && record.GetRowCount() != 0) {
+        if (read.FailOnUniqueCheck && record.GetRowCount() != 0) {
             return RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
@@ -513,7 +547,7 @@ public:
                 auto requests = lookupState.Worker->RebuildRequest(ev->Get()->ReadId, ReadId);
                 for (auto& request : requests) {
                     ++lookupState.ReadsInflight;
-                    StartTableRead(read.LookupCookie, read.ShardId, read.UniqueCheck, std::move(request));
+                    StartTableRead(read.LookupCookie, read.ShardId, read.UniqueCheck, read.FailOnUniqueCheck, std::move(request));
                 }
                 ReadIdToState.erase(ev->Get()->ReadId);
             } else {
@@ -538,7 +572,7 @@ public:
             auto requests = lookupState.Worker->RebuildRequest(readId, ReadId);
             for (auto& request : requests) {
                 ++lookupState.ReadsInflight;
-                StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.UniqueCheck, std::move(request));
+                StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.UniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
             }
             ReadIdToState.erase(readId);
         } else {
@@ -564,17 +598,6 @@ private:
 
     const TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
 
-    struct TLookupState {
-        std::unique_ptr<TKqpStreamLookupWorker> Worker;
-        ui64 ReadsInflight = 0;
-        ui64 LookupColumnsCount = 0;
-
-
-        bool IsAllReadsFinished() const {
-            return ReadsInflight == 0;
-        }
-    };
-
     THashMap<ui64, TLookupState> CookieToLookupState;
 
     struct TShardState {
@@ -589,6 +612,7 @@ private:
         const ui64 ShardId;
         ui64 LastSeqNo = 0;
         const bool UniqueCheck;
+        const bool FailOnUniqueCheck;
         bool Blocked = false;
     };
 

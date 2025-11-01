@@ -28,7 +28,7 @@ def get_build_size():
     if not os.path.exists(ydbd_path):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
         print("Error: {} not exists, skipping".format(ydbd_path), file=sys.stderr)
-        return 1
+        return 0
 
     binary_size_bytes = subprocess.check_output(
         ["bash", "-c", "cat {} | wc -c".format(ydbd_path)]

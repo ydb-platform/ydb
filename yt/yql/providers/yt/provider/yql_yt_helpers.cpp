@@ -63,14 +63,6 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (lambdaBody.IsCallable("udf") && lambdaBody.ChildrenSize() == 8) {
-        for (const auto& setting: lambdaBody.Child(7)->Children()) {
-            if (setting->HeadPtr()->Content() == "layers") {
-                return false;
-            }
-        }
-    }
-
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
         if (auto maybeRead = maybeLength.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();

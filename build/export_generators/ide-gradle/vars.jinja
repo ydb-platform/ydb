@@ -28,7 +28,7 @@
 
 {#- ErrorProne -#}
 {%- set with_errorprone = not(disable_errorprone) and (target.use_errorprone) and (target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
-{%- set with_test_errorprone = not(disable_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
+{%- set with_test_errorprone = not(disable_errorprone) and not(disable_test_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
 {%- if with_errorprone or with_test_errorprone -%}
 {%-     set errorprones = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|unique -%}
 {%- endif -%}

@@ -305,7 +305,7 @@ private:
     }
 
     void InsertDummyBarrier() {
-        if (PendingBarriers.empty() && PauseBarrier != TBarrier::NoBarrier ) {
+        if (PendingBarriers.empty() && PauseBarrier != TBarrier::NoBarrier) {
             PendingBarriers.emplace_front(TBarrier { .Barrier = PauseBarrier });
         }
     }
@@ -376,7 +376,8 @@ public:
         if (watermark > TBarrier::MaxValidWatermark) {
             watermark = TBarrier::MaxValidWatermark;
         }
-        if (!PendingBarriers.empty() && watermark <= PauseBarrier) { // it is possible channel was paused by idle watermark, then real watermark less pausing watermark arrived; just ignore that
+        if (!PendingBarriers.empty() && watermark <= PauseBarrier) { // it is possible channel was paused by idle watermark, then real watermark less than the pausing watermark arrived; just ignore added watermark
+                                                                     // TODO: consider moving pausing barrier (watermark) backward
             return;
         }
         Y_ENSURE(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);

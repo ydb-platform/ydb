@@ -457,7 +457,7 @@ public:
                     } else {
                         for (ui64 channelId : input.Channels) {
                             const NDq::TChannel& channel = GetChannel(channelId);
-                            if (channel.WatermarksMode != NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            if (channel.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
                                 watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
                                 input.WatermarksIdleTimeoutUs = Max(input.WatermarksIdleTimeoutUs, channel.WatermarksIdleTimeoutUs);
                             }

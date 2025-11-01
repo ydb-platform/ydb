@@ -619,11 +619,11 @@ private:
 
     void InitWatermarkTracker() override {
         auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-        auto idleDelayUs = // TODO remove fallback
-            SourceParams.GetWatermarks().HasIdleDelayUs() ?
-            SourceParams.GetWatermarks().GetIdleDelayUs() :
+        auto idleTimeoutUs = // TODO remove fallback
+            SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
+            SourceParams.GetWatermarks().GetIdleTimeoutUs() :
             lateArrivalDelayUs;
-        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs));
     }
 
     void SchedulePartitionIdlenessCheck(TInstant at) override {

@@ -266,8 +266,8 @@ namespace NYql::NDqs {
             SourceTaskID = resultTask.Id;
         }
 
-        // TODO switch from `PRAGMA dq.WatermarksIdleDelayMs` to `... WITH Watermarks IDLE DELAY ....`
-        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default", Settings->WatermarksIdleDelayMs.Get() ? TMaybe<ui64>(TDuration::MilliSeconds(*Settings->WatermarksIdleDelayMs.Get()).MicroSeconds()) : Nothing());
+        // TODO switch from `PRAGMA dq.WatermarksIdleTimeoutMs` to `... WITH Watermarks IDLE TIMEOUT ....`
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default", Settings->WatermarksIdleTimeoutMs.Get() ? TMaybe<ui64>(TDuration::MilliSeconds(*Settings->WatermarksIdleTimeoutMs.Get()).MicroSeconds()) : Nothing());
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }
@@ -325,8 +325,8 @@ namespace NYql::NDqs {
                     *sourceProto->MutableSettings() = *input.SourceSettings;
                     sourceProto->SetType(input.SourceType);
                     sourceProto->SetWatermarksMode(input.WatermarksMode);
-                    if (input.WatermarksIdleDelayUs) {
-                        sourceProto->SetWatermarksIdleDelayUs(*input.WatermarksIdleDelayUs);
+                    if (input.WatermarksIdleTimeoutUs) {
+                        sourceProto->SetWatermarksIdleTimeoutUs(*input.WatermarksIdleTimeoutUs);
                     }
                 } else {
                     FillInputDesc(inputDesc, input);
@@ -610,8 +610,8 @@ namespace NYql::NDqs {
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
         channelDesc.SetTransportVersion(Settings->GetDataTransportVersion());
         channelDesc.SetWatermarksMode(channel.WatermarksMode);
-        if (channel.WatermarksIdleDelayUs) {
-            channelDesc.SetWatermarksIdleDelayUs(*channel.WatermarksIdleDelayUs);
+        if (channel.WatermarksIdleTimeoutUs) {
+            channelDesc.SetWatermarksIdleTimeoutUs(*channel.WatermarksIdleTimeoutUs);
         }
         channelDesc.SetEnableSpilling(enableSpilling);
 

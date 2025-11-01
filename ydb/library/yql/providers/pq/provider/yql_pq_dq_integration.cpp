@@ -245,8 +245,8 @@ public:
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
                         srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
-                    } else if (name == WatermarksIdleDelayUsSetting) {
-                        srcDesc.MutableWatermarks()->SetIdleDelayUs(FromString<ui64>(Value(setting)));
+                    } else if (name == WatermarksIdleTimeoutUsSetting) {
+                        srcDesc.MutableWatermarks()->SetIdleTimeoutUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     }
@@ -436,14 +436,14 @@ public:
 
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
-            const auto idleDelay = TDuration::MilliSeconds(wrSettings
+            const auto idleTimeout = TDuration::MilliSeconds(wrSettings
 #if 0
-                .WatermarksIdleDelayMs
+                .WatermarksIdleTimeoutMs
 #else
                 .WatermarksLateArrivalDelayMs
 #endif
-                .GetOrElse(TDqSettings::TDefault::WatermarksIdleDelayMs));
-            Add(props, WatermarksIdleDelayUsSetting, ToString(idleDelay.MicroSeconds()), pos, ctx);
+                .GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs));
+            Add(props, WatermarksIdleTimeoutUsSetting, ToString(idleTimeout.MicroSeconds()), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

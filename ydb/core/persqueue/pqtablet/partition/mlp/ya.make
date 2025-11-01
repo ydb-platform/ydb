@@ -5,6 +5,7 @@ SRCS(
     mlp_consumer.cpp
     mlp_message_enricher.cpp
     mlp_storage.cpp
+    mlp_storage__serialization.cpp
 )
 
 

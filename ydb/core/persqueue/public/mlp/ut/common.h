@@ -29,7 +29,7 @@ inline auto CreateSetup() {
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
         },
-        NActors::NLog::PRI_DEBUG
+        NActors::NLog::PRI_ERROR
     );
     return setup;
 }

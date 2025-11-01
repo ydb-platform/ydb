@@ -7,6 +7,7 @@
 #include <util/datetime/base.h>
 
 #include <deque>
+#include <set>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
@@ -39,20 +40,52 @@ public:
 
     struct TMessage {
         ui64 Status: 3 = EMessageStatus::Unprocessed;
-        ui64 Reserve: 2;
-        ui64 HasMessageGroupId: 1 = false;
+        ui64 Reserve: 3;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
         // but it has never been processed successfully.
         ui64 ReceiveCount: 10 = 0;
         // For locked messages, the time after which the message should be returned to the queue by timeout.
         ui64 DeadlineDelta: 16 = 0;
+        ui64 HasMessageGroupId: 1 = false;
         // Hash of the message group. For consumers who keep the order of messages, it is guaranteed that
         // messages within the same group are processed sequentially in the order in which they were recorded
         // in the topic.
-        ui64 MessageGroupIdHash: 32 = 0;
+        ui64 MessageGroupIdHash: 31 = 0;
+        ui64 WriteTimestampDelta: 26 = 0;
     };
-    static_assert(sizeof(TMessage) == sizeof(ui64));
+    static_assert(sizeof(TMessage) == sizeof(ui64) * 2);
+
+    struct TMessageWrapper {
+        ui64 Offset;
+        TMessage Message;
+    };
+
+    struct TBatch {
+        friend class TStorage;
+
+        TBatch(TStorage* storage);
+
+        bool SerializeTo(NKikimrPQ::TMLPStorageWAL&);
+
+        bool GetRequiredSnapshot() const;
+        size_t AffectedMessageCount() const;
+
+    protected:
+        void AddNewMessage(ui64 offset);
+        void AddChange(ui64 offset);
+        void AddDLQ(ui64 offset);
+
+    private:
+        TStorage* Storage;
+
+        std::set<ui64> ChangedMessages;
+        std::optional<ui64> FirstNewMessage;
+        size_t NewMessageCount = 0;
+        std::deque<ui64> DLQ;
+
+        bool RequiredSnapshot = false;
+    };
 
     struct TMetrics {
         size_t InflyMessageCount = 0;
@@ -70,6 +103,7 @@ public:
     void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
 
     ui64 GetFirstOffset() const;
+    size_t GetMessageCount() const;
     ui64 GetLastOffset() const;
     ui64 GetFirstUncommittedOffset() const;
     ui64 GetFirstUnlockedOffset() const;
@@ -93,15 +127,18 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
 
-    void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
+    void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
 
     size_t ProccessDeadlines();
     // TODO MLP удалять сообщения если в партиции сместился StartOffset
     size_t Compact();
     void MoveBaseDeadline();
 
-    bool InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
-    bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);
+    TBatch GetBatch();
+
+    bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
+    bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);
+    bool ApplyWAL(NKikimrPQ::TMLPStorageWAL&);
 
     const TMetrics& GetMetrics() const;
 
@@ -133,9 +170,13 @@ private:
     ui64 FirstUnlockedOffset = 0;
 
     TInstant BaseDeadline;
+    TInstant BaseWriteTimestamp;
 
     std::deque<TMessage> Messages;
     std::unordered_set<ui32> LockedMessageGroupsId;
+    std::deque<ui64> DLQQueue;
+
+    TBatch Batch;
 
     TMetrics Metrics;
 };

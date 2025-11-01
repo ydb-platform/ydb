@@ -59,7 +59,7 @@ private:
     void ProcessEventQueue();
     bool FetchMessagesIfNeeded();
     void ReadSnapshot();
-    void PersistSnapshot();
+    void Persist();
 
     void CommitIfNeeded();
     
@@ -83,6 +83,8 @@ private:
     std::deque<TResult> PendingCommitQueue;
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
+
+    size_t NextWALIndex = 0;
 };
 
 }

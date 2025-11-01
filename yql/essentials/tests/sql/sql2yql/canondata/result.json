@@ -1161,6 +1161,27 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_aggregate-parsetype_constness_/sql.yql"
         }
     ],
+    "test_sql2yql.test[aggregate-random_sample]": [
+        {
+            "checksum": "10955c7af3e2dc246dbe67ecbd7f58a1",
+            "size": 1335,
+            "uri": "https://{canondata_backend}/1937429/0f66a4a4a8e57f0ccfd2a8e1aa69a4a20f5de8ce/resource.tar.gz#test_sql2yql.test_aggregate-random_sample_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggregate-random_sample_opt]": [
+        {
+            "checksum": "31d9b683a155a09b5f79112f8475bbe5",
+            "size": 1403,
+            "uri": "https://{canondata_backend}/1931696/89dba10c8c7a9cdb6e1815cc6bae53643b1044d4/resource.tar.gz#test_sql2yql.test_aggregate-random_sample_opt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[aggregate-random_value]": [
+        {
+            "checksum": "8d7921e9389458950f7ebf9d47c651ce",
+            "size": 1319,
+            "uri": "https://{canondata_backend}/1937429/0f66a4a4a8e57f0ccfd2a8e1aa69a4a20f5de8ce/resource.tar.gz#test_sql2yql.test_aggregate-random_value_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[aggregate-yql-18511]": [
         {
             "checksum": "83bd32f3e0a53ee1796299a2115c9769",
@@ -8791,6 +8812,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_window-presort_window_partition_by_mem_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-random_sample_window]": [
+        {
+            "checksum": "4d076cc9e81831fc81cae3d3c0240c4d",
+            "size": 1368,
+            "uri": "https://{canondata_backend}/1903885/0347f00733d8cd34543b7f0d4d7f0c370abdbbb0/resource.tar.gz#test_sql2yql.test_window-random_sample_window_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[window-rank/nulls]": [
         {
             "checksum": "d14bd72b327b3f8ac8ab5a8a02c026e7",
@@ -9766,6 +9794,21 @@
     "test_sql_format.test[aggregate-parsetype_constness]": [
         {
             "uri": "file://test_sql_format.test_aggregate-parsetype_constness_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-random_sample]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-random_sample_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-random_sample_opt]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-random_sample_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[aggregate-random_value]": [
+        {
+            "uri": "file://test_sql_format.test_aggregate-random_value_/formatted.sql"
         }
     ],
     "test_sql_format.test[aggregate-yql-18511]": [
@@ -13761,6 +13804,11 @@
     "test_sql_format.test[window-presort_window_partition_by_mem]": [
         {
             "uri": "file://test_sql_format.test_window-presort_window_partition_by_mem_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-random_sample_window]": [
+        {
+            "uri": "file://test_sql_format.test_window-random_sample_window_/formatted.sql"
         }
     ],
     "test_sql_format.test[window-rank/nulls]": [

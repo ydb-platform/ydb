@@ -1564,6 +1564,7 @@ TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const 
 TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode);
 TAggregationPtr BuildNthFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+TAggregationPtr BuildReservoirSamplingFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue);
 
 // Implemented in builtin.cpp
 TNodePtr BuildSqlCall(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args,

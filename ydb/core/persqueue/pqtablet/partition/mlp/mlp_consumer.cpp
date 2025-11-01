@@ -57,8 +57,9 @@ void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
     // TODO MLP Update consumer config
+    LOG_D("Initializing with consumer config: " << Config.ShortDebugString());
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
-    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+    Storage->SetMaxMessageReceiveCount(Config.GetMaxProcessingAttempts());
 
     auto key = MakeSnapshotKey(PartitionId, Config.GetName());
     LOG_D("Reading snapshot " << key << " from " << TabletActorId.ToString());
@@ -323,7 +324,7 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
         if (visibilityDeadline == TInstant::Zero()) {
-            visibilityDeadline = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds()).ToDeadLine(now);
+            visibilityDeadline = TDuration::Seconds(Config.GetDefaultProcessingTimeoutSeconds()).ToDeadLine(now);
         }
 
         std::deque<TMessageId> messages;

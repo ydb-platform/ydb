@@ -1,5 +1,6 @@
 #include "pq_schema_actor.h"
 
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
@@ -187,7 +188,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
-    void ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+    TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+        Cerr << (TStringBuilder() << ">>>>> a " << alter.ShortDebugString() << Endl);
         if (alter.has_set_important()) {
             consumer.set_important(alter.set_important());
         }
@@ -206,6 +208,65 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (alter.has_reset_availability_period()) {
             consumer.clear_availability_period();
         }
+
+        if (consumer.consumer_type() == Ydb::Topic::CONSUMER_TYPE_SHARED) {
+            if (alter.has_set_default_processing_timeout()) {
+                consumer.mutable_default_processing_timeout()->CopyFrom(alter.set_default_processing_timeout());
+            }
+
+            if (alter.has_alter_dead_letter_policy()) {
+                auto& alterPolicy = alter.alter_dead_letter_policy();
+                auto* policy = consumer.mutable_dead_letter_policy();
+                if (alterPolicy.has_set_enabled()) {
+                    policy->set_enabled(alterPolicy.set_enabled());
+                }
+
+                if (alterPolicy.has_alter_condition()) {
+                    policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
+                }
+
+                if (alterPolicy.has_alter_move_action()) {
+                    if (!policy->has_move_action()) {
+                        return "Cannot alter move action";
+                    }
+                    if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
+                        if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
+                            return "Dead letter queue cannot be empty";
+                        }
+                        policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
+                    }
+                } else if (alterPolicy.has_set_move_action()) {
+                    if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
+                        return "Dead letter queue cannot be empty";
+                    }
+                    policy->clear_action();
+                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
+                } else if (alterPolicy.has_set_delete_action()) {
+                    policy->clear_action();
+                    policy->mutable_delete_action();
+                }
+            }
+        } else {
+            if (alter.has_set_default_processing_timeout()) {
+                return "Cannot alter default processing timeout for streaming consumer";
+            }
+            if (alter.has_alter_dead_letter_policy()) {
+                auto& alterPolicy = alter.alter_dead_letter_policy();
+                if (alterPolicy.has_set_enabled()) {
+                    return "Cannot alter dead letter policy for streaming consumer";
+                }
+
+                if (alterPolicy.has_alter_condition()) {
+                    return "Cannot alter dead letter policy condition for streaming consumer";
+                }
+
+                if (alterPolicy.has_alter_move_action() || alterPolicy.has_set_move_action() || alterPolicy.has_set_delete_action()) {
+                    return "Cannot alter dead letter policy action for streaming consumer";
+                }
+            }
+        }
+
+        return {};
     }
 
     TMsgPqCodes AddReadRuleToConfig(
@@ -216,6 +277,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& pqConfig,
         bool enableTopicDiskSubDomainQuota
     ) {
+        Cerr << (TStringBuilder() << ">>>>> a " << rr.ShortDebugString() << Endl);
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
             return TMsgPqCodes(TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
@@ -227,7 +289,50 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto* consumer = config->AddConsumers();
 
         consumer->SetName(consumerName);
-        consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+
+        switch(rr.consumer_type()) {
+            case Ydb::Topic::CONSUMER_TYPE_STREAMING:
+            case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
+                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+
+                if (rr.has_keep_messages_order()) {
+                    return TMsgPqCodes("cannot set keep messages order for streaming consumer",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+                if (rr.has_default_processing_timeout()) {
+                    return TMsgPqCodes("cannot set default processing timeout for streaming consumer",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+                if (rr.has_dead_letter_policy()) {
+                    return TMsgPqCodes("cannot set dead letter policy for streaming consumer",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+
+                break;
+            case Ydb::Topic::CONSUMER_TYPE_SHARED: {
+                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+
+                consumer->SetKeepMessageOrder(rr.keep_messages_order());
+                consumer->SetDefaultProcessingTimeoutSeconds(rr.default_processing_timeout().seconds());
+
+                consumer->SetDeadLetterPolicyEnabled(rr.dead_letter_policy().enabled());
+                consumer->SetMaxProcessingAttempts(rr.dead_letter_policy().condition().max_processing_attempts());
+
+                if (rr.dead_letter_policy().has_move_action()) {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+                    consumer->SetDeadLetterQueue(rr.dead_letter_policy().move_action().dead_letter_queue());
+                } else if (rr.dead_letter_policy().has_delete_action()) {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+                } else {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+                }
+
+                break;
+            }
+            case Ydb::Topic::ConsumerType::ConsumerType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            case Ydb::Topic::ConsumerType::ConsumerType_INT_MIN_SENTINEL_DO_NOT_USE_:
+                return TMsgPqCodes(TStringBuilder() << "Unsupported consumer type", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        }
 
         if (rr.read_from().seconds() < 0) {
             return TMsgPqCodes(
@@ -268,8 +373,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                 passwordHash = MD5::Data(pair.second);
                 passwordHash.to_lower();
                 hasPassword = true;
-            } else if (pair.first == "_mlp") { // TODO MLP remove it
-                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
             }
         }
         if (serviceType.empty()) {
@@ -1171,8 +1274,8 @@ namespace NKikimr::NGRpcProxy::V1 {
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(pqConfig);
 
 
-        for (const auto& rr : request.consumers()) {
-            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, rr, supportedClientServiceTypes, true, pqConfig,
+        for (const auto& consumer : request.consumers()) {
+            auto messageAndCode = AddReadRuleToConfig(pqTabletConfig, consumer, supportedClientServiceTypes, true, pqConfig,
                                                       appData->FeatureFlags.GetEnableTopicDiskSubDomainQuota());
             if (messageAndCode.PQCode != Ydb::PersQueue::ErrorCode::OK) {
                 error = messageAndCode.Message;
@@ -1377,18 +1480,10 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
             auto& consumer = consumers.back().second;
-            consumer.set_name(name);
-            consumer.set_important(c.GetImportant());
-            consumer.mutable_read_from()->set_seconds(c.GetReadFromTimestampsMs() / 1000);
-            (*consumer.mutable_attributes())["_service_type"] = c.GetServiceType();
-            (*consumer.mutable_attributes())["_version"] = TStringBuilder() << c.GetVersion();
-            for (ui32 codec : c.GetCodec().GetIds()) {
-                consumer.mutable_supported_codecs()->add_codecs(codec + 1);
-            }
-            if (ui64 ms = c.GetAvailabilityPeriodMs()) {
-                consumer.mutable_availability_period()->set_seconds(ms / 1000);
-                consumer.mutable_availability_period()->set_nanos((ms % 1000) * 1'000'000);
-            }
+
+            Ydb::StatusIds_StatusCode status;
+            TString error;
+            FillConsumer(consumer, c, status, error, false);
         }
 
 
@@ -1412,7 +1507,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             for (auto& consumer : consumers) {
                 if (consumer.second.name() == name || consumer.second.name() == oldName) {
                     found = true;
-                    ProcessAlterConsumer(consumer.second, alter);
+                    if (auto error_ = ProcessAlterConsumer(consumer.second, alter)) {
+                        error = error_;
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
                     consumer.first = true; // check service type
                     break;
                 }

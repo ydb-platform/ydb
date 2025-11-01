@@ -11,7 +11,7 @@
 namespace NKikimr {
 
 bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
-    Ydb::StatusIds_StatusCode& status, TString& error)
+    Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
     auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName(), pqConfig);
@@ -32,7 +32,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
     TString serviceType = "";
     if (in.HasServiceType()) {
         serviceType = in.GetServiceType();
-    } else {
+    } else if (checkServiceType) {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {
             error = "service type must be set for all read rules";
             status = Ydb::StatusIds::INTERNAL_ERROR;
@@ -41,6 +41,36 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
         serviceType = pqConfig.GetDefaultClientServiceType().GetName();
     }
     (*out.mutable_attributes())["_service_type"] = serviceType;
+
+    switch (in.GetType()) {
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
+            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_STREAMING);
+            break;
+        }
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
+            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
+
+            out.set_keep_messages_order(in.GetKeepMessageOrder());
+            out.mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
+
+            auto* deadLetterPolicy = out.mutable_dead_letter_policy();
+            deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
+            deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
+
+            switch(in.GetDeadLetterPolicy()) {
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                    deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(in.GetDeadLetterQueue());
+                    break;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                    deadLetterPolicy->mutable_delete_action();
+                    break;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                    break;
+            }
+            break;
+        }
+    }
+
     return true;
 }
 

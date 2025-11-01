@@ -42,33 +42,6 @@ public:
     {
     }
 
-    static void ConvertAlterConsumerToProto(const TAlterConsumerSettings& settings, Ydb::Topic::AlterConsumer& consumerProto) {
-        consumerProto.set_name(TStringType{settings.ConsumerName_});
-        if (settings.SetImportant_)
-            consumerProto.set_set_important(*settings.SetImportant_);
-        if (settings.SetAvailabilityPeriod_) {
-            if (settings.SetAvailabilityPeriod_ != TDuration::Zero()) {
-                consumerProto.mutable_set_availability_period()->set_seconds(settings.SetAvailabilityPeriod_->Seconds());
-                consumerProto.mutable_set_availability_period()->set_nanos((settings.SetAvailabilityPeriod_->MicroSeconds() % 1'000'000) * 1'000);
-            } else {
-                consumerProto.mutable_reset_availability_period();
-            }
-        }
-        if (settings.SetReadFrom_)
-            consumerProto.mutable_set_read_from()->set_seconds(settings.SetReadFrom_->Seconds());
-
-        if (settings.SetSupportedCodecs_) {
-            for (const auto& codec : *settings.SetSupportedCodecs_) {
-                consumerProto.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
-            }
-        }
-
-        for (auto& pair : settings.AlterAttributes_) {
-            (*consumerProto.mutable_alter_attributes())[pair.first] = pair.second;
-        }
-    }
-
-
     static Ydb::Topic::CreateTopicRequest MakePropsCreateRequest(const std::string& path, const TCreateTopicSettings& settings) {
         Ydb::Topic::CreateTopicRequest request = MakeOperationRequest<Ydb::Topic::CreateTopicRequest>(settings);
         request.set_path(TStringType{path});
@@ -147,7 +120,7 @@ public:
 
         for (const auto& consumer : settings.AlterConsumers_) {
             Ydb::Topic::AlterConsumer& consumerProto = *request.add_alter_consumers();
-            ConvertAlterConsumerToProto(consumer, consumerProto);
+            consumer.SerializeTo(consumerProto);
         }
 
         if (auto level = std::get_if<EMetricsLevel>(&settings.MetricsLevel_)) {

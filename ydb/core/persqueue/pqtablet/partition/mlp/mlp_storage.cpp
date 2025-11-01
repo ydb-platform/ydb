@@ -7,6 +7,7 @@ namespace NKikimr::NPQ::NMLP {
 
 TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider)
     : TimeProvider(timeProvider)
+    , Batch(this)
 {
     BaseDeadline = timeProvider->Now();
 }
@@ -33,9 +34,12 @@ std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromO
                 ++FirstUnlockedOffset;
             }
 
+            ui64 offset = FirstOffset + i;
+            Batch.AddChange(offset);
+
             return NextResult{
                 .Message = DoLock(i, deadline),
-                .FromOffset = FirstOffset + i + 1
+                .FromOffset = offset + 1
             };
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
@@ -58,6 +62,8 @@ bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
     if (!message) {
         return false;
     }
+
+    Batch.AddChange(messageId);
 
     auto newDeadlineDelta = NormalizeDeadline(deadline);
     message->DeadlineDelta = newDeadlineDelta;
@@ -149,86 +155,16 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,
-        .HasMessageGroupId = hasMessagegroup,
         .ReceiveCount = 0,
         .DeadlineDelta = 0,
+        .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
     });
 
+    Batch.AddNewMessage(offset);
+
     ++Metrics.InflyMessageCount;
     ++Metrics.UnprocessedMessageCount;
-}
-
-bool TStorage::InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
-    AFL_ENSURE(snapshot.GetFormatVersion() == 1)("v", snapshot.GetFormatVersion());
-
-    Messages.resize(snapshot.GetMessages().length() / sizeof(TMessage));
-
-    auto& meta = snapshot.GetMeta();
-    FirstOffset = meta.GetFirstOffset();
-    FirstUncommittedOffset = FirstOffset;
-    FirstUnlockedOffset = FirstOffset;
-    BaseDeadline = TInstant::MilliSeconds(meta.GetBaseDeadlineMilliseconds());
-
-    bool moveUnlockedOffset = true;
-    bool moveUncommittedOffset = true;
-
-    const TMessage* ptr = reinterpret_cast<const TMessage*>(snapshot.GetMessages().data());
-    for (size_t i = 0; i < Messages.size(); ++i) {
-        auto& message = Messages[i] = ptr[i];  // TODO BIGENDIAN/LOWENDIAN
-
-        switch(message.Status) {
-            case EMessageStatus::Locked:
-                ++Metrics.LockedMessageCount;
-                if (KeepMessageOrder && message.HasMessageGroupId) {
-                    LockedMessageGroupsId.insert(message.MessageGroupIdHash);
-                    ++Metrics.LockedMessageGroupCount;
-                }
-                moveUncommittedOffset = false;
-                break;
-            case EMessageStatus::Committed:
-                ++Metrics.CommittedMessageCount;
-                break;
-            case EMessageStatus::Unprocessed:
-                ++Metrics.UnprocessedMessageCount;
-                moveUnlockedOffset = false;
-                moveUncommittedOffset = false;
-                break;
-            case EMessageStatus::DLQ:
-                moveUncommittedOffset = false;
-                break;
-        }
-    
-        if (moveUnlockedOffset) {
-            ++FirstUnlockedOffset;
-        }
-        if (moveUncommittedOffset) {
-            ++FirstUncommittedOffset;
-        }
-    }
-
-    Metrics.InflyMessageCount = Messages.size();
-
-    return true;
-}
-
-bool TStorage::CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
-    auto* meta = snapshot.MutableMeta();
-    meta->SetFirstOffset(FirstOffset);
-    meta->SetFirstUncommittedOffset(FirstUncommittedOffset);
-    meta->SetBaseDeadlineMilliseconds(BaseDeadline.MilliSeconds());
-
-    snapshot.SetFormatVersion(1);
-
-    TString buffer;
-    buffer.reserve(Messages.size() * sizeof(TMessage));
-    for (auto& message : Messages) {
-        void* ptr = &message;
-        buffer.append(static_cast<char*>(ptr), sizeof(TMessage)); // TODO BIGENDIAN/LOWENDIAN
-    }
-    snapshot.SetMessages(std::move(buffer));
-
-    return true;
 }
 
 TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) {
@@ -309,10 +245,14 @@ bool TStorage::DoCommit(ui64 offset) {
 
     switch(message->Status) {
         case EMessageStatus::Unprocessed:
+            Batch.AddChange(offset);
+
             --Metrics.UnprocessedMessageCount;
             ++Metrics.CommittedMessageCount;
             break;
         case EMessageStatus::Locked:
+            Batch.AddChange(offset);
+
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
                 if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
@@ -356,11 +296,15 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
         }
     }
 
+    Batch.AddChange(offset);
+
     --Metrics.LockedMessageCount;
 
     if (message.ReceiveCount >= MaxMessageReceiveCount) {
         // TODO Move to DLQ
         message.Status = EMessageStatus::DLQ;
+        DLQQueue.push_back(offset);
+        Batch.AddDLQ(offset);
 
         ++Metrics.DLQMessageCount;
     } else {
@@ -374,7 +318,14 @@ void TStorage::MoveBaseDeadline() {
     auto now = TimeProvider->Now();
     auto deadlineDiff = (now - BaseDeadline).Seconds();
 
-    for (auto& message : Messages) {
+    if (!deadlineDiff) {
+        return;
+    }
+
+    Batch.RequiredSnapshot = true;
+
+    for (size_t i = 0; i < Messages.size(); ++i) {
+        auto& message = Messages[i];
         message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
     }
 
@@ -392,12 +343,20 @@ void TStorage::UpdateFirstUncommittedOffset() {
     }
 }
 
+TStorage::TBatch TStorage::GetBatch() {
+    return std::exchange(Batch, {this});
+}
+
 const TStorage::TMetrics& TStorage::GetMetrics() const {
     return Metrics;
 }
 
 ui64 TStorage::GetFirstOffset() const {
     return FirstOffset;
+}
+
+size_t TStorage::GetMessageCount() const {
+    return Messages.size();
 }
 
 ui64 TStorage::GetLastOffset() const {
@@ -432,6 +391,34 @@ TString TStorage::DebugString() const {
 
     sb << "]";
     return sb;
+}
+
+TStorage::TBatch::TBatch(TStorage* storage)
+    : Storage(storage)
+{
+}
+
+void TStorage::TBatch::AddChange(ui64 offset) {
+    ChangedMessages.insert(offset);
+}
+
+void TStorage::TBatch::AddDLQ(ui64 offset) {
+    DLQ.push_back(offset);
+}
+
+void TStorage::TBatch::AddNewMessage(ui64 offset) {
+    if (!FirstNewMessage) {
+        FirstNewMessage = offset;
+    }
+    ++NewMessageCount;
+}
+
+size_t TStorage::TBatch::AffectedMessageCount() const {
+    return ChangedMessages.size() + DLQ.size() + NewMessageCount;
+}
+
+bool TStorage::TBatch::GetRequiredSnapshot() const {
+    return RequiredSnapshot;
 }
 
 } // namespace NKikimr::NPQ::NMLP

@@ -427,7 +427,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
     {
         TStorage storage(CreateDefaultTimeProvider());
 
-        storage.CreateSnapshot(snapshot);
+        storage.SerializeTo(snapshot);
 
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetFormatVersion(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstOffset(), 0);
@@ -438,7 +438,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
     {
         TStorage storage(CreateDefaultTimeProvider());
 
-        storage.InitializeFromSnapshot(snapshot);
+        storage.Initialize(snapshot);
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 0);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 0);
@@ -473,7 +473,7 @@ Y_UNIT_TEST(StorageSerialization) {
         storage.Next(TInstant::Now() + TDuration::Seconds(1));
         storage.Commit(5);
 
-        storage.CreateSnapshot(snapshot);
+        storage.SerializeTo(snapshot);
 
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetFormatVersion(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstOffset(), 3);
@@ -485,7 +485,7 @@ Y_UNIT_TEST(StorageSerialization) {
         TStorage storage(CreateDefaultTimeProvider());
         storage.SetKeepMessageOrder(true);
 
-        storage.InitializeFromSnapshot(snapshot);
+        storage.Initialize(snapshot);
 
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);

@@ -45,6 +45,25 @@ TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName) {
     return ikey.ToString();
 }
 
+static constexpr char WALSeparator = '/';
+
+TString MakeWALKey(ui32 partitionId, const TString& consumerName, ui32 index) {
+    TKeyPrefix ikey(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId), TKeyPrefix::EMark::MarkMLPWAL);
+    ikey.Append(consumerName.c_str(), consumerName.size());
+    ikey.Append(WALSeparator);
+    ikey.Append(Sprintf("%.5" PRIu32, index).data(), 5);
+
+    return ikey.ToString();
+}
+
+TString MinWALKey(ui32 partitionId, const TString& consumerName) {
+    return MakeWALKey(partitionId, consumerName, 0);
+}
+
+TString MaxWALKey(ui32 partitionId, const TString& consumerName) {
+    return MakeWALKey(partitionId, consumerName, 99999);
+}
+
 TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , PartitionId(partitionId)
@@ -60,10 +79,15 @@ void TConsumerActor::Bootstrap() {
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
 
-    auto key = MakeSnapshotKey(PartitionId, Config.GetName());
-    LOG_D("Reading snapshot " << key << " from " << TabletActorId.ToString());
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    request->Record.AddCmdRead()->SetKey(key);
+    request->Record.AddCmdRead()->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
+    auto* readWAL = request->Record.AddCmdReadRange();
+    readWAL->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
+    readWAL->MutableRange()->SetIncludeFrom(true);
+    readWAL->MutableRange()->SetTo(MinWALKey(PartitionId, Config.GetName()));
+    readWAL->MutableRange()->SetIncludeTo(true);
+    readWAL->SetIncludeData(true);
+
     Send(TabletActorId, std::move(request));
 
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
@@ -156,7 +180,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             }
 
             if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
-                Storage->InitializeFromSnapshot(snapshot);
+                Storage->Initialize(snapshot);
             } else {
                 LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
             }
@@ -169,6 +193,40 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
         }
         default:
             return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
+    }
+
+    if (record.ReadRangeResultSize() != 1) {
+        return Restart(TStringBuilder() << "Unexpected KV response on initialization: " << record.ReadResultSize());
+    }
+
+    auto& walResult = record.GetReadRangeResult(0);
+
+    switch(walResult.GetStatus()) {
+        case NKikimrProto::OK: {
+
+            for (auto w : walResult.GetPair()) {
+                NKikimrPQ::TMLPStorageWAL wal;
+                if (!wal.ParseFromString(w.GetValue())) {
+                    return Restart(TStringBuilder() << "Parse wal error");
+                }
+
+                if (Config.GetGeneration() == wal.GetGeneration()) {
+                    Storage->ApplyWAL(wal);
+                } else {
+                    LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
+                }
+            }
+
+            NextWALIndex = walResult.GetPair().size();
+
+            break;
+        }
+        case NKikimrProto::NODATA: {
+            LOG_D("Initializing new consumer");
+            break;
+        }
+        default:
+            return Restart(TStringBuilder() << "Received KV response error on initialization: " << walResult.GetStatus());
     }
 
     CommitIfNeeded();
@@ -360,28 +418,59 @@ void TConsumerActor::ProcessEventQueue() {
         return;
     }
 
-    PersistSnapshot();
+    Persist();
 }
 
-void TConsumerActor::PersistSnapshot() {
-    LOG_D("PersistSnapshot");
+void TConsumerActor::Persist() {
+    LOG_D("Persist");
 
     Become(&TConsumerActor::StateWrite);
 
-    // TODO MLP Move StartOffset
-    Storage->Compact();
-
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-
-    auto* config = snapshot.MutableConfiguration();
-    config->SetConsumerName(Config.GetName());
-    config->SetGeneration(Config.GetGeneration());
-    Storage->CreateSnapshot(snapshot);
+    auto batch = Storage->GetBatch();
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-    auto* write = request->Record.AddCmdWrite();
-    write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
-    write->SetValue(snapshot.SerializeAsString());
+
+    auto requireSnapshot = batch.GetRequiredSnapshot()
+        || NextWALIndex == 100
+        || batch.AffectedMessageCount() > Storage->GetMessageCount() / 2 /* Affected message count is very big  */
+        || Storage->GetMessageCount() < 32 /* Snapshot is small. WAL not required */;
+
+    if (requireSnapshot) {
+        // TODO MLP Move StartOffset
+        Storage->Compact();
+
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+
+        auto* config = snapshot.MutableConfiguration();
+        config->SetConsumerName(Config.GetName());
+        config->SetGeneration(Config.GetGeneration());
+        Storage->SerializeTo(snapshot);
+
+        auto* write = request->Record.AddCmdWrite();
+        write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
+        write->SetValue(snapshot.SerializeAsString());
+        if (write->GetValue().size() < 1000) {
+            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+        }
+
+        auto* del = request->Record.AddCmdDeleteRange();
+        del->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
+        del->MutableRange()->SetIncludeFrom(true);
+        del->MutableRange()->SetTo(MinWALKey(PartitionId, Config.GetName()));
+        del->MutableRange()->SetIncludeTo(true);
+
+        NextWALIndex = 0;
+    } else {
+        NKikimrPQ::TMLPStorageWAL wal;
+        batch.SerializeTo(wal);
+
+        auto* write = request->Record.AddCmdWrite();
+        write->SetKey(MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex));
+        write->SetValue(wal.SerializeAsString());
+        if (write->GetValue().size() < 1000) {
+            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+        }
+    }
 
     Send(TabletActorId, std::move(request));
 }

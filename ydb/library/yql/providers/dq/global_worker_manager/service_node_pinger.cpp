@@ -288,7 +288,7 @@ private:
                 if (!lastPingTime || errors > 1 || oks < 2 || !result.NodeId) {
                     // GRPC ping
                     NYdbGrpc::TCallMeta meta;
-                    meta.Timeout = timeout;
+                    meta.Timeout = NYdb::TDeadline::SafeDurationCast(timeout);
                     result.Connection->DoRequest<Yql::DqsProto::RegisterNodeRequest, Yql::DqsProto::RegisterNodeResponse>(
                         req, [=] (NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::RegisterNodeResponse&& resp) {
                             if (!status.Ok()) {

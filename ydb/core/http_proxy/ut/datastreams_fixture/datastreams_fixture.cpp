@@ -1,5 +1,7 @@
 #include "datastreams_fixture.h"
 
+#include <ydb/core/http_proxy/auth_actors.h>
+
 #include <util/system/env.h>
 
 #include <thread>
@@ -17,12 +19,12 @@ void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
     InitAll();
 }
 
-void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering) {
+void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool enableSqsTopic) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
     InitKikimr(yandexCloudMode, enableMetering);
     InitAccessServiceService();
-    InitHttpServer(yandexCloudMode);
+    InitHttpServer(yandexCloudMode, enableSqsTopic);
 }
 
 TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) {
@@ -693,7 +695,7 @@ void THttpProxyTestMock::InitAccessServiceService() {
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
@@ -706,6 +708,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode) {
     config.MutableHttpConfig()->SetPort(HttpServicePort);
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
     config.MutableHttpConfig()->SetYmqEnabled(true);
+    config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
 

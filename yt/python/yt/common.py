@@ -269,6 +269,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_proxy_banned(self):
+        """Proxy is banned."""
+        return self.contains_code(2100)
+
     def is_rpc_response_memory_pressure(self):
         """Rpc response memory pressure."""
         return self.contains_code(122)

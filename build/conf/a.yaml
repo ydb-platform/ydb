@@ -1,0 +1,14 @@
+service: docstools
+title: Build Config Auto-trigger
+
+ci:
+  secret: sec-01drh3z694nqvd4wa9qwc0y39z
+  runtime:
+    sandbox:
+      owner: DOCS_TO_YFM
+
+  on-demand-auto:
+    - abs-paths:
+        - 'devtools/dummy_arcadia/hello_docs/yfm-test-ext/a.yaml'  # new CI
+        - 'devtools/dummy_arcadia/hello_docs/yfm-test-doc/a.yaml'  # old CI
+      tags: docs-ci-action

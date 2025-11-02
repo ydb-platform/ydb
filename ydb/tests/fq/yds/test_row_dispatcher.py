@@ -25,6 +25,14 @@ YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
 
+class Param(object):
+    def __init__(
+        self,
+        skip_errors=False,
+    ):
+        self.skip_errors = skip_errors
+
+
 @pytest.fixture
 def kikimr(request):
     kikimr_conf = StreamingOverKikimrConfig(
@@ -33,6 +41,12 @@ def kikimr(request):
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
+    kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
+
+    skip_errors = False
+    if hasattr(request, "param") and isinstance(request.param, Param):
+        skip_errors = request.param.skip_errors
+    kikimr.compute_plane.fq_config['row_dispatcher']['json_parser']['skip_errors'] = skip_errors
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -1175,3 +1189,40 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Failed to parse json message for offset" not in issues, "Incorrect Issues: " + issues
 
         assert received == expected
+
+    @yq_v1
+    @pytest.mark.parametrize(
+        "kikimr", [Param(skip_errors=True)], indirect=["kikimr"]
+    )
+    def test_json_errors(self, kikimr, client):
+        self.init(client, "test_json_errors")
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": "hello1"}',
+            '{"time": 102, "data": 7777}',
+            '{"time": 103, "data": "hello2"}'
+        ]
+
+        self.write_stream(data)
+        expected = ['hello1', 'hello2']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        deadline = time.time() + 30
+        while True:
+            count = 0
+            for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+                value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+                    {"subsystem": "row_dispatcher", "partition": "0", "format": "json_each_row", "sensor": "ParsingErrors"})
+                count += value if value is not None else 0
+            if count > 0:
+                break
+            assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
+            time.sleep(1)
+        stop_yds_query(client, query_id)

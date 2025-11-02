@@ -727,7 +727,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
     }
 }
 
-Y_UNIT_TEST(CompactStorage) {
+Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
     TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
@@ -755,6 +755,37 @@ Y_UNIT_TEST(CompactStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 1); // offset 5
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(CompactStorage_ByReteintion) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    TStorage storage(timeProvider);
+    storage.SetReteintion(TDuration::Seconds(1));
+
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+    storage.AddMessage(4, true, 7, timeProvider->Now() + TDuration::Seconds(11));
+    storage.AddMessage(5, true, 11, timeProvider->Now() + TDuration::Seconds(12));
+
+    timeProvider->Tick(TDuration::Seconds(13));
+
+    auto result = storage.Compact();
+    Cerr << storage.DebugString() << Endl;
+    UNIT_ASSERT_VALUES_EQUAL_C(result, 2, "must remove message with offset 3 and 4");
+
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 6);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 5);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1); // offset 5
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }

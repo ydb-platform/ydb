@@ -148,10 +148,6 @@ size_t TStorage::Compact() {
         }
     }
 
-    if (FirstOffset == FirstUncommittedOffset) {
-        return removed;
-    }
-
     while(!Messages.empty() && FirstOffset < FirstUncommittedOffset) {
         Messages.pop_front();
         ++FirstOffset;
@@ -159,6 +155,9 @@ size_t TStorage::Compact() {
         --Metrics.CommittedMessageCount;
         ++removed;
     }
+
+    FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
+    FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
 
     return removed;
 }
@@ -450,7 +449,8 @@ TString TStorage::DebugString() const {
     for (size_t i = 0; i < Messages.size(); ++i) {
         sb << "{" << (FirstOffset + i) << ", "
             << static_cast<EMessageStatus>(Messages[i].Status) << ", "
-            << Messages[i].DeadlineDelta << "} ";
+            << Messages[i].DeadlineDelta << ", "
+            << Messages[i].WriteTimestampDelta << "} ";
     }
 
     sb << "]";

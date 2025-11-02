@@ -2551,7 +2551,7 @@ private:
         Reset();
         auto convertedColumns = ColumnConverters_[tableIndex].ConvertRowsToColumns(rows, ColumnSchemas_[tableIndex]);
         std::vector<const TBatchColumn*> rootColumns;
-        rootColumns.reserve( std::ssize(convertedColumns));
+        rootColumns.reserve(std::ssize(convertedColumns));
         for (ssize_t columnIndex = 0; columnIndex < std::ssize(convertedColumns); columnIndex++) {
             rootColumns.push_back(convertedColumns[columnIndex].RootColumn);
         }

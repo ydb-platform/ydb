@@ -38,7 +38,7 @@ using ::google::protobuf::internal::WireFormatLite;
 class TZeroCopyWriterWithGapsBase
 {
 public:
-    TZeroCopyWriterWithGapsBase(TBlob& blob)
+    explicit TZeroCopyWriterWithGapsBase(TBlob& blob)
         : Blob_(blob)
         , InitialSize_(blob.Size())
     { }
@@ -70,7 +70,7 @@ public:
     using TGapPosition = ui64;
 
     // NOTE: We need base class to initialize `InitialSize_` before `TZeroCopyOutputStreamWriter`.
-    TZeroCopyWriterWithGaps(TBlobOutput* blobOutput)
+    explicit TZeroCopyWriterWithGaps(TBlobOutput* blobOutput)
         : TZeroCopyWriterWithGapsBase(blobOutput->Blob())
         , TZeroCopyOutputStreamWriter(blobOutput)
     { }
@@ -697,7 +697,6 @@ public:
             WriteVarUint32(writer, embeddingDescription.WireTag);
 
             WriteWithSizePrefix(writer, sizeof(TMessageSize), [&] {
-
                 writer->Write(blob.Begin(), blob.Size());
                 blob.Clear();
                 parentEmbeddingIndex++;

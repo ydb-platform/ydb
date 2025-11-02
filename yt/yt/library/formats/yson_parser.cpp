@@ -22,8 +22,8 @@ public:
         EYsonType type,
         bool enableLinePositionInfo)
         : Parser(consumer, type, {
-            .EnableLinePositionInfo=enableLinePositionInfo,
-            .MemoryLimit=NTableClient::MaxRowWeightLimit
+            .EnableLinePositionInfo = enableLinePositionInfo,
+            .MemoryLimit = NTableClient::MaxRowWeightLimit
         })
     { }
 
@@ -39,7 +39,6 @@ public:
 
 private:
     TYsonParser Parser;
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////

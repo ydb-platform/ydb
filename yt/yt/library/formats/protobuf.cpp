@@ -597,7 +597,7 @@ private:
 class TProtobufTypeConfigBuilder
 {
 public:
-    TProtobufTypeConfigBuilder(bool enumsAsStrings)
+    explicit TProtobufTypeConfigBuilder(bool enumsAsStrings)
         : EnumsAsStrings_(enumsAsStrings)
         , Enumerations_(GetEphemeralNodeFactory()->CreateMap())
     { }
@@ -925,7 +925,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
 
     parent->AddChild(
             std::nullopt,
-            std::move(child), //KMP
+            std::move(child), // KMP
             fieldIndex);
 
     for (auto& fieldConfig : columnConfig->Type->Fields) {

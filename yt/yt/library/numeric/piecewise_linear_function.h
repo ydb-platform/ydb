@@ -381,7 +381,7 @@ public:
     class TLeftToRightTraverser
     {
     public:
-        TLeftToRightTraverser(const TPiecewiseLinearFunction& function, int segmentIndex = 0);
+        explicit TLeftToRightTraverser(const TPiecewiseLinearFunction& function, int segmentIndex = 0);
 
         // See: |TPiecewiseLinearFunction::LeftSegmentAt|.
         // If |y > x|, |LeftSegmentAt(x)| cannot be called after |LeftSegmentAt(y)|.

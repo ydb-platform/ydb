@@ -163,7 +163,7 @@ private:
     const IHttpHandlerPtr Underlying_;
 };
 
-IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
+IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying)
 {
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }

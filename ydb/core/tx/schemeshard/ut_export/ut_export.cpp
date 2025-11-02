@@ -681,7 +681,9 @@ namespace {
                 const auto& topicExpected = expected.at(i);
                 const auto& topicPath = topicExpected.GetPath();
                 UNIT_ASSERT(HasS3File(topicPath));
-                UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
+                auto content = GetS3FileContent(topicPath);
+                UNIT_ASSERT_C(topicExpected.CompareWithString(content),
+                  TStringBuilder() << topicExpected.GetPublicProto().DebugString() << "\n\nVS\n\n" << content);
 
                 if (enablePermissions) {
                     auto permissionsPath = topicExpected.GetPermissions().GetPath();

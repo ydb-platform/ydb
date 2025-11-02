@@ -85,8 +85,10 @@ struct TItemDeserializer {
             return false;
         }
 
+        Cerr << "Befor " << (size_t)data << Endl;
         memcpy(&msg, data, sizeof(TMsg));  // TODO BIGENDIAN/LOWENDIAN
         data += sizeof(TMsg);
+        Cerr << "After " << (size_t)data << Endl;
 
         return true;
     }
@@ -140,7 +142,7 @@ struct TItemDeserializer<TAddedMessage> {
     ui64 LastWriteTimestampDelta = 0;
 
     bool Deserialize(const char*& data, const char* end, TAddedMessage& msg) {
-        if (data + sizeof(TAddedMessage) > end) {
+        if (data + sizeof(msg.MessageGroup.Value) + 1 > end) {
             return false;
         }
 
@@ -210,7 +212,7 @@ struct TDeserializerWithOffset {
     const char* Data;
     const char* End;
     TItemDeserializer<TMsg> ItemDeserializer;
-    ui64 LastOffset;
+    ui64 LastOffset = 0;
 
     TDeserializerWithOffset(const TString& data)
         : Data(data.data())
@@ -219,10 +221,16 @@ struct TDeserializerWithOffset {
     }
 
     bool Next(ui64& offset, TMsg& message) {
+        if (Data >= End) {
+            return false;
+        }
+
         ui64 delta;
         VarintDeserialize(Data, delta);
         LastOffset += delta;
         offset = LastOffset;
+
+        Cerr << "offset: " << offset << Endl;
 
         return ItemDeserializer.Deserialize(Data, End, message);
     }
@@ -293,17 +301,13 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
     AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
 
+    Cerr << "Added messages: " << wal.GetAddedMessages().size() << Endl;
     if (wal.HasAddedMessages()) {
         TDeserializerWithOffset<TAddedMessage> deserializer(wal.GetAddedMessages());
 
         ui64 offset;
         TAddedMessage msg;
         while(deserializer.Next(offset, msg)) {
-            auto* message = GetMessageInt(offset);
-            if (!message) {
-                continue;
-            }
-
             AddMessage(
                 offset,
                 msg.MessageGroup.Fields.HasMessageGroupId,
@@ -313,6 +317,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
+    Cerr << "Changed messages: " << wal.GetChangedMessages().size() << Endl;
     if (wal.HasChangedMessages()) {
         TDeserializerWithOffset<TMessageChange> deserializer(wal.GetChangedMessages());
 
@@ -402,8 +407,6 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     wal.SetFirstOffset(Storage->FirstOffset);
 
     if (FirstNewMessage) {
-        wal.SetFirstAddedOffset(FirstNewMessage.value());
-
         auto lastOffset = Storage->GetLastOffset();
 
         TSerializerWithOffset<TAddedMessage> serializer;
@@ -412,6 +415,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         for (size_t offset = FirstNewMessage.value(); offset < lastOffset; ++offset) {
             auto* message = Storage->GetMessage(offset);
             if (message) {
+                Cerr << "Adding message " << offset << Endl;
                 TAddedMessage msg;
                 msg.MessageGroup.Fields.HasMessageGroupId = message->HasMessageGroupId;
                 msg.MessageGroup.Fields.MessageGroupIdHash = message->MessageGroupIdHash;

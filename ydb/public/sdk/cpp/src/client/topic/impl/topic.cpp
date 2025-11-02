@@ -104,7 +104,7 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
         Attributes_[pair.first] = pair.second;
     }
 
-    switch(consumer.consumer_type()) {
+    switch (consumer.consumer_type()) {
         case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
         case Ydb::Topic::CONSUMER_TYPE_STREAMING:
             ConsumerType_ = EConsumerType::Streaming;
@@ -732,7 +732,7 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
 {
-    switch(proto.consumer_type()) {
+    switch (proto.consumer_type()) {
         case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
         case Ydb::Topic::CONSUMER_TYPE_STREAMING:
             ConsumerType_ = EConsumerType::Streaming;
@@ -778,7 +778,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
                     DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
             }
 
-            switch(DeadLetterPolicy_.Action_) {
+            switch (DeadLetterPolicy_.Action_) {
                 case EDeadLetterAction::Move:
                     proto.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(
                         DeadLetterPolicy_.DeadLetterQueue_.value());

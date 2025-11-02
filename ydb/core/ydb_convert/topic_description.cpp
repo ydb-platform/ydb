@@ -57,7 +57,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
             deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
             deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
 
-            switch(in.GetDeadLetterPolicy()) {
+            switch (in.GetDeadLetterPolicy()) {
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
                     deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(in.GetDeadLetterQueue());
                     break;
@@ -116,7 +116,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     }
 
     out.mutable_partitioning_settings()->set_max_active_partitions(config.GetPartitionStrategy().GetMaxPartitionCount());
-    switch(config.GetPartitionStrategy().GetPartitionStrategyType()) {
+    switch (config.GetPartitionStrategy().GetPartitionStrategyType()) {
         case ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT:
             out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
             break;

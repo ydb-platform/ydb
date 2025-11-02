@@ -189,7 +189,6 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
-        Cerr << (TStringBuilder() << ">>>>> a " << alter.ShortDebugString() << Endl);
         if (alter.has_set_important()) {
             consumer.set_important(alter.set_important());
         }
@@ -277,7 +276,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& pqConfig,
         bool enableTopicDiskSubDomainQuota
     ) {
-        Cerr << (TStringBuilder() << ">>>>> a " << rr.ShortDebugString() << Endl);
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
             return TMsgPqCodes(TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
@@ -290,7 +288,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         consumer->SetName(consumerName);
 
-        switch(rr.consumer_type()) {
+        switch (rr.consumer_type()) {
             case Ydb::Topic::CONSUMER_TYPE_STREAMING:
             case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
                 consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
@@ -827,7 +825,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().up_utilization_percent(), 0 ,30));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoPartitioningSettings.partition_write_speed().down_utilization_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoPartitioningSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
-                switch(autoPartitioningSettings.strategy()) {
+                switch (autoPartitioningSettings.strategy()) {
                     case ::Ydb::PersQueue::V1::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                         break;
@@ -1158,7 +1156,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 pqTabletConfigPartStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().up_utilization_percent(), 0, 90));
                 pqTabletConfigPartStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(IfEqualThenDefault(autoscaleSettings.partition_write_speed().down_utilization_percent(), 0, 30));
                 pqTabletConfigPartStrategy->SetScaleThresholdSeconds(IfEqualThenDefault<int64_t>(autoscaleSettings.partition_write_speed().stabilization_window().seconds(), 0L, 300L));
-                switch(autoscaleSettings.strategy()) {
+                switch (autoscaleSettings.strategy()) {
                     case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
                         pqTabletConfigPartStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                         break;
@@ -1365,7 +1363,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                     auto oldStrategy = pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType();
 
                     if (settings.alter_auto_partitioning_settings().has_set_strategy()) {
-                        switch(settings.alter_auto_partitioning_settings().set_strategy()) {
+                        switch (settings.alter_auto_partitioning_settings().set_strategy()) {
                             case ::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP:
                                 pqTabletConfig->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
                                 break;

@@ -639,6 +639,67 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
     }
 }
 
+Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    NKikimrPQ::TMLPStorageWAL wal;
+
+    {
+        TStorage storage(timeProvider);
+        storage.SetKeepMessageOrder(true);
+        storage.SetMaxMessageReceiveCount(1);
+        storage.SerializeTo(snapshot);
+
+        storage.AddMessage(3, true, 5, timeProvider->Now());
+
+        auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(7));
+        UNIT_ASSERT(r);
+
+        storage.Unlock(3);
+
+        auto message = storage.GetMessage(3);
+        UNIT_ASSERT(message);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+
+        const auto& dlq = storage.GetDLQMessages();
+        UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
+
+        auto batch = storage.GetBatch();
+        UNIT_ASSERT_VALUES_EQUAL(batch.AffectedMessageCount(), 3); // new message and changed message and DLQ
+        batch.SerializeTo(wal);
+    }
+
+    timeProvider->Tick(TDuration::Seconds(5));
+
+    {
+        TStorage storage(CreateDefaultTimeProvider());
+        storage.SetKeepMessageOrder(true);
+
+        storage.Initialize(snapshot);
+        storage.ApplyWAL(wal);
+
+        const auto* message = storage.GetMessage(3);
+        UNIT_ASSERT(message);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+        UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
+
+        auto& metrics = storage.GetMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 1);
+
+        const auto& dlq = storage.GetDLQMessages();
+        UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
+    }
+}
+
 Y_UNIT_TEST(CompactStorage) {
     TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5, TInstant::Now());

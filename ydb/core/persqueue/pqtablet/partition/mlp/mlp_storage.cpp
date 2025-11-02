@@ -191,6 +191,10 @@ const TStorage::TMessage* TStorage::GetMessage(TMessageId message) {
     return GetMessageInt(message);
 }
 
+const std::deque<ui64>& TStorage::GetDLQMessages() const {
+    return DLQQueue;
+}
+
 TStorage::TMessage* TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {
     auto* message = GetMessageInt(offset);
     if (!message) {

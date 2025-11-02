@@ -110,6 +110,7 @@ public:
     TInstant GetBaseDeadline() const;
     TInstant GetMessageDeadline(TMessageId message);
     const TMessage* GetMessage(TMessageId message);
+    const std::deque<ui64>& GetDLQMessages() const;
 
 
     // Return the next message for client processing.

@@ -20,11 +20,25 @@ void TStorage::SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount) {
     MaxMessageReceiveCount = maxMessageReceiveCount;
 }
 
+void TStorage::SetReteintion(TDuration reteintion) {
+    Reteintion = reteintion;
+}
+
 std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromOffset) {
+    auto dieTime = TimeProvider->Now() - Reteintion;
+    auto dieDelta = dieTime > BaseWriteTimestamp ? (dieTime - BaseWriteTimestamp).Seconds() : 0;
+
     bool moveUnlockedOffset = fromOffset <= FirstUnlockedOffset;
     for (size_t i = std::max(fromOffset, FirstUnlockedOffset) - FirstOffset; i < Messages.size(); ++i) {
         const auto& message = Messages[i];
         if (message.Status == EMessageStatus::Unprocessed) {
+            if (message.WriteTimestampDelta < dieDelta) {
+                if (moveUnlockedOffset) {
+                    ++FirstUnlockedOffset;
+                }
+                continue;
+            }
+
             if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
                 moveUnlockedOffset = false;
                 continue;
@@ -102,12 +116,43 @@ size_t TStorage::Compact() {
     AFL_ENSURE(FirstOffset <= FirstUnlockedOffset)("l", FirstOffset)("r", FirstUnlockedOffset);
     AFL_ENSURE(FirstUncommittedOffset <= FirstUnlockedOffset)("l", FirstUncommittedOffset)("r", FirstUnlockedOffset);
 
-    if (FirstOffset == FirstUncommittedOffset) {
-        return 0;
+    size_t removed = 0;
+
+    auto dieTime = TimeProvider->Now() - Reteintion;
+    if (dieTime > BaseWriteTimestamp) {
+        auto dieDelta = (dieTime - BaseWriteTimestamp).Seconds();
+        while (!Messages.empty() && dieDelta > Messages.front().WriteTimestampDelta && Messages.front().Status != EMessageStatus::Locked) {
+            auto& message = Messages.front();
+
+            ++FirstOffset;
+            --Metrics.InflyMessageCount;
+
+            switch (message.Status) {
+                case EMessageStatus::Unprocessed:
+                    --Metrics.UnprocessedMessageCount;
+                    break;
+                case EMessageStatus::Locked:
+                    --Metrics.LockedMessageCount;
+                    break;
+                case EMessageStatus::Committed:
+                    --Metrics.CommittedMessageCount;
+                    break;
+                case EMessageStatus::DLQ:
+                    --Metrics.DLQMessageCount;
+                    break;
+            }
+
+            ++removed;
+
+           Messages.pop_front();
+        }
     }
 
-    size_t removed = 0;
-    while(FirstOffset < FirstUncommittedOffset) {
+    if (FirstOffset == FirstUncommittedOffset) {
+        return removed;
+    }
+
+    while(!Messages.empty() && FirstOffset < FirstUncommittedOffset) {
         Messages.pop_front();
         ++FirstOffset;
         --Metrics.InflyMessageCount;

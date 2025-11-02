@@ -58,7 +58,7 @@ void FillYTError(
     consumer->Flush();
 
     headers->Add(XYTErrorHeaderName, errorString);
-    headers->Add(XYTErrorContentTypeHeaderName, "application/json");
+    headers->Add(XYTErrorContentTypeHeaderName, ApplicationJsonContentType);
 
     FillYTErrorResponse(headers, error);
 }
@@ -365,7 +365,7 @@ void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 
 void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonConsumer*)> producer)
 {
-    rsp->GetHeaders()->Set(ContentTypeHeaderName, "application/json");
+    rsp->GetHeaders()->Set(ContentTypeHeaderName, ApplicationJsonContentType);
 
     TBufferOutput out;
 

@@ -15,9 +15,9 @@
 
 namespace NYT::NHttp {
 
-namespace NHeaders {
-
 ////////////////////////////////////////////////////////////////////////////////
+
+namespace NHeaders {
 
 inline const std::string AcceptHeaderName("Accept");
 inline const std::string AccessControlAllowCredentialsHeaderName("Access-Control-Allow-Credentials");
@@ -60,9 +60,11 @@ inline const std::string XYTResponseMessageHeaderName("X-YT-Response-Message");
 inline const std::string XYTSpanIdHeaderName("X-YT-Span-Id");
 inline const std::string XYTTraceIdHeaderName("X-YT-Trace-Id");
 
-////////////////////////////////////////////////////////////////////////////////
+inline const std::string ApplicationJsonContentType("application/json");
+inline const std::string ApplicationXYsonContentType("application/x-yson");
+inline const std::string ApplicationXProtobufContentType("application/x-protobuf");
 
-} // namespace Headers
+} // namespace NHeaders
 
 ////////////////////////////////////////////////////////////////////////////////
 

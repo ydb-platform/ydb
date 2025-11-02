@@ -272,7 +272,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                 moveUncommittedOffset = false;
                 break;
         }
-    
+
         if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
         }
@@ -324,11 +324,47 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
                 continue;
             }
 
+            auto oldStatus = message->Status;
+
             message->Status = msg.Common.Fields.Status;
             message->DeadlineDelta = msg.Common.Fields.DeadlineDelta;
             message->ReceiveCount = msg.Common.Fields.ReceiveCount;
 
-            // TODO metrics
+            if (oldStatus != message->Status) {
+                switch(oldStatus) {
+                    case EMessageStatus::Locked:
+                        --Metrics.LockedMessageCount;
+                        break;
+                    case EMessageStatus::Committed:
+                        --Metrics.CommittedMessageCount;
+                        break;
+                    case EMessageStatus::Unprocessed:
+                        --Metrics.UnprocessedMessageCount;
+                        break;
+                    case EMessageStatus::DLQ:
+                        --Metrics.DLQMessageCount;
+                        break;
+                }
+
+                switch(message->Status) {
+                    case EMessageStatus::Locked:
+                        ++Metrics.LockedMessageCount;
+                        if (KeepMessageOrder && message->HasMessageGroupId) {
+                            LockedMessageGroupsId.insert(message->MessageGroupIdHash);
+                            ++Metrics.LockedMessageGroupCount;
+                        }
+                        break;
+                    case EMessageStatus::Committed:
+                        ++Metrics.CommittedMessageCount;
+                        break;
+                    case EMessageStatus::Unprocessed:
+                        ++Metrics.UnprocessedMessageCount;
+                        break;
+                    case EMessageStatus::DLQ:
+                        ++Metrics.DLQMessageCount;
+                        break;
+                }
+            }
         }
     }
 

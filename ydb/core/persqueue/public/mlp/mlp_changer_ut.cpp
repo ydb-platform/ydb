@@ -214,7 +214,7 @@ Y_UNIT_TEST(CapacityTest) {
         }
 
         void Next() {
-            while (Infly < 200) {
+            while (Infly < 400) {
                 Register(CreateReader(SelfId(), TReaderSettings{
                     .DatabasePath = "/Root",
                     .TopicName = "/Root/topic1",

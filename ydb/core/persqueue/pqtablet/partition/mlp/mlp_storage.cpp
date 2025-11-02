@@ -124,6 +124,8 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     while (!Messages.empty() && offset > GetLastOffset()) {
         auto message = Messages.front();
 
+        Batch.RequiredSnapshot = true;
+
         --Metrics.InflyMessageCount;
         switch(message.Status) {
             case EMessageStatus::Unprocessed:

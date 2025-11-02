@@ -88,7 +88,7 @@ TError ParseYTError(
 
 //! Catches exception thrown from underlying handler body and
 //! translates it into HTTP error.
-IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying);
+IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying);
 
 bool MaybeHandleCors(
     const IRequestPtr& req,

@@ -40,6 +40,8 @@ class TJsonTenantInfo : public TViewerPipeClient {
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> PoolsResponse;
 
+    static std::unique_ptr<NKikimrViewer::TTenantInfo> TenantsCache;
+
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
     THashMap<TString, NKikimrViewer::EFlag> HcOverallByTenantPath;
@@ -247,6 +249,10 @@ public:
                 OnBscError(error);
             }
             if (ev->Get()->TabletId == GetConsoleId()) {
+                if (TenantsCache) {
+                    return ReplyAndPassAway(GetHTTPOKJSON(*TenantsCache));
+                }
+                
                 if (ListTenantsResponse) {
                     ListTenantsResponse->Error(error);
                 }
@@ -1140,10 +1146,14 @@ public:
         for (auto problem : Problems) {
             Result.AddProblems(problem);
         }
+        TenantsCache = std::make_unique<NKikimrViewer::TTenantInfo>(Result);
         ReplyAndPassAway(GetHTTPOKJSON(Result));
     }
 
     void HandleTimeout() {
+        if (TenantsCache) {
+            return ReplyAndPassAway(GetHTTPOKJSON(*TenantsCache));
+        }
         TString error = "Timeout";
         if (ListTenantsResponse) {
             ListTenantsResponse->Error(error);

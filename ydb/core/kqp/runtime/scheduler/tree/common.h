@@ -76,21 +76,14 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         void AddChild(const TPtr& element) {
             Y_ENSURE(Y_LIKELY(element));
-            Children.push_back(element);
+            Y_ENSURE(Children.insert(element).second);
             element->Parent = this;
         }
 
         void RemoveChild(const TPtr& element) {
             Y_ENSURE(Y_LIKELY(element));
-            for (auto it = Children.begin(); it != Children.end(); ++it) {
-                if (*it == element) {
-                    element->Parent = nullptr;
-                    Children.erase(it);
-                    return;
-                }
-            }
-
-            // TODO: throw exception that child not found.
+            Y_ENSURE(Children.erase(element));
+            element->Parent = nullptr;
         }
 
         inline size_t ChildrenSize() const {
@@ -139,7 +132,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         TTreeElementBase* Parent = nullptr;
 
     private:
-        std::vector<TPtr> Children;
+        std::unordered_set<TPtr> Children;
     };
 
     template <ETreeType T>
@@ -171,6 +164,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr FairShare;
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         NMonitoring::TDynamicCounters::TCounterPtr Waiting;
+        NMonitoring::TDynamicCounters::TCounterPtr Queries;
         NMonitoring::TDynamicCounters::TCounterPtr Satisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr AdjustedSatisfaction;
         NMonitoring::TDynamicCounters::TCounterPtr InFlightExtra;

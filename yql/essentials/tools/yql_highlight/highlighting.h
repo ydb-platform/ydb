@@ -15,4 +15,16 @@ void ForEachMultiLine(const THighlighting& highlighting, Action action) {
     }
 }
 
+template <std::invocable<const TUnit&, const TRangePattern&> Action>
+void ForEachMultiLineExceptEmbedded(const THighlighting& highlighting, Action action) {
+    ForEachMultiLine(highlighting, [&](const TUnit& unit, const TRangePattern& pattern) {
+        if (pattern.BeginPlain == TRangePattern::EmbeddedPythonBegin ||
+            pattern.BeginPlain == TRangePattern::EmbeddedJavaScriptBegin) {
+            return;
+        }
+
+        action(unit, pattern);
+    });
+}
+
 } // namespace NSQLHighlight

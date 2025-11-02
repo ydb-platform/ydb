@@ -6,25 +6,26 @@ using TRe = NSQLTranslationV1::TRegexPattern;
 using NSQLTranslationV1::Merged;
 
 THighlighting MakeYQLsHighlighting() {
+    const THighlighting yql = MakeHighlighting();
+    const auto unit = [&](EUnitKind kind) {
+        return *FindIf(yql.Units, [&](const TUnit& unit) {
+            return unit.Kind == kind;
+        });
+    };
+
+    auto strings = unit(EUnitKind::StringLiteral).RangePatterns;
+    EraseIf(strings, [](const TRangePattern& range) {
+        return range.BeginPlain.StartsWith("'");
+    });
+
+    auto types = unit(EUnitKind::TypeIdentifier).Patterns;
+    for (NSQLTranslationV1::TRegexPattern& pattern : types) {
+        pattern.IsCaseInsensitive = false;
+    }
+
     TString id = R"re([A-Za-z_\-0-9]+)re";
     TString lower = R"re([a-z_0-9])re" + SubstGlobalCopy(id, '+', '*');
     TString title = R"re([A-Z])re" + SubstGlobalCopy(id, '+', '*');
-
-    TRe keywords = Merged({
-        {"let"},
-        {"return"},
-        {"quote"},
-        {"block"},
-        {"lambda"},
-        {"declare"},
-        {"import"},
-        {"export"},
-        {"library"},
-        {"override_library"},
-        {"package"},
-        {"set_package_version"},
-    });
-    keywords.Before = R"re(\()re";
 
     return {
         .Name = "YQLs",
@@ -37,7 +38,22 @@ THighlighting MakeYQLsHighlighting() {
             },
             TUnit{
                 .Kind = EUnitKind::Keyword,
-                .Patterns = {keywords},
+                .Patterns = {
+                    Merged({
+                        {"let"},
+                        {"return"},
+                        {"quote"},
+                        {"block"},
+                        {"lambda"},
+                        {"declare"},
+                        {"import"},
+                        {"export"},
+                        {"library"},
+                        {"override_library"},
+                        {"package"},
+                        {"set_package_version"},
+                    }),
+                },
             },
             TUnit{
                 .Kind = EUnitKind::BindParameterIdentifier,
@@ -46,15 +62,20 @@ THighlighting MakeYQLsHighlighting() {
             TUnit{
                 .Kind = EUnitKind::QuotedIdentifier,
                 .Patterns = {
-                    TRe{.Body = id + "!", .Before = R"re(\()re"},
+                    TRe{.Body = title + "!"},
                 },
                 .IsPlain = false,
             },
             TUnit{
+                .Kind = EUnitKind::TypeIdentifier,
+                .Patterns = types,
+            },
+            TUnit{
                 .Kind = EUnitKind::FunctionIdentifier,
                 .Patterns = {
-                    TRe{.Body = title, .Before = R"re(\()re"},
+                    TRe{.Body = title},
                     TRe{.Body = "'" + id + "\\." + id},
+                    TRe{.Body = "'\"" + id + "\\." + id + "\""},
                 },
                 .IsPlain = false,
             },
@@ -69,11 +90,7 @@ THighlighting MakeYQLsHighlighting() {
             },
             TUnit{
                 .Kind = EUnitKind::StringLiteral,
-                .RangePatterns = {{"@@", "@@", Nothing()}},
-                .Patterns = {
-                    TRe{R"re(\"[^\"\n]*\")re"},
-                    TRe{R"re(\@\@(.|\n)*\@\@)re"},
-                },
+                .RangePatterns = strings,
                 .IsPlain = false,
             },
             TUnit{

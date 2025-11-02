@@ -1,41 +1,46 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-	<title>YQL Highlight Test</title>
-	<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+    <title>YQL Highlight Test</title>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
     <style>
-        html, body {
+        html,
+        body {
             width: 100%;
             height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
         }
+
         #main-container {
             display: flex;
             width: 100%;
             height: 100%;
         }
+
         #container {
             width: 33%;
             height: 100%;
         }
+
         #shiki-container {
             width: 33%;
             height: 100%;
             overflow: auto;
-            border-left: 1px solid #ccc;
         }
+
         #highlightjs-container {
             width: 34%;
             height: 100%;
             overflow: auto;
-            border-left: 1px solid #ccc;
         }
-        #shiki-code, #highlightjs-code {
+
+        #shiki-code,
+        #highlightjs-code {
             margin: 0;
-            padding: 10px;
             font-family: monospace;
             font-size: 14px;
             line-height: 1.4;
@@ -43,96 +48,78 @@
         }
     </style>
 </head>
-<body>
-	<div id="main-container">
-	   <div id="container"></div>
-	   <div id="shiki-container">
-	       <pre id="shiki-code"></pre>
-	   </div>
-	   <div id="highlightjs-container">
-	       <pre><code id="highlightjs-code" class="language-yql"></code></pre>
-	   </div>
-	</div>
 
-	<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+<body>
+    <div id="main-container">
+        <div id="container"></div>
+        <div id="shiki-container">
+            <pre id="shiki-code"></pre>
+        </div>
+        <div id="highlightjs-container">
+            <pre><code id="highlightjs-code-yql" class="language-yql"></code></pre>
+            <pre><code id="highlightjs-code-yqls" class="language-yqls"></code></pre>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/shiki@0.14.7"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-	<script>
-		require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' }});
-		require(['vs/editor/editor.main'], function() {
+    <script>
+        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' } });
+        require(['vs/editor/editor.main'], function () {
             const params = new URLSearchParams(window.location.search);
-            const syntax = params.get('syntax') ?? 'yql';
 
+            const syntax = params.get('syntax') ?? 'yql';
             if (syntax != 'yql' && syntax != 'yqls') {
                 alert(`Invalid query param syntax=${syntax}, expected yql or yqls`);
                 return
             }
 
-            const monarch = (syntax == 'yql')
-                ? (/* {{YQL.monarch.json}} */)
-                : (/* {{YQLs.monarch.json}} */);
+            const theme = params.get('theme') ?? 'light'
+            if (theme != 'light' && theme != 'dark') {
+                alert(`Invalid query param theme=${theme}, expected light or dark`);
+                return
+            }
 
             const tmlanguage = (syntax == 'yql')
                 ? (/* {{YQL.tmLanguage.json}} */)
-                : (/* {{YQLs.tmLanguage.json}} */);
+                    : (/* {{YQLs.tmLanguage.json}} */);
 
             const highlightjs = (syntax == 'yql')
                 ? (/* {{YQL.highlightjs.json}} */)
-                : (/* {{YQLs.highlightjs.json}} */);
+                    : (/* {{YQLs.highlightjs.json}} */);
 
-            const value = (syntax == 'yql')
-                ? (`/* {{query.yql}} */`)
-                : (`/* {{query.yqls}} */`);
+            /* {{monarch.patched.ts}} */
 
-			monaco.editor.defineTheme('vs', {
-				base: 'vs',
-				inherit: true,
-				rules: [
-					{token: 'string.tablepath', foreground: '338186'},
-					{token: 'constant.yql', foreground: '608b4e'},
-					{token: 'keyword.type', foreground: '4d932d'},
-					{token: 'string.sql', foreground: 'a31515'},
-					{token: 'support.function', foreground: '7a3e9d'},
-					{token: 'constant.other.color', foreground: '7a3e9d'},
-					{token: 'comment', foreground: '969896'},
-				],
-				colors: {
-					'editor.lineHighlightBackground': '#EFEFEF',
-				},
-			});
-
-            monaco.languages.register({ id: syntax });
-			monaco.languages.setMonarchTokensProvider(syntax, monarch);
-
-			const myEditor = monaco.editor.create(document.getElementById("container"), {
-				value,
-				language: syntax,
-				automaticLayout: true,
-			});
-
+            shikiTheme = ((theme == 'light') ? 'github-light' : 'github-dark')
             shiki
                 .getHighlighter({
-                    themes: ['github-light'],
+                    themes: [shikiTheme],
                     langs: [{
                         id: syntax,
                         scopeName: `source.${syntax}`,
                         grammar: tmlanguage,
+                        embeddedLangs: [
+                            'python',
+                            'javascript',
+                        ],
                     }],
                 })
                 .then(highlighter => {
                     const code = value;
                     const html = highlighter.codeToHtml(code, {
                         lang: syntax,
-                        theme: 'github-light'
+                        theme: shikiTheme,
                     });
                     document.getElementById('shiki-code').innerHTML = html;
                 });
 
-            hljs.registerLanguage(syntax, function(hljs) { return highlightjs; });
-            const codeElement = document.getElementById('highlightjs-code');
+            hljs.registerLanguage(syntax, function (hljs) { return highlightjs; });
+            const codeElement = document.getElementById(`highlightjs-code-${syntax}`);
             codeElement.textContent = value;
             hljs.highlightElement(codeElement);
-  });
- </script>
+        });
+    </script>
 </body>
+
 </html>

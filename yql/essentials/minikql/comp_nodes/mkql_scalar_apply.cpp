@@ -222,7 +222,7 @@ private:
         }
 
         for (ui32 i = 0; i < Args_.size(); ++i) {
-            Args_[i]->AddDependence(LambdaArgs_[i]);
+            Args_[i]->AddDependent(LambdaArgs_[i]);
             this->Own(LambdaArgs_[i]);
         }
 

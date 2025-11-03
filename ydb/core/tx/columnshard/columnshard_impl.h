@@ -442,6 +442,7 @@ protected:
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
             hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
             hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
+            hFunc(TEvPrivate::TEvBuildStatisticsPipe, Handle);
 
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteDraft, Handle);

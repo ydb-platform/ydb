@@ -7,8 +7,8 @@ TEST_SRCS(
     test_workload.py
 )
 
-SIZE(MEDIUM)
-REQUIREMENTS(ram:32 cpu:32)
+SIZE(LARGE)
+REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(
     ydb/apps/ydb

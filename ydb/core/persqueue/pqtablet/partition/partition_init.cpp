@@ -1095,7 +1095,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition,
+            Config.GetYdbDatabasePath(), Config.GetOffloadConfig()));
     }
 
     LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);

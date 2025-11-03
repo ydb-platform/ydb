@@ -100,8 +100,10 @@ struct TEventHolder : TNonCopyable {
     mutable NLWTrace::TOrbit Orbit;
     NWilson::TSpan Span;
     ui32 ZcTransferId; //id of zero copy transfer. In case of RDMA it is a place where some internal handle can be stored to identify events
+    TInstant EnqueueTime;
 
     ui32 Fill(IEventHandle& ev);
+    ui32 Fill(IEventHandle& ev, TInstant now);
 
     void InitChecksum() {
         Descr.Checksum = 0;
@@ -135,6 +137,7 @@ struct TEventHolder : TNonCopyable {
 
 namespace NActors {
     class TEventOutputChannel;
+    class IInterconnectMetrics;
 }
 
 struct TTcpPacketOutTask : TNonCopyable {
@@ -142,6 +145,8 @@ struct TTcpPacketOutTask : TNonCopyable {
     NInterconnect::TOutgoingStream& OutgoingStream;
     NInterconnect::TOutgoingStream& XdcStream;
     NInterconnect::TOutgoingStream::TBookmark HeaderBookmark;
+    NActors::IInterconnectMetrics* Metrics;
+
     ui32 InternalSize = 0;
     ui32 ExternalSize = 0;
 
@@ -153,12 +158,9 @@ struct TTcpPacketOutTask : TNonCopyable {
     ui32 ExternalChecksum = 0;
 
     TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
-            NInterconnect::TOutgoingStream& xdcStream)
-        : Params(params)
-        , OutgoingStream(outgoingStream)
-        , XdcStream(xdcStream)
-        , HeaderBookmark(OutgoingStream.Bookmark(sizeof(TTcpPacketHeader_v2)))
-    {}
+        NInterconnect::TOutgoingStream& xdcStream, NActors::IInterconnectMetrics* metrics);
+
+    void UpdateIcQueueDuration(const TEventHolder& event);
 
     // Preallocate some space to fill it later.
     NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {

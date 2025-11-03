@@ -71,6 +71,8 @@ namespace NActors {
             switch (State) {
                 case EState::INITIAL:
                     event.InitChecksum();
+                    task.UpdateIcQueueDuration(event);
+                    event.Span && event.Span.Event("FeedBuf:INITIAL");
                     if (event.Buffer) {
                         State = EState::BODY;
                         Iter = event.Buffer->GetBeginIter();

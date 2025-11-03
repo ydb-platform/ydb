@@ -403,6 +403,8 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         DLQQueue.push_back(offset);
     }
 
+    Batch = { this };
+
     return wal.HasAddedMessages() || wal.HasChangedMessages();
 }
 

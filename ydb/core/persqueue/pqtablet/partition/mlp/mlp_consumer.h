@@ -86,7 +86,7 @@ private:
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
 
-    size_t NextWALIndex = 0;
+    ui64 NextWALIndex = 0;
 };
 
 }

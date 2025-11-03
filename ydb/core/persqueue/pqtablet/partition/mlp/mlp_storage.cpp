@@ -408,6 +408,10 @@ void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteT
     auto deadlineDiff = (newBaseDeadline - BaseDeadline).Seconds();
     auto writeTimestampDiff = (newBaseWriteTimestamp - BaseWriteTimestamp).Seconds();
 
+    if (deadlineDiff == 0 && writeTimestampDiff == 0) {
+        return;
+    }
+
     for (size_t i = 0; i < Messages.size(); ++i) {
         auto& message = Messages[i];
         message.DeadlineDelta = message.DeadlineDelta > deadlineDiff ? message.DeadlineDelta - deadlineDiff : 0;
@@ -503,6 +507,14 @@ void TStorage::TBatch::AddNewMessage(ui64 offset) {
 void TStorage::TBatch::MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp) {
     BaseDeadline = baseDeadline;
     BaseWriteTimestamp = baseWriteTimestamp;
+}
+
+bool TStorage::TBatch::Empty() const {
+    return ChangedMessages.empty()
+        && !FirstNewMessage.has_value()
+        && DLQ.empty()
+        && !BaseDeadline.has_value()
+        && !BaseWriteTimestamp.has_value();
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

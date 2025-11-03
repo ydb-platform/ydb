@@ -85,6 +85,8 @@ public:
 
         bool SerializeTo(NKikimrPQ::TMLPStorageWAL&);
 
+        bool Empty() const;
+
         size_t AddedMessageCount() const;
         size_t ChangedMessageCount() const;
         size_t DLQMessageCount() const;

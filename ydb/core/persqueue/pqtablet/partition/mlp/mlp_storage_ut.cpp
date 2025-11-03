@@ -782,7 +782,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
     }
 }
 
-Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime) {
+Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
     NKikimrPQ::TMLPStorageSnapshot snapshot;

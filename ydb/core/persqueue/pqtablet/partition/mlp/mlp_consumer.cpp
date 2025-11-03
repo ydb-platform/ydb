@@ -8,6 +8,11 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
+enum class EWriteCookie {
+    TxWrite = 1,
+    BackgroundWrite = 2
+};
+
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
     selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::UNAVAILABLE, std::move(error)), 0, cookie);
 }
@@ -45,13 +50,13 @@ TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName) {
     return ikey.ToString();
 }
 
-static constexpr char WALSeparator = '/';
+static constexpr char WALSeparator = '|';
 
-TString MakeWALKey(ui32 partitionId, const TString& consumerName, ui32 index) {
+TString MakeWALKey(ui32 partitionId, const TString& consumerName, ui64 index) {
     TKeyPrefix ikey(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId), TKeyPrefix::EMark::MarkMLPWAL);
     ikey.Append(consumerName.c_str(), consumerName.size());
     ikey.Append(WALSeparator);
-    ikey.Append(Sprintf("%.5" PRIu32, index).data(), 5);
+    ikey.Append(Sprintf("%.16X" PRIu32, index).data(), 16);
 
     return ikey.ToString();
 }
@@ -61,7 +66,7 @@ TString MinWALKey(ui32 partitionId, const TString& consumerName) {
 }
 
 TString MaxWALKey(ui32 partitionId, const TString& consumerName) {
-    return MakeWALKey(partitionId, consumerName, 99999);
+    return MakeWALKey(partitionId, consumerName, Max<ui64>());
 }
 
 TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
@@ -182,6 +187,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
             if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
                 LOG_D("Read snapshot");
+                NextWALIndex = snapshot.GetWALIndex();
                 Storage->Initialize(snapshot);
             } else {
                 LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
@@ -205,7 +211,6 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     switch(walResult.GetStatus()) {
         case NKikimrProto::OK: {
-
             for (auto w : walResult.GetPair()) {
                 NKikimrPQ::TMLPStorageWAL wal;
                 if (!wal.ParseFromString(w.GetValue())) {
@@ -214,13 +219,12 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
                 if (Config.GetGeneration() == wal.GetGeneration()) {
                     LOG_D("Read WAL " << w.key());
+                    NextWALIndex = wal.GetWALIndex();
                     Storage->ApplyWAL(wal);
                 } else {
                     LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
                 }
             }
-
-            NextWALIndex = walResult.GetPair().size();
 
             break;
         }
@@ -250,6 +254,7 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
         return Restart(TStringBuilder() << "Received KV error on write: " << record.GetStatus()
             << " " << record.GetErrorReason());
     }
+
     if (record.WriteResultSize() != 1) {
         return Restart(TStringBuilder() << "Unexpected KV response on write: " << record.WriteResultSize());
     }
@@ -259,7 +264,11 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
         return Restart(TStringBuilder() << "Received KV response error on write: " << writeResult.GetStatus());
     }
 
-    LOG_D("Snapshot persisted");
+    if (ev->Cookie == static_cast<ui64>(EWriteCookie::BackgroundWrite)) {
+        return;
+    }
+
+    LOG_D("Persisted");
     Become(&TConsumerActor::StateWork);
 
     CommitIfNeeded();
@@ -436,26 +445,19 @@ void TConsumerActor::ProcessEventQueue() {
 
     LOG_T("AfterQueueDump: " << Storage->DebugString());
 
-    if (PendingCommitQueue.empty() && PendingUnlockQueue.empty() &&
-        PendingChangeMessageDeadlineQueue.empty() && PendingReadQueue.empty()) {
-        LOG_D("Batch is empty");
-        return;
-    }
-
     Persist();
 }
 
 void TConsumerActor::Persist() {
     LOG_D("Persist");
 
-    Become(&TConsumerActor::StateWrite);
-
     auto batch = Storage->GetBatch();
+    if (batch.Empty()) {
+        LOG_D("Batch is empty");
+        return;
+    }
 
-    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-
-    auto requireSnapshot = NextWALIndex == 100
-        || Storage->GetMessageCount() < 32 /* Snapshot is small. WAL not required */;
+    Become(&TConsumerActor::StateWrite);
 
     auto tryInlineChannel = [](auto& write) {
         if (write->GetValue().size() < 1000) {
@@ -463,8 +465,27 @@ void TConsumerActor::Persist() {
         }
     };
 
-    if (requireSnapshot) {
-        // TODO MLP Move StartOffset
+    auto withWAL = Storage->GetMessageCount() > 32;
+    if (withWAL) {
+        auto key = MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex);
+
+        NKikimrPQ::TMLPStorageWAL wal;
+        wal.SetWALIndex(NextWALIndex);
+        batch.SerializeTo(wal);
+
+        auto data = wal.SerializeAsString();
+        LOG_D("Write WAL Size: " << data.size() << " Key: " << key);
+
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        auto* write = request->Record.AddCmdWrite();
+        write->SetKey(std::move(key));
+        write->SetValue(std::move(data));
+        tryInlineChannel(write);
+
+        Send(TabletActorId, std::move(request), 0, static_cast<ui64>(EWriteCookie::TxWrite));
+    }
+
+    if (!withWAL || NextWALIndex % 150 == 0) {
         Storage->Compact();
 
         NKikimrPQ::TMLPStorageSnapshot snapshot;
@@ -474,34 +495,25 @@ void TConsumerActor::Persist() {
         config->SetGeneration(Config.GetGeneration());
         Storage->SerializeTo(snapshot);
 
+        snapshot.SetWALIndex(NextWALIndex);
+
+        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
         auto* write = request->Record.AddCmdWrite();
         write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
         write->SetValue(snapshot.SerializeAsString());
+        write->SetPriority(withWAL ? ::NKikimrClient::TKeyValueRequest::BACKGROUND : ::NKikimrClient::TKeyValueRequest::REALTIME);
         tryInlineChannel(write);
 
         auto* del = request->Record.AddCmdDeleteRange();
         del->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
         del->MutableRange()->SetIncludeFrom(true);
-        del->MutableRange()->SetTo(MaxWALKey(PartitionId, Config.GetName()));
+        del->MutableRange()->SetTo(MakeWALKey(PartitionId, Config.GetName(), NextWALIndex));
         del->MutableRange()->SetIncludeTo(true);
 
-        NextWALIndex = 0;
+        Send(TabletActorId, std::move(request), 0, static_cast<ui64>(withWAL ? EWriteCookie::BackgroundWrite : EWriteCookie::TxWrite));
+
         LOG_D("Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size());
-    } else {
-        NKikimrPQ::TMLPStorageWAL wal;
-        batch.SerializeTo(wal);
-
-        auto key = MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex);
-        auto data = wal.SerializeAsString();
-        LOG_D("Write WAL Size: " << data.size() << " Key: " << key);
-
-        auto* write = request->Record.AddCmdWrite();
-        write->SetKey(std::move(key));
-        write->SetValue(std::move(data));
-        tryInlineChannel(write);
     }
-
-    Send(TabletActorId, std::move(request));
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {

@@ -1371,6 +1371,8 @@ message TMLPStorageSnapshot {
     optional bytes Messages = 4;
 
     repeated uint64 DLQ = 5;
+
+    optional uint64 WALIndex = 6;
 }
 
 message TMLPStorageWAL {
@@ -1388,5 +1390,7 @@ message TMLPStorageWAL {
 
     optional uint64 BaseDeadlineSeconds = 9;
     optional uint64 BaseWriteTimestampSeconds = 10;
+
+    optional uint64 WALIndex = 11;
 }
 

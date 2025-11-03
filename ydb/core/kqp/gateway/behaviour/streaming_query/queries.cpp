@@ -1756,6 +1756,7 @@ private:
         ev->ForgetAfter = TDuration::Max();
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
+        ev->ProgressStatsPeriod = TDuration::Seconds(1);
 
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());

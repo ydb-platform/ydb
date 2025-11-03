@@ -115,7 +115,6 @@ public:
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
-            queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
             LogSettings
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
@@ -1104,6 +1103,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(InsertTopicBasic, TStreamingTestFixture) {
+        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(1000);
+
         TString sourceName = "sourceName";
         TString inputTopicName = "inputTopicName";
         TString outputTopicName = "outputTopicName";
@@ -2181,6 +2182,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
+        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
 

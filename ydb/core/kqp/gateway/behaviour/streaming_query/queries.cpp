@@ -1756,7 +1756,12 @@ private:
         ev->ForgetAfter = TDuration::Max();
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
-        ev->ProgressStatsPeriod = TDuration::Seconds(1);
+
+        if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
+            ev->ProgressStatsPeriod = TDuration::MilliSeconds(statsPeriod);
+        } else {
+            ev->ProgressStatsPeriod = TDuration::Seconds(1);
+        }
 
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());

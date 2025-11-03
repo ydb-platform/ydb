@@ -363,7 +363,7 @@ class LoadSuiteBase:
                     verifies_info[pattern]['hosts_count'][host] = counters[pattern]
                 else:
                     verifies_info[pattern] = {
-                        'full_trace': next(m for m in verify_match if m[1] == pattern),
+                        'full_trace': next(m[0] for m in verify_match if m[1] == pattern),
                         'hosts_count': {host: counters[pattern]}
                     }
         return verifies_info
@@ -488,9 +488,6 @@ class LoadSuiteBase:
                 else:
                     # Берем первый полный блок для паттерна
                     full_trace = next((m[0] for m in oom_matches if m[1] == pattern), pattern)
-                    # Ограничиваем размер для Allure (первые 5000 символов)
-                    if len(full_trace) > 5000:
-                        full_trace = full_trace[:5000] + '\n... (truncated for display)'
                     oom_info[pattern] = {
                         'full_trace': full_trace,
                         'hosts_count': {host: counters[pattern]}

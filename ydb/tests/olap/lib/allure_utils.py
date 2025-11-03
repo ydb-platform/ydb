@@ -119,6 +119,19 @@ def _produce_oom_report(node_errors: list[NodeErrors]) -> str:
     return html
 
 
+def _attach_oom_outputs(node_errors: list[NodeErrors]):
+    """Прикрепляет полные OOM логи как attachments, аналогично sanitizer."""
+    if not node_errors or len(node_errors) == 0:
+        return
+
+    reported_hosts = set()
+    for node_error in node_errors:
+        host = node_error.node.host
+        if host not in reported_hosts and node_error.oom_output:
+            allure.attach(node_error.oom_output, f"OOM output for {host}", allure.attachment_type.TEXT)
+            reported_hosts.add(host)
+
+
 def _produce_sanitizer_report(node_errors: list[NodeErrors]) -> str:
     if not node_errors or len(node_errors) == 0:
         return ''
@@ -896,11 +909,12 @@ def allure_test_description(
 
     html += _set_node_errors(node_errors)
     html += _produce_verify_report(verify_errors)
-    html += _produce_oom_report(node_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
     if logs_in_html:
+        html += _produce_oom_report(node_errors)
         html += _produce_sanitizer_report(node_errors)
     else:
+        _attach_oom_outputs(node_errors)
         _attach_sanitizer_outputs(node_errors)
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 
@@ -981,11 +995,12 @@ def parallel_allure_test_description(
 
     html += _set_node_errors(node_errors)
     html += _produce_verify_report(verify_errors)
-    html += _produce_oom_report(node_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
     if logs_in_html:
+        html += _produce_oom_report(node_errors)
         html += _produce_sanitizer_report(node_errors)
     else:
+        _attach_oom_outputs(node_errors)
         _attach_sanitizer_outputs(node_errors)
     html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
 

@@ -187,6 +187,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
             if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
                 LOG_D("Read snapshot");
+                HasSnapshot = true;
                 NextWALIndex = snapshot.GetWALIndex();
                 Storage->Initialize(snapshot);
             } else {
@@ -246,7 +247,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 }
 
 void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
-    LOG_D("HandleOnWrite TEvKeyValue::TEvResponse");
+    LOG_D("HandleOnWrite TEvKeyValue::TEvResponse " << ev->Get()->Record.ShortDebugString());
 
     auto& record = ev->Get()->Record;
 
@@ -264,11 +265,17 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
         return Restart(TStringBuilder() << "Received KV response error on write: " << writeResult.GetStatus());
     }
 
-    if (ev->Cookie == static_cast<ui64>(EWriteCookie::BackgroundWrite)) {
+    if (record.GetCookie() == static_cast<ui64>(EWriteCookie::BackgroundWrite)) {
+        LOG_D("Background write finished");
         return;
     }
 
-    LOG_D("Persisted");
+    if (CurrentStateFunc() != &TConsumerActor::StateWrite) {
+        LOG_W("Received TX write response on work state");
+        return;
+    }
+
+    LOG_D("TX write finished");
     Become(&TConsumerActor::StateWork);
 
     CommitIfNeeded();
@@ -336,6 +343,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+        hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
@@ -465,7 +473,7 @@ void TConsumerActor::Persist() {
         }
     };
 
-    auto withWAL = Storage->GetMessageCount() > 32;
+    auto withWAL = HasSnapshot && Storage->GetMessageCount() > 32;
     if (withWAL) {
         auto key = MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex);
 
@@ -477,15 +485,18 @@ void TConsumerActor::Persist() {
         LOG_D("Write WAL Size: " << data.size() << " Key: " << key);
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        request->Record.SetCookie(static_cast<ui64>(EWriteCookie::TxWrite));
         auto* write = request->Record.AddCmdWrite();
         write->SetKey(std::move(key));
         write->SetValue(std::move(data));
         tryInlineChannel(write);
 
-        Send(TabletActorId, std::move(request), 0, static_cast<ui64>(EWriteCookie::TxWrite));
+        Send(TabletActorId, std::move(request));
     }
 
     if (!withWAL || NextWALIndex % 150 == 0) {
+        HasSnapshot = true;
+
         Storage->Compact();
 
         NKikimrPQ::TMLPStorageSnapshot snapshot;
@@ -498,6 +509,10 @@ void TConsumerActor::Persist() {
         snapshot.SetWALIndex(NextWALIndex);
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+
+        auto cookie = withWAL ? static_cast<ui64>(EWriteCookie::BackgroundWrite) : static_cast<ui64>(EWriteCookie::TxWrite);
+        request->Record.SetCookie(cookie);
+
         auto* write = request->Record.AddCmdWrite();
         write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
         write->SetValue(snapshot.SerializeAsString());
@@ -510,9 +525,9 @@ void TConsumerActor::Persist() {
         del->MutableRange()->SetTo(MakeWALKey(PartitionId, Config.GetName(), NextWALIndex));
         del->MutableRange()->SetIncludeTo(true);
 
-        Send(TabletActorId, std::move(request), 0, static_cast<ui64>(withWAL ? EWriteCookie::BackgroundWrite : EWriteCookie::TxWrite));
+        Send(TabletActorId, std::move(request));
 
-        LOG_D("Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size());
+        LOG_D("Write Snapshot Count: " << Storage->GetMessageCount() << " Size: " << write->GetValue().size() << " cookie: " << cookie);
     }
 }
 
@@ -592,7 +607,9 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
 
         LOG_D("Fetched " << messageCount << " messages");
 
-        ProcessEventQueue();
+        if (CurrentStateFunc() == &TConsumerActor::StateWork) {
+            ProcessEventQueue();
+        }
     }
 }
 

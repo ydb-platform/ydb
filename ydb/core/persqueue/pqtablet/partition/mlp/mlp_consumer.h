@@ -87,6 +87,7 @@ private:
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
 
     ui64 NextWALIndex = 0;
+    bool HasSnapshot = false;
 };
 
 }

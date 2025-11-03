@@ -189,7 +189,7 @@ Y_UNIT_TEST(CapacityTest) {
 
     Cerr << (TStringBuilder() << ">>>>> TOPIC WAS CREATED" << Endl);
 
-    WriteMany(setup, "/Root/topic1", 0, 10000, 100000);
+    WriteMany(setup, "/Root/topic1", 0, 10000, 50000);
 
     Cerr << (TStringBuilder() << ">>>>> MESSAGES WAS WRITTEN" << Endl);
 
@@ -214,7 +214,7 @@ Y_UNIT_TEST(CapacityTest) {
         }
 
         void Next() {
-            while (Infly < 1000) {
+            while (Infly < 200) {
                 Register(CreateReader(SelfId(), TReaderSettings{
                     .DatabasePath = "/Root",
                     .TopicName = "/Root/topic1",

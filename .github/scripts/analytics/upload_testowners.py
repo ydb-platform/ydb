@@ -36,7 +36,7 @@ def main():
         
         # Get table paths from config
         test_runs_table = ydb_wrapper.get_table_path("test_results")
-        table_path = f'test_results/analytics/testowners'    
+        table_path = ydb_wrapper.get_table_path("testowners")    
 
         query_get_owners = f"""
    select 

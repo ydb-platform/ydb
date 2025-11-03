@@ -27,6 +27,7 @@ def main():
     with YDBWrapper() as ydb_wrapper:
         # Get table paths from config
         test_runs_table = ydb_wrapper.get_table_path("test_results")
+        testowners_table = ydb_wrapper.get_table_path("testowners")
       
         # Получаем последнюю дату из истории
         table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
@@ -135,7 +136,7 @@ def main():
                                 Date('{date}') as date_base,
                                 '{build_type}' as  build_type,
                                 '{branch}' as  branch
-                            from  `test_results/analytics/testowners` 
+                            from  `{testowners_table}` 
                         ) as test_and_date
                         left JOIN (
                             

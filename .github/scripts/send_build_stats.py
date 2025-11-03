@@ -76,8 +76,11 @@ def main():
             for type_ in DATETIME_COLUMNS:
                 text_query_builder.append("DECLARE ${} as Datetime;".format(type_))
 
+            # Get table path from config
+            binary_size_table = wrapper.get_table_path("binary_size")
+            
             text_query_builder.append(
-                """INSERT INTO binary_size
+                """INSERT INTO `{}`
 (
     {}
 )
@@ -86,6 +89,7 @@ VALUES
     {}                   
 );                         
 """.format(
+                    binary_size_table,
                     ", \n    ".join(ALL_COLUMNS),
                     ", \n    ".join(["$" + column for column in ALL_COLUMNS]),
                 )

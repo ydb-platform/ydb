@@ -265,11 +265,13 @@ def main():
         
         # Get table paths from config
         test_runs_table = ydb_wrapper.get_table_path("test_results")
+        tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+        all_tests_table = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
         
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
-        table_path = f'test_results/analytics/tests_monitor'
+        table_path = tests_monitor_table
 
         # Get last existing day
         print("Geting date of last collected monitor data")
@@ -457,7 +459,7 @@ def main():
                         is_muted,
                         date
                     FROM 
-                        `test_results/all_tests_with_owner_and_mute`
+                        `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
                         AND date = Date('{date}')

@@ -40,6 +40,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         
         # Get table paths from config
         test_runs_table = ydb_wrapper.get_table_path("test_results")
+        testowners_table = ydb_wrapper.get_table_path("testowners")
         
         if job_id and branch:  # extend all tests from main by new tests from pr
             print(f'🔄 Mode: Extend all tests from main by new tests from PR')
@@ -52,7 +53,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 full_name
-                from `test_results/analytics/testowners`
+                from `{testowners_table}`
             WHERE  
                 run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                 and run_timestamp_last <= Date('{today}') + Interval("P1D")
@@ -80,7 +81,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             t.owners as owners,
             trc.run_timestamp_last as run_timestamp_last,
             Date('{today}') as date
-        FROM `test_results/analytics/testowners` t
+        FROM `{testowners_table}` t
         INNER JOIN (
             SELECT 
                 suite_folder,
@@ -143,8 +144,9 @@ def upload_muted_tests(tests):
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return
-
-        table_path = f'test_results/all_tests_with_owner_and_mute'
+        
+        # Get table path from config
+        table_path = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
         print(f'📋 Target table: {table_path}')
 
         print(f'🏗️  Creating table if not exists...')

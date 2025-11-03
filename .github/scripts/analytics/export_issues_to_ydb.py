@@ -604,7 +604,8 @@ def main():
             print("Error: Environment variable GITHUB_TOKEN is missing")
             return 1
         
-        table_path = "github_data/issues"
+        # Get table path from config
+        table_path = ydb_wrapper.get_table_path("issues")
         batch_size = 100
         
         try:

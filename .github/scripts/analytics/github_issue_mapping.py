@@ -124,7 +124,7 @@ def main():
         if not ydb_wrapper.check_credentials():
             return 1
         
-        table_path = "test_results/analytics/github_issue_mapping"
+        table_path = ydb_wrapper.get_table_path("github_issue_mapping")
         
         try:
             # Get GitHub issues data

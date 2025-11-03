@@ -29,50 +29,56 @@ Y_UNIT_TEST_SUITE(DnsResolver) {
     };
 
     Y_UNIT_TEST(ResolveLocalHost) {
-        for (auto type : { EDnsResolverType::Ares, EDnsResolverType::Libc }) {
-            TSimpleDnsResolverOptions options { .Type = type };
-            TTestActorRuntimeBase runtime;
-            runtime.Initialize();
-            auto sender = runtime.AllocateEdgeActor();
-            auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
-            runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("localhost", AF_UNSPEC)),
-                    0, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
-            size_t addrs = ev->Get()->AddrsV4.size() + ev->Get()->AddrsV6.size();
-            UNIT_ASSERT_C(addrs > 0, "Got " << addrs << " addresses");
+        for (auto addTrailingDot : { true, false }) {
+            for (auto type : { EDnsResolverType::Ares, EDnsResolverType::Libc }) {
+                TSimpleDnsResolverOptions options { .Type = type, .AddTrailingDot = addTrailingDot };
+                TTestActorRuntimeBase runtime;
+                runtime.Initialize();
+                auto sender = runtime.AllocateEdgeActor();
+                auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
+                runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("localhost", AF_UNSPEC)),
+                        0, true);
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
+                size_t addrs = ev->Get()->AddrsV4.size() + ev->Get()->AddrsV6.size();
+                UNIT_ASSERT_C(addrs > 0, "Got " << addrs << " addresses");
+            }
         }
     }
 
     Y_UNIT_TEST(ResolveYandexRu) {
-        for (auto type : { EDnsResolverType::Ares, EDnsResolverType::Libc }) {
-            TSimpleDnsResolverOptions options { .Type = type }; 
-            TTestActorRuntimeBase runtime;
-            runtime.Initialize();
-            auto sender = runtime.AllocateEdgeActor();
-            auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
-            runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("yandex.ru", AF_UNSPEC)),
-                    0, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
-            size_t addrs = ev->Get()->AddrsV4.size() + ev->Get()->AddrsV6.size();
-            UNIT_ASSERT_C(addrs > 0, "Got " << addrs << " addresses");
+        for (auto addTrailingDot : { true, false }) {
+            for (auto type : { EDnsResolverType::Ares, EDnsResolverType::Libc }) {
+                TSimpleDnsResolverOptions options { .Type = type, .AddTrailingDot = addTrailingDot }; 
+                TTestActorRuntimeBase runtime;
+                runtime.Initialize();
+                auto sender = runtime.AllocateEdgeActor();
+                auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
+                runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetHostByName("yandex.ru", AF_UNSPEC)),
+                        0, true);
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetHostByNameResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
+                size_t addrs = ev->Get()->AddrsV4.size() + ev->Get()->AddrsV6.size();
+                UNIT_ASSERT_C(addrs > 0, "Got " << addrs << " addresses");
+            }
         }
     }
 
     Y_UNIT_TEST(GetAddrYandexRu) {
-        for (auto type : { EDnsResolverType::Ares, EDnsResolverType::Libc }) {
-            TSimpleDnsResolverOptions options { .Type = type };
-            TTestActorRuntimeBase runtime;
-            runtime.Initialize();
-            auto sender = runtime.AllocateEdgeActor();
-            auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
+        for (auto addTrailingDot : { true, false }) {
+            for (auto type : { EDnsResolverType::Ares, EDnsResolverType::Libc }) {
+                TSimpleDnsResolverOptions options { .Type = type, .AddTrailingDot = addTrailingDot };
+                TTestActorRuntimeBase runtime;
+                runtime.Initialize();
+                auto sender = runtime.AllocateEdgeActor();
+                auto resolver = runtime.Register(CreateSimpleDnsResolver(options));
 
-            runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetAddr("yandex.ru", AF_UNSPEC)),
-                    0, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetAddrResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
-            UNIT_ASSERT_C(ev->Get()->IsV4() || ev->Get()->IsV6(), "Expect v4 or v6 address");
+                runtime.Send(new IEventHandle(resolver, sender, new TEvDns::TEvGetAddr("yandex.ru", AF_UNSPEC)),
+                        0, true);
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDns::TEvGetAddrResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Status, 0, ev->Get()->ErrorText);
+                UNIT_ASSERT_C(ev->Get()->IsV4() || ev->Get()->IsV6(), "Expect v4 or v6 address");
+            }
         }
     }
 

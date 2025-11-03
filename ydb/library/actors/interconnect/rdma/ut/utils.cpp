@@ -42,7 +42,7 @@ std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntim
     TString ip = env ?: defIp;
 
     NInterconnect::TAddress address(ip, 7777);
-    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(GetV6CompatAddr(address));
+    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address);
     RDMA_UT_EXPECT_TRUE(ctx);
     Cerr << "Using verbs context: " << *ctx << ", on addr: " << ip << Endl;
 

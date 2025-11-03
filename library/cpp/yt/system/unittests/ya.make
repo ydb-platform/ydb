@@ -1,19 +1,16 @@
-LIBRARY()
+GTEST()
 
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
-    env.cpp
-    exit.cpp
-    thread_id.cpp
+    env_ut.cpp
 )
 
 PEERDIR(
     library/cpp/yt/misc
+    library/cpp/yt/string
+    library/cpp/yt/system
+    library/cpp/testing/gtest
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    unittests
-)

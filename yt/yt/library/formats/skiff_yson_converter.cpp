@@ -223,7 +223,6 @@ TOptionalTypesMatch MatchOptionalTypes(
     };
 
     try {
-
         // First of all we compute strict and relaxed depths of optional chain.
         // Strict depth is the depth of chain where each element is optional<T>.
         // Relaxed depth is the depth of chain where each element is optional<T> or variant<null, T>
@@ -351,7 +350,6 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
                     skiffFields[index].Name);
             }
             result.emplace_back(std::nullopt);
-
         };
 
         ssize_t nextSkiffFieldIndex = 0;
@@ -1716,7 +1714,7 @@ TSkiffToYsonConverter CreateListSkiffToYsonConverter(
     auto match = MatchListTypes(descriptor, skiffSchema);
     auto innerConverter = CreateSkiffToYsonConverterImpl(std::move(match.first), match.second, context, config);
 
-    return [innerConverter = innerConverter, descriptor=std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
+    return [innerConverter = innerConverter, descriptor = std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {
             auto tag = parser->ParseVariant8Tag();
@@ -1873,7 +1871,7 @@ TSkiffToYsonConverter CreateDictSkiffToYsonConverter(
     return [
         keyConverter = std::move(keyConverter),
         valueConverter = std::move(valueConverter),
-        descriptor=std::move(descriptor)
+        descriptor = std::move(descriptor)
     ] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {

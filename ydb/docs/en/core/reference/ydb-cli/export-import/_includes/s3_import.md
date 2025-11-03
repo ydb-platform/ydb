@@ -28,6 +28,8 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 `--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
 
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from import. Paths are relative to the `root-path`. You may specify this parameter multiple times for different templates.
+
 {% cut "Alternate syntax" %}
 
 There's an alternate syntax to specify the list of imported objects, supported for backward compatibility.

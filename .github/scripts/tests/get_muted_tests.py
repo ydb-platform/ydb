@@ -26,10 +26,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'   - branch: {branch}')
     print(f'   - build_type: {build_type}')
 
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return []
@@ -137,10 +134,7 @@ def write_to_file(text, file):
 def upload_muted_tests(tests):
     print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
     
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return

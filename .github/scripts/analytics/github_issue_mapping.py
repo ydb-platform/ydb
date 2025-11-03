@@ -19,8 +19,10 @@ from github_issue_utils import create_test_issue_mapping
 
 
 def get_github_issues_data(ydb_wrapper):
-    """Get GitHub issues data from the github_data/issues table"""
-    query = """
+    """Get GitHub issues data from the issues table"""
+    # Get table path from config
+    issues_table = ydb_wrapper.get_table_path("issues")
+    query = f"""
     SELECT 
         issue_number,
         title,
@@ -29,7 +31,7 @@ def get_github_issues_data(ydb_wrapper):
         body,
         created_at,
         updated_at
-    FROM `github_data/issues`
+    FROM `{issues_table}`
     WHERE body IS NOT NULL
     AND body != ''
     """
@@ -118,7 +120,6 @@ def main():
     print("Starting GitHub issue mapping table creation")
     script_start_time = time.time()
     
-    # Initialize YDB wrapper with context manager for automatic cleanup
     with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():

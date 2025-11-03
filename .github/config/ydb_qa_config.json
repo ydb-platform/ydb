@@ -10,6 +10,7 @@
               "tests_monitor": "test_results/analytics/tests_monitor",
               "test_history_fast": "test_results/analytics/test_history_fast",
               "github_issue_mapping": "test_results/analytics/github_issue_mapping",
+              "flaky_tests_window": "test_results/analytics/flaky_tests_window_1_days",
               "all_tests_with_owner_and_mute": "test_results/all_tests_with_owner_and_mute",
               "binary_size": "binary_size",
               "issues": "github_data/issues"

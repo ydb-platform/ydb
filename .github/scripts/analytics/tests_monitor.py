@@ -230,7 +230,6 @@ def compute_owner(owner):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument(
         '--build_type',
         choices=['relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan'],
@@ -253,12 +252,12 @@ def main():
     )
 
     args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
+    # Always use 1 day window
+    history_for_n_day = 1
     build_type = args.build_type
     branch = args.branch
     concurrent_mode = args.concurrent_mode
 
-    # Initialize YDB wrapper with context manager for automatic cleanup
     with YDBWrapper() as ydb_wrapper:        
         if not ydb_wrapper.check_credentials():
             return 1
@@ -267,6 +266,7 @@ def main():
         test_runs_table = ydb_wrapper.get_table_path("test_results")
         tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
         all_tests_table = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
+        flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
         
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2025, 2, 1)
@@ -444,7 +444,7 @@ def main():
                     hist.test_name AS test_name
                 FROM (
                     SELECT * FROM
-                    `test_results/analytics/flaky_tests_window_{history_for_n_day}_days` 
+                    `{flaky_tests_table}` 
                     WHERE 
                     date_window = Date('{date}')
                     AND build_type = '{build_type}' 

@@ -28,7 +28,6 @@ def create_tables(ydb_wrapper, table_path):
 
 
 def main():
-    # Initialize YDB wrapper with context manager for automatic cleanup
     with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():

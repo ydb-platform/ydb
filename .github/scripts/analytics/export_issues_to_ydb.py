@@ -591,7 +591,6 @@ def main():
     print("Starting GitHub issues export to YDB")
     script_start_time = time.time()
     
-    # Initialize YDB wrapper with context manager for automatic cleanup
     with YDBWrapper() as ydb_wrapper:
         
         # Check credentials

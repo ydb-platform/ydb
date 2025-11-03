@@ -78,7 +78,6 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
 
 
 def main():
-    # Initialize YDB wrapper with context manager for automatic cleanup
     with YDBWrapper() as ydb_wrapper:
         
         

@@ -103,7 +103,6 @@ def main():
     table_path = args.table_path
     batch_size = 1000
 
-    # Initialize YDB wrapper with context manager for automatic cleanup
     with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():

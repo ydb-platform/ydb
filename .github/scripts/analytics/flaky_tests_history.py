@@ -10,14 +10,15 @@ from ydb_wrapper import YDBWrapper
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument('--build_type', default='relwithdebinfo', type=str, help='build types')
     parser.add_argument('--branch', default='main', type=str, help='branch')
 
     args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
     build_type = args.build_type
     branch = args.branch
+    
+    # Always use 1 day window
+    history_for_n_day = 1
     
     print(f'🚀 Starting flaky_tests_history.py')
     print(f'   📅 Days window: {history_for_n_day}')
@@ -28,9 +29,10 @@ def main():
         # Get table paths from config
         test_runs_table = ydb_wrapper.get_table_path("test_results")
         testowners_table = ydb_wrapper.get_table_path("testowners")
+        flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
       
         # Получаем последнюю дату из истории
-        table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
+        table_path = flaky_tests_table
         last_date_query = f"""
             select max(date_window) as max_date_window from `{table_path}`
             where build_type = '{build_type}' and branch = '{branch}'
@@ -147,7 +149,7 @@ def main():
                             from  `{test_runs_table}`
                             where
                                 run_timestamp <= Date('{date}') + Interval("P1D")
-                                and run_timestamp >= Date('{date}') - {history_for_n_day+1}*Interval("P1D") 
+                                and run_timestamp >= Date('{date}') - 2*Interval("P1D") 
 
                                 and job_name in (
                                     'Nightly-run',

@@ -12,10 +12,7 @@ from ydb_wrapper import YDBWrapper
 
 
 def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch):
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return {}

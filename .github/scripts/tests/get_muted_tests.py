@@ -152,11 +152,10 @@ def upload_muted_tests(tests):
         print(f'🏗️  Creating table if not exists...')
         create_tables(ydb_wrapper, table_path)
         
-        full_path = f"{ydb_wrapper.database_path}/{table_path}"
-        print(f'📤 Starting bulk upsert to: {full_path}')
+        print(f'📤 Starting bulk upsert to: {table_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        # Подготавливаем column_types
+        # Prepare column_types
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
@@ -169,8 +168,8 @@ def upload_muted_tests(tests):
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
-        # Используем bulk_upsert_batches
-        ydb_wrapper.bulk_upsert_batches(full_path, tests, column_types, batch_size=1000)
+        # Use bulk_upsert_batches (wrapper will construct full path internally)
+        ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
         
         print(f'✅ Bulk upsert completed successfully')
         print(f'📊 Successfully uploaded {len(tests)} test records')

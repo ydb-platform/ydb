@@ -157,11 +157,12 @@ size_t TStorage::Compact() {
     }
 
     while(!Messages.empty() && FirstOffset < FirstUncommittedOffset) {
-        Messages.pop_front();
         ++FirstOffset;
         --Metrics.InflyMessageCount;
         --Metrics.CommittedMessageCount;
         ++removed;
+
+        Messages.pop_front();
     }
 
     FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
@@ -175,8 +176,6 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     while (!Messages.empty() && offset > GetLastOffset()) {
         auto message = Messages.front();
-
-        Batch.RequiredSnapshot = true;
 
         --Metrics.InflyMessageCount;
         switch(message.Status) {
@@ -506,12 +505,16 @@ void TStorage::TBatch::MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTim
     BaseWriteTimestamp = baseWriteTimestamp;
 }
 
-size_t TStorage::TBatch::AffectedMessageCount() const {
-    return ChangedMessages.size() + DLQ.size() + NewMessageCount;
+size_t TStorage::TBatch::AddedMessageCount() const {
+    return NewMessageCount;
 }
 
-bool TStorage::TBatch::GetRequiredSnapshot() const {
-    return RequiredSnapshot;
+size_t TStorage::TBatch::ChangedMessageCount() const {
+    return ChangedMessages.size();
+}
+
+size_t TStorage::TBatch::DLQMessageCount() const {
+    return DLQ.size();
 }
 
 TStorage::TMessageIterator::TMessageIterator(const TStorage& storage, ui64 offset)

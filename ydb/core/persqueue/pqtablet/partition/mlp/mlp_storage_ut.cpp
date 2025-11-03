@@ -545,7 +545,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
         storage.AddMessage(3, true, 5, timeProvider->Now());
 
         auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AffectedMessageCount(), 1); // new message
+        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message
         batch.SerializeTo(wal);
     }
 
@@ -591,7 +591,8 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
         UNIT_ASSERT_VALUES_EQUAL(r.value().Message, 3);
 
         auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AffectedMessageCount(), 2); // new message and changed message
+        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message and changed message
+        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1); // new message and changed message
         batch.SerializeTo(wal);
     }
 
@@ -637,7 +638,8 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         UNIT_ASSERT(r);
 
         auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AffectedMessageCount(), 2); // new message and changed message
+        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1);
         batch.SerializeTo(wal);
     }
 
@@ -694,7 +696,9 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
         UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
 
         auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AffectedMessageCount(), 3); // new message and changed message and DLQ
+        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch.DLQMessageCount(), 1);
         batch.SerializeTo(wal);
     }
 

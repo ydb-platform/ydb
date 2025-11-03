@@ -303,6 +303,32 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         MoveBaseDeadline(newBaseDeadline, newBaseWriteTimestamp);
     }
 
+    while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
+        auto& message = Messages.front();
+
+        ++FirstOffset;
+        --Metrics.InflyMessageCount;
+
+        switch (message.Status) {
+            case EMessageStatus::Unprocessed:
+                --Metrics.UnprocessedMessageCount;
+                break;
+            case EMessageStatus::Locked:
+                --Metrics.LockedMessageCount;
+                break;
+            case EMessageStatus::Committed:
+                --Metrics.CommittedMessageCount;
+                break;
+            case EMessageStatus::DLQ:
+                --Metrics.DLQMessageCount;
+                break;
+        }
+
+        Messages.pop_front();
+    }
+
+    FirstOffset = wal.GetFirstOffset();
+
     if (wal.HasAddedMessages()) {
         TDeserializerWithOffset<TAddedMessage> deserializer(wal.GetAddedMessages());
 
@@ -420,7 +446,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         TSerializerWithOffset<TAddedMessage> serializer;
         serializer.Reserve(NewMessageCount);
 
-        for (size_t offset = FirstNewMessage.value(); offset < lastOffset; ++offset) {
+        for (size_t offset = std::max(FirstNewMessage.value(), Storage->FirstOffset); offset < lastOffset; ++offset) {
             auto* message = Storage->GetMessage(offset);
             if (message) {
                 TAddedMessage msg;
@@ -451,7 +477,9 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     for (auto offset : DLQ) {
-        wal.AddDLQ(offset);
+        if (offset >= Storage->FirstOffset) {
+            wal.AddDLQ(offset);
+        }
     }
 
     return true;

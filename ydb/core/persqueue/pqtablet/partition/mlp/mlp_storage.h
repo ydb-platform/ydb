@@ -85,8 +85,9 @@ public:
 
         bool SerializeTo(NKikimrPQ::TMLPStorageWAL&);
 
-        bool GetRequiredSnapshot() const;
-        size_t AffectedMessageCount() const;
+        size_t AddedMessageCount() const;
+        size_t ChangedMessageCount() const;
+        size_t DLQMessageCount() const;
 
     protected:
         void AddNewMessage(ui64 offset);
@@ -105,8 +106,6 @@ public:
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
-
-        bool RequiredSnapshot = false;
     };
 
     struct TMetrics {

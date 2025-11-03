@@ -454,9 +454,7 @@ void TConsumerActor::Persist() {
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
 
-    auto requireSnapshot = batch.GetRequiredSnapshot()
-        || NextWALIndex == 100
-        || batch.AffectedMessageCount() > Storage->GetMessageCount() / 2 /* Affected message count is very big  */
+    auto requireSnapshot = NextWALIndex == 100
         || Storage->GetMessageCount() < 32 /* Snapshot is small. WAL not required */;
 
     auto tryInlineChannel = [](auto& write) {
@@ -495,7 +493,7 @@ void TConsumerActor::Persist() {
 
         auto key = MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex);
         auto data = wal.SerializeAsString();
-        LOG_D("Write WAL Count: " << batch.AffectedMessageCount() << " Size: " << data.size() << " Key: " << key);
+        LOG_D("Write WAL Size: " << data.size() << " Key: " << key);
 
         auto* write = request->Record.AddCmdWrite();
         write->SetKey(std::move(key));

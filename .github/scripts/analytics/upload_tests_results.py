@@ -157,6 +157,112 @@ def get_codeowners_for_tests(codeowners_file_path, tests_data):
         return tests_data_with_owners
 
 
+def check_table_schema(wrapper, table_path):
+    """Check table schema and return which columns exist"""
+    schema_check_query = f"SELECT * FROM `{table_path}` LIMIT 1"
+    try:
+        schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
+        has_full_name = False
+        has_metadata = False
+        if column_metadata:
+            existing_columns = {col_name for col_name, _ in column_metadata}
+            has_full_name = 'full_name' in existing_columns
+            has_metadata = 'metadata' in existing_columns
+        return has_full_name, has_metadata
+    except Exception as e:
+        # Table doesn't exist or error - assume old schema
+        print(f'Table schema check failed (assuming old schema): {e}')
+        return False, False
+
+
+def prepare_rows_for_schema(results_with_owners, has_full_name, has_metadata):
+    """Prepare rows for upload based on table schema"""
+    prepared_rows = []
+    for index, row in enumerate(results_with_owners):
+        upload_row = {
+            'branch': row['branch'],
+            'build_type': row['build_type'],
+            'commit': row['commit'],
+            'duration': row['duration'],
+            'job_id': row['job_id'],
+            'job_name': row['job_name'],
+            'log': row['log'],
+            'logsdir': row['logsdir'],
+            'owners': row['owners'],
+            'pull': row['pull'],
+            'run_timestamp': row['run_timestamp'],
+            'status_description': row['status_description'],
+            'status': row['status'],
+            'stderr': row['stderr'],
+            'stdout': row['stdout'],
+            'suite_folder': row['suite_folder'],
+            'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
+            'test_name': row['test_name'],
+        }
+        
+        if has_full_name:
+            upload_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
+        
+        if has_metadata:
+            upload_row['metadata'] = {}
+        
+        prepared_rows.append(upload_row)
+    
+    return prepared_rows
+
+
+def prepare_rows_for_backup(source_rows, source_has_full_name, source_has_metadata, 
+                            backup_has_full_name, backup_has_metadata):
+    """Adapt rows from source schema to backup schema"""
+    backup_rows = []
+    for row in source_rows:
+        backup_row = row.copy()
+        
+        # Handle full_name
+        if not backup_has_full_name:
+            backup_row.pop('full_name', None)
+        elif 'full_name' not in backup_row and backup_has_full_name:
+            # Backup requires full_name but source doesn't have it - add it
+            backup_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
+        
+        # Handle metadata
+        if not backup_has_metadata:
+            backup_row.pop('metadata', None)
+        elif 'metadata' not in backup_row and backup_has_metadata:
+            # Backup requires metadata but source doesn't have it - add it
+            backup_row['metadata'] = {}
+        
+        backup_rows.append(backup_row)
+    
+    return backup_rows
+
+
+def prepare_column_types(has_full_name, has_metadata):
+    """Build column types based on schema"""
+    column_types = get_column_types()
+    if has_full_name:
+        column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    if has_metadata:
+        column_types = column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
+    return column_types
+
+
+def upload_to_table(wrapper, table_path, rows, column_types, table_name="table"):
+    """Upload rows to specified table"""
+    if not rows:
+        print(f'No rows to upload to {table_name}')
+        return
+    
+    print(f'Uploading {len(rows)} test results to {table_name}')
+    wrapper.bulk_upsert_batches(
+        table_path,
+        rows,
+        column_types,
+        batch_size=1000
+    )
+    print(f'Successfully uploaded to {table_name}')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test-results-file', action='store',
@@ -198,28 +304,6 @@ def main():
                 print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
                 return 1
             
-            # Get relative table path through wrapper
-            test_table_path = wrapper.get_table_path("test_results")
-            
-            # Create table if it doesn't exist (IF NOT EXISTS - won't affect existing table)
-            wrapper.create_table(test_table_path, get_table_schema(test_table_path))
-            
-            # Check table schema to determine which version we're working with
-            schema_check_query = f"SELECT * FROM `{test_table_path}` LIMIT 1"
-            schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
-            
-            # Determine which columns exist in the table
-            has_full_name = False
-            has_metadata = False
-            if column_metadata:
-                existing_columns = {col_name for col_name, _ in column_metadata}
-                has_full_name = 'full_name' in existing_columns
-                has_metadata = 'metadata' in existing_columns
-                print(f'Schema check: full_name={has_full_name}, metadata={has_metadata}')
-            else:
-                # No metadata - assume old schema
-                print('Schema check: old schema (no full_name, no metadata)')
-            
             # Parse XML with test results
             results = parse_junit_xml(
                 test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
@@ -228,113 +312,48 @@ def main():
             # Add owner information
             result_with_owners = get_codeowners_for_tests(codeowners, results)
             
-            # Prepare data for upload
-            prepared_for_upload_rows = []
-            for index, row in enumerate(result_with_owners):
-                upload_row = {
-                    'branch': row['branch'],
-                    'build_type': row['build_type'],
-                    'commit': row['commit'],
-                    'duration': row['duration'],
-                    'job_id': row['job_id'],
-                    'job_name': row['job_name'],
-                    'log': row['log'],
-                    'logsdir': row['logsdir'],
-                    'owners': row['owners'],
-                    'pull': row['pull'],
-                    'run_timestamp': row['run_timestamp'],
-                    'status_description': row['status_description'],
-                    'status': row['status'],
-                    'stderr': row['stderr'],
-                    'stdout': row['stdout'],
-                    'suite_folder': row['suite_folder'],
-                    'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
-                    'test_name': row['test_name'],
-                }
-                
-                # Add full_name if column exists in table
-                if has_full_name:
-                    upload_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
-                
-                # Add metadata if column exists in table
-                if has_metadata:
-                    upload_row['metadata'] = {}  # Empty JSON object for now
-                
-                prepared_for_upload_rows.append(upload_row)
+            # Get table paths
+            test_table_path = wrapper.get_table_path("test_results")
             
-            # Build column types dynamically based on schema
-            column_types = get_column_types()
-            if has_full_name:
-                column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-            if has_metadata:
-                column_types = column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
+            # Create table if it doesn't exist (IF NOT EXISTS - won't affect existing table)
+            wrapper.create_table(test_table_path, get_table_schema(test_table_path))
             
-            # Upload data to YDB (wrapper will add database_path automatically)
-            if prepared_for_upload_rows:
-                print(f'Uploading {len(prepared_for_upload_rows)} test results')
-                wrapper.bulk_upsert_batches(
-                    test_table_path, 
-                    prepared_for_upload_rows, 
-                    column_types,
-                    batch_size=1000
+            # Check main table schema
+            has_full_name, has_metadata = check_table_schema(wrapper, test_table_path)
+            print(f'Main table schema: full_name={has_full_name}, metadata={has_metadata}')
+            
+            # Prepare rows and column types for main table
+            prepared_rows = prepare_rows_for_schema(result_with_owners, has_full_name, has_metadata)
+            column_types = prepare_column_types(has_full_name, has_metadata)
+            
+            # Upload to main table
+            upload_to_table(wrapper, test_table_path, prepared_rows, column_types, "main table")
+            
+            # Dual write to backup table if configured
+            try:
+                backup_table_path = wrapper.get_table_path("test_results_backup")
+                print(f'Dual write: checking backup table {backup_table_path}')
+                
+                # Check backup table schema
+                backup_has_full_name, backup_has_metadata = check_table_schema(wrapper, backup_table_path)
+                print(f'Backup table schema: full_name={backup_has_full_name}, metadata={backup_has_metadata}')
+                
+                # Prepare rows and column types for backup table
+                backup_rows = prepare_rows_for_backup(
+                    prepared_rows, has_full_name, has_metadata, 
+                    backup_has_full_name, backup_has_metadata
                 )
-                print('Tests uploaded successfully')
+                backup_column_types = prepare_column_types(backup_has_full_name, backup_has_metadata)
                 
-                # Dual write: also write to backup table if it exists in config (for backward compatibility during migration)
-                try:
-                    backup_table_path = wrapper.get_table_path("test_results_backup")
-                    print(f'Dual write: also uploading to backup table {backup_table_path}')
-                    
-                    # Check backup table schema to determine which fields it has
-                    backup_schema_query = f"SELECT * FROM `{backup_table_path}` LIMIT 1"
-                    backup_has_full_name = False
-                    backup_has_metadata = False
-                    try:
-                        backup_schema_results, backup_column_metadata = wrapper.execute_scan_query_with_metadata(backup_schema_query)
-                        if backup_column_metadata:
-                            backup_existing_columns = {col_name for col_name, _ in backup_column_metadata}
-                            backup_has_full_name = 'full_name' in backup_existing_columns
-                            backup_has_metadata = 'metadata' in backup_existing_columns
-                            print(f'Backup table schema check: full_name={backup_has_full_name}, metadata={backup_has_metadata}')
-                        else:
-                            print('Backup table schema check: old schema (no full_name, no metadata)')
-                    except Exception as e:
-                        # Backup table doesn't exist or error - assume old schema
-                        print(f'Backup table schema check failed (assuming old schema): {e}')
-                    
-                    # Prepare data for backup table based on its schema
-                    backup_rows = []
-                    for row in prepared_for_upload_rows:
-                        backup_row = row.copy()
-                        # Remove fields that don't exist in backup table schema
-                        if not backup_has_full_name:
-                            backup_row.pop('full_name', None)
-                        if not backup_has_metadata:
-                            backup_row.pop('metadata', None)
-                        backup_rows.append(backup_row)
-                    
-                    # Build column types based on backup table schema
-                    backup_column_types = get_column_types()
-                    if backup_has_full_name:
-                        backup_column_types = backup_column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                    if backup_has_metadata:
-                        backup_column_types = backup_column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
-                    
-                    wrapper.bulk_upsert_batches(
-                        backup_table_path,
-                        backup_rows,
-                        backup_column_types,
-                        batch_size=1000
-                    )
-                    print('Dual write to backup table completed successfully')
-                except KeyError:
-                    # Backup table not in config - this is normal for old branches
-                    pass
-                except Exception as e:
-                    # Log but don't fail - backup write is optional
-                    print(f'Warning: Failed to write to backup table (this is non-critical): {e}')
-            else:
-                print('No test results to upload')
+                # Upload to backup table
+                upload_to_table(wrapper, backup_table_path, backup_rows, backup_column_types, "backup table")
+                
+            except KeyError:
+                # Backup table not in config - this is normal for old branches
+                pass
+            except Exception as e:
+                # Log but don't fail - backup write is optional
+                print(f'Warning: Failed to write to backup table (this is non-critical): {e}')
                 
     except Exception as e:
         print(f"Warning: Failed to upload test results to YDB: {e}")

@@ -34,7 +34,7 @@ class YDBWrapper:
             # Fallback к JSON файлу для локальной разработки
             if config_path is None:
                 dir_path = os.path.dirname(__file__)
-                config_path = f"{dir_path}/../../config/ydb_qa_db.json"
+                config_path = f"{dir_path}/../../config/ydb_qa_config.json"
             
             # Загружаем JSON конфиг
             try:

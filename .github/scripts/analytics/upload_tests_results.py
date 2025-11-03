@@ -285,17 +285,40 @@ def main():
                     backup_table_path = wrapper.get_table_path("test_results_backup")
                     print(f'Dual write: also uploading to backup table {backup_table_path}')
                     
-                    # Prepare data for backup table (old schema without full_name and metadata)
+                    # Check backup table schema to determine which fields it has
+                    backup_schema_query = f"SELECT * FROM `{backup_table_path}` LIMIT 1"
+                    backup_has_full_name = False
+                    backup_has_metadata = False
+                    try:
+                        backup_schema_results, backup_column_metadata = wrapper.execute_scan_query_with_metadata(backup_schema_query)
+                        if backup_column_metadata:
+                            backup_existing_columns = {col_name for col_name, _ in backup_column_metadata}
+                            backup_has_full_name = 'full_name' in backup_existing_columns
+                            backup_has_metadata = 'metadata' in backup_existing_columns
+                            print(f'Backup table schema check: full_name={backup_has_full_name}, metadata={backup_has_metadata}')
+                        else:
+                            print('Backup table schema check: old schema (no full_name, no metadata)')
+                    except Exception as e:
+                        # Backup table doesn't exist or error - assume old schema
+                        print(f'Backup table schema check failed (assuming old schema): {e}')
+                    
+                    # Prepare data for backup table based on its schema
                     backup_rows = []
                     for row in prepared_for_upload_rows:
                         backup_row = row.copy()
-                        # Remove fields that don't exist in old schema
-                        backup_row.pop('full_name', None)
-                        backup_row.pop('metadata', None)
+                        # Remove fields that don't exist in backup table schema
+                        if not backup_has_full_name:
+                            backup_row.pop('full_name', None)
+                        if not backup_has_metadata:
+                            backup_row.pop('metadata', None)
                         backup_rows.append(backup_row)
                     
-                    # Use old schema column types (without full_name and metadata)
+                    # Build column types based on backup table schema
                     backup_column_types = get_column_types()
+                    if backup_has_full_name:
+                        backup_column_types = backup_column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    if backup_has_metadata:
+                        backup_column_types = backup_column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
                     
                     wrapper.bulk_upsert_batches(
                         backup_table_path,

@@ -71,36 +71,36 @@ def main():
         
     """
     
-    # Execute query using ydb_wrapper
-    results = ydb_wrapper.execute_scan_query(query_get_owners)
+        # Execute query using ydb_wrapper
+        results = ydb_wrapper.execute_scan_query(query_get_owners)
 
-    print(f'testowners data captured, {len(results)} rows')
-    test_list = []
-    for row in results:
-        test_list.append({
-            'suite_folder': row['suite_folder'],
-            'test_name': row['test_name'],
-            'full_name': row['full_name'],
-            'owners': row['owners'],
-            'run_timestamp_last': row['run_timestamp_last'],
-        })
-    
-    print('upserting testowners')
-    create_tables(ydb_wrapper, table_path)
-    
-    # Подготавливаем column_types
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    )
-    
-    ydb_wrapper.bulk_upsert_batches(table_path, test_list, column_types, batch_size=1000)
+        print(f'testowners data captured, {len(results)} rows')
+        test_list = []
+        for row in results:
+            test_list.append({
+                'suite_folder': row['suite_folder'],
+                'test_name': row['test_name'],
+                'full_name': row['full_name'],
+                'owners': row['owners'],
+                'run_timestamp_last': row['run_timestamp_last'],
+            })
+        
+        print('upserting testowners')
+        create_tables(ydb_wrapper, table_path)
+        
+        # Prepare column_types
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+            .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        
+        ydb_wrapper.bulk_upsert_batches(table_path, test_list, column_types, batch_size=1000)
 
-    print('testowners updated')
+        print('testowners updated')
 
 
 if __name__ == "__main__":

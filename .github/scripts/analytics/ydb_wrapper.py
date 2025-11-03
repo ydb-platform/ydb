@@ -804,11 +804,11 @@ class YDBWrapper:
         """
         if database == "main":
             if table_name not in self._main_db_tables:
-                raise KeyError(f"Table '{table_name}' not found in main_database.tables config")
+                raise KeyError(f"Table '{table_name}' not found in databases.main.tables config")
             return self._main_db_tables[table_name]
         elif database == "statistics":
             if table_name not in self._stats_db_tables:
-                raise KeyError(f"Table '{table_name}' not found in statistics_database.tables config")
+                raise KeyError(f"Table '{table_name}' not found in databases.statistics.tables config")
             return self._stats_db_tables[table_name]
         else:
             raise ValueError(f"Unknown database: {database}. Use 'main' or 'statistics'")

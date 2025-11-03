@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
+import configparser
 import datetime
 import os
+import subprocess
 import sys
 import uuid
-import subprocess
 
 # Добавляем путь к analytics скриптам
 dir_path = os.path.dirname(__file__)
@@ -57,14 +58,16 @@ def main():
                 print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
                 return 1
             
-            ydbd_path = wrapper.ydbd_path
+            config_path = f"{dir_path}/../config/variables.ini"
+            config = configparser.ConfigParser()
+            config.read(config_path)
+            ydbd_path = config.get("YDBD", "YDBD_PATH")
             
             if not os.path.exists(ydbd_path):
                 # can be possible due to incremental builds and ydbd itself is not affected by changes
                 print("{} not exists, skipping".format(ydbd_path))
                 return 0
 
-            # Построение запроса
             text_query_builder = []
             for type_ in STRING_COLUMNS:
                 text_query_builder.append("DECLARE ${} as String;".format(type_))

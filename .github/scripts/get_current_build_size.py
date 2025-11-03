@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 
-import json
+import configparser
 import os
 import subprocess
+import sys
 
 
 def get_ydbd_path():
-    """Получает ydbd_path из конфига (env или файл)"""
-    # Приоритет 1: YDB_QA_CONFIG из env
-    ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
-    if ydb_qa_config_env:
-        config_dict = json.loads(ydb_qa_config_env)
-        return config_dict["variables"]["ydbd_path"]
-    
-    # Приоритет 2: локальный файл
     dir_path = os.path.dirname(__file__)
-    config_path = f"{dir_path}/../config/ydb_qa_db.json"
-    with open(config_path, 'r') as f:
-        config_dict = json.load(f)
-        return config_dict["variables"]["ydbd_path"]
+    config_path = f"{dir_path}/../config/variables.ini"
+    
+    config = configparser.ConfigParser()
+    config.read(config_path)
+    
+    # Читаем из секции [YDBD] параметр YDBD_PATH
+    return config.get("YDBD", "YDBD_PATH")
 
 
 def get_build_size():
-    import sys
     ydbd_path = get_ydbd_path()
     
     if not os.path.exists(ydbd_path):

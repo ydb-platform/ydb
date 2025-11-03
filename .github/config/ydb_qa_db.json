@@ -26,10 +26,9 @@
       }
   },
   "variables": {
-      "ydbd_path": "ydb/apps/ydbd/ydbd"
+      
   },
   "flags": {
-      "use_two_databases_upload": false,
       "enable_statistics": true
   }
 }

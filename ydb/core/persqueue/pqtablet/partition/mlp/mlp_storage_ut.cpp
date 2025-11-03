@@ -552,7 +552,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
     timeProvider->Tick(TDuration::Seconds(5));
 
     {
-        TStorage storage(CreateDefaultTimeProvider());
+        TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
@@ -599,7 +599,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
     timeProvider->Tick(TDuration::Seconds(5));
 
     {
-        TStorage storage(CreateDefaultTimeProvider());
+        TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
@@ -646,7 +646,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
     timeProvider->Tick(TDuration::Seconds(5));
 
     {
-        TStorage storage(CreateDefaultTimeProvider());
+        TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
@@ -705,7 +705,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
     timeProvider->Tick(TDuration::Seconds(5));
 
     {
-        TStorage storage(CreateDefaultTimeProvider());
+        TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
@@ -728,6 +728,57 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
         const auto& dlq = storage.GetDLQMessages();
         UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
+    }
+}
+
+Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    NKikimrPQ::TMLPStorageWAL wal;
+
+    {
+        TStorage storage(timeProvider);
+        storage.SetKeepMessageOrder(true);
+        storage.SerializeTo(snapshot);
+
+        storage.AddMessage(3, true, 5, timeProvider->Now());
+        storage.AddMessage(7, true, 5, timeProvider->Now());
+
+        auto batch = storage.GetBatch();
+        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 2);
+        batch.SerializeTo(wal);
+    }
+
+    timeProvider->Tick(TDuration::Seconds(5));
+
+    {
+        TStorage storage(timeProvider);
+        storage.SetKeepMessageOrder(true);
+
+        storage.Initialize(snapshot);
+        storage.ApplyWAL(wal);
+
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
+
+        {
+            const auto* message = storage.GetMessage(3);
+            UNIT_ASSERT(!message);
+        }
+
+        {
+            const auto* message = storage.GetMessage(7);
+            UNIT_ASSERT(message);
+        }
+
+        auto& metrics = storage.GetMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
     }
 }
 

@@ -1,6 +1,7 @@
 RECURSE(
     blobsan
     cfg
+    merge_yaml
     partcheck
     query_replay
     query_replay_yt

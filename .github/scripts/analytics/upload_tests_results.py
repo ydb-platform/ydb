@@ -13,7 +13,7 @@ from ydb_wrapper import YDBWrapper
 max_characters_for_status_description = int(7340032/4) #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
 
 def get_column_types():
-    """Получение типов колонок для bulk upsert"""
+    """Get column types for bulk upsert"""
     return (
         ydb.BulkUpsertColumns()
         .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -37,13 +37,14 @@ def get_column_types():
     )
 
 def get_table_schema(table_path):
-    """Получение SQL-схемы для создания таблицы"""
+    """Get SQL schema for table creation"""
     return f"""
         CREATE TABLE IF NOT EXISTS `{table_path}` (
-            -- Primary key columns (в порядке PRIMARY KEY)
+            -- Primary key columns (in PRIMARY KEY order)
             run_timestamp Timestamp NOT NULL,
             build_type Utf8 NOT NULL,
             branch Utf8 NOT NULL,
+            full_name Utf8 NOT NULL,
             test_name Utf8 NOT NULL,
             suite_folder Utf8 NOT NULL,
             status Utf8 NOT NULL,
@@ -63,9 +64,10 @@ def get_table_schema(table_path):
             logsdir Utf8,
             stderr Utf8,
             stdout Utf8,
+            metadata Json,
             
             -- Primary key definition
-            PRIMARY KEY (run_timestamp, build_type, branch, test_name, suite_folder, status)
+            PRIMARY KEY (run_timestamp, build_type, branch, full_name, test_name, suite_folder, status)
         )
         PARTITION BY HASH(run_timestamp, build_type, branch, suite_folder)
         WITH (
@@ -90,9 +92,7 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
             status = "passed"
             if testcase.find("properties/property/[@name='mute']") is not None:
                 status = "mute"
-                status_description = testcase.find(
-                    "properties/property/[@name='mute']"
-                ).get("value")
+                status_description = testcase.find("skipped").text # error text always in skipped node for muted tests
             elif testcase.find("failure") is not None:
                 status = "failure"
                 status_description = testcase.find("failure").text
@@ -188,31 +188,54 @@ def main():
     codeowners = f"{git_root}/.github/TESTOWNERS"
 
     try:
-        # YDBWrapper сам найдет конфиг по умолчанию и определит имя скрипта
+        # YDBWrapper will find config by default and determine script name
         with YDBWrapper() as wrapper:
-            # Проверяем наличие учетных данных
+            # Check credentials
             if not wrapper.check_credentials():
                 print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
                 return 1
             
-            # Получаем относительный путь к таблице через wrapper
+            # Get relative table path through wrapper
             test_table_path = wrapper.get_table_path("test_results")
             
-            # Создаем таблицу если не существует (wrapper сам добавит database_path)
+            # Create table if it doesn't exist (wrapper will add database_path automatically)
             wrapper.create_table(test_table_path, get_table_schema(test_table_path))
             
-            # Парсим XML с результатами тестов
+            # Check table schema to see if full_name and metadata columns exist
+            schema_check_query = f"SELECT * FROM `{test_table_path}` LIMIT 1"
+            has_full_name = False
+            has_metadata = False
+            try:
+                schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
+                # Even if table is empty, metadata should contain column information
+                if column_metadata:
+                    existing_columns = {col_name for col_name, _ in column_metadata}
+                    has_full_name = 'full_name' in existing_columns
+                    has_metadata = 'metadata' in existing_columns
+                    print(f'Schema check: full_name={has_full_name}, metadata={has_metadata}')
+                else:
+                    # If no metadata, assume new schema (columns will be added by create_table)
+                    print('No column metadata returned, assuming new schema')
+                    has_full_name = True  # full_name is in PRIMARY KEY, so it exists in new schema
+                    has_metadata = True  # metadata is in new schema
+            except Exception as e:
+                # If query fails (table doesn't exist or empty), assume new schema
+                print(f'Warning: Could not check table schema: {e}, assuming new schema')
+                has_full_name = True  # full_name is in PRIMARY KEY
+                has_metadata = True  # metadata is in new schema
+            
+            # Parse XML with test results
             results = parse_junit_xml(
                 test_results_file, build_type, job_name, job_id, commit, branch, pull, run_timestamp
             )
             
-            # Добавляем информацию о владельцах
+            # Add owner information
             result_with_owners = get_codeowners_for_tests(codeowners, results)
             
-            # Подготавливаем данные для загрузки
+            # Prepare data for upload
             prepared_for_upload_rows = []
             for index, row in enumerate(result_with_owners):
-                prepared_for_upload_rows.append({
+                upload_row = {
                     'branch': row['branch'],
                     'build_type': row['build_type'],
                     'commit': row['commit'],
@@ -231,15 +254,32 @@ def main():
                     'suite_folder': row['suite_folder'],
                     'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
                     'test_name': row['test_name'],
-                })
+                }
+                
+                # Add full_name if column exists in table
+                if has_full_name:
+                    upload_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
+                
+                # Add metadata if column exists in table
+                if has_metadata:
+                    upload_row['metadata'] = {}  # Empty JSON object for now
+                
+                prepared_for_upload_rows.append(upload_row)
             
-            # Загружаем данные в YDB (wrapper сам добавит database_path)
+            # Build column types dynamically based on schema
+            column_types = get_column_types()
+            if has_full_name:
+                column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            if has_metadata:
+                column_types = column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
+            
+            # Upload data to YDB (wrapper will add database_path automatically)
             if prepared_for_upload_rows:
                 print(f'Uploading {len(prepared_for_upload_rows)} test results')
                 wrapper.bulk_upsert_batches(
                     test_table_path, 
                     prepared_for_upload_rows, 
-                    get_column_types(),
+                    column_types,
                     batch_size=1000
                 )
                 print('Tests uploaded successfully')
@@ -252,9 +292,6 @@ def main():
         return 0
     
     return 0
-
-       
-
 
 if __name__ == "__main__":
     sys.exit(main())

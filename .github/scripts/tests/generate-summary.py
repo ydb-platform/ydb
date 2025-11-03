@@ -12,6 +12,7 @@ from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from junit_utils import get_property_value, iter_xml_files
+from report_utils import iter_report_results
 from get_test_history import get_test_history
 
 
@@ -86,16 +87,22 @@ class TestResult:
     owners: str
     status_description: str
     is_sanitizer_issue: bool = False
+    is_timeout: bool = False
 
     @property
     def status_display(self):
-        return {
+        status_str = {
             TestStatus.PASS: "PASS",
             TestStatus.FAIL: "FAIL",
             TestStatus.ERROR: "ERROR",
             TestStatus.SKIP: "SKIP",
             TestStatus.MUTE: "MUTE",
         }[self.status]
+        
+        if self.is_timeout:
+            status_str += " (TIMEOUT)"
+        
+        return status_str
 
     @property
     def elapsed_display(self):
@@ -114,9 +121,67 @@ class TestResult:
         return f"{self.classname}/{self.name}"
 
     @classmethod
+    def from_report(cls, result):
+        """Create TestResult from a build results report entry."""
+        path = result.get('path', '')
+        name = result.get('name', '')
+        subtest_name = result.get('subtest_name', name)
+        
+        # Combine path/name as classname, subtest as name
+        classname = f"{path}/{name}" if path else name
+        
+        status_description = None
+        error_type = result.get('error_type')
+        is_timeout = error_type == 'TIMEOUT'
+        
+        status_str = result.get('status', 'OK')
+        if status_str == 'FAILED':
+            if is_timeout:
+                status = TestStatus.ERROR
+            else:
+                status = TestStatus.FAIL
+            status_description = result.get('rich-snippet', result.get('snippet', ''))
+        elif status_str == 'SKIPPED':
+            status = TestStatus.SKIP
+            status_description = result.get('rich-snippet', '')
+        else:
+            status = TestStatus.PASS
+
+        # Extract log URLs from links
+        links = result.get('links', {})
+        log_urls = {}
+        for key, value in links.items():
+            if value:
+                # value might be a list, take first element
+                url = value[0] if isinstance(value, list) else value
+                log_urls[key] = url
+
+        elapsed = result.get('duration', 0.0)
+
+        return cls(
+            classname=classname,
+            name=subtest_name,
+            status=status,
+            log_urls=log_urls,
+            elapsed=elapsed,
+            count_of_passed=0,
+            owners='',
+            status_description=status_description,
+            is_sanitizer_issue=is_sanitizer_issue(status_description),
+            is_timeout=is_timeout
+        )
+
+    @classmethod
     def from_junit(cls, testcase):
         classname, name = testcase.get("classname"), testcase.get("name")
         status_description = None
+        is_timeout = False
+        
+        # Check for timeout in error_type property
+        error_type = get_property_value(testcase, "error_type")
+        if error_type == "TIMEOUT":
+            is_timeout = True
+        
         if testcase.find("failure") is not None:
             status = TestStatus.FAIL
             if testcase.find("failure").text is not None:
@@ -153,7 +218,18 @@ class TestResult:
             elapsed = 0
             print(f"Unable to cast elapsed time for {classname}::{name}  value={elapsed!r}")
 
-        return cls(classname, name, status, log_urls, elapsed, 0, '', status_description, is_sanitizer_issue(status_description))
+        return cls(
+            classname=classname,
+            name=name,
+            status=status,
+            log_urls=log_urls,
+            elapsed=elapsed,
+            count_of_passed=0,
+            owners='',
+            status_description=status_description,
+            is_sanitizer_issue=is_sanitizer_issue(status_description),
+            is_timeout=is_timeout
+        )
 
 
 class TestSummaryLine:
@@ -426,9 +502,17 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
     for title, html_fn, path in paths:
         summary_line = TestSummaryLine(title)
 
-        for fn, suite, case in iter_xml_files(path):
-            test_result = TestResult.from_junit(case)
-            summary_line.add(test_result)
+        # Detect if path is a report.json or junit XML file
+        if path.endswith('.json') or os.path.basename(path) == 'report.json' or (os.path.isdir(path) and os.path.exists(os.path.join(path, 'report.json'))):
+            # Use report.json format
+            for result in iter_report_results(path):
+                test_result = TestResult.from_report(result)
+                summary_line.add(test_result)
+        else:
+            # Use junit XML format (backward compatibility)
+            for fn, suite, case in iter_xml_files(path):
+                test_result = TestResult.from_junit(case)
+                summary_line.add(test_result)
         
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)

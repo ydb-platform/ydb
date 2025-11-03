@@ -6,6 +6,7 @@
           "connection_timeout": 60,
           "tables": {
               "test_results": "test_results/test_runs_column",
+              "test_results_backup": "test_results/test_runs_column",
               "testowners": "test_results/analytics/testowners",
               "tests_monitor": "test_results/analytics/tests_monitor",
               "test_history_fast": "test_results/analytics/test_history_fast",
@@ -14,14 +15,6 @@
               "all_tests_with_owner_and_mute": "test_results/all_tests_with_owner_and_mute",
               "binary_size": "binary_size",
               "issues": "github_data/issues"
-          }
-      },
-      "backup": {
-          "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
-          "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
-          "connection_timeout": 60,
-          "tables": {
-              "test_results": "test_results/test_runs"
           }
       },
       "statistics": {
@@ -34,7 +27,6 @@
       }
   },
   "variables": {
-      
   },
   "flags": {
       "enable_statistics": true

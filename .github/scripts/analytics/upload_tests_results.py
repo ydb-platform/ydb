@@ -92,16 +92,20 @@ def parse_junit_xml(test_results_file, build_type, job_name, job_id, commit, bra
             status = "passed"
             if testcase.find("properties/property/[@name='mute']") is not None:
                 status = "mute"
-                status_description = testcase.find("skipped").text # error text always in skipped node for muted tests
+                skipped = testcase.find("skipped")
+                status_description = skipped.text if skipped is not None else ""
             elif testcase.find("failure") is not None:
                 status = "failure"
-                status_description = testcase.find("failure").text
+                failure = testcase.find("failure")
+                status_description = failure.text if failure is not None else ""
             elif testcase.find("error") is not None:
                 status = "error"
-                status_description = testcase.find("error").text
+                error = testcase.find("error")
+                status_description = error.text if error is not None else ""
             elif testcase.find("skipped") is not None:
                 status = "skipped"
-                status_description = testcase.find("skipped").text
+                skipped = testcase.find("skipped")
+                status_description = skipped.text if skipped is not None else ""
 
             results.append(
                 {
@@ -188,7 +192,6 @@ def main():
     codeowners = f"{git_root}/.github/TESTOWNERS"
 
     try:
-        # YDBWrapper will find config by default and determine script name
         with YDBWrapper() as wrapper:
             # Check credentials
             if not wrapper.check_credentials():
@@ -283,6 +286,37 @@ def main():
                     batch_size=1000
                 )
                 print('Tests uploaded successfully')
+                
+                # Dual write: also write to backup table if it exists in config (for backward compatibility during migration)
+                try:
+                    backup_table_path = wrapper.get_table_path("test_results_backup")
+                    print(f'Dual write: also uploading to backup table {backup_table_path}')
+                    
+                    # Prepare data for backup table (old schema without full_name and metadata)
+                    backup_rows = []
+                    for row in prepared_for_upload_rows:
+                        backup_row = row.copy()
+                        # Remove fields that don't exist in old schema
+                        backup_row.pop('full_name', None)
+                        backup_row.pop('metadata', None)
+                        backup_rows.append(backup_row)
+                    
+                    # Use old schema column types (without full_name and metadata)
+                    backup_column_types = get_column_types()
+                    
+                    wrapper.bulk_upsert_batches(
+                        backup_table_path,
+                        backup_rows,
+                        backup_column_types,
+                        batch_size=1000
+                    )
+                    print('Dual write to backup table completed successfully')
+                except KeyError:
+                    # Backup table not in config - this is normal for old branches
+                    pass
+                except Exception as e:
+                    # Log but don't fail - backup write is optional
+                    print(f'Warning: Failed to write to backup table (this is non-critical): {e}')
             else:
                 print('No test results to upload')
                 

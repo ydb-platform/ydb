@@ -14,24 +14,15 @@ from contextlib import contextmanager
 class YDBWrapper:
     """Wrapper for working with YDB with statistics logging"""
     
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False):
-        # Priority: YDB_QA_CONFIG env > config file (JSON)
+    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = True):
+        # If use_local_config=True: use only local config file (ignore YDB_QA_CONFIG env)
+        # If use_local_config=False: Priority: YDB_QA_CONFIG env > config file (JSON)
         # By default logs go to stdout (as before)
         # If silent=True, logs go to stderr (for scripts called from other scripts)
         self._log_stream = sys.stderr if silent else sys.stdout
         
-        ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
-        
-        if ydb_qa_config_env:
-            # Parse JSON from ENV
-            try:
-                config_dict = json.loads(ydb_qa_config_env)
-                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
-                
-            except (json.JSONDecodeError, KeyError) as e:
-                raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
-        else:
-            # Fallback to JSON file for local development
+        if use_local_config:
+            # Force use local config file, ignore environment variable
             if config_path is None:
                 dir_path = os.path.dirname(__file__)
                 config_path = f"{dir_path}/../../config/ydb_qa_config.json"
@@ -45,6 +36,33 @@ class YDBWrapper:
                 raise RuntimeError(f"Config file not found: {config_path}")
             except json.JSONDecodeError as e:
                 raise RuntimeError(f"Invalid JSON config file: {e}")
+        else:
+            # Original behavior: YDB_QA_CONFIG env > config file
+            ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
+            
+            if ydb_qa_config_env:
+                # Parse JSON from ENV
+                try:
+                    config_dict = json.loads(ydb_qa_config_env)
+                    enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+                    
+                except (json.JSONDecodeError, KeyError) as e:
+                    raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
+            else:
+                # Fallback to JSON file for local development
+                if config_path is None:
+                    dir_path = os.path.dirname(__file__)
+                    config_path = f"{dir_path}/../../config/ydb_qa_config.json"
+                
+                # Load JSON config
+                try:
+                    with open(config_path, 'r') as f:
+                        config_dict = json.load(f)
+                    enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+                except FileNotFoundError:
+                    raise RuntimeError(f"Config file not found: {config_path}")
+                except json.JSONDecodeError as e:
+                    raise RuntimeError(f"Invalid JSON config file: {e}")
         
         # Statistics settings
         self._enable_statistics = enable_statistics
@@ -96,8 +114,7 @@ class YDBWrapper:
             'stats_path': stats.get("path", main["path"]),
             '_stats_connection_timeout': stats.get("connection_timeout",60),
             'stats_table': stats.get("tables", {}).get("query_statistics", "analytics/query_statistics"),
-            '_stats_db_tables': stats.get("tables", {}),
-            'ydbd_path': variables.get("ydbd_path", "ydb/apps/ydbd/ydbd")
+            '_stats_db_tables': stats.get("tables", {})
         }
         
         for key, value in config_mapping.items():

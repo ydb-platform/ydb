@@ -20,23 +20,32 @@ try:
     print("Checking YDB configuration...")
     
     try:
+        # Determine config file path (same logic as YDBWrapper)
+        script_dir = os.path.dirname(__file__)
+        config_file_path = f"{script_dir}/config/ydb_qa_config.json"
+        
+        # Check if config file exists
+        if os.path.exists(config_file_path):
+            print(f"✓ Using local config file: {config_file_path}")
+            try:
+                with open(config_file_path, 'r') as f:
+                    config = json.load(f)
+                databases = list(config.get('databases', {}).keys())
+                if databases:
+                    print(f"✓ Databases configured: {', '.join(databases)}")
+            except Exception as e:
+                print(f"⚠ Could not parse config file: {e}")
+        else:
+            print(f"⚠ Config file not found: {config_file_path}")
+        
+        # Note about YDB_QA_CONFIG (wrapper ignores it by default)
+        if os.environ.get("YDB_QA_CONFIG"):
+            print("ℹ YDB_QA_CONFIG is set, but wrapper uses local config file by default (use_local_config=True)")
+        
         # Try to create wrapper - it will load config and show logs
         with YDBWrapper(silent=False) as wrapper:
             if wrapper.check_credentials():
                 print("✓ Credentials available")
-                
-                # Show config source
-                if os.environ.get("YDB_QA_CONFIG"):
-                    print("✓ Using YDB_QA_CONFIG from environment")
-                    try:
-                        config = json.loads(os.environ.get("YDB_QA_CONFIG"))
-                        databases = list(config.get('databases', {}).keys())
-                        if databases:
-                            print(f"✓ Databases configured: {', '.join(databases)}")
-                    except Exception:
-                        pass
-                else:
-                    print("⚠ YDB_QA_CONFIG not set, using fallback config file")
                 
                 # Try to get cluster info (will show connection status)
                 try:

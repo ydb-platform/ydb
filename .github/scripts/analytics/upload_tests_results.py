@@ -201,31 +201,24 @@ def main():
             # Get relative table path through wrapper
             test_table_path = wrapper.get_table_path("test_results")
             
-            # Create table if it doesn't exist (wrapper will add database_path automatically)
+            # Create table if it doesn't exist (IF NOT EXISTS - won't affect existing table)
             wrapper.create_table(test_table_path, get_table_schema(test_table_path))
             
-            # Check table schema to see if full_name and metadata columns exist
+            # Check table schema to determine which version we're working with
             schema_check_query = f"SELECT * FROM `{test_table_path}` LIMIT 1"
+            schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
+            
+            # Determine which columns exist in the table
             has_full_name = False
             has_metadata = False
-            try:
-                schema_results, column_metadata = wrapper.execute_scan_query_with_metadata(schema_check_query)
-                # Even if table is empty, metadata should contain column information
-                if column_metadata:
-                    existing_columns = {col_name for col_name, _ in column_metadata}
-                    has_full_name = 'full_name' in existing_columns
-                    has_metadata = 'metadata' in existing_columns
-                    print(f'Schema check: full_name={has_full_name}, metadata={has_metadata}')
-                else:
-                    # If no metadata, assume new schema (columns will be added by create_table)
-                    print('No column metadata returned, assuming new schema')
-                    has_full_name = True  # full_name is in PRIMARY KEY, so it exists in new schema
-                    has_metadata = True  # metadata is in new schema
-            except Exception as e:
-                # If query fails (table doesn't exist or empty), assume new schema
-                print(f'Warning: Could not check table schema: {e}, assuming new schema')
-                has_full_name = True  # full_name is in PRIMARY KEY
-                has_metadata = True  # metadata is in new schema
+            if column_metadata:
+                existing_columns = {col_name for col_name, _ in column_metadata}
+                has_full_name = 'full_name' in existing_columns
+                has_metadata = 'metadata' in existing_columns
+                print(f'Schema check: full_name={has_full_name}, metadata={has_metadata}')
+            else:
+                # No metadata - assume old schema
+                print('Schema check: old schema (no full_name, no metadata)')
             
             # Parse XML with test results
             results = parse_junit_xml(

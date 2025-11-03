@@ -93,6 +93,8 @@ public:
         void AddChange(ui64 offset);
         void AddDLQ(ui64 offset);
 
+        void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
+
     private:
         TStorage* Storage;
 
@@ -100,6 +102,9 @@ public:
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
         std::deque<ui64> DLQ;
+
+        std::optional<TInstant> BaseDeadline;
+        std::optional<TInstant> BaseWriteTimestamp;
 
         bool RequiredSnapshot = false;
     };
@@ -179,6 +184,8 @@ private:
     void DoUnlock(TMessage& message, ui64 offset);
 
     void UpdateFirstUncommittedOffset();
+
+    void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;

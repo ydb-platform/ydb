@@ -419,7 +419,7 @@ Y_UNIT_TEST(UnlockCommittedMessage) {
 }
 
 Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
-    auto now = TInstant::Now();
+    auto now = TInstant::Seconds(TInstant::Now().Seconds());
 
     TStorage storage(CreateDefaultTimeProvider());
     {
@@ -459,7 +459,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetFormatVersion(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstOffset(), 0);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstUncommittedOffset(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetBaseDeadlineMilliseconds(), storage.GetBaseDeadline().MilliSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetBaseDeadlineSeconds(), storage.GetBaseDeadline().Seconds());
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMessages().size(), 0);
     }
     {
@@ -471,7 +471,7 @@ Y_UNIT_TEST(EmptyStorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 0);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 0);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline().MilliSeconds(), snapshot.GetMeta().GetBaseDeadlineMilliseconds());
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline().Seconds(), snapshot.GetMeta().GetBaseDeadlineSeconds());
 
         auto& metrics = storage.GetMetrics();
         UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 0);
@@ -505,7 +505,7 @@ Y_UNIT_TEST(StorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetFormatVersion(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstOffset(), 3);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetFirstUncommittedOffset(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetBaseDeadlineMilliseconds(), storage.GetBaseDeadline().MilliSeconds());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetMeta().GetBaseDeadlineSeconds(), storage.GetBaseDeadline().Seconds());
         UNIT_ASSERT(snapshot.GetMessages().size() > 0);
     }
     {
@@ -518,7 +518,7 @@ Y_UNIT_TEST(StorageSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUnlockedOffset(), 6);
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline().MilliSeconds(), snapshot.GetMeta().GetBaseDeadlineMilliseconds());
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline().Seconds(), snapshot.GetMeta().GetBaseDeadlineSeconds());
 
         auto& metrics = storage.GetMetrics();
         UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);

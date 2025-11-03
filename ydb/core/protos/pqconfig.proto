@@ -1361,8 +1361,8 @@ message TMLPStorageSnapshot {
     message TMeta {
         optional uint64 FirstOffset = 1;
         optional uint64 FirstUncommittedOffset = 2;
-        optional uint64 BaseDeadlineMilliseconds = 3;
-        optional uint64 BaseWriteTimestampMilliseconds = 4;
+        optional uint64 BaseDeadlineSeconds = 3;
+        optional uint64 BaseWriteTimestampSeconds = 4;
         optional uint64 DLQMovedMessages = 5;
     }
     optional TMeta Meta = 2;
@@ -1385,5 +1385,8 @@ message TMLPStorageWAL {
 
     repeated uint64 DLQ = 7;
     optional uint64 DLQMovedMessages = 8;
+
+    optional uint64 BaseDeadlineSeconds = 9;
+    optional uint64 BaseWriteTimestampSeconds = 10;
 }
 

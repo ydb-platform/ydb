@@ -243,8 +243,8 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     FirstOffset = meta.GetFirstOffset();
     FirstUncommittedOffset = FirstOffset;
     FirstUnlockedOffset = FirstOffset;
-    BaseDeadline = TInstant::MilliSeconds(meta.GetBaseDeadlineMilliseconds());
-    BaseWriteTimestamp = TInstant::MilliSeconds(meta.GetBaseWriteTimestampMilliseconds());
+    BaseDeadline = TInstant::Seconds(meta.GetBaseDeadlineSeconds());
+    BaseWriteTimestamp = TInstant::Seconds(meta.GetBaseWriteTimestampSeconds());
 
     bool moveUnlockedOffset = true;
     bool moveUncommittedOffset = true;
@@ -296,6 +296,12 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
 bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
     AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
+
+    if (wal.HasBaseDeadlineSeconds() || wal.HasBaseWriteTimestampSeconds()) {
+        auto newBaseDeadline = wal.HasBaseDeadlineSeconds() ? TInstant::Seconds(wal.GetBaseDeadlineSeconds()) : BaseDeadline;
+        auto newBaseWriteTimestamp = wal.HasBaseWriteTimestampSeconds() ? TInstant::Seconds(wal.GetBaseWriteTimestampSeconds()) : BaseWriteTimestamp;
+        MoveBaseDeadline(newBaseDeadline, newBaseWriteTimestamp);
+    }
 
     if (wal.HasAddedMessages()) {
         TDeserializerWithOffset<TAddedMessage> deserializer(wal.GetAddedMessages());
@@ -378,7 +384,8 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     auto* meta = snapshot.MutableMeta();
     meta->SetFirstOffset(FirstOffset);
     meta->SetFirstUncommittedOffset(FirstUncommittedOffset);
-    meta->SetBaseDeadlineMilliseconds(BaseDeadline.MilliSeconds());
+    meta->SetBaseDeadlineSeconds(BaseDeadline.Seconds());
+    meta->SetBaseWriteTimestampSeconds(BaseWriteTimestamp.Seconds());
 
     snapshot.SetFormatVersion(1);
 
@@ -399,6 +406,13 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     wal.SetFormatVersion(1);
     wal.SetFirstOffset(Storage->FirstOffset);
+
+    if (BaseDeadline) {
+        wal.SetBaseDeadlineSeconds(BaseDeadline->Seconds());
+    }
+    if (BaseWriteTimestamp) {
+        wal.SetBaseWriteTimestampSeconds(BaseWriteTimestamp->Seconds());
+    }
 
     if (FirstNewMessage) {
         auto lastOffset = Storage->GetLastOffset();

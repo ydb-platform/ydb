@@ -5,11 +5,19 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+namespace {
+
+TInstant TrimToSeconds(TInstant time) {
+    return TInstant::Seconds(time.Seconds() + (time.MilliSecondsOfSecond() > 0 ? 1 : 0));
+}
+
+}
+
 TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider)
     : TimeProvider(timeProvider)
     , Batch(this)
 {
-    BaseDeadline = timeProvider->Now();
+    BaseDeadline = TrimToSeconds(timeProvider->Now());
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -200,7 +208,8 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
 
     if (BaseWriteTimestamp == TInstant::Zero()) {
-        BaseWriteTimestamp = writeTimestamp;
+        BaseWriteTimestamp = TrimToSeconds(writeTimestamp);
+        Batch.MoveBaseTime(BaseDeadline, BaseWriteTimestamp);
     }
 
     Messages.push_back({
@@ -209,7 +218,7 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         .DeadlineDelta = 0,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
-        .WriteTimestampDelta = (writeTimestamp - BaseWriteTimestamp).Seconds()
+        .WriteTimestampDelta = (TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds()
     });
 
     Batch.AddNewMessage(offset);
@@ -271,8 +280,9 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
         return 0;
     }
 
-    auto deadlineDuration = deadline - BaseDeadline;
-    auto deadlineDelta = deadlineDuration.Seconds() + (deadlineDuration.MilliSecondsOfSecond() ? 1 : 0);
+    deadline = TrimToSeconds(deadline);
+
+    auto deadlineDelta = (deadline - BaseDeadline).Seconds();
     if (deadlineDelta >= MaxDeadlineDelta) {
         MoveBaseDeadline();
         if (deadline <= BaseDeadline) {
@@ -387,17 +397,17 @@ void TStorage::MoveBaseDeadline() {
         return;
     }
 
-    auto now = TimeProvider->Now();
-    auto deadlineDiff = (now - BaseDeadline).Seconds();
+    auto newBaseDeadline = TrimToSeconds(TimeProvider->Now());
+    auto newBaseWriteTimestamp = BaseWriteTimestamp + TDuration::Seconds(Messages.front().WriteTimestampDelta);
 
-    if (!deadlineDiff) {
-        return;
-    }
+    MoveBaseDeadline(newBaseDeadline, newBaseWriteTimestamp);
 
-    auto writeTimestampDiff = Messages.front().WriteTimestampDelta;
-    BaseWriteTimestamp += TDuration::Seconds(writeTimestampDiff);
+    Batch.MoveBaseTime(BaseDeadline, BaseWriteTimestamp);
+}
 
-    Batch.RequiredSnapshot = true;
+void TStorage::MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp) {
+    auto deadlineDiff = (newBaseDeadline - BaseDeadline).Seconds();
+    auto writeTimestampDiff = (newBaseWriteTimestamp - BaseWriteTimestamp).Seconds();
 
     for (size_t i = 0; i < Messages.size(); ++i) {
         auto& message = Messages[i];
@@ -405,7 +415,8 @@ void TStorage::MoveBaseDeadline() {
         message.WriteTimestampDelta = message.WriteTimestampDelta > writeTimestampDiff ? message.WriteTimestampDelta - writeTimestampDiff : 0;
     }
 
-    BaseDeadline = now;
+    BaseDeadline = newBaseDeadline;
+    BaseWriteTimestamp = newBaseWriteTimestamp;
 }
 
 void TStorage::UpdateFirstUncommittedOffset() {
@@ -488,6 +499,11 @@ void TStorage::TBatch::AddNewMessage(ui64 offset) {
         FirstNewMessage = offset;
     }
     ++NewMessageCount;
+}
+
+void TStorage::TBatch::MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp) {
+    BaseDeadline = baseDeadline;
+    BaseWriteTimestamp = baseWriteTimestamp;
 }
 
 size_t TStorage::TBatch::AffectedMessageCount() const {

@@ -306,9 +306,9 @@ runs:
         # git checkout main -- "$script" doesn't change HEAD, only files in working directory
         for script in "${MAIN_SCRIPTS[@]}"; do
           if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
-            git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script"
+            git checkout main -- "$script" 2>/dev/null && echo "✅ $script"
           else
-            chmod +x "$script" && echo "✅ $script (PR version)"
+            echo "✅ $script (PR version)"
           fi
         done
         
@@ -498,7 +498,7 @@ runs:
           fi
 
           # upload tests results to YDB
-          # Формируем имя для upload на основе типа события и попытки
+          # Create run name based on event type and retry number
           case "$GITHUB_EVENT_NAME" in
             workflow_dispatch)
               run_name="${{ github.run_id }}_manual"

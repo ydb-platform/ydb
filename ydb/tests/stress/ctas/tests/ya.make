@@ -1,4 +1,4 @@
-PY3TEST()
+cPY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/ctas/ctas")
@@ -7,7 +7,7 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:4)
+REQUIREMENTS(ram:32 cpu:32)
 
 SIZE(MEDIUM)
 

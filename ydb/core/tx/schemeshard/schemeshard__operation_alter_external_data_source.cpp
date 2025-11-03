@@ -7,10 +7,9 @@
 
 #include <utility>
 
-namespace {
+namespace NKikimr::NSchemeShard {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
+namespace {
 
 class TPropose: public TSubOperationState {
 private:
@@ -194,10 +193,9 @@ public:
     THolder<TProposeResponse> Propose(const TString& owner,
                                       TOperationContext& context) override {
         Y_UNUSED(owner);
-        const auto ssId              = context.SS->SelfTabletId();
+        const auto ssId = context.SS->SelfTabletId();
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const auto& externalDataSourceDescription =
-            Transaction.GetCreateExternalDataSource();
+        const auto& externalDataSourceDescription = Transaction.GetCreateExternalDataSource();
         const TString& name = externalDataSourceDescription.GetName();
 
         LOG_N("TAlterExternalDataSource Propose"
@@ -215,8 +213,7 @@ public:
         }
 
         const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(
-            result, parentPath, Transaction, /* isCreate */ false));
+        RETURN_RESULT_UNLESS(NExternalDataSource::IsParentPathValid(result, parentPath, Transaction, /* isCreate */ false));
 
         const TPath dstPath = parentPath.Child(name);
 
@@ -224,23 +221,27 @@ public:
         RETURN_RESULT_UNLESS(IsApplyIfChecksPassed(result, context));
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
-        const auto oldExternalDataSourceInfo =
-        context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
+        const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldExternalDataSourceInfo);
-        const TExternalDataSourceInfo::TPtr externalDataSourceInfo =
-            NExternalDataSource::CreateExternalDataSource(externalDataSourceDescription,
-                                     oldExternalDataSourceInfo->AlterVersion + 1);
+        const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
+            externalDataSourceDescription,
+            oldExternalDataSourceInfo->AlterVersion + 1
+        );
         Y_ABORT_UNLESS(externalDataSourceInfo);
+        externalDataSourceInfo->ExternalTableReferences = oldExternalDataSourceInfo->ExternalTableReferences;
 
         {
             bool isTieredStorage = false;
-            for (const auto& referrer : externalDataSourceInfo->ExternalTableReferences.GetReferences()) {
+
+            const auto& references = externalDataSourceInfo->ExternalTableReferences.GetReferences();
+            for (const auto& referrer : references) {
                 if (TPath::Init(TPathId::FromProto(referrer.GetPathId()), context.SS)->PathType ==
                     NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
                     isTieredStorage = true;
                     break;
                 }
             }
+
             if (isTieredStorage) {
                 if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -248,11 +249,15 @@ public:
                     return result;
                 }
             }
+
+            if (oldExternalDataSourceInfo->SourceType != externalDataSourceInfo->SourceType && !references.empty()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot change external data source type while it is used in other entities, please remove them at the beginning: " << references[0].GetPath());
+                return result;
+            }
         }
 
         AddPathInSchemeShard(result, dstPath);
-        const TPathElement::TPtr externalDataSource =
-            ReplaceExternalDataSourcePathElement(dstPath);
+        const TPathElement::TPtr externalDataSource = ReplaceExternalDataSourcePathElement(dstPath);
         CreateTransaction(context, externalDataSource->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -261,8 +266,7 @@ public:
 
         AdvanceTransactionStateToPropose(context, db);
 
-        PersistExternalDataSource(
-            context, db, externalDataSource, externalDataSourceInfo);
+        PersistExternalDataSource(context, db, externalDataSource, externalDataSourceInfo);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
@@ -286,9 +290,7 @@ public:
     }
 };
 
-} // namespace
-
-namespace NKikimr::NSchemeShard {
+} // anonymous namespace
 
 ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterExternalDataSource>(id, tx);
@@ -299,4 +301,4 @@ ISubOperation::TPtr CreateAlterExternalDataSource(TOperationId id, TTxState::ETx
     return MakeSubOperation<TAlterExternalDataSource>(id, state);
 }
 
-}
+} // namespace NKikimr::NSchemeShard

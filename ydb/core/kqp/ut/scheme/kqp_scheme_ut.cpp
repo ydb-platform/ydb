@@ -8610,6 +8610,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto& externalTable = externalTableDesc->ResultSet.at(0);
             UNIT_ASSERT_VALUES_EQUAL(externalTable.ExternalTableInfo->Description.GetLocation(), "/other/location/");
         }
+
+        {
+            const auto result = queryClient.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="YT",
+                    LOCATION="other-bucket",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName
+            ), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot change external data source type while it is used in other entities, please remove them at the beginning: /Root/ExternalTable");
+        }
     }
 
     Y_UNIT_TEST(DisableCreateExternalTable) {
@@ -8915,6 +8928,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
         TKikimrRunner kikimr{ NKqp::TKikimrSettings(config) };
 
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
@@ -8954,6 +8968,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = TStringBuilder() << R"( DROP EXTERNAL DATA SOURCE `)" << externalDataSourceName << "`";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable", result.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            const auto result = queryClient.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="other-bucket",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName
+            ), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = session.ExecuteSchemeQuery(fmt::format(
+                "DROP EXTERNAL DATA SOURCE `{external_source}`",
+                "external_source"_a = externalDataSourceName
+            )).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Other entities depend on this data source, please remove them at the beginning: /Root/ExternalTable");
         }
     }
 

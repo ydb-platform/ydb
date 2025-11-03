@@ -24,7 +24,23 @@ To run the command to import data from an S3 storage, specify the [S3 connection
 
 `--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times if you need to import multiple items. `STRING` is set in `<property>=<value>,...` format with the following mandatory properties:
 
+<<<<<<< HEAD
 - `source`, `src` or `s` is the path (key prefix) in S3 that hosts the imported directory or table
+=======
+`--destination-path PATH`: Destination folder for the objects being imported; defaults to the database root if not provided.
+
+`--include PATH`: Schema objects to be included in the import. Directories are traversed recursively. You may specify this parameter multiple times to include several objects. If not specified, all objects in export are imported.
+
+`--exclude STRING`: Template ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) to exclude paths from import. Paths are relative to the `root-path`. You may specify this parameter multiple times for different templates.
+
+{% cut "Alternate syntax" %}
+
+There's an alternate syntax to specify the list of imported objects, supported for backward compatibility.
+
+`--item STRING`: Description of the item to import. You can specify the `--item` parameter multiple times to import multiple items. If no `--item` or `--include` parameters are specified, all objects from the source prefix will be imported. `STRING` is specified in the `<property>=<value>,...` format with the following properties:
+
+- `source`, `src`, or `s` is the key prefix in S3 that contains the imported directory or table.
+>>>>>>> d9296557d (Add docs for `ydb import s3 --exclude` option + typo fix (#28113))
 - `destination`, `dst`, or `d` is the database path to host the imported directory or table. The destination of the path must not exist. All the directories along the path will be created if missing.
 
 ### Additional parameters {#aux}

@@ -630,12 +630,16 @@ void LoadSmallTables(
     ExecuteWithRetry("LoadItems", [&]() {
         return LoadItems(tableClient, itemTablePath, arena, fastRng, Log);
     }, arena, Log);
-    ExecuteWithRetry("LoadWarehouses", [&]() {
-        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, arena, fastRng, Log);
-    }, arena, Log);
-    ExecuteWithRetry("LoadDistricts", [&]() {
-        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, arena, fastRng, Log);
-    }, arena, Log);
+
+    for (int wh = 1; wh <= warehouseCount; wh += MAX_WAREHOUSES_PER_IMPORT_BATCH) {
+        int lastId = Min(wh + MAX_WAREHOUSES_PER_IMPORT_BATCH - 1, warehouseCount);
+        ExecuteWithRetry("LoadWarehouses", [&]() {
+            return LoadWarehouses(tableClient, warehouseTablePath, wh, lastId, arena, fastRng, Log);
+        }, arena, Log);
+        ExecuteWithRetry("LoadDistricts", [&]() {
+            return LoadDistricts(tableClient, districtTablePath, wh, lastId, arena, fastRng, Log);
+        }, arena, Log);
+    }
 }
 
 //-----------------------------------------------------------------------------

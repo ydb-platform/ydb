@@ -63,15 +63,15 @@ std::optional<TStorage::NextResult> TStorage::Next(TInstant deadline, ui64 fromO
     return std::nullopt;
 }
 
-bool TStorage::Commit(TMessageId messageId) {
+bool TStorage::Commit(ui64 messageId) {
     return DoCommit(messageId);
 }
 
-bool TStorage::Unlock(TMessageId messageId) {
+bool TStorage::Unlock(ui64 messageId) {
     return DoUnlock(messageId);
 }
 
-bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
+bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
     auto* message = GetMessageInt(messageId, EMessageStatus::Locked);
     if (!message) {
         return false;
@@ -85,7 +85,7 @@ bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
     return true;
 }
 
-TInstant TStorage::GetMessageDeadline(TMessageId messageId) {
+TInstant TStorage::GetMessageDeadline(ui64 messageId) {
     auto* message = GetMessageInt(messageId, EMessageStatus::Locked);
     if (!message) {
         return TInstant::Zero();
@@ -218,6 +218,19 @@ void TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     ++Metrics.UnprocessedMessageCount;
 }
 
+const TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) const {
+    if (offset < FirstOffset) {
+        return nullptr;
+    }
+
+    auto offsetDelta = offset - FirstOffset;
+    if (offsetDelta >= Messages.size()) {
+        return nullptr;
+    }
+
+    return &Messages.at(offsetDelta);
+}
+
 TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) {
     if (offset < FirstOffset) {
         return nullptr;
@@ -228,10 +241,10 @@ TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) {
         return nullptr;
     }
 
-    return &Messages[offsetDelta];
+    return &Messages.at(offsetDelta);
 }
 
-const TStorage::TMessage* TStorage::GetMessage(TMessageId message) {
+const TStorage::TMessage* TStorage::GetMessage(ui64 message) {
     return GetMessageInt(message);
 }
 
@@ -272,7 +285,7 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
     return deadlineDelta;
 }
 
-TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
+ui64 TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
     auto& message = Messages[offsetDelta];
     AFL_VERIFY(message.Status == EMessageStatus::Unprocessed)("status", message.Status);
     message.Status = EMessageStatus::Locked;
@@ -483,6 +496,42 @@ size_t TStorage::TBatch::AffectedMessageCount() const {
 
 bool TStorage::TBatch::GetRequiredSnapshot() const {
     return RequiredSnapshot;
+}
+
+TStorage::TMessageIterator::TMessageIterator(const TStorage& storage, ui64 offset)
+    : Storage(storage)
+    , Offset(offset)
+{
+}
+
+TStorage::TMessageIterator& TStorage::TMessageIterator::operator++() {
+    ++Offset;
+    return *this;
+}
+
+TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
+    auto *message = Storage.GetMessageInt(Offset);
+
+    return TMessageWrapper{
+        .Offset = Offset,
+        .Status = static_cast<EMessageStatus>(message->Status),
+        .ProcessingCount = message->ReceiveCount,
+        .ProcessingDeadline = static_cast<EMessageStatus>(message->Status) == EMessageStatus::Locked ?
+            Storage.BaseDeadline + TDuration::Seconds(message->DeadlineDelta) : TInstant::Zero(),
+        .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),
+    };
+}
+
+bool TStorage::TMessageIterator::operator==(const TStorage::TMessageIterator& other) const {
+    return Offset == other.Offset;
+}
+
+TStorage::TMessageIterator TStorage::begin() const {
+    return TMessageIterator(*this, FirstOffset);
+}
+
+TStorage::TMessageIterator TStorage::end() const {
+    return TMessageIterator(*this, FirstOffset + Messages.size());
 }
 
 } // namespace NKikimr::NPQ::NMLP

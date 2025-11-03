@@ -58,8 +58,25 @@ public:
 
     struct TMessageWrapper {
         ui64 Offset;
-        TMessage Message;
+        EMessageStatus Status;
+        ui32 ProcessingCount;
+        TInstant ProcessingDeadline;
+        TInstant WriteTimestamp;
     };
+
+    struct TMessageIterator {
+        TMessageIterator(const TStorage& storage, ui64 offset);
+
+        TMessageIterator& operator++();
+        TMessageWrapper operator*() const;
+        bool operator==(const TMessageIterator& other) const;
+
+    private:
+        const TStorage& Storage;
+        ui64 Offset;
+    };
+
+    friend struct TMessageIterator;
 
     struct TBatch {
         friend class TStorage;
@@ -109,8 +126,8 @@ public:
     ui64 GetFirstUncommittedOffset() const;
     ui64 GetFirstUnlockedOffset() const;
     TInstant GetBaseDeadline() const;
-    TInstant GetMessageDeadline(TMessageId message);
-    const TMessage* GetMessage(TMessageId message);
+    TInstant GetMessageDeadline(ui64 message);
+    const TMessage* GetMessage(ui64 message);
     const std::deque<ui64>& GetDLQMessages() const;
 
 
@@ -119,15 +136,15 @@ public:
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
     struct NextResult {
-        TMessageId Message;
+        ui64 Message;
         ui64 FromOffset;
     };
     std::optional<NextResult> Next(TInstant deadline, ui64 fromOffset = 0);
-    bool Commit(TMessageId message);
-    bool Unlock(TMessageId message);
+    bool Commit(ui64 message);
+    bool Unlock(ui64 message);
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
-    bool ChangeMessageDeadline(TMessageId message, TInstant deadline);
+    bool ChangeMessageDeadline(ui64 message, TInstant deadline);
 
     void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
 
@@ -146,13 +163,17 @@ public:
 
     TString DebugString() const;
 
+    TMessageIterator begin() const;
+    TMessageIterator end() const;
+
 private:
     // offsetDelte, TMessage
+    const TMessage* GetMessageInt(ui64 offset) const;
     TMessage* GetMessageInt(ui64 offset);
     TMessage* GetMessageInt(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
-    TMessageId DoLock(ui64 offsetDelta, TInstant deadline);
+    ui64 DoLock(ui64 offsetDelta, TInstant deadline);
     bool DoCommit(ui64 offset);
     bool DoUnlock(ui64 offset);
     void DoUnlock(TMessage& message, ui64 offset);

@@ -1,6 +1,7 @@
 #pragma once
 
-#include "mlp.h"
+#include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -29,7 +30,7 @@ inline auto CreateSetup() {
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
         },
-        NActors::NLog::PRI_ERROR
+        NActors::NLog::PRI_DEBUG
     );
     return setup;
 }
@@ -46,18 +47,22 @@ inline void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
     driver.Stop(true);
 }
 
-inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
+inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
+    NYdb::NTopic::TCreateTopicSettings& settings) {
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    const auto settings = NYdb::NTopic::TCreateTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName(consumerName)
-                .AddAttribute("_mlp", "1")
-            .EndAddConsumer();
     client.CreateTopic(topicName, settings);
 
     setup->GetServer().WaitInit(GetTopicPath(topicName));
+}
+
+inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
+    return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddConsumer()
+                .ConsumerName(consumerName)
+                .AddAttribute("_mlp", "1")
+            .EndAddConsumer());
 }
 
 inline TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {
@@ -87,6 +92,15 @@ inline TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& ru
     return readerId;
 }
 
+inline TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime,const TString& databasePath, const TString& topicPath) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
 inline THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
     return runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>();
 }
@@ -97,6 +111,10 @@ inline THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runt
 
 inline THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5)) {
     return runtime.GrabEdgeEvent<TEvChangeResponse>(timeout);
+}
+
+inline THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5)) {
+    return runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(timeout);
 }
 
 inline void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout = TDuration::Seconds(5)) {

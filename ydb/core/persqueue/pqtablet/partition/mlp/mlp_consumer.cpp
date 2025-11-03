@@ -73,6 +73,7 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
 }
 
 void TConsumerActor::Bootstrap() {
+    LOG_D("Start MLP consumer " << Config.GetName());
     Become(&TConsumerActor::StateInit);
 
     // TODO MLP Update consumer config
@@ -180,6 +181,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             }
 
             if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
+                LOG_D("Read snapshot");
                 Storage->Initialize(snapshot);
             } else {
                 LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
@@ -211,6 +213,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                 }
 
                 if (Config.GetGeneration() == wal.GetGeneration()) {
+                    LOG_D("Read WAL " << w.key());
                     Storage->ApplyWAL(wal);
                 } else {
                     LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
@@ -235,22 +238,6 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
         LOG_D("Initialized");
         Become(&TConsumerActor::StateWork);
         ProcessEventQueue();
-    }
-}
-
-STFUNC(TConsumerActor::StateInit) {
-    switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPQ::TEvMLPReadRequest, Queue);
-        hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
-        hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
-        hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
-        hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
-        hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
-        hFunc(TEvPQ::TEvError, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
-        sFunc(TEvents::TEvPoison, PassAway);
-        default:
-            LOG_E("Unexpected " << EventStr("StateInit", ev));
     }
 }
 
@@ -298,12 +285,48 @@ void TConsumerActor::CommitIfNeeded() {
     }
 }
 
+void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
+    auto response = std::make_unique<TEvPQ::TEvGetMLPConsumerStateResponse>();
+
+    for (auto it = Storage->begin(); it != Storage->end(); ++it) {
+        auto msg = *it;
+    
+        response->Messages.push_back({
+            .Offset = msg.Offset,
+            .Status = msg.Status,
+            .ProcessingCount = msg.ProcessingCount,
+            .ProcessingDeadline = msg.ProcessingDeadline,
+            .WriteTimestamp = msg.WriteTimestamp
+        });
+    }
+
+    Send(ev->Sender, std::move(response), 0, ev->Cookie);
+}
+
+STFUNC(TConsumerActor::StateInit) {
+    switch (ev->GetTypeRewrite()) {
+        hFunc(TEvPQ::TEvMLPReadRequest, Queue);
+        hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
+        hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
+        hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+        hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
+        hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
+        hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
+        sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            LOG_E("Unexpected " << EventStr("StateInit", ev));
+    }
+}
+
 STFUNC(TConsumerActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Handle);
         hFunc(TEvPQ::TEvMLPCommitRequest, Handle);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
@@ -319,6 +342,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
@@ -384,7 +408,7 @@ void TConsumerActor::ProcessEventQueue() {
             visibilityDeadline = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds()).ToDeadLine(now);
         }
 
-        std::deque<TMessageId> messages;
+        std::deque<ui64> messages;
         for (; count; --count) {
             auto result = Storage->Next(visibilityDeadline, fromOffset);
             if (!result) {
@@ -435,6 +459,12 @@ void TConsumerActor::Persist() {
         || batch.AffectedMessageCount() > Storage->GetMessageCount() / 2 /* Affected message count is very big  */
         || Storage->GetMessageCount() < 32 /* Snapshot is small. WAL not required */;
 
+    auto tryInlineChannel = [](auto& write) {
+        if (write->GetValue().size() < 1000) {
+            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+        }
+    };
+
     if (requireSnapshot) {
         // TODO MLP Move StartOffset
         Storage->Compact();
@@ -449,9 +479,7 @@ void TConsumerActor::Persist() {
         auto* write = request->Record.AddCmdWrite();
         write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
         write->SetValue(snapshot.SerializeAsString());
-        if (write->GetValue().size() < 1000) {
-            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-        }
+        tryInlineChannel(write);
 
         auto* del = request->Record.AddCmdDeleteRange();
         del->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
@@ -465,13 +493,14 @@ void TConsumerActor::Persist() {
         NKikimrPQ::TMLPStorageWAL wal;
         batch.SerializeTo(wal);
 
+        auto key = MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex);
+        auto data = wal.SerializeAsString();
+        LOG_D("Write WAL Count: " << batch.AffectedMessageCount() << " Size: " << data.size() << " Key: " << key);
+
         auto* write = request->Record.AddCmdWrite();
-        write->SetKey(MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex));
-        write->SetValue(wal.SerializeAsString());
-        if (write->GetValue().size() < 1000) {
-            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-        }
-        LOG_D("WAL Count: " << batch.AffectedMessageCount() << " Size: " << write->GetValue().size());
+        write->SetKey(std::move(key));
+        write->SetValue(std::move(data));
+        tryInlineChannel(write);
     }
 
     Send(TabletActorId, std::move(request));

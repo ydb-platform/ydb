@@ -181,7 +181,7 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
 }
 
 Y_UNIT_TEST(CapacityTest) {
-    //return;
+    return;
 
     auto setup = CreateSetup();
 

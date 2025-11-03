@@ -40,6 +40,8 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
+    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
 

@@ -4769,6 +4769,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(PredicateWithTimestampParameter) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();

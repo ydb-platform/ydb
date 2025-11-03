@@ -25,6 +25,8 @@ def main():
     print(f'   🌿 Branch: {branch}')
     
     with YDBWrapper() as ydb_wrapper:
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
       
         # Получаем последнюю дату из истории
         table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
@@ -141,7 +143,7 @@ def main():
                                 suite_folder || '/' || test_name as full_name,
                                 run_timestamp,
                                 status
-                            from  `test_results/test_runs_column`
+                            from  `{test_runs_table}`
                             where
                                 run_timestamp <= Date('{date}') + Interval("P1D")
                                 and run_timestamp >= Date('{date}') - {history_for_n_day+1}*Interval("P1D") 

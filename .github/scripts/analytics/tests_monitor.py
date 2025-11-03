@@ -263,6 +263,9 @@ def main():
         if not ydb_wrapper.check_credentials():
             return 1
         
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
@@ -294,7 +297,7 @@ def main():
         # Try to find the earliest date when this branch had any test runs
         query_branch_creation = f"""
             SELECT MIN(run_timestamp) as earliest_run
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE branch = '{branch}' AND build_type = '{build_type}'
         """
         

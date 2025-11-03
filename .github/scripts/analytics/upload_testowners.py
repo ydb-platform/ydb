@@ -34,6 +34,8 @@ def main():
         if not ydb_wrapper.check_credentials():
             return 1
         
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
         table_path = f'test_results/analytics/testowners'    
 
         query_get_owners = f"""
@@ -44,7 +46,7 @@ def main():
         FIRST_VALUE(owners) OVER w AS owners, 
         FIRST_VALUE (run_timestamp) OVER w AS run_timestamp_last 
         FROM 
-        `test_results/test_runs_column` 
+        `{test_runs_table}` 
     WHERE 
         run_timestamp >= CurrentUtcDate()- Interval("P1D") 
         AND branch = 'main' 

@@ -35,7 +35,7 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def get_missed_data_for_upload(ydb_wrapper):
+def get_missed_data_for_upload(ydb_wrapper, test_runs_table):
     query = f"""
        SELECT 
         build_type, 
@@ -53,7 +53,7 @@ def get_missed_data_for_upload(ydb_wrapper):
         status,
         status_description,
         owners
-    FROM `test_results/test_runs_column`  as all_data
+    FROM `{test_runs_table}`  as all_data
     LEFT JOIN (
         select distinct run_timestamp  from `test_results/analytics/test_history_fast`
     ) as fast_data_missed
@@ -86,6 +86,9 @@ def main():
         if not ydb_wrapper.check_credentials():
             return 1
         
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        
         table_path = "test_results/analytics/test_history_fast"
         batch_size = 1000
 
@@ -93,7 +96,7 @@ def main():
         create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
-        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper)
+        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, test_runs_table)
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:

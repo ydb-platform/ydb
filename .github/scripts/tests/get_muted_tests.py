@@ -38,6 +38,9 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         today = datetime.date.today().strftime('%Y-%m-%d')
         print(f'📅 Using date: {today}')
         
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        
         if job_id and branch:  # extend all tests from main by new tests from pr
             print(f'🔄 Mode: Extend all tests from main by new tests from PR')
             print(f'   - job_id: {job_id}')
@@ -58,7 +61,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 suite_folder || '/' || test_name as full_name
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE
                 job_id = {job_id} 
                 and branch = '{branch}'
@@ -83,7 +86,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 MAX(run_timestamp) as run_timestamp_last
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE branch = '{branch}'
             AND build_type = '{build_type}'
             GROUP BY suite_folder, test_name

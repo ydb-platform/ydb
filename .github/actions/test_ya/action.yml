@@ -157,7 +157,9 @@ runs:
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
+        # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
+        echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
@@ -522,7 +524,7 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -589,7 +591,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        # Use ORIGINAL_HEAD from build step (saved before any git operations)
         get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
         file_to_check=.github/config/muted_ya.txt
         check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
@@ -644,7 +646,7 @@ runs:
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}"
-        export commit_git_sha="$(git rev-parse HEAD)"
+        export commit_git_sha="$ORIGINAL_HEAD"
 
         python3 .github/scripts/send_build_stats.py
 
@@ -660,7 +662,7 @@ runs:
         export branch_to_compare="$BRANCH_NAME"
         export yellow_treshold=102400
         export red_treshold=2097152
-        export commit_git_sha="$(git rev-parse HEAD)"
+        export commit_git_sha="$ORIGINAL_HEAD"
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`

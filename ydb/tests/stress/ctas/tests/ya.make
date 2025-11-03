@@ -1,4 +1,4 @@
-cPY3TEST()
+PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/ctas/ctas")

@@ -6,7 +6,7 @@
           "connection_timeout": 60,
           "tables": {
               "test_results": "test_results/test_runs_column",
-              "test_results_backup": "test_results/test_runs_column",
+              "test_results_backup": "test_results/test_runs",
               "testowners": "test_results/analytics/testowners",
               "tests_monitor": "test_results/analytics/tests_monitor",
               "test_history_fast": "test_results/analytics/test_history_fast",

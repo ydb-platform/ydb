@@ -565,6 +565,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 resolverOptions.Type = NDnsResolver::EDnsResolverType::Libc;
                 break;
         }
+        resolverOptions.AddTrailingDot = nsConfig.GetAddTrailingDot();
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(

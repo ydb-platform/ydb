@@ -16,11 +16,23 @@ void TDefaultDataExtractor::VisitSimple(
 
 void TDefaultDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& chunkVisitor,
     const TRecordVisitor& recordVisitor) const {
+    std::shared_ptr<NArrow::NAccessor::TSubColumnsArray> subColumns;
+
     if (dataArray->GetType() != NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        VisitSimple(dataArray, 0, chunkVisitor);
-        return;
+        NArrow::NAccessor::NSubColumns::TSettings settings;
+        settings.SetDataExtractor(NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());
+        auto subColumnsConclusion = NArrow::NAccessor::TSubColumnsArray::Make(dataArray, settings,
+            dataArray->GetDataType());
+        if (subColumnsConclusion.IsFail()) {
+            VisitSimple(dataArray, 0, chunkVisitor);
+            return;
+        } else {
+            subColumns = subColumnsConclusion.DetachResult();
+        }
+    } else {
+        subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
     }
-    const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
+
     for (ui32 idx = 0; idx < subColumns->GetColumnsData().GetRecords()->GetColumnsCount(); ++idx) {
         const std::string_view svColName = subColumns->GetColumnsData().GetStats().GetColumnName(idx);
         const ui64 hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(svColName);
@@ -55,21 +67,33 @@ bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress
 
 THashMap<ui64, ui32> TDefaultDataExtractor::DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const {
     THashMap<ui64, ui32> result;
+    std::shared_ptr<NArrow::NAccessor::TSubColumnsArray> subColumns;
+
     if (dataArray->GetType() != NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        result.emplace(0, dataArray->GetRecordsCount());
-    } else {
-        const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
-        {
-            auto& stats = subColumns->GetColumnsData().GetStats();
-            for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
-                result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
-            }
+        NArrow::NAccessor::NSubColumns::TSettings settings;
+        settings.SetDataExtractor(NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());
+        auto subColumnsConclusion = NArrow::NAccessor::TSubColumnsArray::Make(dataArray, settings,
+            dataArray->GetDataType());
+        if (subColumnsConclusion.IsFail()) {
+            result.emplace(0, dataArray->GetRecordsCount());
+            return result;
+        } else {
+            subColumns = subColumnsConclusion.DetachResult();
         }
-        {
-            auto& stats = subColumns->GetOthersData().GetStats();
-            for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
-                result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
-            }
+    } else {
+        subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
+    }
+
+    {
+        auto& stats = subColumns->GetColumnsData().GetStats();
+        for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
+            result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
+        }
+    }
+    {
+        auto& stats = subColumns->GetOthersData().GetStats();
+        for (ui32 i = 0; i < stats.GetColumnsCount(); ++i) {
+            result[NRequest::TOriginalDataAddress::CalcSubColumnHash(stats.GetColumnName(i))] += stats.GetColumnRecordsCount(i);
         }
     }
     return result;

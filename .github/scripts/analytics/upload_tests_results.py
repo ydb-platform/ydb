@@ -204,7 +204,7 @@ def prepare_rows_for_schema(results_with_owners, has_full_name, has_metadata):
             upload_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
         
         if has_metadata:
-            upload_row['metadata'] = {}
+            upload_row['metadata'] = "{}"  # JSON string for YDB Json type
         
         prepared_rows.append(upload_row)
     
@@ -230,7 +230,7 @@ def prepare_rows_for_backup(source_rows, source_has_full_name, source_has_metada
             backup_row.pop('metadata', None)
         elif 'metadata' not in backup_row and backup_has_metadata:
             # Backup requires metadata but source doesn't have it - add it
-            backup_row['metadata'] = {}
+            backup_row['metadata'] = "{}"  # JSON string for YDB Json type
         
         backup_rows.append(backup_row)
     

@@ -47,33 +47,34 @@ void WaitUntilSet(
 
 //! Blocks the current fiber until #future is set and returns the resulting value.
 //! The fiber is rescheduled to #invoker.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitFor(
-    TFuture<T> future,
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitFor(
+    TFuture future,
     IInvokerPtr invoker = GetCurrentInvoker());
 
 //! Similar to #WaitFor but if #future is already set then the fiber
 //! is not rescheduled. If not, the fiber is rescheduled via
 //! the current invoker.
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForFast(
-    TFuture<T> future);
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitForFast(
+    TFuture future);
 
 //! Similar to #WaitFor but extracts the value from #future via |GetUnique|.
+// TODO(babenko): deprecated, see YT-26319
 template <class T>
 [[nodiscard]] TErrorOr<T> WaitForUnique(
-    const TFuture<T>& future,
+    TFuture<T> future,
     IInvokerPtr invoker = GetCurrentInvoker());
 
 //! From the authors of #WaitForUnique and #WaitForFast.
 template <class T>
 [[nodiscard]] TErrorOr<T> WaitForUniqueFast(
-    const TFuture<T>& future);
+    TFuture<T> future);
 
 //! A possibly blocking version of #WaitFor.
-template <class T>
-TErrorOr<T> WaitForWithStrategy(
-    TFuture<T> future,
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(
+    TFuture future,
     EWaitForStrategy strategy);
 
 //! Reschedules the current fiber to the current invoker.

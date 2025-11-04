@@ -4,12 +4,13 @@ LIBRARY()
 
 VERSION(1.54.3)
 
-LICENSE(
-    BSD-3-Clause AND
-    MIT
-)
+LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+PEERDIR(
+    contrib/restricted/google/utf8_range
+)
 
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
@@ -17,6 +18,7 @@ ADDINCL(
     contrib/libs/grpc/src/core/ext/upb-generated
     contrib/libs/grpc/src/core/ext/upbdefs-generated
     contrib/libs/grpc/third_party/upb
+    contrib/restricted/google/utf8_range
 )
 
 NO_COMPILER_WARNINGS()
@@ -34,9 +36,6 @@ ENDIF()
 SRCS(
     src/core/ext/upb-generated/google/protobuf/descriptor.upb.c
     src/core/ext/upbdefs-generated/google/protobuf/descriptor.upbdefs.c
-    third_party/upb/third_party/utf8_range/naive.c
-    third_party/upb/third_party/utf8_range/range2-neon.c
-    third_party/upb/third_party/utf8_range/range2-sse.c
     third_party/upb/upb/arena.c
     third_party/upb/upb/array.c
     third_party/upb/upb/decode.c

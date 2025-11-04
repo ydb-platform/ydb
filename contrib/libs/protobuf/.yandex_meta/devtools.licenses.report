@@ -29,70 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-SKIP     CC-BY-4.0            0ec92fc648504d1069b11b64e44bfdc4
-BELONGS third_party/utf8_range/ya.make
-    License text:
-        Markus Kuhn [ˈmaʳkʊs kuːn] <http://www.cl.cam.ac.uk/~mgk25/> — 2002-07-25 CC BY
-    Scancode info:
-        Original SPDX id: CC-BY-4.0
-        Score           : 50.00
-        Match type      : REFERENCE
-        Links           : http://creativecommons.org/licenses/by/4.0/, http://creativecommons.org/licenses/by/4.0/legalcode, https://spdx.org/licenses/CC-BY-4.0
-    Files with this license:
-        third_party/utf8_range/UTF-8-demo.txt [5:5]
-
-KEEP     MIT                  399584035c417b91040964779555dfac
-BELONGS third_party/utf8_range/ya.make
-    License text:
-        MIT License
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        third_party/utf8_range/LICENSE [1:1]
-
-KEEP     MIT                  4b22d8fd72d8f6c6211edffd2b6983d7
-BELONGS third_party/utf8_range/ya.make
-FILE_INCLUDE LICENSE found in files: third_party/utf8_range/utf8_validity.cc at line 4, third_party/utf8_range/utf8_validity.h at line 4
-FILE_INCLUDE third_party/utf8_range/LICENSE found in files: third_party/utf8_range/utf8_validity.cc at line 4, third_party/utf8_range/utf8_validity.h at line 4
-    License text:
-        // Use of this source code is governed by an MIT-style
-        // license that can be found in the LICENSE file or at
-        // https://opensource.org/licenses/MIT.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        third_party/utf8_range/utf8_validity.cc [3:5]
-        third_party/utf8_range/utf8_validity.h [3:5]
-
-KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
-BELONGS third_party/utf8_range/ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        third_party/utf8_range/LICENSE [6:22]
-
-SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
-BELONGS third_party/utf8_range/ya.make
-    License text:
-        \## Contributor License Agreement
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-generic-cla
-        Score           : 16.00
-        Match type      : NOTICE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
-    Files with this license:
-        third_party/utf8_range/CONTRIBUTING.md [8:8]
-
 SKIP     LicenseRef-scancode-proprietary-license 67e6ac0ff3543e750737c958f31bbc07
 BELONGS ya.make
     License text:
@@ -307,19 +243,6 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
     Files with this license:
         CONTRIBUTING.md [35:35]
-
-SKIP     LicenseRef-scancode-generic-cla d629c1791f1024cda2ec24fa16773bcd
-BELONGS third_party/utf8_range/ya.make
-    License text:
-        Contributions to this project must be accompanied by a Contributor License
-        Agreement (CLA). You (or your employer) retain the copyright to your
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-generic-cla
-        Score           : 22.00
-        Match type      : NOTICE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
-    Files with this license:
-        third_party/utf8_range/CONTRIBUTING.md [10:11]
 
 SKIP     LicenseRef-scancode-generic-cla d72fcd21b18e44b666a94e6225ed43eb
 BELONGS ya.make

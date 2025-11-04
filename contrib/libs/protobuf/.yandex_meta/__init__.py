@@ -149,7 +149,6 @@ def post_install(self):
 
         libprotobuf.RECURSE = [
             "builtin_proto",
-            "third_party/utf8_range",
         ]
 
         libprotobuf.PEERDIR.add("library/cpp/sanitizer/include")
@@ -180,8 +179,6 @@ def post_install(self):
             ENDIF()
             """,
         )
-
-        libprotoc.ADDINCL = ["contrib/libs/protobuf/third_party/utf8_range"]
 
         libprotoc.SRCS = {os.path.join("src/google/protobuf/compiler", src) for src in libprotoc.SRCS}
         # Moving a couple of sources from runtime library to compiler (where they actually belong)
@@ -234,17 +231,16 @@ protobuf = CMakeNinjaNixProject(
         # Do not install protobuf lite, as nobody needs it
         "libprotobuf",
         "libprotoc",
-        "libutf8_validity",
         "protoc",
     ],
     put={
         "libprotobuf": ".",
         "libprotoc": "src/google/protobuf/compiler/protoc",
-        "libutf8_validity": "third_party/utf8_range",
         "protoc": "src/google/protobuf/compiler",
     },
     unbundle_from={
         "abseil-cpp-tstring": "third_party/abseil-cpp",
+        "utf8_range": "third_party/utf8_range",
     },
     # FIXME: import protobuf against abseil-cpp from buildInputs
     # use_provides=[

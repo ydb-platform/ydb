@@ -395,27 +395,36 @@ runs:
 
           if [ -n "$SYSTEMD_CMD" ]; then
             echo "Running: $SYSTEMD_CMD $YA_MAKE_COMMAND ..." | tee -a $YA_MAKE_OUTPUT
-            # Run command and capture output
+            
+            # Get the unit name we'll create
+            UNIT_NAME_PREFIX="ya-make-$$"
+            
+            # Run command with systemd-run and capture all output
+            # Use StandardOutput=journal+console to ensure we see output
             $SYSTEMD_CMD \
-              $YA_MAKE_COMMAND $YA_MAKE_TARGET \
-              $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
-              --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-              --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR" 2>&1 | tee -a $YA_MAKE_OUTPUT
+              --unit="${UNIT_NAME_PREFIX}.service" \
+              --property=StandardOutput=journal+console \
+              --property=StandardError=journal+console \
+              sh -c "exec $YA_MAKE_COMMAND $YA_MAKE_TARGET \
+                $RERUN_FAILED_OPT --log-file \"$PUBLIC_DIR/ya_log.txt\"  \
+                --evlog-file \"$CURRENT_PUBLIC_DIR/ya_evlog.jsonl\" \
+                --junit \"$CURRENT_JUNIT_XML_PATH\" --build-results-report \"$CURRENT_REPORT\" --output \"$YA_MAKE_OUT_DIR\" 2>&1" 2>&1 | tee -a $YA_MAKE_OUTPUT
             RC=${PIPESTATUS[0]}
             echo $RC > exit_code
             echo "Command finished with exit code: $RC" | tee -a $YA_MAKE_OUTPUT
+            
+            # Always check journal for output
+            echo "Checking systemd journal for unit ${UNIT_NAME_PREFIX}.service:" | tee -a $YA_MAKE_OUTPUT
+            sudo journalctl -u "${UNIT_NAME_PREFIX}.service" --no-pager -n 100 2>&1 | tee -a $YA_MAKE_OUTPUT || true
+            
             if [ $RC -ne 0 ]; then
               echo "Error detected. Checking logs..." | tee -a $YA_MAKE_OUTPUT
               if [ -f "$PUBLIC_DIR/ya_log.txt" ]; then
                 echo "Last 50 lines of ya_log.txt:" | tee -a $YA_MAKE_OUTPUT
                 tail -50 "$PUBLIC_DIR/ya_log.txt" | tee -a $YA_MAKE_OUTPUT
               else
-                echo "ya_log.txt not found. Checking if directory exists:" | tee -a $YA_MAKE_OUTPUT
-                ls -la "$PUBLIC_DIR/" 2>&1 | tee -a $YA_MAKE_OUTPUT || true
-                echo "Checking if ya command exists:" | tee -a $YA_MAKE_OUTPUT
-                which ./ya 2>&1 | tee -a $YA_MAKE_OUTPUT || true
-                echo "Checking ya version:" | tee -a $YA_MAKE_OUTPUT
-                ./ya --version 2>&1 | tee -a $YA_MAKE_OUTPUT || true
+                echo "ya_log.txt not found. Checking systemd unit status:" | tee -a $YA_MAKE_OUTPUT
+                sudo systemctl status "${UNIT_NAME_PREFIX}.service" 2>&1 | head -50 | tee -a $YA_MAKE_OUTPUT || true
               fi
             fi
           else

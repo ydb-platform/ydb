@@ -1,3 +1,4 @@
 items:
-- { name: Обзор,      href: index.md         }
-- { name: OWNER TO,   href: owner.md,        }
+- { name: Обзор, href: index.md }
+- { name: OWNER TO, href: owner.md }
+- { name: SET, href: settings.md }

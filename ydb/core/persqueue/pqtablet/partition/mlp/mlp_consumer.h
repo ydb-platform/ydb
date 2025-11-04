@@ -43,7 +43,7 @@ private:
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
-    void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
+    void Handle(TEvKeyValue::TEvResponse::TPtr&);
 
     void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);

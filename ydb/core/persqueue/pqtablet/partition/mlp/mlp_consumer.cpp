@@ -277,7 +277,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
     }
 }
 
-void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
+void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     LOG_D("HandleOnWrite TEvKeyValue::TEvResponse " << ev->Get()->Record.ShortDebugString());
 
     auto& record = ev->Get()->Record;
@@ -301,10 +301,7 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
         return;
     }
 
-    if (CurrentStateFunc() != &TConsumerActor::StateWrite) {
-        LOG_W("Received TX write response on work state");
-        return;
-    }
+    AFL_ENSURE(CurrentStateFunc() == &TConsumerActor::StateWrite)("c", record.GetCookie());
 
     LOG_D("TX write finished");
     Become(&TConsumerActor::StateWork);
@@ -375,7 +372,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
-        hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
+        hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
@@ -393,7 +390,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
-        hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
+        hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, Handle);

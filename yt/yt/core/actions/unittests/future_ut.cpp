@@ -39,7 +39,7 @@ TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
     EXPECT_TRUE(f.IsSet());
-    auto result =  f.GetUnique();
+    auto result =  f.AsUnique().Get();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, *result.Value());
 }
@@ -395,7 +395,7 @@ TEST_F(TFutureTest, GetUnique)
     promise.Set(v);
 
     EXPECT_TRUE(future.IsSet());
-    auto w = future.GetUnique();
+    auto w = future.AsUnique().Get();
     EXPECT_TRUE(w.IsOK());
     EXPECT_EQ(v, w.Value());
     EXPECT_TRUE(future.IsSet());
@@ -407,13 +407,13 @@ TEST_F(TFutureTest, TryGetUnique)
     auto future = promise.ToFuture();
 
     EXPECT_FALSE(future.IsSet());
-    EXPECT_FALSE(future.TryGetUnique());
+    EXPECT_FALSE(future.AsUnique().TryGet());
 
     std::vector v{1, 2, 3};
     promise.Set(v);
 
     EXPECT_TRUE(future.IsSet());
-    auto w = future.TryGetUnique();
+    auto w = future.AsUnique().TryGet();
     EXPECT_TRUE(w);
     EXPECT_TRUE(w->IsOK());
     EXPECT_EQ(v, w->Value());
@@ -428,7 +428,7 @@ TEST_F(TFutureTest, SubscribeUniqueBeforeSet)
     auto future = promise.ToFuture();
 
     std::vector<int> vv;
-    future.SubscribeUnique(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
+    future.AsUnique().Subscribe(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
         EXPECT_TRUE(arg.IsOK());
         vv = std::move(arg.Value());
     }));
@@ -451,7 +451,7 @@ TEST_F(TFutureTest, SubscribeUniqueAfterSet)
     EXPECT_TRUE(future.IsSet());
 
     std::vector<int> vv;
-    future.SubscribeUnique(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
+    future.AsUnique().Subscribe(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
         EXPECT_TRUE(arg.IsOK());
         vv = std::move(arg.Value());
     }));

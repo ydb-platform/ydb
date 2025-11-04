@@ -86,7 +86,7 @@ void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const {
+bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) {
     // modifying methods are always audited
     const TString method(request->Method);
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
@@ -178,11 +178,18 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
         return;
     }
 
+    THashSet<TString> missingRequiredParts = {"subject", "sanitized_token"};
+
     AUDIT_LOG(
         for (const auto& [name, value] : Parts) {
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
+            if (missingRequiredParts.contains(name)) {
+                missingRequiredParts.erase(name);
+            }
         }
-
+        for (const auto& part : missingRequiredParts) {
+            AUDIT_PART(part, EMPTY_VALUE);
+        }
         AUDIT_PART("status", ToString(status));
         AUDIT_PART("reason", reason, !reason.empty());
     );

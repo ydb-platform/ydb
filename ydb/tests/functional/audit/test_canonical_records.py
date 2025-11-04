@@ -257,6 +257,9 @@ def test_dml_through_http(ydb_cluster):
 
         select_response = http_helpers.sql_request(ydb_cluster, DATABASE, select_sql, TOKEN)
         assert select_response.status_code == 200, select_response.content
+
+        select_response = http_helpers.sql_request(ydb_cluster, DATABASE, select_sql, None)
+        assert select_response.status_code == 401, select_response.content
     return capture_audit.canonize()
 
 

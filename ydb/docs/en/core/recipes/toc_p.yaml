@@ -17,7 +17,7 @@ items:
   include:
     mode: link
     path: vector-search/toc_p.yaml
-- name: transfer
+- name: Transfer
   href: transfer/index.md
   include:
     mode: link

@@ -801,7 +801,7 @@ void CreateIndices(TDriver& driver, const TString& path, TImportState& loadState
 // returns either progress (100 – done) or string with error
 std::expected<double, std::string> GetIndexProgress(
     NOperation::TOperationClient& client,
-    const TOperation::TOperationId& id)
+    const TOperation::TOperationId& id) noexcept
 {
     auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
     if (operation.Ready()) {
@@ -992,15 +992,19 @@ public:
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     auto& indexState = LoadState.IndexBuildStates[i];
                     auto progress = GetIndexProgress(operationClient, indexState.Id);
-                    if (!progress) {
+                    if (progress) {
+                        indexState.Progress = *progress;
+                        if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
+                            ++LoadState.CurrentIndex;
+                        }
+                    } else {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
                         RequestStop();
                         break;
                     }
-                    indexState.Progress = *progress;
-                    if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
-                        ++LoadState.CurrentIndex;
-                    }
+                }
+                if (GetGlobalInterruptSource().stop_requested()) {
+                    continue;
                 }
 
                 if (LoadState.State == TImportState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
@@ -1027,7 +1031,9 @@ public:
         }
 
         for (auto& thread : threads) {
-            thread.join();
+            if (thread.joinable()) {
+                thread.join();
+            }
         }
 
         // if there is either error we have failed to retry or user wants to cancel import,

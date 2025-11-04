@@ -394,11 +394,18 @@ runs:
           fi
 
           if [ -n "$SYSTEMD_CMD" ]; then
+            echo "Running: $SYSTEMD_CMD $YA_MAKE_COMMAND ..." | tee -a $YA_MAKE_OUTPUT
             ($SYSTEMD_CMD \
               $YA_MAKE_COMMAND $YA_MAKE_TARGET \
               $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
               --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-              --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
+              --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& tee -a $YA_MAKE_OUTPUT
+            RC=`cat exit_code`
+            echo "Command finished with exit code: $RC" | tee -a $YA_MAKE_OUTPUT
+            if [ $RC -ne 0 ]; then
+              echo "Error detected. Last 50 lines of ya_log.txt:" | tee -a $YA_MAKE_OUTPUT
+              tail -50 "$PUBLIC_DIR/ya_log.txt" 2>/dev/null | tee -a $YA_MAKE_OUTPUT || echo "ya_log.txt not found or empty" | tee -a $YA_MAKE_OUTPUT
+            fi
           else
             ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
               $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \

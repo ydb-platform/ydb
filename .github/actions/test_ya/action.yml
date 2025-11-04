@@ -369,7 +369,7 @@ runs:
           MONITOR_PID=$!
 
           set +e
-          (systemd-run --scope --wait -p MemoryMax=250G -p MemoryHigh=249G -- \
+          (systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G -- \
             $YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \

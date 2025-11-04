@@ -145,7 +145,7 @@ public:
     ui64 GetFirstUnlockedOffset() const;
     TInstant GetBaseDeadline() const;
     TInstant GetMessageDeadline(ui64 message);
-    const TMessage* GetMessage(ui64 message);
+    std::pair<const TMessage*, bool> GetMessage(ui64 message);
     const std::deque<ui64>& GetDLQMessages() const;
 
 
@@ -190,9 +190,9 @@ public:
 
 private:
     // offsetDelte, TMessage
-    const TMessage* GetMessageInt(ui64 offset) const;
-    TMessage* GetMessageInt(ui64 offset);
-    TMessage* GetMessageInt(ui64 offset, EMessageStatus expectedStatus);
+    std::pair<const TMessage*, bool> GetMessageInt(ui64 offset) const;
+    std::pair<TMessage*, bool> GetMessageInt(ui64 offset);
+    std::pair<TMessage*, bool> GetMessageInt(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
     ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);

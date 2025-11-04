@@ -99,7 +99,7 @@ bool TStorage::Unlock(ui64 messageId) {
 }
 
 bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
-    auto* message = GetMessageInt(messageId, EMessageStatus::Locked);
+    auto [message, _] = GetMessageInt(messageId, EMessageStatus::Locked);
     if (!message) {
         return false;
     }
@@ -113,7 +113,7 @@ bool TStorage::ChangeMessageDeadline(ui64 messageId, TInstant deadline) {
 }
 
 TInstant TStorage::GetMessageDeadline(ui64 messageId) {
-    auto* message = GetMessageInt(messageId, EMessageStatus::Locked);
+    auto [message, _] = GetMessageInt(messageId, EMessageStatus::Locked);
     if (!message) {
         return TInstant::Zero();
     }
@@ -284,41 +284,41 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     return true;
 }
 
-const TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) const {
+std::pair<const TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset) const {
     if (auto it = SlowMessages.find(offset); it != SlowMessages.end()) {
-        return &it->second;
+        return {&it->second,  true};
     }
 
     if (offset < FirstOffset) {
-        return nullptr;
+        return {nullptr, false};
     }
 
     auto offsetDelta = offset - FirstOffset;
     if (offsetDelta >= Messages.size()) {
-        return nullptr;
+        return {nullptr, false};
     }
 
-    return &Messages.at(offsetDelta);
+    return {&Messages.at(offsetDelta), false};
 }
 
-TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) {
+std::pair<TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset) {
     if (auto it = SlowMessages.find(offset); it != SlowMessages.end()) {
-        return &it->second;
+        return {&it->second,  true};
     }
 
     if (offset < FirstOffset) {
-        return nullptr;
+        return {nullptr, false};
     }
 
     auto offsetDelta = offset - FirstOffset;
     if (offsetDelta >= Messages.size()) {
-        return nullptr;
+        return {nullptr, false};
     }
 
-    return &Messages.at(offsetDelta);
+    return {&Messages.at(offsetDelta), false};
 }
 
-const TStorage::TMessage* TStorage::GetMessage(ui64 message) {
+std::pair<const TStorage::TMessage*, bool> TStorage::GetMessage(ui64 message) {
     return GetMessageInt(message);
 }
 
@@ -326,17 +326,17 @@ const std::deque<ui64>& TStorage::GetDLQMessages() const {
     return DLQQueue;
 }
 
-TStorage::TMessage* TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {
-    auto* message = GetMessageInt(offset);
+std::pair<TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {
+    auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
-        return nullptr;
+        return {nullptr, false};
     }
 
     if (message->Status != expectedStatus) {
-        return nullptr;
+        return {nullptr, slowZone};
     }
 
-    return message;
+    return {message, slowZone};
 }
 
 ui64 TStorage::NormalizeDeadline(TInstant deadline) {
@@ -381,7 +381,7 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
 }
 
 bool TStorage::DoCommit(ui64 offset) {
-    auto* message = GetMessageInt(offset);
+    auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {
         return false;
     }
@@ -402,7 +402,13 @@ bool TStorage::DoCommit(ui64 offset) {
                     --Metrics.LockedMessageGroupCount;
                 }
             }
-            ++Metrics.CommittedMessageCount;
+
+            if (slowZone) {
+                SlowMessages.erase(offset);
+                --Metrics.InflyMessageCount;
+            } else {
+                ++Metrics.CommittedMessageCount;
+            }
             break;
         case EMessageStatus::Committed:
             return false;
@@ -419,7 +425,7 @@ bool TStorage::DoCommit(ui64 offset) {
 }
 
 bool TStorage::DoUnlock(ui64 offset) {
-    auto* message = GetMessageInt(offset, EMessageStatus::Locked);
+    auto [message, _] = GetMessageInt(offset, EMessageStatus::Locked);
     if (!message) {
         return false;
     }
@@ -648,7 +654,8 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
         message = &Iterator->second;
     } else {
         offset = Offset;
-        message = Storage.GetMessageInt(Offset);
+        auto [m, _] = Storage.GetMessageInt(Offset);
+        message = m;
     }
 
     return TMessageWrapper{

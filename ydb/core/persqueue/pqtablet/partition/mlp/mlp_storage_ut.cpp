@@ -569,7 +569,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Unlocked) {
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
 
-        const auto* message = storage.GetMessage(3);
+        const auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT(message);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
 
@@ -619,7 +619,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
         storage.ApplyWAL(wal);
         Cerr << "DUMP AFTER WAL: " << storage.DebugString() << Endl;
 
-        const auto* message = storage.GetMessage(3);
+        const auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT(message);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 7);
@@ -666,7 +666,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
 
-        const auto* message = storage.GetMessage(3);
+        const auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT(message);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Committed);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
@@ -702,7 +702,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
 
         storage.Unlock(3);
 
-        auto message = storage.GetMessage(3);
+        auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT(message);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
 
@@ -726,7 +726,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
 
-        const auto* message = storage.GetMessage(3);
+        const auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT(message);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
@@ -777,12 +777,12 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
         UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
 
         {
-            const auto* message = storage.GetMessage(3);
+            const auto [message, _] = storage.GetMessage(3);
             UNIT_ASSERT(!message);
         }
 
         {
-            const auto* message = storage.GetMessage(7);
+            const auto [message, _] = storage.GetMessage(7);
             UNIT_ASSERT(message);
         }
 
@@ -818,7 +818,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         }
 
         {
-            auto* message = storage.GetMessage(3);
+            auto [message, _] = storage.GetMessage(3);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 5);
         }
@@ -833,12 +833,12 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         }
 
         {
-            auto* message = storage.GetMessage(3);
+            auto [message, _] = storage.GetMessage(3);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2); // 5 - 3
         }
         {
-            auto* message = storage.GetMessage(4);
+            auto [message, _] = storage.GetMessage(4);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 13);
         }
@@ -859,12 +859,12 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         UNIT_ASSERT_VALUES_EQUAL(storage.GetBaseDeadline(), timeProvider->Now() - TDuration::Seconds(7));
 
         {
-            const auto* message = storage.GetMessage(3);
+            const auto [message, _] = storage.GetMessage(3);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2); // 5 - 3
         }
         {
-            auto* message = storage.GetMessage(4);
+            auto [message, _] = storage.GetMessage(4);
             UNIT_ASSERT(message);
             UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 13);
         }
@@ -955,11 +955,11 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
     storage.Commit(4);
 
     {
-        auto* message = storage.GetMessage(3);
+        auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
     }
     {
-        auto* message = storage.GetMessage(4);
+        auto [message, _] = storage.GetMessage(4);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Committed);
     }
 
@@ -996,12 +996,12 @@ Y_UNIT_TEST(ProccessDeadlines) {
     UNIT_ASSERT_VALUES_EQUAL(result, 1);
 
     {
-        auto* message = storage.GetMessage(3);
+        auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
         UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
     }
     {
-        auto* message = storage.GetMessage(4);
+        auto [message, _] = storage.GetMessage(4);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
     }
@@ -1035,17 +1035,17 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     storage.MoveBaseDeadline();
 
     {
-        auto* message = storage.GetMessage(3);
+        auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
     }
     {
-        auto* message = storage.GetMessage(4);
+        auto [message, _] = storage.GetMessage(4);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
     }
     {
-        auto* message = storage.GetMessage(5);
+        auto [message, _] = storage.GetMessage(5);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
         UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2);
     }

@@ -333,7 +333,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     for (auto offset : wal.GetMovedToSlowZone()) {
-        auto* message = GetMessageInt(offset);
+        auto [message, _] = GetMessageInt(offset);
         if (!message) {
             continue;
         }
@@ -375,7 +375,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         ui64 offset;
         TMessageChange msg;
         while(deserializer.Next(offset, msg)) {
-            auto* message = GetMessageInt(offset);
+            auto [message, _] = GetMessageInt(offset);
             if (!message) {
                 continue;
             }
@@ -474,7 +474,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         serializer.Reserve(NewMessageCount);
 
         for (size_t offset = std::max(FirstNewMessage.value(), Storage->FirstOffset); offset < lastOffset; ++offset) {
-            auto* message = Storage->GetMessage(offset);
+            auto [message, _] = Storage->GetMessage(offset);
             if (message) {
                 TAddedMessage msg;
                 msg.MessageGroup.Fields.HasMessageGroupId = message->HasMessageGroupId;
@@ -490,7 +490,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         TSerializerWithOffset<TMessageChange> serializer;
         serializer.Reserve(ChangedMessages.size());
         for (auto offset : ChangedMessages) {
-            auto* message = Storage->GetMessage(offset);
+            auto [message, _] = Storage->GetMessage(offset);
             if (message) {
                 TMessageChange msg;
                 msg.Common.Fields.Status = message->Status;

@@ -45,7 +45,7 @@ def get_table_schema(table_path):
             run_timestamp Timestamp NOT NULL,
             build_type Utf8 NOT NULL,
             branch Utf8 NOT NULL,
-            full_name String NOT NULL,
+            full_name Utf8 NOT NULL,
             test_name Utf8 NOT NULL,
             suite_folder Utf8 NOT NULL,
             status Utf8 NOT NULL,
@@ -236,7 +236,7 @@ def prepare_column_types(has_full_name, has_metadata):
     """Build column types based on schema"""
     column_types = get_column_types()
     if has_full_name:
-        column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.String))
+        column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     if has_metadata:
         column_types = column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
     return column_types
@@ -325,7 +325,7 @@ def main():
             main_column_types = prepare_column_types(has_full_name, has_metadata)
             
             # Upload to main table
-            #upload_to_table(wrapper, test_table_path, main_rows, main_column_types, "main table")
+            upload_to_table(wrapper, test_table_path, main_rows, main_column_types, "main table")
             
             # Dual write to backup table if configured
             try:

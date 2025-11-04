@@ -616,7 +616,8 @@ bool TStorage::TBatch::Empty() const {
         && DLQ.empty()
         && !BaseDeadline.has_value()
         && !BaseWriteTimestamp.has_value()
-        && MovedToSlowZone.empty();
+        && MovedToSlowZone.empty()
+        && DeletedFromSlowZone.empty();
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

@@ -76,9 +76,9 @@ namespace NActors {
         ~TEventOutputChannel() {
         }
 
-        std::pair<ui32, TEventHolder*> Push(IEventHandle& ev, TEventHolderPool& pool) {
+        std::pair<ui32, TEventHolder*> Push(IEventHandle& ev, TEventHolderPool& pool, TInstant now) {
             TEventHolder& event = pool.Allocate(Queue);
-            const ui32 bytes = event.Fill(ev) + sizeof(TEventDescr2);
+            const ui32 bytes = event.Fill(ev, now) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
             if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
                 event.Span

@@ -86,7 +86,7 @@ private:
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
 
-    ui64 NextWALIndex = 0;
+    ui64 LastWALIndex = 0;
     bool HasSnapshot = false;
 };
 

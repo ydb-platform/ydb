@@ -8,9 +8,13 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
-enum class EWriteCookie {
-    TxWrite = 1,
-    BackgroundWrite = 2
+static constexpr size_t MaxWALCount = 250;
+
+enum class EKvCookie {
+    InitialRead = 1,
+    WALRead = 2,
+    TxWrite = 3,
+    BackgroundWrite = 4
 };
 
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
@@ -69,6 +73,15 @@ TString MaxWALKey(ui32 partitionId, const TString& consumerName) {
     return MakeWALKey(partitionId, consumerName, Max<ui64>());
 }
 
+void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitionId, const TString& consumerName, ui64 fromIndex = 0) {
+    auto* readWAL = request->Record.AddCmdReadRange();
+    readWAL->MutableRange()->SetFrom(MakeWALKey(partitionId, consumerName, fromIndex));
+    readWAL->MutableRange()->SetIncludeFrom(false);
+    readWAL->MutableRange()->SetTo(MaxWALKey(partitionId, consumerName));
+    readWAL->MutableRange()->SetIncludeTo(true);
+    readWAL->SetIncludeData(true);
+}
+
 TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , PartitionId(partitionId)
@@ -86,13 +99,9 @@ void TConsumerActor::Bootstrap() {
     Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    request->Record.SetCookie(static_cast<ui64>(EKvCookie::InitialRead));
     request->Record.AddCmdRead()->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
-    auto* readWAL = request->Record.AddCmdReadRange();
-    readWAL->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
-    readWAL->MutableRange()->SetIncludeFrom(true);
-    readWAL->MutableRange()->SetTo(MaxWALKey(PartitionId, Config.GetName()));
-    readWAL->MutableRange()->SetIncludeTo(true);
-    readWAL->SetIncludeData(true);
+    AddReadWAL(request, PartitionId, Config.GetName());
 
     Send(TabletActorId, std::move(request));
 
@@ -166,75 +175,97 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
     if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         return Restart(TStringBuilder() << "Received KV error on initialization: " << record.GetStatus());
     }
-    if (record.ReadResultSize() != 1) {
-        return Restart(TStringBuilder() << "Unexpected KV response on initialization: " << record.ReadResultSize());
-    }
 
-    auto& readResult = record.GetReadResult(0);
-
-    switch(readResult.GetStatus()) {
-        case NKikimrProto::OK: {
-            AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
-
-            NKikimrPQ::TMLPStorageSnapshot snapshot;
-            if (!snapshot.ParseFromString(readResult.GetValue())) {
-                return Restart(TStringBuilder() << "Parse snapshot error");
+    switch (record.GetCookie()) {
+        case static_cast<int>(EKvCookie::InitialRead): {
+            if (record.ReadResultSize() != 1) {
+                return Restart(TStringBuilder() << "Unexpected KV response on initialization: " << record.ReadResultSize());
             }
 
-            if (Config.GetName() != snapshot.GetConfiguration().GetConsumerName()) {
-                return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetName() << " vs " << snapshot.GetConfiguration().GetConsumerName());
-            }
+            auto& readResult = record.GetReadResult(0);
 
-            if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
-                LOG_D("Read snapshot");
-                HasSnapshot = true;
-                NextWALIndex = snapshot.GetWALIndex();
-                Storage->Initialize(snapshot);
-            } else {
-                LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
-            }
+            switch(readResult.GetStatus()) {
+                case NKikimrProto::OK: {
+                    AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
 
-            break;
+                    NKikimrPQ::TMLPStorageSnapshot snapshot;
+                    if (!snapshot.ParseFromString(readResult.GetValue())) {
+                        return Restart(TStringBuilder() << "Parse snapshot error");
+                    }
+
+                    if (Config.GetName() != snapshot.GetConfiguration().GetConsumerName()) {
+                        return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetName() << " vs " << snapshot.GetConfiguration().GetConsumerName());
+                    }
+
+                    if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
+                        LOG_D("Read snapshot");
+                        HasSnapshot = true;
+                        LastWALIndex = snapshot.GetWALIndex();
+                        Storage->Initialize(snapshot);
+                    } else {
+                        LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
+                    }
+
+                    break;
+                }
+                case NKikimrProto::NODATA: {
+                    LOG_D("Initializing new consumer");
+                    break;
+                }
+                default:
+                    return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
+            }
         }
-        case NKikimrProto::NODATA: {
-            LOG_D("Initializing new consumer");
+            [[fallthrough]];
+
+        case static_cast<int>(EKvCookie::WALRead): {
+            if (record.ReadRangeResultSize() != 1) {
+                return Restart(TStringBuilder() << "Unexpected KV response on initialization: " << record.ReadResultSize());
+            }
+
+            auto& walResult = record.GetReadRangeResult(0);
+
+            switch(walResult.GetStatus()) {
+                case NKikimrProto::OK:
+                case NKikimrProto::OVERRUN: {
+                    for (auto w : walResult.GetPair()) {
+                        NKikimrPQ::TMLPStorageWAL wal;
+                        if (!wal.ParseFromString(w.GetValue())) {
+                            return Restart(TStringBuilder() << "Parse wal error");
+                        }
+
+                        if (Config.GetGeneration() == wal.GetGeneration()) {
+                            LOG_D("Read WAL " << w.key());
+                            LastWALIndex = wal.GetWALIndex();
+                            Storage->ApplyWAL(wal);
+                        } else {
+                            LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
+                        }
+                    }
+
+                    if (walResult.GetStatus() == NKikimrProto::OVERRUN) {
+                        LOG_D("WAL overrun");
+                        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+                        request->Record.SetCookie(static_cast<ui64>(EKvCookie::WALRead));
+                        AddReadWAL(request, PartitionId, Config.GetName(), LastWALIndex);
+                        Send(TabletActorId, std::move(request));
+                        return;
+                    }
+
+                    break;
+                }
+                case NKikimrProto::NODATA: {
+                    LOG_D("Initializing new consumer");
+                    break;
+                }
+                default:
+                    return Restart(TStringBuilder() << "Received KV response error on initialization: " << walResult.GetStatus());
+            }
+
             break;
         }
         default:
-            return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
-    }
-
-    if (record.ReadRangeResultSize() != 1) {
-        return Restart(TStringBuilder() << "Unexpected KV response on initialization: " << record.ReadResultSize());
-    }
-
-    auto& walResult = record.GetReadRangeResult(0);
-
-    switch(walResult.GetStatus()) {
-        case NKikimrProto::OK: {
-            for (auto w : walResult.GetPair()) {
-                NKikimrPQ::TMLPStorageWAL wal;
-                if (!wal.ParseFromString(w.GetValue())) {
-                    return Restart(TStringBuilder() << "Parse wal error");
-                }
-
-                if (Config.GetGeneration() == wal.GetGeneration()) {
-                    LOG_D("Read WAL " << w.key());
-                    NextWALIndex = wal.GetWALIndex();
-                    Storage->ApplyWAL(wal);
-                } else {
-                    LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
-                }
-            }
-
-            break;
-        }
-        case NKikimrProto::NODATA: {
-            LOG_D("Initializing new consumer");
-            break;
-        }
-        default:
-            return Restart(TStringBuilder() << "Received KV response error on initialization: " << walResult.GetStatus());
+            AFL_ENSURE(false)("c", record.GetCookie());
     }
 
     CommitIfNeeded();
@@ -265,7 +296,7 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
         return Restart(TStringBuilder() << "Received KV response error on write: " << writeResult.GetStatus());
     }
 
-    if (record.GetCookie() == static_cast<ui64>(EWriteCookie::BackgroundWrite)) {
+    if (record.GetCookie() == static_cast<ui64>(EKvCookie::BackgroundWrite)) {
         LOG_D("Background write finished");
         return;
     }
@@ -333,6 +364,7 @@ STFUNC(TConsumerActor::StateInit) {
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateInit", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
     }
 }
 
@@ -350,6 +382,7 @@ STFUNC(TConsumerActor::StateWork) {
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateWork", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }
 
@@ -367,6 +400,7 @@ STFUNC(TConsumerActor::StateWrite) {
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateWrite", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
     }
 }
 
@@ -475,17 +509,17 @@ void TConsumerActor::Persist() {
 
     auto withWAL = HasSnapshot && Storage->GetMessageCount() > 32;
     if (withWAL) {
-        auto key = MakeWALKey(PartitionId, Config.GetName(), ++NextWALIndex);
+        auto key = MakeWALKey(PartitionId, Config.GetName(), ++LastWALIndex);
 
         NKikimrPQ::TMLPStorageWAL wal;
-        wal.SetWALIndex(NextWALIndex);
+        wal.SetWALIndex(LastWALIndex);
         batch.SerializeTo(wal);
 
         auto data = wal.SerializeAsString();
         LOG_D("Write WAL Size: " << data.size() << " Key: " << key);
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
-        request->Record.SetCookie(static_cast<ui64>(EWriteCookie::TxWrite));
+        request->Record.SetCookie(static_cast<ui64>(EKvCookie::TxWrite));
         auto* write = request->Record.AddCmdWrite();
         write->SetKey(std::move(key));
         write->SetValue(std::move(data));
@@ -494,7 +528,7 @@ void TConsumerActor::Persist() {
         Send(TabletActorId, std::move(request));
     }
 
-    if (!withWAL || NextWALIndex % 150 == 0) {
+    if (!withWAL || LastWALIndex % MaxWALCount == 0) {
         HasSnapshot = true;
 
         Storage->Compact();
@@ -506,11 +540,11 @@ void TConsumerActor::Persist() {
         config->SetGeneration(Config.GetGeneration());
         Storage->SerializeTo(snapshot);
 
-        snapshot.SetWALIndex(NextWALIndex);
+        snapshot.SetWALIndex(LastWALIndex);
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
 
-        auto cookie = withWAL ? static_cast<ui64>(EWriteCookie::BackgroundWrite) : static_cast<ui64>(EWriteCookie::TxWrite);
+        auto cookie = withWAL ? static_cast<ui64>(EKvCookie::BackgroundWrite) : static_cast<ui64>(EKvCookie::TxWrite);
         request->Record.SetCookie(cookie);
 
         auto* write = request->Record.AddCmdWrite();
@@ -522,7 +556,7 @@ void TConsumerActor::Persist() {
         auto* del = request->Record.AddCmdDeleteRange();
         del->MutableRange()->SetFrom(MinWALKey(PartitionId, Config.GetName()));
         del->MutableRange()->SetIncludeFrom(true);
-        del->MutableRange()->SetTo(MakeWALKey(PartitionId, Config.GetName(), NextWALIndex));
+        del->MutableRange()->SetTo(MakeWALKey(PartitionId, Config.GetName(), LastWALIndex));
         del->MutableRange()->SetIncludeTo(true);
 
         Send(TabletActorId, std::move(request));

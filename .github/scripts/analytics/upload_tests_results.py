@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -204,7 +205,7 @@ def prepare_rows_for_schema(results_with_owners, has_full_name, has_metadata):
             upload_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
         
         if has_metadata:
-            upload_row['metadata'] = "{}"  # JSON string for YDB Json type
+            upload_row['metadata'] = json.dumps({})  # JSON string for YDB Json type
         
         prepared_rows.append(upload_row)
     
@@ -228,9 +229,12 @@ def prepare_rows_for_backup(source_rows, source_has_full_name, source_has_metada
         # Handle metadata
         if not backup_has_metadata:
             backup_row.pop('metadata', None)
-        elif 'metadata' not in backup_row and backup_has_metadata:
-            # Backup requires metadata but source doesn't have it - add it
-            backup_row['metadata'] = "{}"  # JSON string for YDB Json type
+        elif backup_has_metadata:
+            # Backup requires metadata - ensure it's in correct format
+            if 'metadata' not in backup_row:
+                # Source doesn't have it - add it
+                backup_row['metadata'] = json.dumps({})  # JSON string for YDB Json type
+            # If metadata already exists, it should already be a valid JSON string from source
         
         backup_rows.append(backup_row)
     

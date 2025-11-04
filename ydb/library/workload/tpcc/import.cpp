@@ -1040,8 +1040,7 @@ public:
                     break;
                 }
 
-                if (LoadState.State == TImportState::EWAIT_INDICES
-                        && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
+                if (LoadState.State == TImportState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
                     LOG_I("Indices created successfully");
                     LoadState.State = TImportState::ESUCCESS;
                     continue;

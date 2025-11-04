@@ -873,7 +873,7 @@ namespace NActors {
         stream.Align();
         XdcStream.Align();
 
-        TTcpPacketOutTask packet(Params, stream, XdcStream, Proxy->Metrics.get());
+        TTcpPacketOutTask packet(Params, stream, XdcStream);
         ui64 serial = 0;
 
         if (data) {

@@ -71,7 +71,10 @@ namespace NActors {
             switch (State) {
                 case EState::INITIAL:
                     event.InitChecksum();
-                    task.UpdateIcQueueDuration(event);
+                    if (event.EnqueueTime) {
+                        TDuration duration = NActors::TlsActivationContext->Now() - event.EnqueueTime;
+                        Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
+                    }
                     event.Span && event.Span.Event("FeedBuf:INITIAL");
                     if (event.Buffer) {
                         State = EState::BODY;

@@ -8,20 +8,12 @@
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 TTcpPacketOutTask::TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
-    NInterconnect::TOutgoingStream& xdcStream, NActors::IInterconnectMetrics* metrics)
+    NInterconnect::TOutgoingStream& xdcStream)
     : Params(params)
     , OutgoingStream(outgoingStream)
     , XdcStream(xdcStream)
     , HeaderBookmark(OutgoingStream.Bookmark(sizeof(TTcpPacketHeader_v2)))
-    , Metrics(metrics)
 {}
-
-void TTcpPacketOutTask::UpdateIcQueueDuration(const TEventHolder& event) {
-    if (event.EnqueueTime) {
-        TDuration duration = NActors::TlsActivationContext->Now() - event.EnqueueTime;
-        Metrics->UpdateIcQueueTimeHistogram(duration.MicroSeconds());
-    }
-}
 
 ui32 TEventHolder::Fill(IEventHandle& ev) {
     Serial = 0;

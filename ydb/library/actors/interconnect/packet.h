@@ -145,7 +145,6 @@ struct TTcpPacketOutTask : TNonCopyable {
     NInterconnect::TOutgoingStream& OutgoingStream;
     NInterconnect::TOutgoingStream& XdcStream;
     NInterconnect::TOutgoingStream::TBookmark HeaderBookmark;
-    NActors::IInterconnectMetrics* Metrics;
 
     ui32 InternalSize = 0;
     ui32 ExternalSize = 0;
@@ -158,9 +157,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     ui32 ExternalChecksum = 0;
 
     TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
-        NInterconnect::TOutgoingStream& xdcStream, NActors::IInterconnectMetrics* metrics);
-
-    void UpdateIcQueueDuration(const TEventHolder& event);
+        NInterconnect::TOutgoingStream& xdcStream);
 
     // Preallocate some space to fill it later.
     NInterconnect::TOutgoingStream::TBookmark Bookmark(size_t len) {

@@ -127,7 +127,7 @@ jobs:
         id: set-vars
         run: |
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
-            echo "threads_count=52" >> $GITHUB_ENV
+            echo "threads_count=20" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=20" >> $GITHUB_ENV

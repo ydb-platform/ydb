@@ -3,6 +3,7 @@
 #include "common.h"
 #include "client_command_options.h"
 
+#include <library/cpp/getopt/small/modchooser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -19,6 +20,9 @@
 
 namespace NYdb {
 namespace NConsoleClient {
+
+class TYdbCommandTreeAutoCompletionWrapper;
+class TYdbCommandAutoCompletionWrapper;
 
 struct TCommandFlags {
     bool Dangerous = false;
@@ -463,6 +467,8 @@ public:
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }
 
+    const TMap<TString, std::unique_ptr<TClientCommand>>& GetSubCommands() const;
+
 protected:
     virtual void Config(TConfig& config) override;
     virtual void SaveParseResult(TConfig& config) override;
@@ -481,6 +487,10 @@ protected:
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
+
+    // friend void TYdbCommandTreeAutoCompletionWrapper::RegisterModes(TModChooser& chooser);
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TCommandWithPath {

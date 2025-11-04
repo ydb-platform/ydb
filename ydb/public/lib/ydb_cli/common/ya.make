@@ -7,6 +7,7 @@ SRCS(
     command.cpp
     command_utils.cpp
     common.cpp
+    completion.cpp
     csv_parser.cpp
     examples.cpp
     format.cpp

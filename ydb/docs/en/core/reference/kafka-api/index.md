@@ -4,5 +4,8 @@
 
 The Kafka API  documentation contains the following sections:
 
+* [Authentication](auth.md)
 * [Usage examples](examples.md)
+* [Kafka Connect](./connect/index.md)
 * [Constraints](constraints.md)
+ 

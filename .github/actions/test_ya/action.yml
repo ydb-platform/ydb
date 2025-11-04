@@ -252,7 +252,10 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        # Get absolute path to ya and current working directory
+        YA_ABS_PATH=$(cd "$(dirname ./ya)" && pwd)/$(basename ./ya)
+        WORK_DIR=$(pwd)
+        export YA_MAKE_COMMAND="$YA_ABS_PATH make ${params[@]}"
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
@@ -297,7 +300,8 @@ runs:
           params+=(--retest)
         fi
 
-        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        # Use absolute path (already set above)
+        export YA_MAKE_COMMAND="$YA_ABS_PATH make ${params[@]}"
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
         echo "YA_MAKE_OUT_DIR=$YA_MAKE_OUT_DIR" >> $GITHUB_ENV
@@ -396,12 +400,13 @@ runs:
           if [ -n "$SYSTEMD_CMD" ]; then
             echo "Running: $SYSTEMD_CMD $YA_MAKE_COMMAND ..." | tee -a $YA_MAKE_OUTPUT
             
-            # Get list of existing units before we start
-            UNITS_BEFORE=$(sudo systemctl list-units --type=service --state=running --no-legend | grep -o 'run-[a-z0-9]*\.service' | sort -u | tail -1 || echo "")
+            # Get list of existing units before we start (using timestamp)
+            UNITS_BEFORE_TS=$(sudo systemctl list-units --type=service --all --no-legend 2>/dev/null | grep 'run-[a-z0-9]*\.service' | wc -l || echo "0")
             
             # Run command with systemd-run and capture all output
+            # Change to working directory in the command to ensure we're in the right place
             $SYSTEMD_CMD \
-              sh -c "exec $YA_MAKE_COMMAND $YA_MAKE_TARGET \
+              sh -c "cd \"$WORK_DIR\" && exec $YA_MAKE_COMMAND $YA_MAKE_TARGET \
                 $RERUN_FAILED_OPT --log-file \"$PUBLIC_DIR/ya_log.txt\"  \
                 --evlog-file \"$CURRENT_PUBLIC_DIR/ya_evlog.jsonl\" \
                 --junit \"$CURRENT_JUNIT_XML_PATH\" --build-results-report \"$CURRENT_REPORT\" --output \"$YA_MAKE_OUT_DIR\" 2>&1" 2>&1 | tee -a $YA_MAKE_OUTPUT
@@ -410,9 +415,9 @@ runs:
             echo "Command finished with exit code: $RC" | tee -a $YA_MAKE_OUTPUT
             
             # Find the unit that was just created (should be the newest run-u*.service)
-            UNIT_NAME=$(sudo systemctl list-units --type=service --all --no-legend | grep -o 'run-[a-z0-9]*\.service' | sort -u | tail -1 || echo "")
+            UNIT_NAME=$(sudo systemctl list-units --type=service --all --no-legend 2>/dev/null | grep 'run-[a-z0-9]*\.service' | tail -1 | awk '{print $1}' || echo "")
             
-            if [ -n "$UNIT_NAME" ] && [ "$UNIT_NAME" != "$UNITS_BEFORE" ]; then
+            if [ -n "$UNIT_NAME" ]; then
               echo "Found unit: $UNIT_NAME. Checking systemd journal:" | tee -a $YA_MAKE_OUTPUT
               sudo journalctl -u "$UNIT_NAME" --no-pager -n 100 2>&1 | tee -a $YA_MAKE_OUTPUT || true
             else

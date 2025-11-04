@@ -45,7 +45,7 @@ def get_table_schema(table_path):
             run_timestamp Timestamp NOT NULL,
             build_type Utf8 NOT NULL,
             branch Utf8 NOT NULL,
-            full_name Utf8 NOT NULL,
+            full_name String NOT NULL,
             test_name Utf8 NOT NULL,
             suite_folder Utf8 NOT NULL,
             status Utf8 NOT NULL,
@@ -176,8 +176,8 @@ def check_table_schema(wrapper, table_path):
         return False, False
 
 
-def prepare_rows_for_schema(results_with_owners, has_full_name, has_metadata):
-    """Prepare rows for upload based on table schema"""
+def prepare_rows_for_upload(results_with_owners):
+    """Prepare rows for upload - always include full_name and metadata"""
     prepared_rows = []
     for index, row in enumerate(results_with_owners):
         upload_row = {
@@ -199,53 +199,44 @@ def prepare_rows_for_schema(results_with_owners, has_full_name, has_metadata):
             'suite_folder': row['suite_folder'],
             'test_id': f"{row['pull']}_{row['run_timestamp']}_{index}",
             'test_name': row['test_name'],
+            # Always include full_name and metadata
+            'full_name': f"{row['suite_folder']}/{row['test_name']}",
+            'metadata': json.dumps({}),  # Empty JSON for now
         }
-        
-        if has_full_name:
-            upload_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
-        
-        if has_metadata:
-            upload_row['metadata'] = json.dumps({})  # JSON string for YDB Json type
         
         prepared_rows.append(upload_row)
     
     return prepared_rows
 
 
-def prepare_rows_for_backup(source_rows, source_has_full_name, source_has_metadata, 
-                            backup_has_full_name, backup_has_metadata):
-    """Adapt rows from source schema to backup schema"""
-    backup_rows = []
-    for row in source_rows:
-        backup_row = row.copy()
+def filter_rows_for_schema(rows, has_full_name, has_metadata):
+    """Filter rows to match table schema - remove fields that don't exist in table"""
+    filtered_rows = []
+    for row in rows:
+        filtered_row = row.copy()
         
-        # Handle full_name
-        if not backup_has_full_name:
-            backup_row.pop('full_name', None)
-        elif 'full_name' not in backup_row and backup_has_full_name:
-            # Backup requires full_name but source doesn't have it - add it
-            backup_row['full_name'] = f"{row['suite_folder']}/{row['test_name']}"
+        # Remove full_name if table doesn't have it
+        if not has_full_name:
+            filtered_row.pop('full_name', None)
         
-        # Handle metadata
-        if not backup_has_metadata:
-            backup_row.pop('metadata', None)
-        elif backup_has_metadata:
-            # Backup requires metadata - ensure it's in correct format
-            if 'metadata' not in backup_row:
-                # Source doesn't have it - add it
-                backup_row['metadata'] = json.dumps({})  # JSON string for YDB Json type
-            # If metadata already exists, it should already be a valid JSON string from source
+        # Handle metadata: remove if table doesn't have it, or convert empty JSON to None
+        if not has_metadata:
+            filtered_row.pop('metadata', None)
+        elif 'metadata' in filtered_row:
+            # If metadata is empty JSON string "{}", convert to None (like export_issues_to_ydb.py)
+            if filtered_row['metadata'] == "{}" or filtered_row['metadata'] == json.dumps({}):
+                filtered_row['metadata'] = None
         
-        backup_rows.append(backup_row)
+        filtered_rows.append(filtered_row)
     
-    return backup_rows
+    return filtered_rows
 
 
 def prepare_column_types(has_full_name, has_metadata):
     """Build column types based on schema"""
     column_types = get_column_types()
     if has_full_name:
-        column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        column_types = column_types.add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.String))
     if has_metadata:
         column_types = column_types.add_column("metadata", ydb.OptionalType(ydb.PrimitiveType.Json))
     return column_types
@@ -322,16 +313,19 @@ def main():
             # Create table if it doesn't exist (IF NOT EXISTS - won't affect existing table)
             wrapper.create_table(test_table_path, get_table_schema(test_table_path))
             
+            # Prepare rows with full data (always includes full_name and metadata)
+            prepared_rows = prepare_rows_for_upload(result_with_owners)
+            
             # Check main table schema
             has_full_name, has_metadata = check_table_schema(wrapper, test_table_path)
             print(f'Main table schema: full_name={has_full_name}, metadata={has_metadata}')
             
-            # Prepare rows and column types for main table
-            prepared_rows = prepare_rows_for_schema(result_with_owners, has_full_name, has_metadata)
-            column_types = prepare_column_types(has_full_name, has_metadata)
+            # Filter rows and prepare column types for main table
+            main_rows = filter_rows_for_schema(prepared_rows, has_full_name, has_metadata)
+            main_column_types = prepare_column_types(has_full_name, has_metadata)
             
             # Upload to main table
-            upload_to_table(wrapper, test_table_path, prepared_rows, column_types, "main table")
+            #upload_to_table(wrapper, test_table_path, main_rows, main_column_types, "main table")
             
             # Dual write to backup table if configured
             try:
@@ -342,11 +336,8 @@ def main():
                 backup_has_full_name, backup_has_metadata = check_table_schema(wrapper, backup_table_path)
                 print(f'Backup table schema: full_name={backup_has_full_name}, metadata={backup_has_metadata}')
                 
-                # Prepare rows and column types for backup table
-                backup_rows = prepare_rows_for_backup(
-                    prepared_rows, has_full_name, has_metadata, 
-                    backup_has_full_name, backup_has_metadata
-                )
+                # Filter rows and prepare column types for backup table
+                backup_rows = filter_rows_for_schema(prepared_rows, backup_has_full_name, backup_has_metadata)
                 backup_column_types = prepare_column_types(backup_has_full_name, backup_has_metadata)
                 
                 # Upload to backup table

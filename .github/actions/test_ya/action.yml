@@ -396,15 +396,11 @@ runs:
           if [ -n "$SYSTEMD_CMD" ]; then
             echo "Running: $SYSTEMD_CMD $YA_MAKE_COMMAND ..." | tee -a $YA_MAKE_OUTPUT
             
-            # Get the unit name we'll create
-            UNIT_NAME_PREFIX="ya-make-$$"
+            # Get list of existing units before we start
+            UNITS_BEFORE=$(sudo systemctl list-units --type=service --state=running --no-legend | grep -o 'run-[a-z0-9]*\.service' | sort -u | tail -1 || echo "")
             
             # Run command with systemd-run and capture all output
-            # Use StandardOutput=journal+console to ensure we see output
             $SYSTEMD_CMD \
-              --unit="${UNIT_NAME_PREFIX}.service" \
-              --property=StandardOutput=journal+console \
-              --property=StandardError=journal+console \
               sh -c "exec $YA_MAKE_COMMAND $YA_MAKE_TARGET \
                 $RERUN_FAILED_OPT --log-file \"$PUBLIC_DIR/ya_log.txt\"  \
                 --evlog-file \"$CURRENT_PUBLIC_DIR/ya_evlog.jsonl\" \
@@ -413,9 +409,16 @@ runs:
             echo $RC > exit_code
             echo "Command finished with exit code: $RC" | tee -a $YA_MAKE_OUTPUT
             
-            # Always check journal for output
-            echo "Checking systemd journal for unit ${UNIT_NAME_PREFIX}.service:" | tee -a $YA_MAKE_OUTPUT
-            sudo journalctl -u "${UNIT_NAME_PREFIX}.service" --no-pager -n 100 2>&1 | tee -a $YA_MAKE_OUTPUT || true
+            # Find the unit that was just created (should be the newest run-u*.service)
+            UNIT_NAME=$(sudo systemctl list-units --type=service --all --no-legend | grep -o 'run-[a-z0-9]*\.service' | sort -u | tail -1 || echo "")
+            
+            if [ -n "$UNIT_NAME" ] && [ "$UNIT_NAME" != "$UNITS_BEFORE" ]; then
+              echo "Found unit: $UNIT_NAME. Checking systemd journal:" | tee -a $YA_MAKE_OUTPUT
+              sudo journalctl -u "$UNIT_NAME" --no-pager -n 100 2>&1 | tee -a $YA_MAKE_OUTPUT || true
+            else
+              echo "Checking all recent run-u*.service units:" | tee -a $YA_MAKE_OUTPUT
+              sudo journalctl -u "run-u*.service" --no-pager -n 100 2>&1 | tail -100 | tee -a $YA_MAKE_OUTPUT || true
+            fi
             
             if [ $RC -ne 0 ]; then
               echo "Error detected. Checking logs..." | tee -a $YA_MAKE_OUTPUT
@@ -423,8 +426,7 @@ runs:
                 echo "Last 50 lines of ya_log.txt:" | tee -a $YA_MAKE_OUTPUT
                 tail -50 "$PUBLIC_DIR/ya_log.txt" | tee -a $YA_MAKE_OUTPUT
               else
-                echo "ya_log.txt not found. Checking systemd unit status:" | tee -a $YA_MAKE_OUTPUT
-                sudo systemctl status "${UNIT_NAME_PREFIX}.service" 2>&1 | head -50 | tee -a $YA_MAKE_OUTPUT || true
+                echo "ya_log.txt not found." | tee -a $YA_MAKE_OUTPUT
               fi
             fi
           else

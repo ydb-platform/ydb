@@ -345,6 +345,16 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         SlowMessages.erase(offset);
     }
 
+    auto firstSlowOffset = wal.HasSlowFirstOffset() ? wal.GetSlowFirstOffset() : Max<ui64>();
+    for (auto it = SlowMessages.begin(); it != SlowMessages.end(); ) {
+        if (it->first >= firstSlowOffset) {
+            break;
+        }
+
+        RemoveMessage(it->second);
+        it = SlowMessages.erase(it);
+    }
+
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
         auto& message = Messages.front();
         RemoveMessage(message);

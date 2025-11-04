@@ -1373,6 +1373,7 @@ message TMLPStorageSnapshot {
     repeated uint64 DLQ = 5;
 
     optional uint64 WALIndex = 6;
+    optional bytes SlowMessages = 7;
 }
 
 message TMLPStorageWAL {
@@ -1394,5 +1395,7 @@ message TMLPStorageWAL {
     optional uint64 WALIndex = 11;
 
     optional uint64 SlowFirstOffset = 12;
+    repeated uint64 MovedToSlowZone = 13;
+    repeated uint64 DeletedFromSlowZone = 14;
 }
 

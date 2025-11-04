@@ -249,39 +249,68 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     bool moveUnlockedOffset = true;
     bool moveUncommittedOffset = true;
 
-    TDeserializer<TMessage> deserializer(snapshot.GetMessages());
-    TMessage msg;
-    size_t i = 0;
-    while (deserializer.Next(msg)) {
-        auto& message = Messages[i++] = msg;
+    {
+        TDeserializer<TMessage> deserializer(snapshot.GetMessages());
+        TMessage message;
+        size_t i = 0;
+        while (deserializer.Next(message)) {
+            Messages[i++] = message;
 
-        switch(message.Status) {
-            case EMessageStatus::Locked:
-                ++Metrics.LockedMessageCount;
-                if (KeepMessageOrder && message.HasMessageGroupId) {
-                    LockedMessageGroupsId.insert(message.MessageGroupIdHash);
-                    ++Metrics.LockedMessageGroupCount;
-                }
-                moveUncommittedOffset = false;
-                break;
-            case EMessageStatus::Committed:
-                ++Metrics.CommittedMessageCount;
-                break;
-            case EMessageStatus::Unprocessed:
-                ++Metrics.UnprocessedMessageCount;
-                moveUnlockedOffset = false;
-                moveUncommittedOffset = false;
-                break;
-            case EMessageStatus::DLQ:
-                moveUncommittedOffset = false;
-                break;
-        }
+            switch(message.Status) {
+                case EMessageStatus::Locked:
+                    ++Metrics.LockedMessageCount;
+                    if (KeepMessageOrder && message.HasMessageGroupId) {
+                        LockedMessageGroupsId.insert(message.MessageGroupIdHash);
+                        ++Metrics.LockedMessageGroupCount;
+                    }
+                    moveUncommittedOffset = false;
+                    break;
+                case EMessageStatus::Committed:
+                    ++Metrics.CommittedMessageCount;
+                    break;
+                case EMessageStatus::Unprocessed:
+                    ++Metrics.UnprocessedMessageCount;
+                    moveUnlockedOffset = false;
+                    moveUncommittedOffset = false;
+                    break;
+                case EMessageStatus::DLQ:
+                    moveUncommittedOffset = false;
+                    break;
+            }
 
-        if (moveUnlockedOffset) {
-            ++FirstUnlockedOffset;
+            if (moveUnlockedOffset) {
+                ++FirstUnlockedOffset;
+            }
+            if (moveUncommittedOffset) {
+                ++FirstUncommittedOffset;
+            }
         }
-        if (moveUncommittedOffset) {
-            ++FirstUncommittedOffset;
+    }
+
+    {
+        TDeserializerWithOffset<TMessage> deserializer(snapshot.GetSlowMessages());
+        ui64 offset;
+        TMessage message;
+        while(deserializer.Next(offset, message)) {
+            SlowMessages[offset] = message;
+
+            switch(message.Status) {
+                case EMessageStatus::Locked:
+                    ++Metrics.LockedMessageCount;
+                    if (KeepMessageOrder && message.HasMessageGroupId) {
+                        LockedMessageGroupsId.insert(message.MessageGroupIdHash);
+                        ++Metrics.LockedMessageGroupCount;
+                    }
+                    break;
+                case EMessageStatus::Committed:
+                    ++Metrics.CommittedMessageCount;
+                    break;
+                case EMessageStatus::Unprocessed:
+                    ++Metrics.UnprocessedMessageCount;
+                    break;
+                case EMessageStatus::DLQ:
+                    break;
+            }
         }
     }
 
@@ -301,6 +330,19 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         auto newBaseDeadline = wal.HasBaseDeadlineSeconds() ? TInstant::Seconds(wal.GetBaseDeadlineSeconds()) : BaseDeadline;
         auto newBaseWriteTimestamp = wal.HasBaseWriteTimestampSeconds() ? TInstant::Seconds(wal.GetBaseWriteTimestampSeconds()) : BaseWriteTimestamp;
         MoveBaseDeadline(newBaseDeadline, newBaseWriteTimestamp);
+    }
+
+    for (auto offset : wal.GetMovedToSlowZone()) {
+        auto* message = GetMessageInt(offset);
+        if (!message) {
+            continue;
+        }
+
+        SlowMessages[offset] = *message;
+    }
+
+    for (auto offset : wal.GetDeletedFromSlowZone()) {
+        SlowMessages.erase(offset);
     }
 
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
@@ -375,6 +417,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         DLQQueue.push_back(offset);
     }
 
+    // Reset changes
     Batch = { this };
 
     return wal.HasAddedMessages() || wal.HasChangedMessages();
@@ -400,12 +443,22 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         snapshot.AddDLQ(offset);
     }
 
+    TSerializerWithOffset<TMessage> slowSerializer;
+    slowSerializer.Reserve(SlowMessages.size());
+    for (auto& message : SlowMessages) {
+        slowSerializer.Add(message.first, message.second);
+    }
+    snapshot.SetSlowMessages(std::move(slowSerializer.Buffer));
+
     return true;
 }
 
 bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     wal.SetFormatVersion(1);
     wal.SetFirstOffset(Storage->FirstOffset);
+    if (!Storage->SlowMessages.empty()) {
+        wal.SetSlowFirstOffset(Storage->SlowMessages.begin()->first);
+    }
 
     if (BaseDeadline) {
         wal.SetBaseDeadlineSeconds(BaseDeadline->Seconds());
@@ -454,6 +507,16 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         if (offset >= Storage->FirstOffset) {
             wal.AddDLQ(offset);
         }
+    }
+
+    for (auto offset : MovedToSlowZone) {
+        if (Storage->SlowMessages.contains(offset)) {
+            wal.AddMovedToSlowZone(offset);
+        }
+    }
+
+    for (auto offset :DeletedFromSlowZone) {
+        wal.AddDeletedFromSlowZone(offset);
     }
 
     return true;

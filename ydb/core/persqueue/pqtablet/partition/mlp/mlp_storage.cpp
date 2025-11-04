@@ -594,6 +594,10 @@ void TStorage::TBatch::MoveToSlow(ui64 offset) {
     MovedToSlowZone.push_back(offset);
 }
 
+void TStorage::TBatch::DeleteFromSlow(ui64 offset) {
+    DeletedFromSlowZone.push_back(offset);
+}
+
 void TStorage::TBatch::MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp) {
     BaseDeadline = baseDeadline;
     BaseWriteTimestamp = baseWriteTimestamp;

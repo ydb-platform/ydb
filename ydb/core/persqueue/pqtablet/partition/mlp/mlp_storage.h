@@ -104,6 +104,7 @@ public:
         void AddChange(ui64 offset);
         void AddDLQ(ui64 offset);
         void MoveToSlow(ui64 offset);
+        void DeleteFromSlow(ui64 offset);
 
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
 
@@ -115,6 +116,7 @@ public:
         size_t NewMessageCount = 0;
         std::deque<ui64> DLQ;
         std::deque<ui64> MovedToSlowZone;
+        std::deque<ui64> DeletedFromSlowZone;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;

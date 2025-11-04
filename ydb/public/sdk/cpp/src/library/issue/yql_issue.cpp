@@ -7,6 +7,7 @@
 #include <library/cpp/colorizer/output.h>
 
 #include <util/charset/utf8.h>
+#include <util/stream/str.h>
 #include <util/string/ascii.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -77,6 +78,12 @@ void TIssue::PrintTo(IOutputStream& out, bool oneLine) const {
     if (GetCode()) {
         out << ", code: " << GetCode();
     }
+}
+
+std::string TIssue::ToString(bool oneLine) const {
+    TStringStream out;
+    PrintTo(out, oneLine);
+    return std::move(out.Str().MutRef());
 }
 
 void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, uint16_t level)> fn, std::function<void(const TIssue&, uint16_t level)> afterChildrenFn) {
@@ -222,6 +229,12 @@ void TIssues::PrintWithProgramTo(
             out << Endl;
         });
     }
+}
+
+std::string TIssues::ToString(bool oneLine) const {
+    TStringStream out;
+    PrintTo(out, oneLine);
+    return std::move(out.Str().MutRef());
 }
 
 TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos) {

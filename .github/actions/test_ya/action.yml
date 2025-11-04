@@ -374,8 +374,14 @@ runs:
           # Try to use systemd-run with memory limits, fallback to direct execution if not available
           SYSTEMD_CMD=""
           if command -v systemd-run >/dev/null 2>&1; then
-            # Try systemd-run with scope first
-            if systemd-run --scope true >/dev/null 2>&1; then
+            # Try systemd-run with --wait (transient service) first - this is usually better
+            if systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G true >/dev/null 2>&1; then
+              SYSTEMD_CMD="systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G --"
+            elif sudo -n systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G true >/dev/null 2>&1; then
+              # Try with sudo if available and passwordless
+              SYSTEMD_CMD="sudo systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G --"
+            # Try systemd-run with scope as fallback
+            elif systemd-run --scope true >/dev/null 2>&1; then
               SYSTEMD_CMD="systemd-run --scope -p MemoryMax=250G -p MemoryHigh=249G --"
             elif sudo -n systemd-run --scope true >/dev/null 2>&1; then
               # Try with sudo if available and passwordless

@@ -405,6 +405,7 @@ bool TStorage::DoCommit(ui64 offset) {
 
             if (slowZone) {
                 SlowMessages.erase(offset);
+                Batch.DeleteFromSlow(offset);
                 --Metrics.InflyMessageCount;
             } else {
                 ++Metrics.CommittedMessageCount;
@@ -558,18 +559,18 @@ TString TStorage::DebugString() const {
          << " BaseDeadline: " << BaseDeadline.ToString()
          << " Messages: [";
     
-    auto dump = [&](const auto offset, const auto& message) {
-        sb << "{" << offset << ", "
+    auto dump = [&](const auto offset, const auto& message, auto zone) {
+        sb << "{" << zone << " " << offset << ", "
             << static_cast<EMessageStatus>(message.Status) << ", "
             << message.DeadlineDelta << ", "
             << message.WriteTimestampDelta << "} ";
     };
 
     for (auto& [offset, message] : SlowMessages) {
-        dump(offset, message);
+        dump(offset, message, 's');
     }
     for (size_t i = 0; i < Messages.size(); ++i) {
-        dump(FirstOffset + i, Messages[i]);
+        dump(FirstOffset + i, Messages[i], 'f');
     }
 
     sb << "]";

@@ -27,7 +27,8 @@ struct MockTimeProvider : public ITimeProvider {
 Y_UNIT_TEST(NextFromEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider());
 
-    auto result = storage.Next(TInstant::Now());
+    TStorage::TPosition position;
+    auto result = storage.Next(TInstant::Now(), position);
     UNIT_ASSERT(!result.has_value());
 
     auto& metrics = storage.GetMetrics();
@@ -147,10 +148,10 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     TStorage storage(CreateDefaultTimeProvider());
     storage.AddMessage(3, true, 5, TInstant::Now());
 
-    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    TStorage::TPosition position;
+    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(result->Message, 3);
-    UNIT_ASSERT_VALUES_EQUAL(result->FromOffset, 4);
+    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
@@ -167,10 +168,10 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     storage.SetKeepMessageOrder(true);
     storage.AddMessage(3, true, 5, TInstant::Now());
 
-    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    TStorage::TPosition position;
+    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(result->Message, 3);
-    UNIT_ASSERT_VALUES_EQUAL(result->FromOffset, 4);
+    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
@@ -194,10 +195,10 @@ Y_UNIT_TEST(NextWithWriteReteintion) {
     timeProvider->Tick(TDuration::Seconds(6));
 
     // skip message by reteintion
-    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1));
+    TStorage::TPosition position;
+    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(result->Message, 4);
-    UNIT_ASSERT_VALUES_EQUAL(result->FromOffset, 5);
+    UNIT_ASSERT_VALUES_EQUAL(*result, 4);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
@@ -212,12 +213,14 @@ Y_UNIT_TEST(NextWithWriteReteintion) {
 Y_UNIT_TEST(SkipLockedMessage) {
     TStorage storage(CreateDefaultTimeProvider());
     {
+        TStorage::TPosition position;
         storage.AddMessage(3, true, 5, TInstant::Now());
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
     }
 
-    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    TStorage::TPosition position;
+    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT_C(!result.has_value(), "The message already locked");
 
     auto& metrics = storage.GetMetrics();
@@ -237,14 +240,16 @@ Y_UNIT_TEST(SkipLockedMessageGroups) {
         storage.AddMessage(3, true, 5, TInstant::Now());
         storage.AddMessage(4, true, 5, TInstant::Now());
         storage.AddMessage(5, true, 7, TInstant::Now());
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(result->Message, 3);
+        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
     }
 
-    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    TStorage::TPosition position;
+    auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(result->Message, 5);
+    UNIT_ASSERT_VALUES_EQUAL(*result, 5);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 3);
@@ -260,7 +265,8 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
     TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5, TInstant::Now());
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
     }
 
@@ -282,7 +288,8 @@ Y_UNIT_TEST(CommitLockedMessage_WithKeepMessageOrder) {
     {
         storage.SetKeepMessageOrder(true);
         storage.AddMessage(3, true, 5, TInstant::Now());
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
     }
 
@@ -341,7 +348,8 @@ Y_UNIT_TEST(UnlockLockedMessage_WithoutKeepMessageOrder) {
     TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5, TInstant::Now());
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
     }
 
@@ -363,7 +371,8 @@ Y_UNIT_TEST(UnlockLockedMessage_WithKeepMessageOrder) {
     {
         storage.SetKeepMessageOrder(true);
         storage.AddMessage(3, true, 5, TInstant::Now());
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
     }
 
@@ -424,7 +433,8 @@ Y_UNIT_TEST(ChangeDeadlineLockedMessage) {
     TStorage storage(CreateDefaultTimeProvider());
     {
         storage.AddMessage(3, true, 5, TInstant::Now());
-        auto result = storage.Next(now + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        auto result = storage.Next(now + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
     }
 
@@ -497,7 +507,8 @@ Y_UNIT_TEST(StorageSerialization) {
         storage.AddMessage(6, true, 13, TInstant::Now());
 
         storage.Commit(3);
-        storage.Next(TInstant::Now() + TDuration::Seconds(1));
+        TStorage::TPosition position;
+        storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         storage.Commit(5);
 
         storage.SerializeTo(snapshot);
@@ -586,9 +597,10 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
 
         storage.AddMessage(3, true, 5, timeProvider->Now());
 
-        auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(7));
+        TStorage::TPosition position;
+        auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(7), position);
         UNIT_ASSERT(r);
-        UNIT_ASSERT_VALUES_EQUAL(r.value().Message, 3);
+        UNIT_ASSERT_VALUES_EQUAL(r.value(), 3);
 
         auto batch = storage.GetBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1); // new message and changed message
@@ -603,7 +615,9 @@ Y_UNIT_TEST(StorageSerialization_WAL_Locked) {
         storage.SetKeepMessageOrder(true);
 
         storage.Initialize(snapshot);
+        Cerr << "DUMP: " << storage.DebugString() << Endl;
         storage.ApplyWAL(wal);
+        Cerr << "DUMP AFTER WAL: " << storage.DebugString() << Endl;
 
         const auto* message = storage.GetMessage(3);
         UNIT_ASSERT(message);
@@ -682,7 +696,8 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
 
         storage.AddMessage(3, true, 5, timeProvider->Now());
 
-        auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(7));
+        TStorage::TPosition position;
+        auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(7), position);
         UNIT_ASSERT(r);
 
         storage.Unlock(3);
@@ -796,9 +811,10 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         storage.AddMessage(3, true, 5, timeProvider->Now());
         storage.AddMessage(4, true, 6, timeProvider->Now());
         {
-            auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(5));
+            TStorage::TPosition position;
+            auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(5), position);
             UNIT_ASSERT(r);
-            UNIT_ASSERT_VALUES_EQUAL(r->Message, 3);
+            UNIT_ASSERT_VALUES_EQUAL(*r, 3);
         }
 
         {
@@ -810,9 +826,10 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
         timeProvider->Tick(TDuration::Seconds(3));
         storage.MoveBaseDeadline();
         {
-            auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(13));
+            TStorage::TPosition position;
+            auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(13), position);
             UNIT_ASSERT(r);
-            UNIT_ASSERT_VALUES_EQUAL(r->Message, 4);
+            UNIT_ASSERT_VALUES_EQUAL(*r, 4);
         }
 
         {
@@ -932,7 +949,8 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
 
-    storage.Next(TInstant::Now() + TDuration::Seconds(1));
+    TStorage::TPosition position;
+    storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     storage.Unlock(3);
     storage.Commit(4);
 
@@ -968,9 +986,10 @@ Y_UNIT_TEST(ProccessDeadlines) {
     storage.AddMessage(5, true, 11, TInstant::Now());
     storage.AddMessage(6, true, 13, TInstant::Now());
 
-    storage.Next(timeProvider->Now() + TDuration::Seconds(10));
+    TStorage::TPosition position;
+    storage.Next(timeProvider->Now() + TDuration::Seconds(10), position);
     timeProvider->Tick(TDuration::Seconds(5));
-    storage.Next(timeProvider->Now() + TDuration::Seconds(10));
+    storage.Next(timeProvider->Now() + TDuration::Seconds(10), position);
     timeProvider->Tick(TDuration::Seconds(7));
 
     auto result = storage.ProccessDeadlines();
@@ -1006,9 +1025,10 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     storage.AddMessage(4, true, 7, TInstant::Now());
     storage.AddMessage(5, true, 11, TInstant::Now());
 
-    storage.Next(timeProvider->Now() + TDuration::Seconds(3));
-    storage.Next(timeProvider->Now() + TDuration::Seconds(5));
-    storage.Next(timeProvider->Now() + TDuration::Seconds(7));
+    TStorage::TPosition position;
+    storage.Next(timeProvider->Now() + TDuration::Seconds(3), position);
+    storage.Next(timeProvider->Now() + TDuration::Seconds(5), position);
+    storage.Next(timeProvider->Now() + TDuration::Seconds(7), position);
 
     timeProvider->Tick(TDuration::Seconds(5));
 

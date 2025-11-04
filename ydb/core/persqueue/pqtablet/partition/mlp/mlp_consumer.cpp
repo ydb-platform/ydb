@@ -447,7 +447,7 @@ void TConsumerActor::ProcessEventQueue() {
 
     auto now = TInstant::Now();
 
-    ui64 fromOffset = 0;
+    TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
@@ -458,13 +458,12 @@ void TConsumerActor::ProcessEventQueue() {
 
         std::deque<ui64> messages;
         for (; count; --count) {
-            auto result = Storage->Next(visibilityDeadline, fromOffset);
+            auto result = Storage->Next(visibilityDeadline, position);
             if (!result) {
                 break;
             }
 
-            messages.push_back(result->Message);
-            fromOffset = result->FromOffset;
+            messages.push_back(result.value());
         }
 
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
@@ -568,11 +567,11 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     }
 
     auto& metrics = Storage->GetMetrics();
-    if (metrics.InflyMessageCount >= TStorage::MaxMessages) {
+    if (metrics.InflyMessageCount >= Storage->MaxMessages) {
         LOG_D("Skip fetch: infly limit exceeded");
         return false;
     }
-    if (metrics.InflyMessageCount >= TStorage::MinMessages && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
+    if (metrics.InflyMessageCount >= Storage->MinMessages && metrics.UnprocessedMessageCount >= metrics.LockedMessageCount * 2) {
         LOG_D("Skip fetch: there are enough messages. InflyMessageCount=" << metrics.InflyMessageCount
             << ", UnprocessedMessageCount=" << metrics.UnprocessedMessageCount
             << ", LockedMessageCount=" << metrics.LockedMessageCount);
@@ -581,11 +580,11 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     FetchInProgress = true;
 
-    auto maxMessages = TStorage::MinMessages;
+    auto maxMessages = Storage->MinMessages;
     if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
         maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
-    maxMessages = std::min(maxMessages, TStorage::MaxMessages - metrics.InflyMessageCount);
+    maxMessages = std::min(maxMessages, Storage->MaxMessages - metrics.InflyMessageCount);
 
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
@@ -627,12 +626,15 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            Storage->AddMessage(
+            bool r = Storage->AddMessage(
                 result.GetOffset(),
                 result.HasSourceId() && !result.GetSourceId().empty(),
                 static_cast<ui32>(Hash(result.GetSourceId())),
                 TInstant::MilliSeconds(result.GetWriteTimestampMS())
             );
+            if (!r) {
+                break;
+            }
             ++messageCount;
         }
 

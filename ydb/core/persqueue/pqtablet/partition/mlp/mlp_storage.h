@@ -7,6 +7,7 @@
 #include <util/datetime/base.h>
 
 #include <deque>
+#include <map>
 #include <set>
 #include <unordered_set>
 
@@ -14,13 +15,19 @@ namespace NKikimr::NPQ::NMLP {
 
 // TODO MLP Slow zone
 class TStorage {
+    static constexpr size_t MAX_MESSAGES = 48000;
+    static constexpr size_t MIN_MESSAGES = 100;
+
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
     // to increase the number of partitions in the topic.
-    static constexpr size_t MaxMessages = 50000;
+    const size_t MaxMessages;
     // The minimum number of messages in flight. We try to maintain this number of messages so
     // that we can respond without delay.
-    static constexpr size_t MinMessages = 100;
+    const size_t MinMessages;
+
+    const size_t MaxFastMessages;
+    const size_t MaxSlowMessages;
 
     // The maximum supported time delta. If it has reached this value, then it is necessary
     // to shift the BaseDeadline. Allows you to store deadlines for up to 18 hours.
@@ -65,7 +72,7 @@ public:
     };
 
     struct TMessageIterator {
-        TMessageIterator(const TStorage& storage, ui64 offset);
+        TMessageIterator(const TStorage& storage, std::map<ui64, TMessage>::const_iterator it, ui64 offset);
 
         TMessageIterator& operator++();
         TMessageWrapper operator*() const;
@@ -73,6 +80,7 @@ public:
 
     private:
         const TStorage& Storage;
+        std::map<ui64, TMessage>::const_iterator Iterator;
         ui64 Offset;
     };
 
@@ -95,6 +103,7 @@ public:
         void AddNewMessage(ui64 offset);
         void AddChange(ui64 offset);
         void AddDLQ(ui64 offset);
+        void MoveToSlow(ui64 offset);
 
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
 
@@ -105,6 +114,7 @@ public:
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
         std::deque<ui64> DLQ;
+        std::deque<ui64> MovedToSlowZone;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
@@ -120,7 +130,7 @@ public:
         size_t DLQMessageCount = 0;
     };
 
-    TStorage(TIntrusivePtr<ITimeProvider> timeProvider);
+    TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
 
     void SetKeepMessageOrder(bool keepMessageOrder);
     void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
@@ -137,22 +147,26 @@ public:
     const std::deque<ui64>& GetDLQMessages() const;
 
 
+    struct TPosition {
+        std::optional<std::map<ui64, TMessage>::iterator> SlowPosition;
+        ui64 FastPosition = 0;
+    };
     // Return the next message for client processing.
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
     struct NextResult {
         ui64 Message;
-        ui64 FromOffset;
+        TPosition Position;
     };
-    std::optional<NextResult> Next(TInstant deadline, ui64 fromOffset = 0);
+    std::optional<ui64> Next(TInstant deadline, TPosition& position);
     bool Commit(ui64 message);
     bool Unlock(ui64 message);
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
 
-    void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
+    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
 
     size_t ProccessDeadlines();
     // TODO MLP удалять сообщения если в партиции сместился StartOffset
@@ -179,14 +193,16 @@ private:
     TMessage* GetMessageInt(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
-    ui64 DoLock(ui64 offsetDelta, TInstant deadline);
+    ui64 DoLock(ui64 offset, TMessage& message, TInstant& deadline);
     bool DoCommit(ui64 offset);
     bool DoUnlock(ui64 offset);
-    void DoUnlock(TMessage& message, ui64 offset);
+    void DoUnlock(ui64 offset, TMessage& message);
 
     void UpdateFirstUncommittedOffset();
 
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
+
+    void RemoveMessage(const TMessage& message);
 
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -205,6 +221,7 @@ private:
     TInstant BaseWriteTimestamp;
 
     std::deque<TMessage> Messages;
+    std::map<ui64, TMessage> SlowMessages;
     std::unordered_set<ui32> LockedMessageGroupsId;
     std::deque<ui64> DLQQueue;
 

@@ -305,26 +305,9 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
         auto& message = Messages.front();
-
-        ++FirstOffset;
-        --Metrics.InflyMessageCount;
-
-        switch (message.Status) {
-            case EMessageStatus::Unprocessed:
-                --Metrics.UnprocessedMessageCount;
-                break;
-            case EMessageStatus::Locked:
-                --Metrics.LockedMessageCount;
-                break;
-            case EMessageStatus::Committed:
-                --Metrics.CommittedMessageCount;
-                break;
-            case EMessageStatus::DLQ:
-                --Metrics.DLQMessageCount;
-                break;
-        }
-
+        RemoveMessage(message);
         Messages.pop_front();
+        ++FirstOffset;
     }
 
     FirstOffset = wal.GetFirstOffset();
@@ -355,28 +338,17 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
                 continue;
             }
 
-            auto oldStatus = message->Status;
+            auto statusChanged = message->Status != msg.Common.Fields.Status;
+            if (statusChanged) {
+                RemoveMessage(*message);
+                ++Metrics.InflyMessageCount;
+            }
 
             message->Status = msg.Common.Fields.Status;
             message->DeadlineDelta = msg.Common.Fields.DeadlineDelta;
             message->ReceiveCount = msg.Common.Fields.ReceiveCount;
 
-            if (oldStatus != message->Status) {
-                switch(oldStatus) {
-                    case EMessageStatus::Locked:
-                        --Metrics.LockedMessageCount;
-                        break;
-                    case EMessageStatus::Committed:
-                        --Metrics.CommittedMessageCount;
-                        break;
-                    case EMessageStatus::Unprocessed:
-                        --Metrics.UnprocessedMessageCount;
-                        break;
-                    case EMessageStatus::DLQ:
-                        --Metrics.DLQMessageCount;
-                        break;
-                }
-
+            if (statusChanged) {
                 switch(message->Status) {
                     case EMessageStatus::Locked:
                         ++Metrics.LockedMessageCount;

@@ -144,10 +144,10 @@ def main():
             mapping_data = convert_mapping_to_table_data(test_to_issue)
             print(f"Converted to {len(mapping_data)} table records")
             
-            # Create mapping table (wrapper добавит database_path автоматически)
+            # Create mapping table (wrapper will add database_path automatically)
             create_test_issue_mapping_table(ydb_wrapper, table_path)
             
-            # Bulk upsert mapping data (wrapper добавит database_path автоматически)
+            # Bulk upsert mapping data (wrapper will add database_path automatically)
             if mapping_data:
                 bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
             else:

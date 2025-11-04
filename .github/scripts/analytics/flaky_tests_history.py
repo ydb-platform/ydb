@@ -31,7 +31,7 @@ def main():
         testowners_table = ydb_wrapper.get_table_path("testowners")
         flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
       
-        # Получаем последнюю дату из истории
+        # Get last date from history
         table_path = flaky_tests_table
         last_date_query = f"""
             select max(date_window) as max_date_window from `{table_path}`
@@ -44,13 +44,13 @@ def main():
             default_start_date = datetime.date(2024, 9, 1)
             base_date = datetime.date(1970, 1, 1)
             
-            # YDB может вернуть date_window как int (дни с 1970-01-01) или datetime.date
+            # YDB may return date_window as int (days since 1970-01-01) or datetime.date
             max_date_window = results[0].get('max_date_window') if results[0] else None
             if max_date_window is not None:
-                # Конвертируем int в date если нужно
+                # Convert int to date if needed
                 if isinstance(max_date_window, int):
                     max_date_window = base_date + datetime.timedelta(days=max_date_window)
-                # Теперь max_date_window это datetime.date, можно сравнивать
+                # Now max_date_window is datetime.date, can compare
                 if max_date_window > default_start_date:
                     last_datetime = max_date_window
                 else:
@@ -61,7 +61,7 @@ def main():
             last_date = last_datetime.strftime('%Y-%m-%d')
             print(f'📅 Last history date: {last_date}')
             
-            # Создаем таблицу если не существует
+            # Create table if it doesn't exist
             create_table_sql = f"""
             CREATE table IF NOT EXISTS `{table_path}` (
                 `test_name` Utf8 NOT NULL,
@@ -88,13 +88,13 @@ def main():
             
             ydb_wrapper.create_table(table_path, create_table_sql)
             
-            # Обрабатываем каждую дату
+            # Process each date
             today = datetime.date.today()
             date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
             
             print(f'📊 Processing {len(date_list)} dates from {last_date} to {today}')
             
-            # Собираем все данные для bulk upsert
+            # Collect all data for bulk upsert
             all_prepared_rows = []
             
             for i, date in enumerate(sorted(date_list), 1):
@@ -175,7 +175,7 @@ def main():
                 results = ydb_wrapper.execute_scan_query(query_get_history)
                 print(f'📈 History data captured, {len(results)} rows')
                 
-                # Подготавливаем данные для upsert
+                # Prepare data for upsert
                 for row in results:
                     row['count'] = dict(zip(list(row['history_list']), [list(
                         row['history_list']).count(i) for i in list(row['history_list'])]))   
@@ -197,11 +197,11 @@ def main():
                         'skip_count': row['count'].get('skipped', 0),
                     })
             
-            # Вставляем все данные одним batch
+            # Insert all data in one batch
             if all_prepared_rows:
                 print(f'💾 Upserting {len(all_prepared_rows)} rows of history data')
                 
-                # Подготавливаем column types для bulk upsert
+                # Prepare column types for bulk upsert
                 column_types = (
                     ydb.BulkUpsertColumns()
                     .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))

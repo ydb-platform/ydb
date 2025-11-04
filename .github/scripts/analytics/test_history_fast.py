@@ -92,7 +92,7 @@ def main():
         table_path = test_history_fast_table
         batch_size = 1000
 
-        # Create table if it doesn't exist (wrapper добавит database_path автоматически)
+        # Create table if it doesn't exist (wrapper will add database_path automatically)
         create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
@@ -100,7 +100,7 @@ def main():
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:
-            # Подготавливаем column_types один раз (те же поля, что возвращает get_missed_data_for_upload)
+            # Prepare column_types once (same fields as returned by get_missed_data_for_upload)
             column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -120,7 +120,7 @@ def main():
                 .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
-            # Используем bulk_upsert_batches для агрегированной статистики (wrapper добавит database_path автоматически)
+            # Use bulk_upsert_batches for aggregated statistics (wrapper will add database_path automatically)
             ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_upload_rows, column_types, batch_size)
             print('Tests uploaded')
         else:

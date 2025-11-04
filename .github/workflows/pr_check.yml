@@ -211,12 +211,12 @@ jobs:
       matrix:
         include:
           - build_preset: relwithdebinfo
-            threads_count: 52
+            threads_count: 20
             timeout: 240
             build_target: "ydb/"
             test_size: small,medium
           - build_preset: release-asan
-            threads_count: 52
+            threads_count: 20
             timeout: 240
             build_target: "ydb/"
             test_size: small,medium

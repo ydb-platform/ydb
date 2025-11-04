@@ -808,7 +808,7 @@ std::expected<double, std::string> GetIndexProgress(
     const TOperation::TOperationId& id,
     TLog* Log) noexcept
 {
-    for (size_t i = 0; i < INDEX_CHECK_MAX_RETRIES; ++i) {
+    for (int i = 0; i < INDEX_CHECK_MAX_RETRIES; ++i) {
         try {
             auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
             if (operation.Ready()) {

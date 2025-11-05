@@ -25,7 +25,7 @@ private:
     virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
     virtual void DoFillReadStats(TReadStats& /*stats*/) const {
-    
+
     }
 
 public:
@@ -189,6 +189,10 @@ public:
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
+
+    bool OrderByLimitAllowed() const {
+        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+    }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();

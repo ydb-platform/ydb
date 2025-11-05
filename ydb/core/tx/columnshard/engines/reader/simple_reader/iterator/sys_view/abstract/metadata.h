@@ -24,10 +24,6 @@ public:
         return PathId;
     }
 
-    virtual TString GetOverridenScanType(const TString& /*defScanType*/) const override {
-        return "SIMPLE";
-    }
-
     virtual bool OrderByLimitAllowed() const override {
         return false;
     }

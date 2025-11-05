@@ -35,9 +35,6 @@ public:
         return true;
     }
     virtual ~ITableMetadataAccessor() = default;
-    virtual TString GetOverridenScanType(const TString& defScanType) const {
-        return defScanType;
-    }
     virtual std::optional<NColumnShard::TUnifiedOptionalPathId> GetPathId() const {
         return std::nullopt;
     }

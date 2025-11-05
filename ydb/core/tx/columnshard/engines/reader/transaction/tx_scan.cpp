@@ -107,7 +107,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader;
             }();
             auto constructor =
-                NReader::IScannerConstructor::TFactory::MakeHolder(read.TableMetadataAccessor->GetOverridenScanType(scanType), context);
+                NReader::IScannerConstructor::TFactory::MakeHolder(scanType, context);
             if (!constructor) {
                 return std::unique_ptr<IScannerConstructor>();
             }
@@ -157,7 +157,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
             }
         }
-        
+
         if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
             auto graphOptional = read.GetProgram().GetGraphOptional();
             TString dotGraph = graphOptional ? graphOptional->DebugDOT() : "";

@@ -1106,17 +1106,21 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
 
-        UNIT_ASSERT(structArray->GetFieldByName("ABC") && structArray->GetFieldByName("ABC")->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->GetFieldByName("DEF") && structArray->GetFieldByName("DEF")->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->GetFieldByName("GHI") && structArray->GetFieldByName("GHI")->type_id() == arrow::Type::UINT64);
-        UNIT_ASSERT(structArray->GetFieldByName("JKL") && structArray->GetFieldByName("JKL")->type_id() == arrow::Type::INT64);
-        UNIT_ASSERT(structArray->GetFieldByName("MNO") && structArray->GetFieldByName("MNO")->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->GetFieldByName("ABC") && structArray->GetFieldByName("ABC") == structArray->field(0));
+        UNIT_ASSERT(structArray->GetFieldByName("DEF") && structArray->GetFieldByName("DEF") == structArray->field(1));
+        UNIT_ASSERT(structArray->GetFieldByName("GHI") && structArray->GetFieldByName("GHI") == structArray->field(2));
+        UNIT_ASSERT(structArray->GetFieldByName("JKL") && structArray->GetFieldByName("JKL") == structArray->field(3));
+        UNIT_ASSERT(structArray->GetFieldByName("MNO") && structArray->GetFieldByName("MNO") == structArray->field(4));
 
-        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("ABC")->length(), values.size());
-        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("DEF")->length(), values.size());
-        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("GHI")->length(), values.size());
-        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("JKL")->length(), values.size());
-        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("MNO")->length(), values.size());
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::INT64);
+        UNIT_ASSERT(structArray->field(4)->type_id() == arrow::Type::STRING);
+
+        for (int i = 0; i < structArray->num_fields(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(structArray->field(i)->length(), values.size());
+        }
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, structType, context.HolderFactory);

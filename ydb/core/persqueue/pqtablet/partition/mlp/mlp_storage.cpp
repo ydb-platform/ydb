@@ -49,19 +49,20 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
         position.SlowPosition = SlowMessages.begin();
     }
 
-    while(position.SlowPosition != SlowMessages.end()) {
+    for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
         auto offset = position.SlowPosition.value()->first;
         auto& message = position.SlowPosition.value()->second;
         if (message.Status == EMessageStatus::Unprocessed) {
             if (message.WriteTimestampDelta < dieDelta) {
                 continue;
             }
-        }
-        if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
-            continue;
-        }
 
-        return DoLock(offset, message, deadline);
+            if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.contains(message.MessageGroupIdHash)) {
+                continue;
+            }
+
+            return DoLock(offset, message, deadline);
+        }
     }
 
     bool moveUnlockedOffset = position.FastPosition <= FirstUnlockedOffset;
@@ -583,7 +584,8 @@ TString TStorage::DebugString() const {
         sb << zone <<"{" << offset << ", "
             << static_cast<EMessageStatus>(message.Status) << ", "
             << message.DeadlineDelta << ", "
-            << message.WriteTimestampDelta << "} ";
+            << message.WriteTimestampDelta << ", "
+            << message.MessageGroupIdHash << "} ";
     };
 
     for (auto& [offset, message] : SlowMessages) {
@@ -603,7 +605,7 @@ TStorage::TBatch::TBatch(TStorage* storage)
 }
 
 void TStorage::TBatch::AddChange(ui64 offset) {
-    ChangedMessages.insert(offset);
+    ChangedMessages.push_back(offset);
 }
 
 void TStorage::TBatch::AddDLQ(ui64 offset) {

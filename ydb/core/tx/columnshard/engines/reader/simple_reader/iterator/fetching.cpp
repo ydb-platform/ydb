@@ -67,7 +67,6 @@ TConclusion<bool> TConflictDetector::DoExecuteInplace(
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-
     auto filter =
         MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
                                std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
@@ -78,7 +77,6 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
             return true;
         }
     }
-    
     source->MutableStageData().AddFilter(filter);
     return true;
 }

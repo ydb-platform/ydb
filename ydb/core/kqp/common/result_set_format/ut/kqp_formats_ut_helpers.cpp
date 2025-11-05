@@ -172,7 +172,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* typ
     return builder;
 }
 
-std::shared_ptr<arrow::Array> MakeArray(NMiniKQL::TUnboxedValueVector& values, const NMiniKQL::TType* itemType) {
+std::shared_ptr<arrow::Array> MakeArrowArray(NMiniKQL::TUnboxedValueVector& values, const NMiniKQL::TType* itemType) {
     auto builder = MakeArrowBuilder(itemType);
     auto status = builder->Reserve(values.size());
     YQL_ENSURE(status.ok(), "Failed to reserve space for array: " << status.ToString());
@@ -398,7 +398,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
     return NUdf::TUnboxedValuePod();
 }
 
-NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array, const NMiniKQL::TType* itemType,
+NMiniKQL::TUnboxedValueVector ExtractUnboxedVector(const std::shared_ptr<arrow::Array>& array, const NMiniKQL::TType* itemType,
     const NMiniKQL::THolderFactory& holderFactory)
 {
     NMiniKQL::TUnboxedValueVector values;

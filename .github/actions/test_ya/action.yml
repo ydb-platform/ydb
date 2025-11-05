@@ -256,6 +256,10 @@ runs:
         YA_ABS_PATH=$(cd "$(dirname ./ya)" && pwd)/$(basename ./ya)
         WORK_DIR=$(pwd)
         export YA_MAKE_COMMAND="$YA_ABS_PATH make ${params[@]}"
+        
+        # Get current user and group for systemd-run
+        CURRENT_UID=$(id -u)
+        CURRENT_GID=$(id -g)
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
@@ -382,10 +386,11 @@ runs:
             # MemoryMax=230G: hard limit, process will be killed if exceeded
             # MemoryHigh=229G: soft limit, process will be throttled if exceeded  
             # MemorySwapMax=230G: limit swap usage to prevent OOM
-            if systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G true >/dev/null 2>&1; then
-              SYSTEMD_CMD="systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --"
-            elif sudo -n systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G true >/dev/null 2>&1; then
-              SYSTEMD_CMD="sudo systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --"
+            # --uid and --gid: run as current user to avoid permission issues
+            if systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --uid=$CURRENT_UID --gid=$CURRENT_GID true >/dev/null 2>&1; then
+              SYSTEMD_CMD="systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --uid=$CURRENT_UID --gid=$CURRENT_GID --"
+            elif sudo -n systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --uid=$CURRENT_UID --gid=$CURRENT_GID true >/dev/null 2>&1; then
+              SYSTEMD_CMD="sudo systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --uid=$CURRENT_UID --gid=$CURRENT_GID --"
             else
               echo "Warning: systemd-run requires authentication, running without memory limits" | tee -a $YA_MAKE_OUTPUT
             fi

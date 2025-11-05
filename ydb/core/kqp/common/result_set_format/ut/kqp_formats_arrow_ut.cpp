@@ -20,7 +20,8 @@
 using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 
-inline static constexpr size_t TEST_ARRAY_SIZE = 1 << 16;
+inline static constexpr size_t TEST_ARRAY_DATATYPE_SIZE = 1 << 16;
+inline static constexpr size_t TEST_ARRAY_NESTED_SIZE = 1 << 8;
 inline static constexpr ui8 DECIMAL_PRECISION = 35;
 inline static constexpr ui8 DECIMAL_SCALE = 10;
 
@@ -775,15 +776,15 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     UNIT_ASSERT(IsArrowCompatible(type));
 
     TUnboxedValueVector values;
-    values.reserve(TEST_ARRAY_SIZE);
+    values.reserve(TEST_ARRAY_DATATYPE_SIZE);
 
-    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+    for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         values.emplace_back(GetValueOfBasicType(type, i));
     }
 
     auto array = MakeArrowArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
-    UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
+    UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
     std::shared_ptr<TArrowArrayType> typedArray;
     std::shared_ptr<arrow::StringArray> timezoneArray;
@@ -791,7 +792,8 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     if constexpr (IsTimezoneType) {
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT(structArray->num_fields() == 2);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
+
         UNIT_ASSERT(structArray->field(0)->type_id() == arrowTypeId);
         UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRING);
 
@@ -802,7 +804,7 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
         typedArray = static_pointer_cast<TArrowArrayType>(array);
     }
 
-    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+    for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         auto arrowValue = ExtractUnboxedValue(array, i, type, context.HolderFactory);
         AssertUnboxedValuesAreEqual(arrowValue, values[i], type);
     }
@@ -822,23 +824,23 @@ void TestFixedSizeBinaryDataTypeConversion() {
     UNIT_ASSERT(IsArrowCompatible(type));
 
     TUnboxedValueVector values;
-    values.reserve(TEST_ARRAY_SIZE);
+    values.reserve(TEST_ARRAY_DATATYPE_SIZE);
 
-    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+    for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         values.emplace_back(GetValueOfBasicType(type, i));
     }
 
     auto array = MakeArrowArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
-    UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
+    UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
     std::shared_ptr<arrow::FixedSizeBinaryArray> typedArray;
 
     UNIT_ASSERT(array->type_id() == arrow::Type::FIXED_SIZE_BINARY);
     typedArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(array);
-    UNIT_ASSERT(typedArray->byte_width() == NScheme::FSB_SIZE);
+    UNIT_ASSERT_VALUES_EQUAL(typedArray->byte_width(), NScheme::FSB_SIZE);
 
-    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+    for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         auto arrowValue = ExtractUnboxedValue(array, i, type, context.HolderFactory);
         AssertUnboxedValuesAreEqual(arrowValue, values[i], type);
     }
@@ -852,25 +854,25 @@ void TestSingularTypeConversion() {
     UNIT_ASSERT(IsArrowCompatible(type));
 
     TUnboxedValueVector values;
-    values.reserve(TEST_ARRAY_SIZE);
+    values.reserve(TEST_ARRAY_DATATYPE_SIZE);
 
-    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+    for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         values.emplace_back();
     }
 
     auto array = MakeArrowArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
-    UNIT_ASSERT(array->length() == static_cast<i64>(TEST_ARRAY_SIZE));
+    UNIT_ASSERT_VALUES_EQUAL(array->length(), TEST_ARRAY_DATATYPE_SIZE);
 
     if (SingularKind == TType::EKind::Null) {
         UNIT_ASSERT(array->type_id() == arrow::Type::NA);
     } else {
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT(structArray->num_fields() == 0);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 0);
     }
 
-    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+    for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         auto arrowValue = ExtractUnboxedValue(array, i, type, context.HolderFactory);
         AssertUnboxedValuesAreEqual(arrowValue, values[i], type);
     }
@@ -1039,15 +1041,17 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         TTestContext context;
 
         auto listType = context.GetListType();
-        auto values = context.CreateLists(100);
+        auto values = context.CreateLists(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(listType));
 
         auto array = MakeArrowArray(values, listType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
+        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
         auto listArray = static_pointer_cast<arrow::ListArray>(array);
-        UNIT_ASSERT(listArray->num_fields() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
         UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
@@ -1060,23 +1064,25 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         TTestContext context;
 
         auto tupleType = context.GetTupleType();
-        auto values = context.CreateTuples(100);
+        auto values = context.CreateTuples(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(tupleType));
 
         auto array = MakeArrowArray(values, tupleType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT(structArray->num_fields() == 3);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
 
         UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
         UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
         UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
 
-        UNIT_ASSERT(static_cast<ui64>(structArray->field(0)->length()) == values.size());
-        UNIT_ASSERT(static_cast<ui64>(structArray->field(1)->length()) == values.size());
-        UNIT_ASSERT(static_cast<ui64>(structArray->field(2)->length()) == values.size());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(structArray->field(0)->length()), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(structArray->field(1)->length()), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(structArray->field(2)->length()), values.size());
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, tupleType, context.HolderFactory);
@@ -1088,13 +1094,15 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         TTestContext context;
 
         auto structType = context.GetStructType();
-        auto values = context.CreateStructs(100);
+        auto values = context.CreateStructs(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(structType));
 
         auto array = MakeArrowArray(values, structType);
-        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
 
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
 
@@ -1118,47 +1126,6 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
 }
 
 Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
-    Y_UNIT_TEST(Struct) {
-        TTestContext context;
-
-        auto structType = context.GetStructType();
-        UNIT_ASSERT(IsArrowCompatible(structType));
-
-        auto values = context.CreateStructs(100);
-        auto array = MakeArrowArray(values, structType);
-
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT(structArray->num_fields() == 3);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
-        UNIT_ASSERT(static_cast<ui64>(structArray->field(0)->length()) == values.size());
-        UNIT_ASSERT(static_cast<ui64>(structArray->field(1)->length()) == values.size());
-        UNIT_ASSERT(static_cast<ui64>(structArray->field(2)->length()) == values.size());
-        auto binaryArray = static_pointer_cast<arrow::BinaryArray>(structArray->field(0));
-        auto int32Array = static_pointer_cast<arrow::Int32Array>(structArray->field(1));
-        auto uint64Array = static_pointer_cast<arrow::UInt64Array>(structArray->field(2));
-        auto index = 0;
-        for (const auto& value: values) {
-            auto stringValue = value.GetElement(0);
-            auto stringRef = stringValue.AsStringRef();
-            auto stringView = binaryArray->GetView(index);
-            UNIT_ASSERT_EQUAL(std::string(stringRef.Data(), stringRef.Size()), std::string(stringView));
-
-            auto intValue = value.GetElement(1).Get<i32>();
-            auto intArrow = int32Array->Value(index);
-            UNIT_ASSERT_EQUAL(intValue, intArrow);
-
-            auto uIntValue = value.GetElement(2).Get<ui64>();
-            auto uIntArrow = uint64Array->Value(index);
-            UNIT_ASSERT_EQUAL(uIntValue, uIntArrow);
-            ++index;
-        }
-    }
-
     Y_UNIT_TEST(OptionalListOfOptional) {
         TTestContext context;
 
@@ -1726,19 +1693,6 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
 }
 
 Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
-    Y_UNIT_TEST(Struct) {
-        TTestContext context;
-
-        auto structType = context.GetStructType();
-        auto values = context.CreateStructs(100);
-        auto array = MakeArrowArray(values, structType);
-        auto restoredValues = ExtractUnboxedVector(array, structType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], structType);
-        }
-    }
-
     Y_UNIT_TEST(OptionalListOfOptional) {
         TTestContext context;
 

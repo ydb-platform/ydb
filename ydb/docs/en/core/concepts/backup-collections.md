@@ -102,8 +102,8 @@ All backup operations run asynchronously in the background, allowing you to:
 ### Backup creation process {#backup-creation-process}
 
 1. **Transaction isolation**: Backup starts from a consistent snapshot point
-2. **Change tracking**: For incremental backups, only changes since last backup are captured and stored in [changefeed](cdc.md)
-3. **Change materialization**: When incremental backup called changefeed compacted to incremental backup tables
+2. **Change tracking**: For incremental backups, only changes since last backup are captured and stored in a [changefeed](cdc.md)
+3. **Change materialization**: When incremental backup is called, the changefeed is compacted into incremental backup tables
 
 ### Incremental backup mechanism {#incremental-backup-mechanism}
 
@@ -147,7 +147,7 @@ Without backup collections, only full export/import operations are available.
 
 ### Benefits
 
-- **Storage efficiency**: Incremental backups use significantly less storage compared to full backups.
+- **Storage efficiency**: Incremental backups use significantly less storage compared to storing multiple full backups.
 - **Faster backups**: Only changes are processed after initial full backup (note: change capture still incurs storage and cpu costs).
 - **SQL interface**: Familiar SQL commands for backup management.
 - **Background processing**: Non-blocking operations.

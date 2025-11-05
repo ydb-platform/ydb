@@ -27,7 +27,7 @@ Backups can be created using different methods:
 
 ## Backup collections {#backup-collections}
 
-Backup collections provide a way to organize full and incremental backups in a structured manner, enabling efficient point-in-time recovery for production workloads.
+Backup collections provide a way to organize full and incremental backups in a structured manner, enabling efficient point-in-time recovery for production workloads. Collections are stored in a dedicated directory structure within the database, which can be exported to external storage using [export/import](../reference/ydb-cli/export-import/index.md) or dump/restore operations. See [Storage backends](backup-collections.md#storage-backends) for more details.
 
 Learn more:
 

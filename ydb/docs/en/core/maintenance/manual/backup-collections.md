@@ -23,7 +23,11 @@ DROP BACKUP COLLECTION `collection_name`;
 RESTORE `collection_name`
 ```
 
-For detailed syntax, see [YQL reference documentation](../../yql/reference/syntax/index.md).
+For detailed syntax, see YQL reference documentation:
+- [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)
+- [BACKUP](../../yql/reference/syntax/backup.md)
+- [RESTORE](../../yql/reference/syntax/restore-backup-collection.md)
+- [DROP BACKUP COLLECTION](../../yql/reference/syntax/drop-backup-collection.md)
 
 ### Basic collection creation {#basic-collection-creation}
 

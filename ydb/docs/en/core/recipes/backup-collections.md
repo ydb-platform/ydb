@@ -1,6 +1,8 @@
 # Backup Collections: Common Recipes and Examples
 
-This guide provides practical examples for common backup collection use cases. For basic operations, see the [operations guide](../maintenance/manual/backup-collections.md).
+This guide provides real-world scenarios and practical examples for common backup collection use cases. It focuses on complete workflows and patterns for specific situations like multi-environment setups, microservices, and data migration.
+
+For step-by-step operational instructions and SQL reference, see the [operations guide](../maintenance/manual/backup-collections.md). For conceptual information, see [backup collections concepts](../concepts/backup-collections.md).
 
 ## Basic backup workflow {#basic-workflow}
 

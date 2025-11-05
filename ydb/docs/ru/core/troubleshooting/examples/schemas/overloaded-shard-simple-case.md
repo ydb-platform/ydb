@@ -18,6 +18,8 @@
 
 {% endnote %}
 
+{% if audience == "tech" %}
+
 Рассмотрим графики **Latency** на панели мониторинга Grafana [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) и определим, имеет ли отношение наша проблема к кластеру {{ ydb-short-name }}:
 
 ![DB Overview > Latencies > R tx server latency percentiles](_assets/overloaded-shard-simple-case/incident-grafana-latency-percentiles.png)
@@ -89,6 +91,8 @@
 График показывает только один data shard, нагрузка на который изменилась примерно в ##10:19:30## — data shard перешёл в `Группу 70`, содержащую шарды, нагруженные на 60–70%.
 
 {% endcut %}
+
+{% endif %}
 
 ![Overloaded shard](./_assets/overloaded-shard-simple-case/incident-grafana-overloaded-shards.png)
 

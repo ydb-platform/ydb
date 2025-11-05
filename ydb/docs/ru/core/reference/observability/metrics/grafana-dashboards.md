@@ -1,4 +1,4 @@
-{% if audience == "tech"%}
+{% if audience == "tech" %}
 
 # Дашборды Grafana для {{ ydb-short-name }}
 

@@ -4,7 +4,11 @@
 
 ## Диагностика
 
+{% if audience == "tech" %}
+
 1. Проверьте наличие скачков на графиках панели мониторинга **[DB overview > Storage](../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** в Grafana.
+
+{% endif %}
 
 1. Во [встроенном UI](../../../reference/embedded-ui/index.md) на вкладке **Storage** проанализируйте список доступных групп хранения и их потребление места на диске.
 

@@ -2,16 +2,13 @@
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/engines/predicate/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash.h>
-
-namespace NKikimr::NOlap {
-class TPredicateContainer;
-}
 
 namespace NKikimr::NOlap::NTxInteractions {
 
@@ -219,10 +216,16 @@ private:
         , PrimaryKey(primaryKey) {
     }
 
-    TIntervalPoint(const std::shared_ptr<NArrow::TSimpleRow>& primaryKey, const int includeState)
-        : IncludeState(includeState) {
-        if (primaryKey) {
-            PrimaryKey = *primaryKey;
+    TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
+        : IncludeState(includeState)
+    {
+        if (!point.IsAll()) {
+            auto fields = schema->fields();
+            fields.resize(point.NumColumns());
+            auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);
+            auto builders = NArrow::MakeBuilders(schemaTrimmed);
+            point.AppendPointTo(builders);
+            PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
         }
     }
 

@@ -69,15 +69,15 @@ int main(int argc, const char* argv[]) {
     THashMap<ui64, ui64> committedOffsets; // partition id -> confirmed offset
     std::atomic<bool> closing = false;
     std::atomic<TInstant::TValue> lastDataReceiveTime = TInstant::Now().GetValue();
-
+    std::mutex guard;
     settings
         .EventHandlers_.SimpleDataHandlers(
-            [&messagesReceived, &maxReceivedOffsets, &closing, &lastDataReceiveTime](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) mutable
+            [&messagesReceived, &maxReceivedOffsets, &closing, &lastDataReceiveTime, &guard](NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent& event) mutable
             {
                 if (closing) {
                     return;
                 }
-
+                std::lock_guard<std::mutex> lock(guard);
                 lastDataReceiveTime = TInstant::Now().GetValue();
                 ui64& maxReceivedOffset = maxReceivedOffsets[event.GetPartitionStream()->GetPartitionId()];
                 for (const auto& msg : event.GetMessages()) {
@@ -90,8 +90,9 @@ int main(int argc, const char* argv[]) {
 
     auto commitAckHandler = settings.EventHandlers_.CommitAcknowledgementHandler_;
     settings.EventHandlers_.CommitAcknowledgementHandler(
-        [&readSession, &messagesReceived, &maxReceivedOffsets, &committedOffsets, maxMessagesCount = opts.MessagesCount, &commitAckHandler, &closing, &commitAfterProcessing = opts.CommitAfterProcessing](NYdb::NPersQueue::TReadSessionEvent::TCommitAcknowledgementEvent& event) mutable
+        [&readSession, &messagesReceived, &maxReceivedOffsets, &committedOffsets, maxMessagesCount = opts.MessagesCount, &commitAckHandler, &closing, &commitAfterProcessing = opts.CommitAfterProcessing, &guard](NYdb::NPersQueue::TReadSessionEvent::TCommitAcknowledgementEvent& event) mutable
         {
+            std::lock_guard<std::mutex> lock(guard);
             committedOffsets[event.GetPartitionStream()->GetPartitionId()] = event.GetCommittedOffset();
             if (messagesReceived >= maxMessagesCount) {
                 bool allCommitted = true;
@@ -121,11 +122,11 @@ int main(int argc, const char* argv[]) {
     // Timeout tracking thread
     NThreading::TPromise<void> barrier = NThreading::NewPromise<void>();
     std::thread timeoutTrackingThread(
-        [barrierFuture = barrier.GetFuture(), &closing, &lastDataReceiveTime, readSession, timeout = opts.Timeout]() mutable {
+        [barrierFuture = barrier.GetFuture(), &closing, &lastDataReceiveTime, readSession, timeout = opts.Timeout, &guard]() mutable {
             if (timeout == TDuration::Zero()) {
                 return;
             }
-
+            std::lock_guard<std::mutex> lock(guard);
             bool futureIsSignalled = false;
             while (!closing && !futureIsSignalled) {
                 const TInstant lastDataTime = TInstant::FromValue(lastDataReceiveTime);

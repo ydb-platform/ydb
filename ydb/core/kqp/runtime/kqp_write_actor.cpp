@@ -1608,7 +1608,8 @@ private:
                 TUniqueSecondaryKeyCollector collector(
                     KeyColumnTypes,
                     lookupInfo.Lookup->GetKeyColumnTypes(),
-                    lookupInfo.KeyIndexes);
+                    lookupInfo.KeyIndexes,
+                    lookupInfo.FullKeyIndexes);
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
@@ -1618,7 +1619,7 @@ private:
                     }
                 }
 
-                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+                const auto [uniqueSecondaryKeys, _] = std::move(collector).BuildUniqueSecondaryKeys();
 
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
@@ -1724,7 +1725,8 @@ private:
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
-                        lookupInfo.KeyIndexes);
+                        lookupInfo.KeyIndexes,
+                        lookupInfo.FullKeyIndexes);
 
                 // TODO: skip initial unchanged rows.
                 for (const auto& row : writeRows) {
@@ -1734,7 +1736,7 @@ private:
                     }
                 }
 
-                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+                const auto [uniqueSecondaryKeys, _] = std::move(collector).BuildUniqueSecondaryKeys();
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
@@ -1767,24 +1769,23 @@ private:
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId) {
-                const bool isUpdate = OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
-                const auto& keyIndexes = isUpdate
-                    ? lookupInfo.FullKeyIndexes
-                    : lookupInfo.KeyIndexes;
-
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
-                        keyIndexes);
+                        lookupInfo.KeyIndexes,
+                        lookupInfo.FullKeyIndexes);
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         AFL_ENSURE(collector.AddRow(row));
                     }
                 }
-                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+                const auto [uniqueSecondaryKeys, uniqueSecondaryKeysWithPk]  = std::move(collector).BuildUniqueSecondaryKeys();
 
                 lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-                    if (!IsError() && uniqueSecondaryKeys.contains(cells.first(keyIndexes.size())) != isUpdate) {
+                    AFL_ENSURE(cells.size() == lookupInfo.FullKeyIndexes.size());
+                    if (!IsError()
+                            && uniqueSecondaryKeys.contains(cells.first(lookupInfo.KeyIndexes.size()))
+                            && !uniqueSecondaryKeysWithPk.contains(cells)) {
                         Error = "TODO";
                     }
                 });

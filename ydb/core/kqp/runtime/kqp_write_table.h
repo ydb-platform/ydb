@@ -106,19 +106,24 @@ public:
     TUniqueSecondaryKeyCollector(
         const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
         const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
-        const TConstArrayRef<ui32> secondaryKeyColumns);
+        const TConstArrayRef<ui32> secondaryKeyColumns,
+        const TConstArrayRef<ui32> secondaryTableKeyColumns);
 
     bool AddRow(const TConstArrayRef<TCell> row);
 
-    THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> BuildUniqueSecondaryKeys() &&;
+    using TKeysSet = THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals>;
+
+    std::pair<TKeysSet, TKeysSet> BuildUniqueSecondaryKeys() &&;
 
 private:
     const TConstArrayRef<NScheme::TTypeInfo> PrimaryKeyColumnTypes;
     const TConstArrayRef<NScheme::TTypeInfo> SecondaryKeyColumnTypes;
     const TConstArrayRef<ui32> SecondaryKeyColumns;
+    const TConstArrayRef<ui32> SecondaryTableKeyColumns;
 
     std::vector<std::vector<TCell>> Cells;
-    THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> UniqueCellsSet;
+    TKeysSet UniqueCellsSet;
+    TKeysSet UniqueWithPkCellsSet;
     THashMap<TConstArrayRef<TCell>, TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
     THashMap<TConstArrayRef<TCell>, TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
 };

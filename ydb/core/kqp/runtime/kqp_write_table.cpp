@@ -1201,10 +1201,14 @@ std::vector<TConstArrayRef<TCell>> CutColumns(
 TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
     const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
     const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
-    const TConstArrayRef<ui32> secondaryKeyColumns)
+    const TConstArrayRef<ui32> secondaryKeyColumns,
+    const TConstArrayRef<ui32> secondaryTableKeyColumns)
         : PrimaryKeyColumnTypes(primaryKeyColumnTypes)
         , SecondaryKeyColumnTypes(secondaryKeyColumnTypes)
-        , SecondaryKeyColumns(secondaryKeyColumns) {
+        , SecondaryKeyColumns(secondaryKeyColumns)
+        , SecondaryTableKeyColumns(secondaryTableKeyColumns) {
+    AFL_ENSURE(secondaryKeyColumns.size() <= secondaryTableKeyColumns.size());
+    AFL_ENSURE(secondaryTableKeyColumns.size() <= primaryKeyColumnTypes.size() + secondaryKeyColumnTypes.size());
 }
 
 bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
@@ -1212,7 +1216,7 @@ bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
     {
         Cells.emplace_back();
         Cells.back().reserve(SecondaryKeyColumns.size());
-        for (const auto& index : SecondaryKeyColumns) {
+        for (const auto& index : SecondaryTableKeyColumns) {
             if (row[index].IsNull()) {
                 // In case on unique indexes NULL != NULL,
                 // so we don't need to check if rows with NULLs are unique. 
@@ -1235,7 +1239,8 @@ bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
             PrimaryToSecondary.erase(primaryKey);
         }
     } else {
-        const auto& secondaryKey = Cells.back();
+        const auto& secondaryTableKey = TConstArrayRef<TCell>(Cells.back());
+        const auto& secondaryKey = secondaryTableKey.first(SecondaryKeyColumns.size());
         const auto iterSecondary = SecondaryToPrimary.find(secondaryKey);
 
         if (iterSecondary != SecondaryToPrimary.end()
@@ -1264,14 +1269,17 @@ bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
         PrimaryToSecondary[primaryKey] = secondaryKey;
         SecondaryToPrimary[secondaryKey] = primaryKey;
 
-        UniqueCellsSet.insert(secondaryKey);
+        // TODO: only one set (UniqueWithPkCellsSet, UniqueCellsSet = UniqueWithPkCellsSet.first(secondarykey)) 
+        if (UniqueCellsSet.insert(secondaryKey).second) {
+            UniqueWithPkCellsSet.insert(secondaryTableKey);
+        }
     }
 
     return true;
 }
 
-THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> TUniqueSecondaryKeyCollector::BuildUniqueSecondaryKeys() && {
-    return std::move(UniqueCellsSet);
+std::pair<TUniqueSecondaryKeyCollector::TKeysSet, TUniqueSecondaryKeyCollector::TKeysSet> TUniqueSecondaryKeyCollector::BuildUniqueSecondaryKeys() && {
+    return {std::move(UniqueCellsSet), std::move(UniqueWithPkCellsSet)};
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,

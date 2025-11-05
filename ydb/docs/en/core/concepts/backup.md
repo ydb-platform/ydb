@@ -23,6 +23,8 @@ Backups can be created using different methods:
 || **Full snapshot** | Locally in database, s3-compatible storage, file system | One-time backups, database migration, testing, smaller production environments | ydb export/import or ydb dump/restore or link to [CLI docs](../reference/ydb-cli/export-import/index.md) | - |
 || **Incremental backup** | Locally in database, s3-compatible storage*, file system* | Production environments, large datasets, regular backup schedules | Requires backup collections - link to [backup collection docs](backup-collections.md) | Only tables are backed up for now |
 
+Incremental backups are more storage-efficient than creating multiple full backups, as they capture only changes since the previous backup rather than duplicating all data.
+
 \* In order to store incremental backup chain in s3-compatible storage or file system it is required to make a backup collection locally first, and then to back it up its directory using full snapshot backup.
 
 ## Backup collections {#backup-collections}

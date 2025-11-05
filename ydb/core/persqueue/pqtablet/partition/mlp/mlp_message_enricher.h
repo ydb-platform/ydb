@@ -12,7 +12,7 @@ namespace NKikimr::NPQ::NMLP {
 class TMessageEnricherActor : public TBaseActor<TMessageEnricherActor>
                             , public TConstantLogPrefix {
 
-    static constexpr TDuration Timeout = TDuration::Seconds(1);
+    static constexpr TDuration Timeout = TDuration::Seconds(5);
 
 public:
     TMessageEnricherActor(const TActorId& tabletActorId,

@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/public/mlp/ut/common.h>
+#include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 
 namespace NKikimr::NPQ::NMLP {
 

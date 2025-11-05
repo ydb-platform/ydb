@@ -33,6 +33,7 @@ public:
         MarkSourceId = 's',
         MarkUserDeprecated = 'u',
         MarkMLPSnapshot = 'S',
+        MarkMLPWAL = 'w',
     };
 
     enum EServiceType : char {

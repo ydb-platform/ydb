@@ -183,6 +183,11 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
                         continue;
                     }
                     
+                    // Skip deleted indexes
+                    if (childPath->Dropped()) {
+                        continue;
+                    }
+                    
                     // Get index info and filter for global sync only
                     // We need more complex logic for vector indexes in future
                     auto indexInfo = context.SS->Indexes.at(childPathId);

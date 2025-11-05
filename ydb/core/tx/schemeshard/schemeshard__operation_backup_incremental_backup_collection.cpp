@@ -246,6 +246,11 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                     continue;
                 }
+                
+                // Skip deleted indexes
+                if (childPath->Dropped()) {
+                    continue;
+                }
 
                 // Get index info and filter for global sync only
                 auto indexInfo = context.SS->Indexes.at(childPathId);

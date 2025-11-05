@@ -164,6 +164,11 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
                     continue;
                 }
+                
+                // Skip deleted indexes
+                if (childPath->Dropped()) {
+                    continue;
+                }
 
                 auto indexInfo = context.SS->Indexes.at(childPathId);
                 if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {

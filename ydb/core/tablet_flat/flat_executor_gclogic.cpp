@@ -188,8 +188,18 @@ void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
     for (auto channelId : ChannelsToCutHistory) {
         auto& channel = ChannelInfo[channelId];
         auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+        std::unordered_set<ui32> seenGroups;
+        auto allHistoryIt = TabletStorageInfo->Channels[channelId].History.begin();
         for (const auto* historyEntry : historyToCut) {
-            channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration, Max<ui32>()});
+            while (allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
+                seenGroups.insert(allHistoryIt->GroupID);
+                ++allHistoryIt;
+            }
+            if (!seenGroups.contains(historyEntry->GroupID)) {
+                // we can cut this entry AND entries before it do not use same group
+                // we can put a hard barrier on it
+                channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration, Max<ui32>()});
+            }
             channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
         }
     }

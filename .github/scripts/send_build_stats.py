@@ -7,7 +7,7 @@ import subprocess
 import sys
 import uuid
 
-# Добавляем путь к analytics скриптам
+# Add path to analytics scripts
 dir_path = os.path.dirname(__file__)
 sys.path.insert(0, f"{dir_path}/analytics")
 

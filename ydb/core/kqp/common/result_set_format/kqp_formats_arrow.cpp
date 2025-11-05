@@ -89,11 +89,11 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TTupleType* tupleT
     std::vector<std::shared_ptr<arrow::Field>> fields;
     fields.reserve(tupleType->GetElementsCount());
     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
-        auto elementName = std::string("field" + ToString(index));
+        auto elementName = "field" + std::to_string(index);
         auto elementType = tupleType->GetElementType(index);
         auto elementArrowType = NFormats::GetArrowType(elementType);
 
-        fields.push_back(std::make_shared<arrow::Field>(elementName, elementArrowType, elementType->IsOptional()));
+        fields.emplace_back(std::make_shared<arrow::Field>(elementName, elementArrowType, elementType->IsOptional()));
     }
     return arrow::struct_(fields);
 }

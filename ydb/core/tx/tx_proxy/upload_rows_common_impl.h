@@ -623,7 +623,7 @@ private:
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        request->DatabaseName = std::move(GetDatabase());
+        request->DatabaseName = GetDatabase();
 
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = ::NKikimr::SplitPath(table);
@@ -1049,7 +1049,7 @@ private:
         auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

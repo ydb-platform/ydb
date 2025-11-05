@@ -640,6 +640,7 @@ public:
             TVector<TKeyDesc::TColumnOp>{});
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
+        request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

@@ -9,7 +9,10 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(
+    ya:fat
+)
 
 DEPENDS(
     ydb/tests/stress/ctas

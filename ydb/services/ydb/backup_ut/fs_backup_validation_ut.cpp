@@ -1,3 +1,5 @@
+#include "backup_test_base.h"
+
 #include <ydb/services/ydb/ydb_common_ut.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
@@ -68,24 +70,10 @@ protected:
         return *Driver;
     }
 
-#define YDB_SDK_CLIENT(type, funcName)                               \
-    protected:                                                       \
-    TMaybe<type> Y_CAT(funcName, Instance);                          \
-    public:                                                          \
-    type& funcName() {                                               \
-        if (!Y_CAT(funcName, Instance)) {                            \
-            Y_CAT(funcName, Instance).ConstructInPlace(YdbDriver()); \
-        }                                                            \
-        return *Y_CAT(funcName, Instance);                           \
-    }                                                                \
-    /**/
-
     YDB_SDK_CLIENT(NYdb::NExport::TExportClient, YdbExportClient);
     YDB_SDK_CLIENT(NYdb::NImport::TImportClient, YdbImportClient);
     YDB_SDK_CLIENT(NYdb::NQuery::TQueryClient, YdbQueryClient);
     YDB_SDK_CLIENT(NYdb::NOperation::TOperationClient, YdbOperationClient);
-
-#undef YDB_SDK_CLIENT
 
     template <class TResponseType>
     void WaitOpSuccess(const TResponseType& res, const TString& comments = {}, 
@@ -159,14 +147,6 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path is required but not set",
             res.Status().GetIssues().ToString());
-
-        // Fix: provide base_path
-        {
-            // NExport::TExportToFsSettings fixSettings = settings;
-            // fixSettings.BasePath(TString(TempDir().Path()));
-            // auto res = YdbExportClient().ExportToFs(fixSettings).GetValueSync();
-            // WaitOpSuccess(res, "Export with base_path should succeed");
-        }
     }
 
     Y_UNIT_TEST(RelativeBasePath) {
@@ -182,6 +162,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path must be an absolute path",
             res.Status().GetIssues().ToString());
 
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
         // Fix: use absolute path
         {
             // NExport::TExportToFsSettings fixSettings = settings;
@@ -204,6 +185,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Unsupported compression codec",
             res.Status().GetIssues().ToString());
 
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
         // Fix: use valid codec
         {
             // NExport::TExportToFsSettings fixSettings = settings;
@@ -241,6 +223,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
             res.Status().GetIssues().ToString());
 
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
         // Fix: valid level
         {
             // NExport::TExportToFsSettings fixSettings = settings;
@@ -286,6 +269,15 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path must be an absolute path",
             res.Status().GetIssues().ToString());
+
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
+        // Fix: use absolute path
+        {
+            // NImport::TImportFromFsSettings fixSettings = settings;
+            // fixSettings.BasePath(TString(TempDir().Path()));
+            // auto res = YdbImportClient().ImportFromFs(fixSettings).GetValueSync();
+            // WaitOpSuccess(res, "Import with absolute base_path should succeed");
+        }
     }
 
     Y_UNIT_TEST(EmptyImportItem) {

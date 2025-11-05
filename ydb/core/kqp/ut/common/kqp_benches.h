@@ -1,12 +1,18 @@
 #pragma once
 
+#include <limits>
+#include <numeric>
+#include <random>
+#include <util/generic/array_size.h>
 #include <util/generic/utility.h>
+#include <util/generic/ylimits.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
 
 #include <chrono>
 #include <cassert>
 #include <algorithm>
+#include <queue>
 #include <cmath>
 #include <iomanip>
 
@@ -24,416 +30,234 @@ ui64 MeasureTimeNanos(Lambda &&lambda) {
     return Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
 }
 
-class TimeFormatter {
-public:
-    static std::string Format(uint64_t valueNs, ui64 uncertaintyNs) {
-        auto [unit, scale] = SelectUnit(valueNs);
 
-        double scaledValue = valueNs / scale;
-        double scaledUncertainty = uncertaintyNs / scale;
-
-        int decimalPlaces = GetDecimalPlaces(scaledUncertainty);
-
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(decimalPlaces);
-        oss << scaledValue << " " << unit << " ± " << scaledUncertainty << " " << unit;
-
-        return oss.str();
-    }
-
-    static std::string Format(uint64_t valueNs) {
-        auto [unit, scale] = SelectUnit(valueNs);
-        double scaledValue = valueNs / scale;
-
-        int decimalPlaces = GetDecimalPlacesForValue(scaledValue);
-
-        std::ostringstream oss;
-        oss << std::fixed << std::setprecision(decimalPlaces);
-        oss << scaledValue << " " << unit;
-
-        return oss.str();
-    }
-
-private:
-    static std::pair<std::string, double> SelectUnit(ui64 nanoseconds) {
-        if (nanoseconds >= 1'000'000'000) {
-            return {"s", 1e9};
-        } else if (nanoseconds >= 1'000'000) {
-            return {"ms", 1e6};
-        } else if (nanoseconds >= 1'000) {
-            return {"μs", 1e3};
-        } else {
-            return {"ns", 1.0};
-        }
-    }
-
-    static int GetDecimalPlaces(double scaledUncertainty) {
-        if (scaledUncertainty < 0.01) return 2;
-
-        double log_val = std::log10(scaledUncertainty);
-        int magnitude = static_cast<int>(std::floor(log_val));
-
-        if (scaledUncertainty >= 100.0) {
-            return 0;
-        } else if (scaledUncertainty >= 10.0) {
-            return 1;
-        } else if (scaledUncertainty >= 1.0) {
-            return 1;
-        } else {
-            return std::max(0, -magnitude + 1);
-        }
-    }
-
-    static int GetDecimalPlacesForValue(double scaledValue) {
-        if (scaledValue < 0.01) return 4;
-
-        double absValue = std::abs(scaledValue);
-
-        if (absValue >= 1000.0) {
-            return 0;
-        } else if (absValue >= 100.0) {
-            return 1;
-        } else if (absValue >= 10.0) {
-            return 2;
-        } else if (absValue >= 1.0) {
-            return 2;
-        } else if (absValue >= 0.1) {
-            return 3;
-        } else {
-            return 4;
-        }
-    }
-
-};
-
-template <typename TValue>
-struct TStatistics {
+struct TComputedStatistics {
     ui64 N;
-
-    TValue Min, Max;
+    double Min, Max;
 
     double Median;
     double MAD;
 
+    double Q1;
+    double Q3;
+    double IQR;
+
     double Mean;
     double Stdev;
 
-    double Q1;
-    double Q3;
-
-    double IQR;
-    std::vector<TValue> Outliers;
+    static std::string GetCSVHeader();
+    void ToCSV(IOutputStream &os) const;
 };
 
-void DumpTimeStatistics(TStatistics<ui64> stats, IOutputStream &OS) {
-    OS << "Median = " << TimeFormatter::Format(stats.Median, stats.MAD) << " (MAD)\n";
 
-    OS << "N = " << stats.N << "\n";
-    OS << "Min, Max = [ " << TimeFormatter::Format(stats.Min) << ", " << TimeFormatter::Format(stats.Max) << " ]\n";
+double CalculatePercentile(const std::vector<double>& data, double percentile);
+double CalculateMedian(std::vector<double>& data);
+double CalculateMAD(const std::vector<double>& data, double median, std::vector<double>& storage);
+double CalculateMean(const std::vector<double>& data);
+double CalculateSampleStdDev(const std::vector<double>& data, double mean);
 
-    OS << "Mean = " << TimeFormatter::Format(stats.Mean, stats.Stdev) << " (Std. dev.)\n";
-}
 
-// TValue is arithmetic and can be compared with itself, added to itself, and dividable by floats
-// TValue is assumed to be cheap to pass by value
-template <typename TValue>
+class TStatistics {
+public:
+    TStatistics(std::vector<double> samples, double min, double max)
+        : Samples_(std::move(samples))
+        , Min_(min)
+        , Max_(max)
+    {
+    }
+
+    TComputedStatistics ComputeStatistics() const;
+
+    ui64 GetN() const {
+        return Samples_.size();
+    }
+
+    double GetMin() const {
+        return Min_;
+    }
+
+    double GetMax() const {
+        return Max_;
+    }
+
+    void Merge(TStatistics other) {
+        Samples_.insert(Samples_.end(), other.Samples_.begin(), other.Samples_.end());
+        Min_ = std::min(Min_, other.Min_);
+        Max_ = std::min(Max_, other.Max_);
+    }
+
+    // Operations on two random values, very expensive.
+    // Each operation produces cartesian product of all possibilities if
+    // it's small enough or fallbacks to Monte Carlo methods if not.
+    TStatistics operator-(const TStatistics &rhs) const;
+    TStatistics operator+(const TStatistics &rhs) const;
+    TStatistics operator*(const TStatistics &rhs) const;
+    TStatistics operator/(const TStatistics &rhs) const;
+
+    // Only gives precisely correct min & max if you map with monotonic function
+    template <typename TMapLambda>
+    TStatistics Map(TMapLambda map) {
+        std::vector<double> samples;
+        double min = std::numeric_limits<double>::max();
+        double max = std::numeric_limits<double>::min();
+
+        for (double value : Samples_) {
+            double newValue = map(value);
+            samples.push_back(newValue);
+
+            min = std::min(newValue, min);
+            max = std::max(newValue, max);
+        }
+
+        double candidates[] = { min, max, map(Min_), map(Max_) };
+        return {
+            std::move(samples),
+            *std::min_element(candidates, candidates + Y_ARRAY_SIZE(candidates)),
+            *std::max_element(candidates, candidates + Y_ARRAY_SIZE(candidates))
+        };
+    }
+
+    template <typename TFilterLambda>
+    TStatistics Filter(TFilterLambda &&filter) const {
+        std::vector<double> samples;
+
+        // That's an upper bound since this function can only remove elements.
+        // This resize can be memory inefficient, but is likely faster.
+        samples.reserve(Samples_.size());
+
+        double min = std::numeric_limits<double>::max();
+        double max = std::numeric_limits<double>::min();
+
+        for (double value : Samples_) {
+            if (!filter(value)) {
+                continue;
+            }
+
+            samples.push_back(value);
+
+            min = std::min(value, min);
+            max = std::max(value, max);
+        }
+
+        double globalMin = filter(Min_) ? Min_ : min;
+        double globalMax = filter(Max_) ? Max_ : max;
+
+        return {std::move(samples), globalMin, globalMax};
+    }
+
+
+private:
+    mutable std::vector<double> Samples_;
+    double Min_;
+    double Max_;
+
+    // This lets us operate on two random values, it computes distribution of values after arbitrary operation
+    template <typename TCombiner>
+    std::vector<double>
+        Combine(const TStatistics& rhs, TCombiner&& combine, ui64 maxSamples = 1e8) const {
+
+        std::vector<double> combined;
+
+        ui64 cartesianProductSize = Samples_.size() * rhs.Samples_.size();
+
+        if (cartesianProductSize < maxSamples) {
+            combined.reserve(cartesianProductSize);
+
+            for (ui64 i = 0; i < Samples_.size(); ++ i) {
+                for (ui64 j = 0; j < rhs.Samples_.size(); ++ j) {
+                    combined.push_back(combine(Samples_[i], rhs.Samples_[j]));
+                }
+            }
+
+            return combined;
+        }
+
+        // Fallback to Monte Carlo if the sample size is too big:
+        std::random_device randomDevice;
+        std::mt19937 rng(/*seed=*/randomDevice());
+
+        std::uniform_int_distribution<> distributionLHSIdx(0, Samples_.size() - 1);
+        std::uniform_int_distribution<> distributionRHSIdx(0, rhs.Samples_.size() - 1);
+
+        for (ui64 repeatIdx = 0; repeatIdx < maxSamples; ++ repeatIdx) {
+            ui64 i = distributionLHSIdx(rng);
+            ui64 j = distributionRHSIdx(rng);
+
+            combined.push_back(combine(Samples_[i], rhs.Samples_[j]));
+        }
+
+        return combined;
+    }
+
+};
+
+
 class TRunningStatistics {
 public:
     TRunningStatistics()
-        : MaxHeap_()
-        , MinHeap_()
-        , N_(0)
+        : MinHeap_()
+        , MaxHeap_()
+        , Samples_()
+        , MADStorage_()
         , Total_(0)
         , Min_(std::nullopt)
         , Max_(std::nullopt)
     {
     }
 
-    void AddValue(TValue num) {
-        Total_ += num;
-        ++ N_;
+    void AddValue(double num);
 
-        if (!Min_) {
-            Min_ = num;
-        } else {
-            Min_ = Min(*Min_, num);
-        }
+    double GetMedian() const;
+    double CalculateMAD() const;
 
-        if (!Max_) {
-            Max_ = num;
-        } else {
-            Max_ = Max(*Max_, num);
-        };
-
-        if (MaxHeap_.empty() || num <= MaxHeap_[0]) {
-            MaxHeap_.push_back(num);
-            std::push_heap(MaxHeap_.begin(), MaxHeap_.end());
-        } else {
-            MinHeap_.push_back(num);
-            std::push_heap(MinHeap_.begin(), MinHeap_.end(), std::greater<TValue>{});
-        }
-
-        if (MaxHeap_.size() > MinHeap_.size() + 1) {
-            // MinHeap_.push(MaxHeap_.top());
-            MinHeap_.push_back(MaxHeap_[0]);
-            std::push_heap(MinHeap_.begin(), MinHeap_.end(), std::greater<TValue>{});
-
-            // MaxHeap_.pop();
-            std::pop_heap(MaxHeap_.begin(), MaxHeap_.end());
-            MaxHeap_.pop_back();
-        } else if (MinHeap_.size() > MaxHeap_.size()) {
-            // MaxHeap_.push(MinHeap_.top());
-            MaxHeap_.push_back(MinHeap_[0]);
-            std::push_heap(MaxHeap_.begin(), MaxHeap_.end());
-
-            // MinHeap_.pop();
-            std::pop_heap(MinHeap_.begin(), MinHeap_.end(), std::greater<TValue>{});
-            MinHeap_.pop_back();
-        }
-    }
-
-    double GetMean() const {
-        assert(N_ != 0);
-
-        return Total_ / static_cast<double>(N_);
-    }
-
-    double CalculateStdDev() const {
-        assert(N_ != 0);
-
-        if (N_ == 1) {
-            return 0;
-        }
-
-        auto mean = GetMean();
-
-        double deviationSquaresSum = 0;
-        auto addValue = [&](TValue value) {
-            double deviation = abs(value - mean);
-            deviationSquaresSum += deviation * deviation;
-        };
-
-        for (TValue value : MaxHeap_) {
-            addValue(value);
-        }
-
-        for (TValue value : MinHeap_) {
-            addValue(value);
-        }
-
-        return std::sqrt(deviationSquaresSum / (N_ - 1));
-    }
-
-    double GetMedian() const {
-        assert(!MaxHeap_.empty() || !MinHeap_.empty());
-
-        if (MaxHeap_.size() > MinHeap_.size()) {
-            return MaxHeap_[0];
-        } else {
-            return (MaxHeap_[0] + MinHeap_[0]) / 2.0;
-        }
-    }
-
-    double CalculateMAD() const {
-        assert(!MaxHeap_.empty() || !MinHeap_.empty());
-
-        std::vector<double> deviation;
-        double median = GetMedian();
-
-        IterateElements([&](TValue value) {
-            deviation.push_back(std::abs(value - median));
-        });
-
-        std::sort(deviation.begin(), deviation.end());
-        return (deviation[deviation.size() / 2] + deviation[(deviation.size() - 1) / 2]) / 2.0;
-
-    }
-
-    TValue GetMin() const {
-        assert(Min_);
-        return *Min_;
-    }
-
-    TValue GetMax() const {
-        assert(Max_);
-        return *Max_;
-    }
-
-    TValue GetTotal() const {
+    double GetTotal() const {
         return Total_;
     }
 
     ui32 GetN() const {
-        return N_;
+        return Samples_.size();
     }
 
-    TStatistics<TValue> GetStatistics() const {
-        auto elements = CollectElements();
-        std::sort(elements.begin(), elements.end());
-
-        double q1 = CalculateQuartile(elements, 0.25);
-        double q3 = CalculateQuartile(elements, 0.75);
-        double iqr = q3 - q1;
-
-        double median = GetMedian();
-
-        const double multiplier = 1.5;
-        double lowerFence = q1 - multiplier * iqr;
-        double upperFence = q3 + multiplier * iqr;
-
-        std::vector<TValue> outliers;
-        for (TValue value : elements) {
-            if (value < lowerFence || value > upperFence) {
-                outliers.push_back(value);
-            }
-        }
-
-        return {
-            .N = GetN(),
-            .Min = GetMin(),
-            .Max = GetMax(),
-            .Median = median,
-            .MAD = CalculateMAD(),
-            .Mean = GetMean(),
-            .Stdev = CalculateStdDev(),
-            .Q1 = q1,
-            .Q3 = q3,
-            .IQR = iqr,
-            .Outliers = outliers
-        };
+    double GetMin() const {
+        assert(Min_);
+        return *Min_;
     }
 
-    void AddValues(const TRunningStatistics<TValue>& other) {
-        TRunningStatistics<TValue> values;
-        other.IterateElements([&](TValue value) {
-            AddValue(value);
-        });
+    double GetMax() const {
+        assert(Max_);
+        return *Max_;
     }
 
-    std::vector<TValue> CollectElements() const {
-        std::vector<TValue> values;
-        IterateElements([&](TValue value) {
-            values.push_back(value);
-        });
-
-        return values;
-    }
-
-    template <typename TCast>
-    TRunningStatistics<TCast> Cast() const {
-        if constexpr (std::is_same_v<TValue, TCast>) {
-            return *this;
-        } else {
-            TRunningStatistics<TCast> stats;
-            IterateElements([&](TValue lhs) {
-                stats.AddValue(static_cast<TCast>(lhs));
-            });
-
-            return stats;
-        }
-    }
-
-    template <typename Lambda>
-    TRunningStatistics<TValue> Reject(Lambda &&shouldReject) const {
-        TRunningStatistics<TValue> stats;
-        IterateElements([&](TValue value) {
-            if (!shouldReject(value)) {
-                stats.AddValue(value);
-            }
-        });
-
-        return stats;
-    }
-
-    TRunningStatistics<i64> operator-(TRunningStatistics rhsStats) const {
-        TRunningStatistics<i64> stats;
-        IterateElements([&](TValue lhs) {
-            rhsStats.IterateElements([&](TValue rhs) {
-                stats.AddValue((i64) lhs - (i64) rhs);
-            });
-        });
-
-        return stats;
-    }
-
-    TRunningStatistics<double> operator/(TRunningStatistics rhsStats) const {
-        TRunningStatistics<double> stats;
-        IterateElements([&](TValue lhs) {
-            rhsStats.IterateElements([&](TValue rhs) {
-                stats.AddValue((double) lhs / (double) rhs);
-            });
-        });
-
-        return stats;
+    TStatistics GetStatistics() {
+        assert(GetN() > 0);
+        return {Samples_, *Min_, *Max_};
     }
 
 private:
-    std::vector<TValue> MaxHeap_;
-    std::vector<TValue> MinHeap_;
+    std::priority_queue<double, std::vector<double>, std::greater<double>> MinHeap_;
+    std::priority_queue<double, std::vector<double>> MaxHeap_;
 
-    // std::priority_queue<TValue, std::vector<TValue>> MaxHeap_;
-    // std::priority_queue<TValue, std::vector<TValue>, std::greater<TValue>> MinHeap_;
+    std::vector<double> Samples_;
 
-    ui32 N_;
-    TValue Total_;
+    // This vector is used to not allocate memory every time
+    // we are requested to compute MAD and need to calculate diviations
+    mutable std::vector<double> MADStorage_;
 
-    std::optional<TValue> Min_;
-    std::optional<TValue> Max_;
+    double Total_;
 
-private:
-    template <typename Lambda>
-    void IterateElements(Lambda &&lambda) const {
-        for (TValue value : MaxHeap_) {
-            lambda(value);
-        }
-
-        for (TValue value : MinHeap_) {
-            lambda(value);
-        }
-    }
-
-    static double CalculateQuartile(const std::vector<TValue>& data, double percentile) { // TODO: rename
-        assert(percentile >= 0.0 && percentile <= 1.0);
-        assert(std::is_sorted(data.begin(), data.end()));
-
-        double position = percentile * (data.size() - 1);
-        int lowerIndex = floor(position);
-        int upperIndex = ceil(position);
-
-        if (lowerIndex == upperIndex) {
-            return data[lowerIndex];
-        }
-
-        double weight = position - lowerIndex;
-        return data[lowerIndex] * (1 - weight) + data[upperIndex] * weight;
-    }
+    std::optional<double> Min_;
+    std::optional<double> Max_;
 };
 
-template <typename TValue>
-static std::string joinVector(const std::vector<TValue> &data, std::string delimeter = ";") {
-    if (data.empty()) {
-        return "";
-    }
-
-    std::string str;
-    str += std::to_string(data[0]);
-
-    for (ui32 i = 1; i < data.size(); ++ i) {
-        str += delimeter + std::to_string(data[i]);
-    }
-
-    return str;
-}
 
 
-std::string BoxPlotCSVHeader() {
-    return "median,Q1,Q3,IQR,MAD,min,max";
-}
+class TimeFormatter {
+public:
+    static std::string Format(uint64_t valueNs, ui64 uncertaintyNs);
+    static std::string Format(uint64_t valueNs);
+};
 
-template <typename TValue>
-void DumpBoxPlotToCSV(IOutputStream &os, TStatistics<TValue> stat) {
-    os << stat.Median << "," << stat.Q1  << "," << stat.Q3 << "," << stat.IQR << "," << stat.MAD << "," << stat.Min << "," << stat.Max;
-}
+void DumpTimeStatistics(const TComputedStatistics &stats, IOutputStream &OS);
 
 
 struct TRepeatedTestConfig {
@@ -443,25 +267,29 @@ struct TRepeatedTestConfig {
 };
 
 template <typename TLambda>
-std::optional<TRunningStatistics<ui64>> RepeatedTest(TRepeatedTestConfig config, ui64 singleRunTimeout, double thresholdMAD, TLambda &&lambda) {
+std::optional<TStatistics> RepeatedTest(TRepeatedTestConfig config, ui64 singleRunTimeout, double thresholdMAD, TLambda &&lambda) {
     assert(config.MinRepeats >= 1);
 
-    TRunningStatistics<ui64> stats;
+    TRunningStatistics stats;
     do {
         bool hasTimedOut = false;
         ui64 ellapsedTime = MeasureTimeNanos([&]() { hasTimedOut = !lambda(); });
 
-        if (hasTimedOut || ellapsedTime > singleRunTimeout) {
+        if (hasTimedOut) {
             return std::nullopt;
+        }
+
+        if (ellapsedTime > singleRunTimeout) {
+            break;
         }
 
         stats.AddValue(ellapsedTime);
     } while ((stats.GetN() < config.MaxRepeats) &&
              (stats.GetN() < config.MinRepeats ||
-              (stats.GetTotal() + stats.GetMedian() <= config.Timeout &&
+              (stats.GetTotal() + stats.GetMedian() < config.Timeout &&
                stats.CalculateMAD() / stats.GetMedian() > thresholdMAD)));
 
-    return stats;
+    return std::move(stats).GetStatistics();
 }
 
 
@@ -473,7 +301,7 @@ struct TBenchmarkConfig {
 };
 
 template <typename Lambda>
-std::optional<TRunningStatistics<ui64>> Benchmark(TBenchmarkConfig config, Lambda &&lambda) {
+std::optional<TStatistics> Benchmark(TBenchmarkConfig config, Lambda &&lambda) {
     if (config.Warmup.MaxRepeats != 0) {
         auto warmupStats = RepeatedTest(config.Warmup, config.SingleRunTimeout, config.MADThreshold, lambda);
         if (!warmupStats) {

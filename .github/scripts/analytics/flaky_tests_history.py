@@ -10,27 +10,29 @@ from ydb_wrapper import YDBWrapper
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument('--build_type', default='relwithdebinfo', type=str, help='build types')
     parser.add_argument('--branch', default='main', type=str, help='branch')
 
     args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
     build_type = args.build_type
     branch = args.branch
+    
+    # Always use 1 day window
+    history_for_n_day = 1
     
     print(f'🚀 Starting flaky_tests_history.py')
     print(f'   📅 Days window: {history_for_n_day}')
     print(f'   🔧 Build type: {build_type}')
     print(f'   🌿 Branch: {branch}')
     
-    script_name = os.path.basename(__file__)
-    
-    # Инициализируем YDB обертку с контекстным менеджером для автоматического закрытия
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        testowners_table = ydb_wrapper.get_table_path("testowners")
+        flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
       
         # Получаем последнюю дату из истории
-        table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
+        table_path = flaky_tests_table
         last_date_query = f"""
             select max(date_window) as max_date_window from `{table_path}`
             where build_type = '{build_type}' and branch = '{branch}'
@@ -136,7 +138,7 @@ def main():
                                 Date('{date}') as date_base,
                                 '{build_type}' as  build_type,
                                 '{branch}' as  branch
-                            from  `test_results/analytics/testowners` 
+                            from  `{testowners_table}` 
                         ) as test_and_date
                         left JOIN (
                             
@@ -144,10 +146,10 @@ def main():
                                 suite_folder || '/' || test_name as full_name,
                                 run_timestamp,
                                 status
-                            from  `test_results/test_runs_column`
+                            from  `{test_runs_table}`
                             where
                                 run_timestamp <= Date('{date}') + Interval("P1D")
-                                and run_timestamp >= Date('{date}') - {history_for_n_day+1}*Interval("P1D") 
+                                and run_timestamp >= Date('{date}') - 2*Interval("P1D") 
 
                                 and job_name in (
                                     'Nightly-run',
@@ -219,8 +221,7 @@ def main():
                     .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                 )
                 
-                full_path = f"{ydb_wrapper.database_path}/{table_path}"
-                ydb_wrapper.bulk_upsert_batches(full_path, all_prepared_rows, column_types, batch_size=1000)
+                ydb_wrapper.bulk_upsert_batches(table_path, all_prepared_rows, column_types, batch_size=1000)
                 
                 print('✅ History updated successfully')
             else:

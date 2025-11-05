@@ -102,10 +102,8 @@ def main():
 
     table_path = args.table_path
     batch_size = 1000
-    script_name = os.path.basename(__file__)
 
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
@@ -122,10 +120,8 @@ def main():
             print("No data to create table from.")
             return
 
-        # Create table if not exists based on sample column types
-        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
         create_table_if_not_exists(
-            ydb_wrapper, full_table_path, column_types, args.store_type,
+            ydb_wrapper, table_path, column_types, args.store_type,
             args.partition_keys, args.primary_keys, args.ttl_min, args.ttl_key
         )
 
@@ -137,8 +133,7 @@ def main():
             column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, args.store_type.upper())
             column_types_map.add_column(column_name, column_type_obj)
         
-        # Используем bulk_upsert_batches для агрегированной статистики
-        ydb_wrapper.bulk_upsert_batches(full_table_path, results, column_types_map, batch_size)
+        ydb_wrapper.bulk_upsert_batches(table_path, results, column_types_map, batch_size)
         
         print('Data uploaded')
 

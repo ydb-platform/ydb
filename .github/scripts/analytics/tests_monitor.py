@@ -230,7 +230,6 @@ def compute_owner(owner):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
     parser.add_argument(
         '--build_type',
         choices=['relwithdebinfo', 'release-asan', 'release-tsan', 'release-msan'],
@@ -253,21 +252,26 @@ def main():
     )
 
     args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
+    # Always use 1 day window
+    history_for_n_day = 1
     build_type = args.build_type
     branch = args.branch
     concurrent_mode = args.concurrent_mode
 
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:        
+    with YDBWrapper() as ydb_wrapper:        
         if not ydb_wrapper.check_credentials():
             return 1
+        
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+        all_tests_table = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
+        flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
         
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
-        table_path = f'test_results/analytics/tests_monitor'
+        table_path = tests_monitor_table
 
         # Get last existing day
         print("Geting date of last collected monitor data")
@@ -295,7 +299,7 @@ def main():
         # Try to find the earliest date when this branch had any test runs
         query_branch_creation = f"""
             SELECT MIN(run_timestamp) as earliest_run
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE branch = '{branch}' AND build_type = '{build_type}'
         """
         
@@ -440,7 +444,7 @@ def main():
                     hist.test_name AS test_name
                 FROM (
                     SELECT * FROM
-                    `test_results/analytics/flaky_tests_window_{history_for_n_day}_days` 
+                    `{flaky_tests_table}` 
                     WHERE 
                     date_window = Date('{date}')
                     AND build_type = '{build_type}' 
@@ -455,7 +459,7 @@ def main():
                         is_muted,
                         date
                     FROM 
-                        `test_results/all_tests_with_owner_and_mute`
+                        `{all_tests_table}`
                     WHERE 
                         branch = '{branch}'
                         AND date = Date('{date}')
@@ -670,7 +674,6 @@ def main():
 
         # Create table and bulk upsert using ydb_wrapper
         create_tables(ydb_wrapper, table_path)
-        full_path = f"{ydb_wrapper.database_path}/{table_path}"
 
         chunk_size = 40000
 
@@ -708,8 +711,7 @@ def main():
             .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         )
         
-        # Используем bulk_upsert_batches для агрегированной статистики
-        ydb_wrapper.bulk_upsert_batches(full_path, prepared_for_update_rows, column_types, chunk_size)
+        ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_update_rows, column_types, chunk_size)
 
         end_time = time.time()
         print(f'monitor data upserted: {end_time - start_upsert_time}')

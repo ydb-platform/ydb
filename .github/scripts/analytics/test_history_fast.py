@@ -24,12 +24,12 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
             `status` Utf8,
             `status_description` Utf8,
             `owners` Utf8,
-            PRIMARY KEY (`run_timestamp`, `full_name`, `job_name`, `branch`, `build_type`, test_id)
+            PRIMARY KEY (`run_timestamp`, `build_type`, `branch`, `full_name`, `job_name`, `test_id`)
         )
-        PARTITION BY HASH(run_timestamp)
+        PARTITION BY HASH(`run_timestamp`, `build_type`, `branch`, `full_name`)
         WITH (
         STORE = COLUMN,
-        TTL = Interval("P7D") ON run_timestamp
+        TTL = Interval("P60D") ON run_timestamp
         )
     """
     ydb_wrapper.create_table(table_path, create_sql)
@@ -59,7 +59,7 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     ) as fast_data_missed
     ON all_data.run_timestamp = fast_data_missed.run_timestamp
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
+        all_data.run_timestamp >= CurrentUtcDate() - 2*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
         and (CASE 
             WHEN String::Contains(all_data.test_name, 'sole chunk') 

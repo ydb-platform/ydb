@@ -98,7 +98,6 @@ namespace NYql::NDq {
             // all the splits from all partitions will be packed into a single ReadSplits call.
             // There's a lot of space for the optimizations here.
             NConnector::NApi::TReadSplitsRequest request;
-            *request.mutable_data_source_instance() = Source_.select().data_source_instance();
             request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
             request.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
 

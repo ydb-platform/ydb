@@ -883,10 +883,17 @@ namespace NYql::NConnector::NTest {
                         setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_))));
                         break;
                     case EArgsValidation::DataSourceInstance:
-                        setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher([expected = Result_->data_source_instance()](const NConnector::NApi::TReadSplitsRequest& actual) {
-                            return MatchProtos(expected, actual.data_source_instance());
-                        }))));
-                        break;
+                        if (!Result_->splits().empty()) {
+                            setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher([expected = Result_->splits(0).select().data_source_instance()](const NConnector::NApi::TReadSplitsRequest& actual) {
+                                for (const auto& split : actual.splits()) {
+                                    if (!MatchProtos(expected, split.select().data_source_instance())) {
+                                        return false;
+                                    }
+                                }
+                                return true;
+                            }))));
+                            break;
+                        }
                     case EArgsValidation::Off:
                         setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher([](const auto&) { return true; }))));
                         break;

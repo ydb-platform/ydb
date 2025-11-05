@@ -689,7 +689,6 @@ public:
         {
             auto columnsBuilder = readSplitsBuilder
                 .Filtering(TReadSplitsRequest::FILTERING_OPTIONAL)
-                .DataSourceInstance(GetMockConnectorSourceInstance())
                 .ValidateArgs(settings.ValidateReadSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
                 .Split()
                     .Description("some binary description")

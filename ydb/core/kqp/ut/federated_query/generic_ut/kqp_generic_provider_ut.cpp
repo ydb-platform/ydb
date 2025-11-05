@@ -239,7 +239,6 @@ namespace NKikimr::NKqp {
             std::vector<ui16> colData = {10, 20, 30, 40, 50};
             clientMock->ExpectReadSplits()
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -361,7 +360,6 @@ namespace NKikimr::NKqp {
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -479,7 +477,6 @@ namespace NKikimr::NKqp {
             // step 3: ReadSplits
             clientMock->ExpectReadSplits()
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
-                .DataSourceInstance(dataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select()
@@ -601,7 +598,6 @@ namespace NKikimr::NKqp {
 
             f->ClientMock->ExpectReadSplits()
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
-                .DataSourceInstance(f->DataSourceInstance)
                 .Split()
                     .Description("some binary description")
                     .Select(expectedSelect)

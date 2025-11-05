@@ -18,6 +18,8 @@
 
 namespace NKikimr::NMiniKQL {
 
+namespace {
+
 struct IColumnDataExtractor {
     using TPtr = std::unique_ptr<IColumnDataExtractor>;
 
@@ -627,6 +629,8 @@ private:
     TVector<TVector<ui32>> InnerMapping_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
 };
+
+} // anonymous namespace
 
 // ------------------------------------------------------------
 

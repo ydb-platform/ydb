@@ -1168,8 +1168,16 @@
     "kind": "Normal"
   },
   {
+    "name": "RandomSample",
+    "kind": "Agg"
+  },
+  {
     "name": "RandomUuid",
     "kind": "Normal"
+  },
+  {
+    "name": "RandomValue",
+    "kind": "Agg"
   },
   {
     "name": "Rank",

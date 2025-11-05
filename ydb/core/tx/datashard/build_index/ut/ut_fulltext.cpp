@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         options.Shards(1);
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {TokenColumn, NTableIndex::NFulltext::TokenTypeName, true, true},
+            {TokenColumn, "String", true, true},
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
         });
@@ -266,7 +266,7 @@ __ydb_token = yellow, key = 3, data = three
             options.Shards(1);
             options.AllowSystemColumnNames(true);
             options.Columns({
-                {TokenColumn, NTableIndex::NFulltext::TokenTypeName, true, true},
+                {TokenColumn, "String", true, true},
                 {"key", "Uint32", true, true},
                 {"text", "String", false, false},
                 {"data", "String", false, false},
@@ -331,7 +331,7 @@ __ydb_token = yellow, key = 3, text = yellow apple, data = three
             options.Shards(1);
             options.AllowSystemColumnNames(true);
             options.Columns({
-                {TokenColumn, NTableIndex::NFulltext::TokenTypeName, true, true},
+                {TokenColumn, "String", true, true},
                 {"key", "Uint32", true, true},
                 {"text", "String", true, true},
                 {"subkey", "Uint32", true, true},

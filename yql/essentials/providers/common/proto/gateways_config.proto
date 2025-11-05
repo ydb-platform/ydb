@@ -236,6 +236,7 @@ message TClickHouseClusterConfig {
     optional string Id = 13;
     repeated string GroupAllowed = 14;
     optional bool ForceUseBalancer = 15 [default = false];
+    optional bool JsonFormatHeader = 16 [default = false];
 }
 
 message TClickHouseGatewayConfig {
@@ -733,6 +734,17 @@ message TIcebergDataSourceOptions {
     optional TIcebergWarehouse warehouse = 2;
 }
 
+// TYdbDataSourceOptions represents settings specific for YDB data source
+message TYdbDataSourceOptions {
+    // EQueryDataFormat determines the format of the data returned by the YDB server
+    enum EQueryDataFormat {
+        QUERY_DATA_FORMAT_UNSPECIFIED = 0;
+        ARROW = 1; 
+    }
+
+    optional EQueryDataFormat query_data_format = 1;
+}
+
 // TGenericDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TGenericDataSourceInstance {
     // Data source kind
@@ -759,6 +771,7 @@ message TGenericDataSourceInstance {
         TLoggingDataSourceOptions logging_options = 12;
         TMongoDbDataSourceOptions mongodb_options = 13;
         TIcebergDataSourceOptions iceberg_options = 14;
+        TYdbDataSourceOptions ydb_options = 15;
     }
 }
 

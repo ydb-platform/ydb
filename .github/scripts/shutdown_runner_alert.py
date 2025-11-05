@@ -35,9 +35,7 @@ def get_workflows_from_ts(owner, repo, token, ts, max_runs=50):
         response.raise_for_status()
         workflow_runs += response.json()['workflow_runs']
 
-        if str_to_date(workflow_runs[-1]['created_at']) < ts:
-            break
-    return list(filter(lambda run: str_to_date(run['created_at']) >= ts, workflow_runs))
+    return list(filter(lambda run: str_to_date(run['updated_at']) >= ts, workflow_runs))
 
 
 def get_workflow_jobs(owner, repo, run_id, token):
@@ -116,19 +114,21 @@ def main():
         current_date = datetime.datetime.now()
         workflows = get_workflows_from_ts(owner, repo, token, current_date - datetime.timedelta(hours=args.hours_delta), max_runs=args.max_rows)
         print(f'Got {len(workflows)} workflows created from the last {args.hours_delta} hours')
-        recent_workflows = sorted(workflows, key=lambda x: x['created_at'], reverse=True)
+        recent_workflows = sorted(workflows, key=lambda x: x['updated_at'], reverse=True)
 
         errors = []
         for workflow in recent_workflows:
             if check_logs_for_shutdown_signal(owner, repo, workflow['id'], token):
                 print(f"\n🔴 SHUTDOWN ERROR - Workflow #{workflow['id']}")
                 print(f"Created: {workflow['created_at']}")
+                print(f"Finished: {workflow['updated_at']}")
                 print(f"URL: {workflow['html_url']}")
                 print(f"PR: {workflow['pull_requests'][0]['url'] if workflow['pull_requests'] else 'N/A'}")
                 errors.append({
                     "workflow_id": workflow['id'],
                     "workflow_name": workflow['name'],
                     "created_at": str_to_date(workflow['created_at']).strftime('%Y-%m-%d %H:%M'),
+                    "updated_at": str_to_date(workflow['updated_at']).strftime('%Y-%m-%d %H:%M'),
                     "workflow_url": workflow['html_url'],
                     "pr_url": workflow['pull_requests'][0]['url'] if workflow['pull_requests'] else None
                 })
@@ -142,7 +142,8 @@ def main():
             for error in errors:
                 message += f"""
 • Workflow *{error['workflow_name']}* [#{error['workflow_id']}]({error['workflow_url']})
-  Created at: {error['created_at']}"""
+  Created at: {error['created_at']}
+  Finished at: {error['updated_at']}"""
                 if error['pr_url']:
                     message += f"""
   Linked PR: {error['pr_url']}"""

@@ -70,7 +70,7 @@ public:
         }
 
         ::epoll_event ev;
-        memset((void*)&ev, 0, sizeof(ev));
+        memset(reinterpret_cast<void*>(&ev), 0, sizeof(ev));
 
         ev.events = EPOLLIN;
         ev.data.fd = sigFD;

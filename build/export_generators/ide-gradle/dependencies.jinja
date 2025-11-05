@@ -127,10 +127,11 @@ dependencies {
 {%- endif %}
 
 {%- if proto_template -%}
-{%-     if target.proto_namespace %}
-    protobuf(files(mainProtosDir.map { it.dir("{{ target.proto_namespace }}") }))
-{%-     else %}
-    protobuf(files(mainProtosDir))
-{%-     endif -%}
+{%-     if prepareProtosTask %}
+    protobuf(files(prepareMainProtos))
+{%-     endif %}
+{%-     if extractLibrariesProtosTask %}
+    implementation(files(prepareMainIncludeProtos))
+{%-     endif %}
 {%- endif %}
 }

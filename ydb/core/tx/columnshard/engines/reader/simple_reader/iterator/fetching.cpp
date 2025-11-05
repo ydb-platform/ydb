@@ -58,7 +58,6 @@ void VerifyConflictingPortion(const std::shared_ptr<NCommon::IDataSource>& sourc
 
 TConclusion<bool> TConflictDetector::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    
     VerifyConflictingPortion(source);
     // it is not empty (not filtered everything out by other filters) and conflicting, so we must mark the conflict here
     AFL_VERIFY(source->AddTxConflict());

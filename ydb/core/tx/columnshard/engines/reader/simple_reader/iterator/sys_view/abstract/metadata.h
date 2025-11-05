@@ -28,6 +28,10 @@ public:
         return "SIMPLE";
     }
 
+    virtual bool OrderByLimitAllowed() const override {
+        return false;
+    }
+
     virtual bool NeedDuplicateFiltering() const override {
         return false;
     }

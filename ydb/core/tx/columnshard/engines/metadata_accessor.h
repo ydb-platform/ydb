@@ -24,6 +24,10 @@ private:
 
 public:
     ITableMetadataAccessor(const TString& tablePath);
+
+    virtual bool OrderByLimitAllowed() const {
+        return true;
+    }
     virtual bool NeedDuplicateFiltering() const {
         return true;
     }

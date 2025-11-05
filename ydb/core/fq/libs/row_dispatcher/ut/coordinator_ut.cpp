@@ -263,6 +263,17 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
             Ping(id);
         }
         
+        MockRequest(ReadActor1, "endpoint1", "read_group", "topic1", {0, 1, 2});
+        auto result1 = ExpectResult(ReadActor1);
+        UNIT_ASSERT(result1.PartitionsSize() == 3);
+
+        auto event = new NActors::TEvInterconnect::TEvNodeDisconnected(RowDispatcher2Id.NodeId());
+        Runtime.Send(new NActors::IEventHandle(Coordinator, RowDispatcher2Id, event));
+
+        ExpectDistributionReset(ReadActor1);
+
+        MockRequest(ReadActor1, "endpoint1", "read_group", "topic1", {0, 1, 2});
+        UNIT_ASSERT(result1.PartitionsSize() == 2);
     }
 }
 

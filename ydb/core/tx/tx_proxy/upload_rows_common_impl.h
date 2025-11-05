@@ -602,6 +602,7 @@ private:
                 return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
             }
 
+            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
             UploadCounters.OnMissingDefaultColumns();
             LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
         }

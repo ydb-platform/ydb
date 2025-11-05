@@ -272,11 +272,13 @@ private:
 void NormalizeProbabilities(std::vector<double>& probabilities);
 
 std::vector<int> SampleFromPMF(
+    TRNG& rng,
     const std::vector<double>& probabilities,
     int numVertices, int minDegree);
 
 std::vector<int> GenerateLogNormalDegrees(
-    int numVertices, double logMean = 1.0, double logStdDev = 0.5,
+    TRNG& rng, int numVertices,
+    double logMean = 1.0, double logStdDev = 0.5,
     int minDegree = 1, int maxDegree = -1
 );
 

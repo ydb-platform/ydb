@@ -1,5 +1,7 @@
+#include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <util/generic/ptr.h>
@@ -316,33 +318,66 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         };
     }
 
+    struct TBenchState {
+        ui32 Seed;
+        ui32 TopologyCounter;
+        ui32 MCMCCounter;
+        ui32 KeyCounter;
+
+        std::string toHex() const {
+            std::stringstream ss;
+            ss << std::hex << std::setfill('0');
+            ss << std::setw(8) << Seed
+               << std::setw(8) << TopologyCounter
+               << std::setw(8) << MCMCCounter
+               << std::setw(8) << KeyCounter;
+            return ss.str();
+        }
+
+        static TBenchState fromHex(const std::string& hex) {
+            TBenchState state;
+            ui32* parts[] = {&state.Seed, &state.TopologyCounter, &state.MCMCCounter, &state.KeyCounter};
+            for (ui32 i = 0; i < 4; ++ i) {
+                *parts[i] = std::stoul(hex.substr(i * 8, 8), nullptr, 16);
+            }
+
+            return state;
+        }
+    };
+
     struct TTestContext {
         std::unique_ptr<TKikimrRunner> Runner;
         NYdb::NQuery::TQueryClient QueryClient;
         NYdb::NQuery::TSession Session;
 
+        std::optional<TBenchState> State;
         TRNG RNG;
+
         std::string OutputDir;
         std::map<std::string, TUnbufferedFileOutput> Streams = {};
 
     };
 
-    TTestContext CreateTestContext(TArgs args, uint64_t state = 0, std::string outputDir = "") {
-        TRNG rng = TRNG::Deserialize(state);
+    TTestContext CreateTestContext(TArgs args, std::string outputDir = "") {
+        std::random_device randomDevice;
+        TRNG rng(randomDevice() % UINT32_MAX);
+
+        std::optional<TBenchState> state;
+        if (args.HasArg("state")) {
+            state = TBenchState::fromHex(args.GetString("state"));
+            rng.seed(state->Seed);
+        }
 
         auto numTablesRanged = args.GetArg<uint64_t>("N");
 
-        rng.reset(); // ensure this setup is always the same
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTablesRanged.GetLast());
         TString stats = TSchemaStats::MakeRandom(rng, fullSchema, 7, 10).ToJSON();
-
-        rng.Restore(state);
 
         auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(10));
         auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        return { std::move(kikimr), std::move(db), std::move(session), std::move(rng), outputDir };
+        return { std::move(kikimr), std::move(db), std::move(session), state, std::move(rng), outputDir };
     }
 
     std::string WriteGraph(TTestContext &ctx, ui32 graphID, const TRelationGraph &graph) {
@@ -433,7 +468,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         if (topologyName == "mcmc") {
             return []([[maybe_unused]] TRNG rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
                 Cout << "================================= METRICS ================================\n";
-                auto sampledDegrees = GenerateLogNormalDegrees(n, mu, sigma);
+                auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 Cout << "sampled degrees: " << JoinSeq(", ", sampledDegrees) << "\n";
 
                 auto graphicDegrees = MakeGraphicConnected(sampledDegrees);
@@ -447,7 +482,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         if (topologyName == "chung-lu") {
             return []([[maybe_unused]] TRNG rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
                 Cout << "================================= METRICS ================================\n";
-                auto initialDegrees = GenerateLogNormalDegrees(n, mu, sigma);
+                auto initialDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 Cout << "initial degrees: " << JoinSeq(", ", initialDegrees) << "\n";
 
                 auto initialGraph = GenerateRandomChungLuGraph(rng, initialDegrees);
@@ -461,14 +496,15 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     void RunBenches(TTestContext &ctx, TBenchmarkConfig config, TArgs args) {
         std::string resultType = args.GetStringOrDefault("result", "SE");
 
-        ui64 generationRepeats = args.GetArgOrDefault<uint64_t>("gen", "1").GetValue();
-        ui64 repeats = args.GetArgOrDefault<uint64_t>("repeats", "1").GetValue();
+        ui64 topologyGenerationRepeats = args.GetArgOrDefault<uint64_t>("gen-n", "1").GetValue();
+        ui64 mcmcRepeats = args.GetArgOrDefault<uint64_t>("mcmc-n", "1").GetValue();
+        ui64 equiJoinKeysGenerationRepeats = args.GetArgOrDefault<uint64_t>("keys-n", "1").GetValue();
 
         std::string topologyName = args.GetStringOrDefault("type", "star");
         auto generateTopology = GetTopology(topologyName);
 
         std::string headerAggregate = "idx,N,alpha,theta,sigma,mu," + TComputedStatistics::GetCSVHeader();
-        std::string header = "idx,seed,graph_name,aggregate_" + headerAggregate;
+        std::string header = "idx,state,graph_name,aggregate_" + headerAggregate;
 
         ui32 idx = 0;
         ui32 aggregateIdx = 0;
@@ -485,45 +521,68 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                          << "," << sigma << "," << mu;
 
                             std::map<std::string, TStatistics> aggregate;
-                            for (ui64 j = 0; j < generationRepeats; ++ j) {
+                            for (ui64 i = 0; i < topologyGenerationRepeats; ++ i) {
                                 Cout << "\n\n\n";
+
+                                if (ctx.State) {
+                                    ctx.RNG.Forward(ctx.State->TopologyCounter);
+                                }
+
+                                ui32 counterTopology = ctx.RNG.GetCounter();
                                 auto initialGraph = generateTopology(ctx.RNG, n, mu, sigma);
 
-                                for (ui64 i = 0; i < repeats; ++ i) {
-                                    ui64 seed = ctx.RNG.Serialize();
-
-                                    Cout << "\n\nReproduce: ya make -r -ttt --test-param TOPOLOGY='";
-                                    Cout << "type=" << topologyName << "; "
-                                         << "N=" << n << "; "
-                                         << "alpha=" << alpha << "; "
-                                         << "theta=" << theta << "; "
-                                         << "sigma=" << sigma << "; "
-                                         << "mu=" << mu << "; "
-                                         << "seed=" << ctx.RNG.Serialize() << "'\n";
-
-
+                                for (ui64 j = 0; j < mcmcRepeats; ++ j) {
                                     TRelationGraph graph = initialGraph;
-                                    if (i != 0) {
+
+                                    if (ctx.State) {
+                                        ctx.RNG.Forward(ctx.State->MCMCCounter);
+                                    }
+
+                                    ui32 counterMCMC = ctx.RNG.GetCounter();
+                                    if (topologyName == "mcmc") {
                                         MCMCRandomize(ctx.RNG, graph);
                                     }
 
-                                    graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
-
-                                    try {
-                                        auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
-                                        if (!result) {
-                                            goto stop;
+                                    for (ui64 k = 0; k < equiJoinKeysGenerationRepeats; ++ k) {
+                                        if (ctx.State) {
+                                            ctx.RNG.Forward(ctx.State->KeyCounter);
                                         }
 
-                                        AccumulateAllStats(aggregate, *result);
-                                        std::string graphName = WriteGraph(ctx, idx, graph);
+                                        ui32 counterKeys = ctx.RNG.GetCounter();
+                                        graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
-                                        std::stringstream params;
-                                        params << idx ++ << "," << seed << "," << graphName << "," << commonParams.str();
-                                        WriteAllStats(ctx, "", header, params.str(), *result);
-                                    } catch (std::exception &exc) {
-                                        Cout << "Skipped run: " << exc.what() << "\n";
-                                        continue;
+                                        std::string state = TBenchState(ctx.RNG.GetSeed(), counterTopology, counterMCMC, counterKeys).toHex();
+
+                                        Cout << "\n\nReproduce: TOPOLOGY='";
+                                        Cout << "type=" << topologyName << "; "
+                                            << "N=" << n << "; "
+                                            << "alpha=" << alpha << "; "
+                                            << "theta=" << theta << "; "
+                                            << "sigma=" << sigma << "; "
+                                            << "mu=" << mu << "; "
+                                             << "state=" << state << "'\n";
+
+                                        try {
+                                            auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
+                                            if (!result) {
+                                                goto stop;
+                                            }
+
+                                            AccumulateAllStats(aggregate, *result);
+                                            std::string graphName = WriteGraph(ctx, idx, graph);
+
+                                            std::stringstream params;
+                                            params << idx ++ << "," << state << "," << graphName << "," << commonParams.str();
+                                            WriteAllStats(ctx, "", header, params.str(), *result);
+                                        } catch (std::exception &exc) {
+                                            Cout << "Skipped run: " << exc.what() << "\n";
+                                            continue;
+                                        }
+
+                                        if (ctx.State) {
+                                            // We are running in reproducibility mode, stop immediately after case is reproduced
+                                            return;
+                                        }
                                     }
                                 }
                             }
@@ -550,8 +609,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto config = GetBenchmarkConfig(args);
         DumpBenchmarkConfig(Cout, config);
 
-        uint64_t state = args.GetArgOrDefault<ui64>("seed", "0").GetValue();
-        TTestContext ctx = CreateTestContext(args, state, GetTestParam("SAVE_DIR"));
+        TTestContext ctx = CreateTestContext(args, GetTestParam("SAVE_DIR"));
 
         RunBenches(ctx, config, args);
     }

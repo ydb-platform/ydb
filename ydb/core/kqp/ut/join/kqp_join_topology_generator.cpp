@@ -419,23 +419,17 @@ void NormalizeProbabilities(std::vector<double>& probabilities) {
     }
 }
 
-std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
-                               int numVertices, int minDegree) {
-    std::random_device randomDevice;
-    std::mt19937 generator(randomDevice());
-    std::discrete_distribution<int> distribution(probabilities.begin(),
-                                                 probabilities.end());
+std::vector<int> SampleFromPMF(TRNG& rng, const std::vector<double>& probabilities, int numVertices, int minDegree) {
+    std::discrete_distribution<int> distribution(probabilities.begin(), probabilities.end());
 
     std::vector<int> degrees(numVertices);
     for (int i = 0; i < numVertices; i++) {
-        degrees[i] = distribution(generator) + minDegree;
+        degrees[i] = distribution(rng) + minDegree;
     }
     return degrees;
 }
 
-std::vector<int> GenerateLogNormalDegrees(int numVertices, double mu,
-                                          double sigma, int minDegree,
-                                          int maxDegree) {
+std::vector<int> GenerateLogNormalDegrees(TRNG& rng, int numVertices, double mu, double sigma, int minDegree, int maxDegree) {
     if (maxDegree == -1) maxDegree = numVertices - 1;
 
     std::vector<double> probabilities(maxDegree - minDegree + 1);
@@ -450,12 +444,11 @@ std::vector<int> GenerateLogNormalDegrees(int numVertices, double mu,
         double z = (logX - mu) / sigma;
 
         // PDF: (1/(x*σ*√(2π))) * exp(-(ln(x)-μ)²/(2σ²))
-        probabilities[k - minDegree] = (1.0 / (x * sigma * std::sqrt(2.0 * M_PI))) *
-                                       std::exp(-0.5 * z * z);
+        probabilities[k - minDegree] = (1.0 / (x * sigma * std::sqrt(2.0 * M_PI))) * std::exp(-0.5 * z * z);
     }
 
     NormalizeProbabilities(probabilities);
-    return SampleFromPMF(probabilities, numVertices, minDegree);
+    return SampleFromPMF(rng, probabilities, numVertices, minDegree);
 }
 
 TRelationGraph GenerateRandomChungLuGraph(TRNG &mt, const std::vector<int>& degrees) {

@@ -26,7 +26,7 @@ public:
         , Counter_(0)
     {
     }
-    
+
     uint64_t Serialize() const {
         return (static_cast<uint64_t>(Seed_) << 32ULL) | static_cast<uint64_t>(Counter_);
     }
@@ -37,6 +37,12 @@ public:
         
         Engine_.seed(Seed_);
         Engine_.discard(Counter_);
+    }
+
+    void Forward(uint32_t counter) {
+        assert(counter >= GetCounter());
+        ui32 difference = counter - GetCounter();
+        discard(difference);
     }
 
     uint32_t GetCounter() const {

@@ -104,9 +104,7 @@ public:
             .WatermarksGranularityMs = State_->Settings->WatermarksGranularityMs.Get(),
             .WatermarksLateArrivalDelayMs = State_->Settings->WatermarksLateArrivalDelayMs.Get(),
             .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get(),
-#if 0
-            .WatermarksIdleDelayMs = State_->Settings->WatermarksLateArrivalDelayMs.Get(),
-#endif
+            .WatermarksIdleTimeoutMs = State_->Settings->WatermarksIdleTimeoutMs.Get(),
         };
         IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, wrSettings);
         if (input != output) {

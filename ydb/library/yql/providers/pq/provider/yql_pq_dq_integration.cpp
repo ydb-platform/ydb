@@ -437,11 +437,7 @@ public:
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
             const auto idleTimeout = TDuration::MilliSeconds(wrSettings
-#if 0
                 .WatermarksIdleTimeoutMs
-#else
-                .WatermarksLateArrivalDelayMs
-#endif
                 .GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs));
             Add(props, WatermarksIdleTimeoutUsSetting, ToString(idleTimeout.MicroSeconds()), pos, ctx);
         }

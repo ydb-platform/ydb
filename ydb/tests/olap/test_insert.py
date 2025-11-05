@@ -307,7 +307,6 @@ class TestInsertStatement(object):
             # Check that error message doesn't contain "uint8" (bool stored as uint8 internally)
             assert "uint8" not in ex.message, f"Error message should not contain 'uint8', but it does: {ex.message}"
 
-
     @pytest.mark.parametrize("primitive_type", ["Uint64", "Int32", "Int16", "Uint8"])
     def test_primitive_pk_error_type(self, primitive_type):
         table_path = self.get_table_path()

@@ -63,6 +63,11 @@ public:
 
     TYsonStructBase();
 
+    TYsonStructBase(const TYsonStructBase& that) = default;
+    TYsonStructBase(TYsonStructBase&& that) = default;
+    TYsonStructBase& operator=(const TYsonStructBase& that);
+    TYsonStructBase& operator=(TYsonStructBase&& that);
+
     virtual ~TYsonStructBase() = default;
 
     void Load(

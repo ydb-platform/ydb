@@ -4095,5 +4095,122 @@ TEST(TYsonStructTest, YsonStringSerialize)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TTestBase
+    : public TYsonStructLite
+{
+    int X = 0;
+
+    static TTestBase Create(int x)
+    {
+        TTestBase result;
+        result.X = x;
+        return result;
+    }
+
+    REGISTER_YSON_STRUCT_LITE(TTestBase);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("x", &TThis::X)
+            .Default(0);
+    }
+};
+
+struct TTestDerived
+    : public TTestBase
+{
+    int Y = 0;
+
+    static TTestDerived Create(int x, int y)
+    {
+        TTestDerived result;
+        result.X = x;
+        result.Y = y;
+        return result;
+    }
+
+    REGISTER_YSON_STRUCT_LITE(TTestDerived);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("y", &TThis::Y)
+            .Default(0);
+    }
+};
+
+TEST(TYsonStructTest, YsonStructLiteCopyAssign)
+{
+    // Note that the lambda below has arguments of type TTestBase&, so if TTestDerived& is provided it will be implicitly
+    // converted to TTestBase& and corresponding operator= will be invoked.
+    // That is that the test checks: it verifies that assignment of the base works as expected and does not change metadata.
+    auto set = [](TTestBase& dst, const TTestBase& src) {
+        dst = src;
+    };
+
+    {
+        auto dst = TTestDerived::Create(1, 2);
+        auto src = TTestDerived::Create(3, 4);
+        set(dst, src);
+        EXPECT_EQ(dst.X, 3);
+        EXPECT_EQ(dst.Y, 2);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestDerived::Create(5, 6);
+        auto src = TTestBase::Create(7);
+        set(dst, src);
+        EXPECT_EQ(dst.X, 7);
+        EXPECT_EQ(dst.Y, 6);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestBase::Create(8);
+        auto src = TTestDerived::Create(9, 10);
+        set(dst, src);
+        EXPECT_EQ(dst.X, 9);
+        EXPECT_FALSE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+}
+
+TEST(TYsonStructTest, YsonStructLiteMoveAssign)
+{
+    // Note that the lambda below has arguments of type TTestBase&/&&, so if TTestDerived&/&& is provided it will be implicitly
+    // converted to TTestBase&/&& and corresponding operator= will be invoked.
+    // That is that the test checks: it verifies that move assignment of the base works as expected and does not change metadata.
+    auto set = [](TTestBase& dst, TTestBase&& src) {
+        dst = std::move(src);
+    };
+
+    {
+        auto dst = TTestDerived::Create(1, 2);
+        auto src = TTestDerived::Create(3, 4);
+        set(dst, std::move(src));
+        EXPECT_EQ(dst.X, 3);
+        EXPECT_EQ(dst.Y, 2);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestDerived::Create(5, 6);
+        auto src = TTestBase::Create(7);
+        set(dst, std::move(src));
+        EXPECT_EQ(dst.X, 7);
+        EXPECT_EQ(dst.Y, 6);
+        EXPECT_TRUE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+
+    {
+        auto dst = TTestBase::Create(8);
+        auto src = TTestDerived::Create(9, 10);
+        set(dst, std::move(src));
+        EXPECT_EQ(dst.X, 9);
+        EXPECT_FALSE(dst.GetMeta()->GetParameterMap().contains("y"));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYTree

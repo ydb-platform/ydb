@@ -214,23 +214,29 @@ struct TTestContext {
     }
 
     TType* GetStructType() {
-        TStructMember members[3] = {
-            {"s", TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv)},
-            {"x", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv)},
-            {"y", TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv)}
+        std::vector<TStructMember> members = {
+            {"ABC", TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv)},
+            {"DEF", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv)},
+            {"GHI", TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv)},
+            {"JKL", TDataType::Create(NUdf::TDataType<NUdf::TInterval>::Id, TypeEnv)},
+            {"MNO", TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, TypeEnv)},
         };
-        return TStructType::Create(3, members, TypeEnv);
+        return TStructType::Create(5, members.data(), TypeEnv);
     }
 
     TUnboxedValueVector CreateStructs(ui32 quantity) {
         TUnboxedValueVector values;
         for (ui32 value = 0; value < quantity; ++value) {
             NUdf::TUnboxedValue* items;
-            auto structValue = Vb.NewArray(3, items);
+            auto structValue = Vb.NewArray(5, items);
+
             std::string string = TStringBuilder() << value;
             items[0] = MakeString(NUdf::TStringRef(string.data(), string.size()));
             items[1] = NUdf::TUnboxedValuePod(static_cast<i32>(-value));
-            items[2] = NUdf::TUnboxedValuePod((ui64) (value * value));
+            items[2] = NUdf::TUnboxedValuePod((ui64) (value));
+            items[3] = NUdf::TUnboxedValuePod(static_cast<i64>(-value));
+            items[4] = NUdf::TUnboxedValuePod(MakeString(NUdf::TStringRef(string.data(), string.size())));
+
             values.emplace_back(std::move(structValue));
         }
         return values;
@@ -690,18 +696,18 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
             break;
         }
 
-        // case TType::EKind::Struct: {
-        //     auto structType = static_cast<const TStructType*>(type);
-        //     UNIT_ASSERT_EQUAL(left.GetListLength(), structType->GetMembersCount());
-        //     UNIT_ASSERT_EQUAL(right.GetListLength(), structType->GetMembersCount());
-        //     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-        //         auto memberType = structType->GetMemberType(index);
-        //         NUdf::TUnboxedValue leftMember = left.GetElement(index);
-        //         NUdf::TUnboxedValue rightMember = right.GetElement(index);
-        //         AssertUnboxedValuesAreEqual(leftMember, rightMember, memberType);
-        //     }
-        //     break;
-        // }
+        case TType::EKind::Struct: {
+            auto structType = static_cast<const TStructType*>(type);
+            UNIT_ASSERT_EQUAL(left.GetListLength(), structType->GetMembersCount());
+            UNIT_ASSERT_EQUAL(right.GetListLength(), structType->GetMembersCount());
+            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+                auto memberType = structType->GetMemberType(index);
+                NUdf::TUnboxedValue leftMember = left.GetElement(index);
+                NUdf::TUnboxedValue rightMember = right.GetElement(index);
+                AssertUnboxedValuesAreEqual(leftMember, rightMember, memberType);
+            }
+            break;
+        }
 
         case TType::EKind::Tuple: {
             auto tupleType = static_cast<const TTupleType*>(type);
@@ -1075,6 +1081,38 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, tupleType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], tupleType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Struct) {
+        TTestContext context;
+
+        auto structType = context.GetStructType();
+        auto values = context.CreateStructs(100);
+
+        auto array = MakeArrowArray(values, structType);
+        UNIT_ASSERT(array->ValidateFull().ok());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
+
+        UNIT_ASSERT(structArray->GetFieldByName("ABC") && structArray->GetFieldByName("ABC")->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(structArray->GetFieldByName("DEF") && structArray->GetFieldByName("DEF")->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->GetFieldByName("GHI") && structArray->GetFieldByName("GHI")->type_id() == arrow::Type::UINT64);
+        UNIT_ASSERT(structArray->GetFieldByName("JKL") && structArray->GetFieldByName("JKL")->type_id() == arrow::Type::INT64);
+        UNIT_ASSERT(structArray->GetFieldByName("MNO") && structArray->GetFieldByName("MNO")->type_id() == arrow::Type::STRING);
+
+        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("ABC")->length(), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("DEF")->length(), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("GHI")->length(), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("JKL")->length(), values.size());
+        UNIT_ASSERT_VALUES_EQUAL(structArray->GetFieldByName("MNO")->length(), values.size());
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, structType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], structType);
         }
     }
 }

@@ -7,8 +7,8 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
-TInstant TrimToSeconds(TInstant time) {
-    return TInstant::Seconds(time.Seconds() + (time.MilliSecondsOfSecond() > 0 ? 1 : 0));
+TInstant TrimToSeconds(TInstant time, bool up = true) {
+    return TInstant::Seconds(time.Seconds() + (up && time.MilliSecondsOfSecond() > 0 ? 1 : 0));
 }
 
 }
@@ -21,7 +21,7 @@ TStorage::TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages
     , TimeProvider(timeProvider)
     , Batch(this)
 {
-    BaseDeadline = TrimToSeconds(timeProvider->Now());
+    BaseDeadline = TrimToSeconds(timeProvider->Now(), false);
 }
 
 void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
@@ -471,7 +471,7 @@ void TStorage::MoveBaseDeadline() {
         return;
     }
 
-    auto newBaseDeadline = TrimToSeconds(TimeProvider->Now());
+    auto newBaseDeadline = TrimToSeconds(TimeProvider->Now(), false);
     auto newBaseWriteTimestamp = BaseWriteTimestamp + 
         (SlowMessages.empty() ? TDuration::Seconds(Messages.front().WriteTimestampDelta)
             : TDuration::Seconds(SlowMessages.begin()->second.WriteTimestampDelta));
@@ -551,16 +551,21 @@ TInstant TStorage::GetBaseDeadline() const {
     return BaseDeadline;
 }
 
+TInstant TStorage::GetBaseWriteTimestamp() const {
+    return BaseWriteTimestamp;
+}
+
 TString TStorage::DebugString() const {
     TStringBuilder sb;
     sb << "FirstOffset: " << FirstOffset
          << " FirstUncommittedOffset: " << FirstUncommittedOffset
          << " FirstUnlockedOffset: " << FirstUnlockedOffset
          << " BaseDeadline: " << BaseDeadline.ToString()
+         << " BaseWriteTimestamp: " << BaseWriteTimestamp.ToString()
          << " Messages: [";
     
     auto dump = [&](const auto offset, const auto& message, auto zone) {
-        sb << "{" << zone << " " << offset << ", "
+        sb << zone <<"{" << " " << offset << ", "
             << static_cast<EMessageStatus>(message.Status) << ", "
             << message.DeadlineDelta << ", "
             << message.WriteTimestampDelta << "} ";

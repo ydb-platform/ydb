@@ -489,6 +489,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
                 TAddedMessage msg;
                 msg.MessageGroup.Fields.HasMessageGroupId = message->HasMessageGroupId;
                 msg.MessageGroup.Fields.MessageGroupIdHash = message->MessageGroupIdHash;
+                msg.WriteTimestampDelta = message->WriteTimestampDelta;
                 serializer.Add(offset, msg);
             }
         }

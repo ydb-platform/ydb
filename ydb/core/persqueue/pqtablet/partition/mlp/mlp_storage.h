@@ -144,6 +144,7 @@ public:
     ui64 GetFirstUncommittedOffset() const;
     ui64 GetFirstUnlockedOffset() const;
     TInstant GetBaseDeadline() const;
+    TInstant GetBaseWriteTimestamp() const;
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
     const std::deque<ui64>& GetDLQMessages() const;

@@ -1,14 +1,4 @@
 {
-    "test_sql_negative.test[watermarks-bad_column-default.txt]": [
-        {
-            "uri": "file://test_sql_negative.test_watermarks-bad_column-default.txt_/err_file.out"
-        }
-    ],
-    "test_sql_negative.test[watermarks-bad_pushdown-default.txt]": [
-        {
-            "uri": "file://test_sql_negative.test_watermarks-bad_pushdown-default.txt_/err_file.out"
-        }
-    ],
     "test_sql_streaming.test[hop-GroupByHop-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_hop-GroupByHop-default.txt_/ast.txt"

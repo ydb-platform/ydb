@@ -2,7 +2,7 @@ import os
 import pytest
 import yatest.common
 
-from test_utils import pytest_generate_tests_for_run, get_case_file
+from test_utils import pytest_generate_tests_for_run
 from ydb.tests.fq.tools.fqrun import FqRun
 from yql_utils import yql_binary_path
 
@@ -29,7 +29,7 @@ def pytest_generate_tests(metafunc):
 
 
 def test(suite, case, cfg, fq_run):
-    program_sql = get_case_file(DATA_PATH, suite, case)
+    program_sql = os.path.join(DATA_PATH, suite, f"{case}.sql")
     with open(program_sql, encoding="utf-8") as f:
         sql_query = f.read()
 

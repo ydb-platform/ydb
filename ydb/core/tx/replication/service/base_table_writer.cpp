@@ -301,6 +301,8 @@ class TLocalTableWriter
         Resolving = true;
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = Database;
+
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     }
@@ -635,6 +637,7 @@ public:
 
     explicit TLocalTableWriter(
             EWriteMode mode,
+            const TString& database,
             const TPathId& tablePathId,
             THolder<IChangeRecordParser>&& parser,
             THolder<IChangeRecordSerializer>&& serializer,
@@ -642,6 +645,7 @@ public:
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
         , Mode(mode)
+        , Database(database)
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
@@ -673,6 +677,7 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
     const EWriteMode Mode;
+    const TString Database;
     const TPathId TablePathId;
     THolder<IChangeRecordParser> Parser;
     THolder<IChangeRecordSerializer> Serializer;
@@ -695,13 +700,14 @@ private:
 }; // TLocalTableWriter
 
 IActor* CreateLocalTableWriter(
+        const TString& database,
         const TPathId& tablePathId,
         THolder<IChangeRecordParser>&& parser,
         THolder<IChangeRecordSerializer>&& serializer,
         std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
         EWriteMode mode)
 {
-    return new TLocalTableWriter(mode, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+    return new TLocalTableWriter(mode, database, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
 }
 
 } // namespace NKikimr::NReplication::NService

@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         }));
         UNIT_ASSERT_EQUAL(r, NMsgBusProxy::MSTATUS_OK);
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table")));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table")));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table")));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             TRecord(2, R"({"key":["2.0"], "update":{"value":"255555555555555.321"}})"),
             TRecord(3, R"({"key":["3.0"], "update":{"value":"355555555555555.321"}})"),
         }));
-    }    
+    }
 
     THolder<TEvService::TEvTxIdResult> MakeTxIdResult(const TMap<TRowVersion, ui64>& result) {
         auto ev = MakeHolder<TEvService::TEvTxIdResult>();
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
         ui64 order = 1;
 
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
         auto worker = env.GetRuntime().Register(new TMockWorker(writer, env.GetSender()));
 
         env.Send<TEvWorker::TEvHandshake>(worker, new TEvWorker::TEvHandshake());
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
         auto worker = env.GetRuntime().Register(new TMockWorker(writer, env.GetSender()));
 
         env.Send<TEvWorker::TEvHandshake>(worker, new TEvWorker::TEvHandshake());
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table"), EWriteMode::Consistent));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table"), EWriteMode::Consistent));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvService::TEvGetTxId>(writer, new TEvWorker::TEvData(0, "TestSource", {

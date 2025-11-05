@@ -13,7 +13,6 @@ Notes
     ||
 || `Bool` |
 Boolean value |
-Not available for column-oriented tables
     ||
 || `Int8` |
 Signed integer

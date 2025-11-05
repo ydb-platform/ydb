@@ -208,7 +208,7 @@ class TJsonNodes : public TViewerPipeClient {
         float MaxPDiskOccupancy = 0;
         float MaxVDiskQuotaUtilization = 0;
         float MaxNormalizedOccupancy = 0;
-        NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlertLevel;
+        NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlertLevel = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
         float CpuUsage = 0; // total, normalized
         float LoadAverage = 0; // normalized
         bool Problems = false;

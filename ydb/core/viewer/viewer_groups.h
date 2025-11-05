@@ -300,7 +300,7 @@ public:
         float MaxVDiskQuotaUtilization = 0;
         float MaxNormalizedOccupancy = 0;
         float MaxVDiskFairOccupancy = 0;
-        NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlertLevel;
+        NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlertLevel = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
         std::vector<TVDisk> VDisks;
         std::vector<TNodeId> VDiskNodeIds; // filter nodes to request disk info from the whiteboard. could be duplicated.
@@ -2451,7 +2451,7 @@ public:
                           * `Latency`
                           * `MaxPDiskOccupancy`
                           * `MaxVDiskQuotaUtilization `
-                          * `MaxNormalizedOccupanc`
+                          * `MaxNormalizedOccupancy`
                           * `MaxVDiskFairOccupancy`
                     required: false
                     type: string

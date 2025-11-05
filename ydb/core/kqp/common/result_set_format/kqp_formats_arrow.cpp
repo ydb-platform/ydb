@@ -62,8 +62,7 @@ std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::StructType>(NUdf::E
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TDataType* dataType) {
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(),
-        [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-            Y_UNUSED(typeHolder);
+        [&]<typename TType>() {
             result = CreateEmptyArrowImpl<TType>(*dataType->GetDataSlot().Get());
             return true;
         });
@@ -612,8 +611,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case NMiniKQL::TType::EKind::Data: {
             auto dataType = static_cast<const NMiniKQL::TDataType*>(type);
             auto slot = *dataType->GetDataSlot().Get();
-            bool success = SwitchMiniKQLDataTypeToArrowType( slot, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-                    Y_UNUSED(typeHolder);
+            bool success = SwitchMiniKQLDataTypeToArrowType(slot, [&]<typename TType>() {
                     AppendDataValue<TType>(builder, value, slot);
                     return true;
                 });

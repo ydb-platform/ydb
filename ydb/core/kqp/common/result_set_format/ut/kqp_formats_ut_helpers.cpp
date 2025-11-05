@@ -205,8 +205,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             NUdf::TUnboxedValue result;
             auto dataSlot = *dataType->GetDataSlot().Get();
             bool success = SwitchMiniKQLDataTypeToArrowType(dataSlot,
-                [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
-                    Y_UNUSED(typeHolder);
+                [&]<typename TType>() {
                     result = GetUnboxedValue<TType>(array, row, dataSlot);
                     return true;
                 });

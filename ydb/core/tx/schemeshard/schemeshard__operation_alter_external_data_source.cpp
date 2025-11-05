@@ -232,16 +232,13 @@ public:
 
         {
             bool isTieredStorage = false;
-
-            const auto& references = externalDataSourceInfo->ExternalTableReferences.GetReferences();
-            for (const auto& referrer : references) {
+            for (const auto& referrer : externalDataSourceInfo->ExternalTableReferences.GetReferences()) {
                 if (TPath::Init(TPathId::FromProto(referrer.GetPathId()), context.SS)->PathType ==
                     NKikimrSchemeOp::EPathType::EPathTypeColumnTable) {
                     isTieredStorage = true;
                     break;
                 }
             }
-
             if (isTieredStorage) {
                 if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -249,11 +246,11 @@ public:
                     return result;
                 }
             }
+        }
 
-            if (oldExternalDataSourceInfo->SourceType != externalDataSourceInfo->SourceType && !references.empty()) {
-                result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Cannot change external data source type while it is used in other entities, please remove them at the beginning: " << references[0].GetPath());
-                return result;
-            }
+        if (oldExternalDataSourceInfo->SourceType != externalDataSourceInfo->SourceType) {
+            result->SetError(NKikimrScheme::StatusSchemeError, "Changing external data source type is not allowed");
+            return result;
         }
 
         AddPathInSchemeShard(result, dstPath);

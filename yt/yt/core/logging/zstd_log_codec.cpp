@@ -1,6 +1,6 @@
-#include "zstd_compression.h"
+#include "zstd_log_codec.h"
 
-#include "compression.h"
+#include "log_codec.h"
 
 #include <yt/yt/core/misc/finally.h>
 
@@ -15,19 +15,19 @@ using namespace NCompression::NDetail;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TZstdLogCompressionCodec
-    : public ILogCompressionCodec
+    : public ILogCodec
 {
 public:
     explicit TZstdLogCompressionCodec(int compressionLevel)
         : CompressionLevel_(compressionLevel)
     { }
 
-    i64 GetMaxBlockSize() const override
+    i64 GetMaxBlockSize() const final
     {
         return MaxZstdFrameUncompressedLength;
     }
 
-    void Compress(const TBuffer& input, TBuffer& output) override
+    void Compress(const TBuffer& input, TBuffer* output) final
     {
         auto context = ZSTD_createCCtx();
         auto contextGuard = Finally([&] {
@@ -36,10 +36,10 @@ public:
 
         auto frameLength = ZSTD_COMPRESSBOUND(std::min<i64>(MaxZstdFrameUncompressedLength, input.Size()));
 
-        output.Reserve(output.Size() + frameLength + ZstdSyncTagSize);
+        output->Reserve(output->Size() + frameLength + ZstdSyncTagSize);
         size_t size = ZSTD_compressCCtx(
             context,
-            output.Data() + output.Size(),
+            output->Data() + output->Size(),
             frameLength,
             input.Data(),
             input.Size(),
@@ -49,16 +49,16 @@ public:
             THROW_ERROR_EXCEPTION("ZSTD_compressCCtx() failed")
                 << TErrorAttribute("zstd_error", ZSTD_getErrorName(size));
         }
-        output.Advance(size);
+        output->Advance(size);
     }
 
-    void AddSyncTag(i64 offset, TBuffer& output) override
+    void AddSyncTag(i64 offset, TBuffer* output) final
     {
-        output.Append(ZstdSyncTagPrefix.data(), ZstdSyncTagPrefix.size());
-        output.Append(reinterpret_cast<const char*>(&offset), sizeof(offset));
+        output->Append(ZstdSyncTagPrefix.data(), ZstdSyncTagPrefix.size());
+        output->Append(reinterpret_cast<const char*>(&offset), sizeof(offset));
     }
 
-    void Repair(TFile* file, i64& outputPosition) override
+    i64 Repair(TFile* file) final
     {
         constexpr auto ScanOverlap = ZstdSyncTagSize - 1;
         constexpr auto MaxZstdFrameLength = ZSTD_COMPRESSBOUND(MaxZstdFrameUncompressedLength);
@@ -71,7 +71,7 @@ public:
 
         TBuffer buffer;
 
-        outputPosition = 0;
+        auto outputPosition = 0;
         while (bufSize >= ZstdSyncTagSize) {
             buffer.Resize(0);
             buffer.Reserve(bufSize);
@@ -89,16 +89,16 @@ public:
             pos = newPos;
         }
         file->Resize(outputPosition);
+        return outputPosition;
     }
 
 private:
-    int CompressionLevel_;
+    const int CompressionLevel_;
 };
 
-DECLARE_REFCOUNTED_TYPE(TZstdLogCompressionCodec)
-DEFINE_REFCOUNTED_TYPE(TZstdLogCompressionCodec)
+////////////////////////////////////////////////////////////////////////////////
 
-ILogCompressionCodecPtr CreateZstdCompressionCodec(int compressionLevel)
+ILogCodecPtr CreateZstdLogCodec(int compressionLevel)
 {
     return New<TZstdLogCompressionCodec>(compressionLevel);
 }

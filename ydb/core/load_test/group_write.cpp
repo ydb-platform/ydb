@@ -8,8 +8,6 @@
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/jaeger_tracing/throttler.h>
 
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
-
 #include <google/protobuf/text_format.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>

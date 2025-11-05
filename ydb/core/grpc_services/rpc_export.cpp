@@ -108,7 +108,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         if constexpr (IsFsExport) {
             auto* exportSettings = createExport.MutableExportToFsSettings();
             *exportSettings = request.settings();
-            exportSettings->set_source_path(CommonSourcePath);
             exportSettings->clear_items();
             for (const auto& [sourcePath, info] : ExportItems) {
                 auto* item = exportSettings->add_items();

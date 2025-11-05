@@ -14,19 +14,19 @@ namespace NKikimr::NKqp::NFormats {
 namespace {
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl(NUdf::EDataSlot slot) {
+std::shared_ptr<arrow::DataType> BuildArrowType(NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>(NUdf::EDataSlot slot) {
+std::shared_ptr<arrow::DataType> BuildArrowType<arrow::FixedSizeBinaryType>(NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
     return arrow::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::StructType>(NUdf::EDataSlot slot) {
+std::shared_ptr<arrow::DataType> BuildArrowType<arrow::StructType>(NUdf::EDataSlot slot) {
     std::shared_ptr<arrow::DataType> type;
     switch (slot) {
         case NUdf::EDataSlot::TzDate:
@@ -63,7 +63,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TDataType* dataTyp
     std::shared_ptr<arrow::DataType> result;
     bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(),
         [&]<typename TType>() {
-            result = CreateEmptyArrowImpl<TType>(*dataType->GetDataSlot().Get());
+            result = BuildArrowType<TType>(*dataType->GetDataSlot().Get());
             return true;
         });
     if (success) {
@@ -301,7 +301,6 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnb
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 }
 
-// Only for timezone datetime types
 template <>
 void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
     Y_UNUSED(dataSlot);
@@ -373,25 +372,28 @@ void AppendDataValue<arrow::FixedSizeBinaryType>(arrow::ArrayBuilder* builder, N
 
     if (!value.HasValue()) {
         status = typedBuilder->AppendNull();
-    } else {
-        switch (dataSlot) {
-            case NUdf::EDataSlot::Uuid: {
-                auto data = value.AsStringRef();
-                status = typedBuilder->Append(data.Data());
-                break;
-            }
+        YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
+        return;
+    }
 
-            case NUdf::EDataSlot::Decimal: {
-                auto intVal = value.GetInt128();
-                status = typedBuilder->Append(reinterpret_cast<const char*>(&intVal));
-                break;
-            }
+    switch (dataSlot) {
+        case NUdf::EDataSlot::Uuid: {
+            auto data = value.AsStringRef();
+            status = typedBuilder->Append(data.Data());
+            break;
+        }
 
-            default: {
-                YQL_ENSURE(false, "Unexpected data slot");
-            }
+        case NUdf::EDataSlot::Decimal: {
+            auto intVal = value.GetInt128();
+            status = typedBuilder->Append(reinterpret_cast<const char*>(&intVal));
+            break;
+        }
+
+        default: {
+            YQL_ENSURE(false, "Unexpected data slot");
         }
     }
+
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 }
 

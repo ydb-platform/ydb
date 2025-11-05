@@ -53,7 +53,7 @@ public:
                     }
                 }
             } else {
-                BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
+                BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status) << ": " << msg->ErrorReason);
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateBlockStorage(tablet->Id));
             }
         }

@@ -53,7 +53,6 @@ class TestDataReadCorrectness(object):
             "primary_index_stats"
         ]
     )
-
     def test(self, table_name):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
         table_path = f"{test_dir}/{table_name}"
@@ -99,8 +98,6 @@ class TestDataReadCorrectness(object):
 
         assert keys == [i for i in range(self.rows_count)], keys
         assert values == [i * 10 for i in range(self.rows_count)], values
-
-
 
 
 class TestDataReadPerformanceNoIntersections(object):

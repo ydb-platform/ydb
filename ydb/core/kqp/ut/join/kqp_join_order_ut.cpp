@@ -1,8 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/string/printf.h>
@@ -10,7 +8,6 @@
 #include <algorithm>
 #include <fstream>
 #include <regex>
-
 
 namespace NKikimr {
 namespace NKqp {

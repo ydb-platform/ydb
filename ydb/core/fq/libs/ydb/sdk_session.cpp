@@ -47,11 +47,11 @@ struct TSdkSession : public ISession {
         return future;
     }
 
-    NYdb::TAsyncStatus CreateTable(const std::string& /*db*/, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
+    NYdb::TAsyncStatus CreateTable(const TString& /*db*/, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) override {
         return Session.CreateTable(path, std::move(tableDesc));
     }
 
-    NYdb::TAsyncStatus DropTable( const std::string& path) override {
+    NYdb::TAsyncStatus DropTable( const TString& path) override {
         return Session.DropTable(path);
     }
 
@@ -59,7 +59,7 @@ struct TSdkSession : public ISession {
         Transaction = transaction;
     }
 
-    bool HasActiveTransaction() override {
+    bool HasActiveTransaction() const override {
         return Transaction && Transaction->IsActive();
     }
 

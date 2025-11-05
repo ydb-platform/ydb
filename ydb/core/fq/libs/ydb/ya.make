@@ -3,14 +3,14 @@ LIBRARY()
 SRCS(
     local_session.cpp
     local_table_client.cpp
+    query_actor.cpp
+    schema.cpp
     sdk_session.cpp
     sdk_table_client.cpp
-    schema.cpp
     util.cpp
-    ydb.cpp
-    query_actor.cpp
     ydb_local_connection.cpp
     ydb_sdk_connection.cpp
+    ydb.cpp
 )
 
 PEERDIR(

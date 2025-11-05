@@ -69,10 +69,10 @@ using TYdbConnectionPtr = TIntrusivePtr<TYdbConnection>;
 struct IYdbConnection : public TThrRefBase {
     using TPtr = TIntrusivePtr<IYdbConnection>;
 
-    virtual IYdbTableClient::TPtr GetTableClient() = 0;
-    virtual TString GetTablePathPrefix() = 0;
-    virtual TString GetDb() = 0;
-    virtual TString GetTablePathPrefixWithoutDb() = 0;
+    virtual IYdbTableClient::TPtr GetTableClient() const = 0;
+    virtual TString GetTablePathPrefix() const = 0;
+    virtual TString GetDb() const = 0;
+    virtual TString GetTablePathPrefixWithoutDb() const = 0;
 };
 
 IYdbConnection::TPtr CreateLocalYdbConnection(

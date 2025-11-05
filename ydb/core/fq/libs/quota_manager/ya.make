@@ -11,11 +11,11 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/core/fq/libs/quota_manager/events
     ydb/core/fq/libs/shared_resources
+    ydb/core/grpc_services/local_rpc
     ydb/core/protos
+    ydb/library/aclib/protos
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/table
-    ydb/library/aclib/protos
-    ydb/core/grpc_services/local_rpc
 )
 
 YQL_LAST_ABI_VERSION()

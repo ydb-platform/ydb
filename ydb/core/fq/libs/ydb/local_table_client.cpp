@@ -7,8 +7,10 @@
 
 #include <ydb/core/fq/libs/ydb/table_client.h>
 
-#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NFq {
 
@@ -84,8 +86,8 @@ private:
     void StartOperation() {        
         auto session = CreateLocalSession();
         auto future = Operation(session);
-        future.Subscribe([this](const NYdb::TAsyncStatus& result){
-            Send(SelfId(), new TEvPrivate::TEvResult(result.GetValue()));
+        future.Subscribe([selfId = SelfId(), actorSystem =  NActors::TActivationContext::ActorSystem()](const NYdb::TAsyncStatus& result){
+            actorSystem->Send(selfId, new TEvPrivate::TEvResult(result.GetValue()));
         });
     }
 
@@ -137,7 +139,7 @@ private:
 private:
     NThreading::TPromise<NYdb::TStatus> Promise;
     const IRetryPolicy::TPtr RetryPolicy;
-    IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
+    IRetryPolicy::IRetryState::TPtr RetryState;
     TOperationFunc Operation;
 };
 

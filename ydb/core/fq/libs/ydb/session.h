@@ -34,13 +34,13 @@ struct ISession : public TThrRefBase{
     
     virtual NYdb::TAsyncStatus Rollback() = 0;
 
-    virtual NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) = 0;
+    virtual NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) = 0;
     
-    virtual NYdb::TAsyncStatus DropTable(const std::string& path) = 0;
+    virtual NYdb::TAsyncStatus DropTable(const TString& path) = 0;
 
     virtual void UpdateTransaction(std::optional<NYdb::NTable::TTransaction> transaction) = 0;
 
-    virtual bool HasActiveTransaction() = 0;
+    virtual bool HasActiveTransaction() const = 0 ;
 };
 
 } // namespace NFq

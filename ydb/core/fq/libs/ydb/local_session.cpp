@@ -127,13 +127,13 @@ struct TLocalSession : public ISession {
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
-    NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
+    NYdb::TAsyncStatus CreateTable(const TString& db, const TString& path, NYdb::NTable::TTableDescription&& tableDesc) override {
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
         NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), promise));
         return promise.GetFuture();
     }
 
-    NYdb::TAsyncStatus DropTable( const std::string& /*path*/) override {
+    NYdb::TAsyncStatus DropTable( const TString& /*path*/) override {
         Y_ABORT("Not implemented");
         return NYdb::TAsyncStatus();
     }
@@ -142,7 +142,7 @@ struct TLocalSession : public ISession {
         // nothing
     }
     
-    bool HasActiveTransaction() override {
+    bool HasActiveTransaction() const override {
         return HasTransaction;
     }
 

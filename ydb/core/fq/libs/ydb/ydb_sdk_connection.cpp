@@ -19,19 +19,19 @@ struct TSdkYdbConnection : public IYdbConnection {
         , TablePathPrefix(JoinPath(Db, config.GetPathPrefix())) {
     }
 
-    IYdbTableClient::TPtr GetTableClient() override {
+    IYdbTableClient::TPtr GetTableClient() const override {
         return TableClient;
     }
 
-    TString GetTablePathPrefix() override {
+    TString GetTablePathPrefix() const override {
         return TablePathPrefix;
     }
 
-    TString GetDb() override {
+    TString GetDb() const override {
         return Db;
     }
 
-    TString GetTablePathPrefixWithoutDb() override {
+    TString GetTablePathPrefixWithoutDb() const override {
         return TablePathPrefix;
     }
 

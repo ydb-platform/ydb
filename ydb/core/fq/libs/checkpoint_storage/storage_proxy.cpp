@@ -108,7 +108,7 @@ private:
     NYdb::TDriver Driver;
     const TStorageProxyMetricsPtr Metrics;
     const IRetryPolicy::TPtr RetryPolicy;
-    IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
+    IRetryPolicy::IRetryState::TPtr RetryState;
 
 public:
     explicit TStorageProxy(

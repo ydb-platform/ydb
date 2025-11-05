@@ -218,7 +218,7 @@ TExprNode::TPtr IsConditionalUpdateSetting(TExprContext& ctx, const TPositionHan
     return Build<TCoNameValueTupleList>(ctx, pos)
         .Add()
             .Name().Build("Mode")
-            .Value<TCoAtom>().Build("upsert") // Rows were read from table, so we are sure that they exist.
+            .Value<TCoAtom>().Build("update") // Rows were read from table, so we are sure that they exist.
         .Build()
         .Add()
             .Name().Build("IsUpdate")

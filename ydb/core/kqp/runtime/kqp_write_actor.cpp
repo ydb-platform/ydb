@@ -1441,6 +1441,7 @@ public:
     struct TPathLookupInfo {
         std::vector<ui32> KeyIndexes;
         std::vector<ui32> DeleteKeyIndexes;
+        std::vector<ui32> FullKeyIndexes;
         IKqpBufferTableLookup* Lookup = nullptr;
     };
 
@@ -1490,6 +1491,7 @@ public:
 
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
+        AFL_ENSURE(!IsError());
         Memory += data->GetMemory();
         BufferedBatches.push_back(std::move(data));
     }
@@ -1516,7 +1518,7 @@ public:
 
         while (stateIteration());
 
-        if (IsClosed() && IsEmpty()) {
+        if (!IsError() && IsClosed() && IsEmpty()) {
             AFL_ENSURE(GetMemory() == 0);
             CloseWrite();
         }
@@ -1542,8 +1544,18 @@ public:
         return Priority;
     }
 
+    bool IsError() const {
+        return Error.has_value();
+    }
+
+    TString GetError() const {
+        AFL_ENSURE(Error);
+        return *Error;
+    }
+
 private:
     bool ProcessBuffering() {
+        AFL_ENSURE(!IsError());
         AFL_ENSURE(ProcessBatches.empty());
         AFL_ENSURE(ProcessCells.empty());
         if (BufferedBatches.empty()) {
@@ -1600,7 +1612,8 @@ private:
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
-                            AFL_ENSURE(false);// TODO: error
+                            Error = "TODO";
+                            return false;
                         }
                     }
                 }
@@ -1625,6 +1638,7 @@ private:
     }
 
     bool ProcessLookupMainTable() {
+        AFL_ENSURE(!IsError());
         AFL_ENSURE(!ProcessBatches.empty());
         AFL_ENSURE(!ProcessCells.empty());
         AFL_ENSURE(OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT);
@@ -1707,20 +1721,20 @@ private:
 
                 AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.DeleteKeyIndexes.size());
 
-                // TODO: skip initial unchanged rows.
                 TUniqueSecondaryKeyCollector collector(
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes);
 
+                // TODO: skip initial unchanged rows.
                 for (const auto& row : writeRows) {
                     if (!collector.AddRow(row)) {
-                        AFL_ENSURE(false);// TODO: error
+                        Error = "TODO";
+                        return false;
                     }
                 }
 
                 const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
-
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
@@ -1739,6 +1753,7 @@ private:
     }
 
     bool ProcessLookupUniqueIndex() {
+        AFL_ENSURE(!IsError());
         AFL_ENSURE(ProcessBatches.empty());
         AFL_ENSURE(ProcessCells.empty());
         AFL_ENSURE(!Writes.empty());
@@ -1750,13 +1765,32 @@ private:
             }
         }
 
-        //TODO: check unique
-
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId) {
-                lookupInfo.Lookup->ExtractResult(Cookie, [](TConstArrayRef<TCell>) {
-                    AFL_ENSURE(false); // Can't return any row
+                const bool isUpdate = OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
+                const auto& keyIndexes = isUpdate
+                    ? lookupInfo.FullKeyIndexes
+                    : lookupInfo.KeyIndexes;
+
+                TUniqueSecondaryKeyCollector collector(
+                        KeyColumnTypes,
+                        lookupInfo.Lookup->GetKeyColumnTypes(),
+                        keyIndexes);
+                for (const auto& write : Writes) {
+                    for (const auto& row : GetRows(write.Batch)) {
+                        AFL_ENSURE(collector.AddRow(row));
+                    }
+                }
+                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
+
+                lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
+                    if (!IsError() && uniqueSecondaryKeys.contains(cells.first(keyIndexes.size())) != isUpdate) {
+                        Error = "TODO";
+                    }
                 });
+            }
+            if (IsError()) {
+                return false;
             }
         }
 
@@ -1767,6 +1801,7 @@ private:
     }
 
     void FlushWritesToActors() {
+        AFL_ENSURE(!IsError());
         for (auto& write : Writes) {
             Memory -= write.Batch->GetMemory();
             WriteBatchToActors(std::move(write.Batch), write.WriteOnlyRows);
@@ -1775,6 +1810,7 @@ private:
     }
 
     void WriteBatchToActors(IDataBatchPtr batch, size_t writeOnlySuffixRows) {
+        AFL_ENSURE(!IsError());
         const bool updateWithoutLookup = (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !PathLookupInfo.contains(PathId));
         for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
             // At first, write to indexes
@@ -1817,6 +1853,7 @@ private:
     }
 
     void CloseWrite() {
+        AFL_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
             if (pathId != PathId) {
@@ -1841,6 +1878,8 @@ private:
 
     bool Closed = false;
     i64 Memory = 0;
+
+    std::optional<TString> Error;
 
     std::vector<IDataBatchPtr> BufferedBatches;
     std::vector<IDataBatchPtr> ProcessBatches;
@@ -2609,7 +2648,7 @@ public:
                     auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
                     auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
                     lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
-                        .KeyIndexes = GetKeyIndexes( // inserted keys
+                        .KeyIndexes = GetKeyIndexes( // inserted secondary keys
                             settings.Columns,
                             settings.WriteIndex,
                             settings.LookupColumns,
@@ -2620,7 +2659,7 @@ public:
                                 keyWriteIndex.data(),
                                 indexSettings.KeyPrefixSize},
                             /* preferAdditionalInputColumns */ false),
-                        .DeleteKeyIndexes = GetKeyIndexes( // deleted keys
+                        .DeleteKeyIndexes = GetKeyIndexes( // deleted secondary keys
                             settings.Columns,
                             settings.WriteIndex,
                             settings.LookupColumns,
@@ -2631,6 +2670,13 @@ public:
                                 keyWriteIndex.data(),
                                 indexSettings.KeyPrefixSize},
                             /* preferAdditionalInputColumns */ true),
+                        .FullKeyIndexes = GetKeyIndexes( // full secondary table keys
+                            settings.Columns,
+                            settings.WriteIndex,
+                            settings.LookupColumns,
+                            indexSettings.KeyColumns,
+                            keyWriteIndex,
+                            /* preferAdditionalInputColumns */ false),
                         .Lookup = lookupActor,
                     });
 
@@ -2729,7 +2775,9 @@ public:
 
     bool Process() {
         ProcessRequestQueue();
-        ProcessTasks();
+        if (!ProcessTasks()) {
+            return false;
+        }
         if (!ProcessFlush()) {
             return false;
         }
@@ -2784,13 +2832,18 @@ public:
         }
     }
 
-    void ProcessTasks() {
+    bool ProcessTasks() {
         TVector<ui64> finishedCookies;
         for (auto& [cookie, writeTask] : WriteTasks) {
             writeTask.Process();
-            //if (writeTask.IsError()) {
-                // TODO: RuntimeError
-            //}
+            if (writeTask.IsError()) {
+                ReplyErrorAndDie(
+                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                    TStringBuilder() << writeTask.GetError(),
+                    {});
+                return false;
+            }
             if (writeTask.IsFinished()) {
                 finishedCookies.push_back(cookie);
             }
@@ -2799,6 +2852,8 @@ public:
         for (const auto& cookie : finishedCookies) {
             WriteTasks.erase(cookie);
         }
+
+        return true;
     }
 
     void ProcessAckQueue() {

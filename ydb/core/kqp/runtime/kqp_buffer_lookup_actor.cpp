@@ -161,8 +161,8 @@ public:
         }
 
         {
-            settings.Columns.reserve(lookupKeyPrefix + lookupColumns.size());
-            for (size_t index = 0; index < lookupKeyPrefix; ++index) {
+            settings.Columns.reserve(keyColumns.size() + lookupColumns.size());
+            for (size_t index = 0; index < keyColumns.size(); ++index) {
                 const auto& keyColumn = keyColumns.at(index);
                 NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(keyColumn.GetTypeId(), keyColumn.GetTypeInfo());
                 settings.Columns.push_back(

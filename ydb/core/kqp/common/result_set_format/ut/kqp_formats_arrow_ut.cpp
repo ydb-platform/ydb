@@ -671,116 +671,126 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
         case TType::EKind::Data: {
             auto dataType = static_cast<const TDataType*>(type);
             auto dataSlot = *dataType->GetDataSlot().Get();
-            // Json-like type are not comparable so just skip them
-            if (dataSlot != NUdf::EDataSlot::Json && dataSlot != NUdf::EDataSlot::Yson && dataSlot != NUdf::EDataSlot::JsonDocument) {
-                UNIT_ASSERT(NUdf::EquateValues(dataSlot, left, right));
-            }
-            break;
-        }
 
-        case TType::EKind::Optional: {
-            UNIT_ASSERT_EQUAL(left.HasValue(), right.HasValue());
-            if (left.HasValue()) {
-                auto innerType = static_cast<const TOptionalType*>(type)->GetItemType();
-                NUdf::TUnboxedValue leftInner = left.GetOptionalValue();
-                NUdf::TUnboxedValue rightInner = right.GetOptionalValue();
-                AssertUnboxedValuesAreEqual(leftInner, rightInner, innerType);
-            }
-            break;
-        }
-
-        case TType::EKind::List: {
-            auto listType = static_cast<const TListType*>(type);
-            auto itemType = listType->GetItemType();
-            auto leftPtr = left.GetElements();
-            auto rightPtr = right.GetElements();
-            UNIT_ASSERT_EQUAL(leftPtr != nullptr, rightPtr != nullptr);
-            if (leftPtr != nullptr) {
-                auto leftLen = left.GetListLength();
-                auto rightLen = right.GetListLength();
-                UNIT_ASSERT_EQUAL(leftLen, rightLen);
-                while (leftLen > 0) {
-                    NUdf::TUnboxedValue leftItem = *leftPtr++;
-                    NUdf::TUnboxedValue rightItem = *rightPtr++;
-                    AssertUnboxedValuesAreEqual(leftItem, rightItem, itemType);
-                    --leftLen;
+            switch (dataSlot) {
+                case NUdf::EDataSlot::JsonDocument:
+                case NUdf::EDataSlot::Json:
+                case NUdf::EDataSlot::Yson: {
+                    UNIT_ASSERT_VALUES_EQUAL(std::string(left.AsStringRef()), std::string(right.AsStringRef()));
+                    break;
                 }
-            } else {
-                const auto leftIter = left.GetListIterator();
-                const auto rightIter = right.GetListIterator();
-                NUdf::TUnboxedValue leftItem;
-                NUdf::TUnboxedValue rightItem;
-                bool leftHasValue = leftIter.Next(leftItem);
-                bool rightHasValue = rightIter.Next(leftItem);
-                while (leftHasValue && rightHasValue) {
-                    AssertUnboxedValuesAreEqual(leftItem, rightItem, itemType);
-                    leftHasValue = leftIter.Next(leftItem);
-                    rightHasValue = rightIter.Next(leftItem);
+
+                default: {
+                    UNIT_ASSERT(NUdf::EquateValues(dataSlot, left, right));
                 }
-                UNIT_ASSERT_EQUAL(leftHasValue, rightHasValue);
             }
             break;
         }
 
-        case TType::EKind::Struct: {
-            auto structType = static_cast<const TStructType*>(type);
-            UNIT_ASSERT_EQUAL(left.GetListLength(), structType->GetMembersCount());
-            UNIT_ASSERT_EQUAL(right.GetListLength(), structType->GetMembersCount());
-            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                auto memberType = structType->GetMemberType(index);
-                NUdf::TUnboxedValue leftMember = left.GetElement(index);
-                NUdf::TUnboxedValue rightMember = right.GetElement(index);
-                AssertUnboxedValuesAreEqual(leftMember, rightMember, memberType);
-            }
-            break;
+        // case TType::EKind::Optional: {
+        //     UNIT_ASSERT_EQUAL(left.HasValue(), right.HasValue());
+        //     if (left.HasValue()) {
+        //         auto innerType = static_cast<const TOptionalType*>(type)->GetItemType();
+        //         NUdf::TUnboxedValue leftInner = left.GetOptionalValue();
+        //         NUdf::TUnboxedValue rightInner = right.GetOptionalValue();
+        //         AssertUnboxedValuesAreEqual(leftInner, rightInner, innerType);
+        //     }
+        //     break;
+        // }
+
+        // case TType::EKind::List: {
+        //     auto listType = static_cast<const TListType*>(type);
+        //     auto itemType = listType->GetItemType();
+        //     auto leftPtr = left.GetElements();
+        //     auto rightPtr = right.GetElements();
+        //     UNIT_ASSERT_EQUAL(leftPtr != nullptr, rightPtr != nullptr);
+        //     if (leftPtr != nullptr) {
+        //         auto leftLen = left.GetListLength();
+        //         auto rightLen = right.GetListLength();
+        //         UNIT_ASSERT_EQUAL(leftLen, rightLen);
+        //         while (leftLen > 0) {
+        //             NUdf::TUnboxedValue leftItem = *leftPtr++;
+        //             NUdf::TUnboxedValue rightItem = *rightPtr++;
+        //             AssertUnboxedValuesAreEqual(leftItem, rightItem, itemType);
+        //             --leftLen;
+        //         }
+        //     } else {
+        //         const auto leftIter = left.GetListIterator();
+        //         const auto rightIter = right.GetListIterator();
+        //         NUdf::TUnboxedValue leftItem;
+        //         NUdf::TUnboxedValue rightItem;
+        //         bool leftHasValue = leftIter.Next(leftItem);
+        //         bool rightHasValue = rightIter.Next(leftItem);
+        //         while (leftHasValue && rightHasValue) {
+        //             AssertUnboxedValuesAreEqual(leftItem, rightItem, itemType);
+        //             leftHasValue = leftIter.Next(leftItem);
+        //             rightHasValue = rightIter.Next(leftItem);
+        //         }
+        //         UNIT_ASSERT_EQUAL(leftHasValue, rightHasValue);
+        //     }
+        //     break;
+        // }
+
+        // case TType::EKind::Struct: {
+        //     auto structType = static_cast<const TStructType*>(type);
+        //     UNIT_ASSERT_EQUAL(left.GetListLength(), structType->GetMembersCount());
+        //     UNIT_ASSERT_EQUAL(right.GetListLength(), structType->GetMembersCount());
+        //     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+        //         auto memberType = structType->GetMemberType(index);
+        //         NUdf::TUnboxedValue leftMember = left.GetElement(index);
+        //         NUdf::TUnboxedValue rightMember = right.GetElement(index);
+        //         AssertUnboxedValuesAreEqual(leftMember, rightMember, memberType);
+        //     }
+        //     break;
+        // }
+
+        // case TType::EKind::Tuple: {
+        //     auto tupleType = static_cast<const TTupleType*>(type);
+        //     UNIT_ASSERT_EQUAL(left.GetListLength(), tupleType->GetElementsCount());
+        //     UNIT_ASSERT_EQUAL(right.GetListLength(), tupleType->GetElementsCount());
+        //     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
+        //         auto elementType = tupleType->GetElementType(index);
+        //         NUdf::TUnboxedValue leftMember = left.GetElement(index);
+        //         NUdf::TUnboxedValue rightMember = right.GetElement(index);
+        //         AssertUnboxedValuesAreEqual(leftMember, rightMember, elementType);
+        //     }
+        //     break;
+        // }
+
+        // case TType::EKind::Dict: {
+        //     auto dictType = static_cast<const TDictType*>(type);
+        //     auto payloadType = dictType->GetPayloadType();
+
+        //     UNIT_ASSERT_EQUAL(left.GetDictLength(), right.GetDictLength());
+        //     const auto leftIter = left.GetDictIterator();
+        //     for (NUdf::TUnboxedValue key, leftPayload; leftIter.NextPair(key, leftPayload);) {
+        //         UNIT_ASSERT(right.Contains(key));
+        //         NUdf::TUnboxedValue rightPayload = right.Lookup(key);
+        //         AssertUnboxedValuesAreEqual(leftPayload, rightPayload, payloadType);
+        //     }
+        //     break;
+        // }
+
+        // case TType::EKind::Variant: {
+        //     auto variantType = static_cast<const TVariantType*>(type);
+        //     UNIT_ASSERT_EQUAL(left.GetVariantIndex(), right.GetVariantIndex());
+        //     ui32 variantIndex = left.GetVariantIndex();
+        //     TType* innerType = variantType->GetUnderlyingType();
+        //     if (innerType->IsStruct()) {
+        //         innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex);
+        //     } else {
+        //         UNIT_ASSERT_C(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
+        //         innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
+        //     }
+        //     NUdf::TUnboxedValue leftValue = left.GetVariantItem();
+        //     NUdf::TUnboxedValue rightValue = right.GetVariantItem();
+        //     AssertUnboxedValuesAreEqual(leftValue, rightValue, innerType);
+        //     break;
+        // }
+
+        default: {
+            UNIT_ASSERT_C(false, TStringBuilder() << "Unsupported type: " << type->GetKindAsStr());
         }
-
-        case TType::EKind::Tuple: {
-            auto tupleType = static_cast<const TTupleType*>(type);
-            UNIT_ASSERT_EQUAL(left.GetListLength(), tupleType->GetElementsCount());
-            UNIT_ASSERT_EQUAL(right.GetListLength(), tupleType->GetElementsCount());
-            for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
-                auto elementType = tupleType->GetElementType(index);
-                NUdf::TUnboxedValue leftMember = left.GetElement(index);
-                NUdf::TUnboxedValue rightMember = right.GetElement(index);
-                AssertUnboxedValuesAreEqual(leftMember, rightMember, elementType);
-            }
-            break;
-        }
-
-        case TType::EKind::Dict: {
-            auto dictType = static_cast<const TDictType*>(type);
-            auto payloadType = dictType->GetPayloadType();
-
-            UNIT_ASSERT_EQUAL(left.GetDictLength(), right.GetDictLength());
-            const auto leftIter = left.GetDictIterator();
-            for (NUdf::TUnboxedValue key, leftPayload; leftIter.NextPair(key, leftPayload);) {
-                UNIT_ASSERT(right.Contains(key));
-                NUdf::TUnboxedValue rightPayload = right.Lookup(key);
-                AssertUnboxedValuesAreEqual(leftPayload, rightPayload, payloadType);
-            }
-            break;
-        }
-
-        case TType::EKind::Variant: {
-            auto variantType = static_cast<const TVariantType*>(type);
-            UNIT_ASSERT_EQUAL(left.GetVariantIndex(), right.GetVariantIndex());
-            ui32 variantIndex = left.GetVariantIndex();
-            TType* innerType = variantType->GetUnderlyingType();
-            if (innerType->IsStruct()) {
-                innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex);
-            } else {
-                Y_VERIFY_S(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
-                innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
-            }
-            NUdf::TUnboxedValue leftValue = left.GetVariantItem();
-            NUdf::TUnboxedValue rightValue = right.GetVariantItem();
-            AssertUnboxedValuesAreEqual(leftValue, rightValue, innerType);
-            break;
-        }
-
-    default:
-        THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }
 }
 
@@ -826,22 +836,15 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     }
 
     for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
-        if constexpr (IsStringType) {
-            if constexpr (std::is_same_v<NUdf::TJsonDocument, TMiniKQLType>) {
-                auto val = NBinaryJson::SerializeToJson(values[i].AsStringRef());
-                UNIT_ASSERT(static_cast<TPhysicalType>(typedArray->Value(i)) == val);
-            } else {
-                auto value = ExtractUnboxedValue(array, i, type, context.HolderFactory);
-                AssertUnboxedValuesAreEqual(value, values[i], type);
-            }
-        } else {
-            UNIT_ASSERT(static_cast<TPhysicalType>(typedArray->Value(i)) == values[i].Get<TPhysicalType>());
+        auto left = ExtractUnboxedValue(array, i, type, context.HolderFactory);
+        auto right = values[i];
+
+        if constexpr (std::is_same_v<NUdf::TJsonDocument, TMiniKQLType>) {
+            left = MakeString(NBinaryJson::SerializeToJson(left.AsStringRef()));
+            right = MakeString(NBinaryJson::SerializeToJson(right.AsStringRef()));
         }
 
-        if constexpr (IsTimezoneType) {
-            auto view = timezoneArray->Value(i);
-            UNIT_ASSERT(values[i].GetTimezoneId() == GetTimezoneId(NUdf::TStringRef(view.data(), view.size())));
-        }
+        AssertUnboxedValuesAreEqual(left, right, type);
     }
 }
 
@@ -876,17 +879,8 @@ void TestFixedSizeBinaryDataTypeConversion() {
     UNIT_ASSERT(typedArray->byte_width() == NScheme::FSB_SIZE);
 
     for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
-        auto view = typedArray->GetView(i);
-        if constexpr (IsDecimalType) {
-            NDecimal::TInt128 actual;
-            std::memcpy(&actual, view.data(), view.size());
-
-            NDecimal::TInt128 expected = values[i].GetInt128();
-            UNIT_ASSERT(actual == expected);
-        } else {
-            auto expected = values[i].AsStringRef();
-            UNIT_ASSERT_STRINGS_EQUAL(std::string(view.data(), view.size()), std::string(expected.Data(), expected.Size()));
-        }
+        auto arrowValue = ExtractUnboxedValue(array, i, type, context.HolderFactory);
+        AssertUnboxedValuesAreEqual(arrowValue, values[i], type);
     }
 }
 
@@ -914,6 +908,11 @@ void TestSingularTypeConversion() {
         UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
         UNIT_ASSERT(structArray->num_fields() == 0);
+    }
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        auto arrowValue = ExtractUnboxedValue(array, i, type, context.HolderFactory);
+        AssertUnboxedValuesAreEqual(arrowValue, values[i], type);
     }
 }
 

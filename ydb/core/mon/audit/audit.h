@@ -37,6 +37,8 @@ private:
     TAuditParts Parts;
     bool Auditable = false;
     NACLibProto::ESubjectType SubjectType = NACLibProto::SUBJECT_TYPE_ANONYMOUS;
+    TString Subject;
+    TString SanitizedToken;
 };
 
 }

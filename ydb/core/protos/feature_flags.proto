@@ -234,5 +234,5 @@ message TFeatureFlags {
     optional bool EnableMetricsLevel = 208 [default = false];
     optional bool EnableSecureScriptExecutions = 209 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = false];
-    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
 }

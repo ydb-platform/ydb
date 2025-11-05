@@ -99,7 +99,7 @@ SRCS(
     crypto/crypto.cpp
     crypto/tls.cpp
 
-    logging/compression.cpp
+    logging/appendable_compressed_file.cpp
     logging/config.cpp
     GLOBAL logging/configure_log_manager.cpp
     logging/formatter.cpp
@@ -114,7 +114,7 @@ SRCS(
     logging/stream_log_writer.cpp
     logging/system_log_event_provider.cpp
     logging/random_access_gzip.cpp
-    logging/zstd_compression.cpp
+    logging/zstd_log_codec.cpp
 
     misc/arithmetic_formula.cpp
     misc/backtrace.cpp

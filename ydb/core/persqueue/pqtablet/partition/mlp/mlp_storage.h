@@ -64,6 +64,7 @@ public:
     static_assert(sizeof(TMessage) == sizeof(ui64) * 2);
 
     struct TMessageWrapper {
+        bool SlowZone;
         ui64 Offset;
         EMessageStatus Status;
         ui32 ProcessingCount;

@@ -1403,6 +1403,103 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     }
 }
 
+Y_UNIT_TEST(SlowZone_LongScenario) {
+    const size_t maxMessages = 8;
+
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    auto now = timeProvider->Now();
+
+    TStorage storage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
+    storage.SetKeepMessageOrder(true);
+    storage.SetMaxMessageReceiveCount(1);
+    storage.SetReteintion(TDuration::Seconds(7 * 13));
+
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    storage.SerializeTo(snapshot);
+
+    {
+        UNIT_ASSERT(storage.AddMessage(0, true, 100, now - TDuration::Seconds(7 * 12)));
+        TStorage::TPosition position;
+        auto r = storage.Next(now + TDuration::Seconds(50), position);
+        UNIT_ASSERT_VALUES_EQUAL(r.value(), 0);
+    }
+    {
+        UNIT_ASSERT(storage.AddMessage(1, true, 101, now - TDuration::Seconds(7 * 11)));
+        storage.Commit(1);
+    }
+    {
+        UNIT_ASSERT(storage.AddMessage(2, true, 102, now - TDuration::Seconds(7 * 10)));
+    }
+    {
+        UNIT_ASSERT(storage.AddMessage(3, true, 103, now - TDuration::Seconds(7 * 9)));
+    }
+    {
+        UNIT_ASSERT(storage.AddMessage(4, true, 104, now - TDuration::Seconds(7 * 8)));
+    }
+
+    NKikimrPQ::TMLPStorageWAL wal1;
+    auto batch1 = storage.GetBatch();
+    batch1.SerializeTo(wal1);
+
+    {
+        UNIT_ASSERT(storage.AddMessage(5, true, 105, now - TDuration::Seconds(7 * 7)));
+    }
+    {
+        // Fat zone is end Move to slow zone
+        UNIT_ASSERT(storage.AddMessage(6, true, 106, now - TDuration::Seconds(7 * 6)));
+    }
+
+    NKikimrPQ::TMLPStorageWAL wal2;
+    auto batch2 = storage.GetBatch();
+    batch2.SerializeTo(wal2);
+
+    {
+        auto it = storage.begin();
+        {
+            UNIT_ASSERT(it != storage.end());
+            auto message = *it;
+            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
+            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
+            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+        }
+        {
+            UNIT_ASSERT(++it != storage.end());
+            auto message = *it;
+            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
+            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Committed);
+        }
+    }
+
+    {
+        // Fat zone is end Move to slow zone
+        UNIT_ASSERT(storage.AddMessage(7, true, 106, now - TDuration::Seconds(7 * 6)));
+    }
+
+        {
+        auto it = storage.begin();
+        {
+            UNIT_ASSERT(it != storage.end());
+            auto message = *it;
+            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
+            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
+            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+        }
+        {
+            // offset 1 is commited and didn`t moved to slow zone
+            UNIT_ASSERT(++it != storage.end());
+            auto message = *it;
+            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
+            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+        }
+    }
+
+
+    Cerr << "DUMP 1: " << storage.DebugString() << Endl;
+
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

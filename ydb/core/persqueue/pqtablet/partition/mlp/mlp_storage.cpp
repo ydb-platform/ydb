@@ -666,6 +666,7 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
     }
 
     return TMessageWrapper{
+        .SlowZone = Iterator != Storage.SlowMessages.end(),
         .Offset = offset,
         .Status = static_cast<EMessageStatus>(message->Status),
         .ProcessingCount = message->ReceiveCount,

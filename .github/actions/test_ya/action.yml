@@ -378,18 +378,14 @@ runs:
           # Try to use systemd-run with memory limits, fallback to direct execution if not available
           SYSTEMD_CMD=""
           if command -v systemd-run >/dev/null 2>&1; then
-            # Try systemd-run with --wait (transient service) first - this is usually better
-            if systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G true >/dev/null 2>&1; then
-              SYSTEMD_CMD="systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G --"
-            elif sudo -n systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G true >/dev/null 2>&1; then
-              # Try with sudo if available and passwordless
-              SYSTEMD_CMD="sudo systemd-run --wait -p MemoryMax=250G -p MemoryHigh=249G --"
-            # Try systemd-run with scope as fallback
-            elif systemd-run --scope true >/dev/null 2>&1; then
-              SYSTEMD_CMD="systemd-run --scope -p MemoryMax=250G -p MemoryHigh=249G --"
-            elif sudo -n systemd-run --scope true >/dev/null 2>&1; then
-              # Try with sudo if available and passwordless
-              SYSTEMD_CMD="sudo systemd-run --scope -p MemoryMax=250G -p MemoryHigh=249G --"
+            # Try systemd-run with --wait (transient service)
+            # MemoryMax=230G: hard limit, process will be killed if exceeded
+            # MemoryHigh=229G: soft limit, process will be throttled if exceeded  
+            # MemorySwapMax=230G: limit swap usage to prevent OOM
+            if systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G true >/dev/null 2>&1; then
+              SYSTEMD_CMD="systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --"
+            elif sudo -n systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G true >/dev/null 2>&1; then
+              SYSTEMD_CMD="sudo systemd-run --wait -p MemoryMax=230G -p MemoryHigh=229G -p MemorySwapMax=230G --"
             else
               echo "Warning: systemd-run requires authentication, running without memory limits" | tee -a $YA_MAKE_OUTPUT
             fi
@@ -398,13 +394,7 @@ runs:
           fi
 
           if [ -n "$SYSTEMD_CMD" ]; then
-            echo "Running: $SYSTEMD_CMD $YA_MAKE_COMMAND ..." | tee -a $YA_MAKE_OUTPUT
-            
-            # Get list of existing units before we start (using timestamp)
-            UNITS_BEFORE_TS=$(sudo systemctl list-units --type=service --all --no-legend 2>/dev/null | grep 'run-[a-z0-9]*\.service' | wc -l || echo "0")
-            
             # Run command with systemd-run and capture all output
-            # Change to working directory in the command to ensure we're in the right place
             $SYSTEMD_CMD \
               sh -c "cd \"$WORK_DIR\" && exec $YA_MAKE_COMMAND $YA_MAKE_TARGET \
                 $RERUN_FAILED_OPT --log-file \"$PUBLIC_DIR/ya_log.txt\"  \
@@ -412,28 +402,6 @@ runs:
                 --junit \"$CURRENT_JUNIT_XML_PATH\" --build-results-report \"$CURRENT_REPORT\" --output \"$YA_MAKE_OUT_DIR\" 2>&1" 2>&1 | tee -a $YA_MAKE_OUTPUT
             RC=${PIPESTATUS[0]}
             echo $RC > exit_code
-            echo "Command finished with exit code: $RC" | tee -a $YA_MAKE_OUTPUT
-            
-            # Find the unit that was just created (should be the newest run-u*.service)
-            UNIT_NAME=$(sudo systemctl list-units --type=service --all --no-legend 2>/dev/null | grep 'run-[a-z0-9]*\.service' | tail -1 | awk '{print $1}' || echo "")
-            
-            if [ -n "$UNIT_NAME" ]; then
-              echo "Found unit: $UNIT_NAME. Checking systemd journal:" | tee -a $YA_MAKE_OUTPUT
-              sudo journalctl -u "$UNIT_NAME" --no-pager -n 100 2>&1 | tee -a $YA_MAKE_OUTPUT || true
-            else
-              echo "Checking all recent run-u*.service units:" | tee -a $YA_MAKE_OUTPUT
-              sudo journalctl -u "run-u*.service" --no-pager -n 100 2>&1 | tail -100 | tee -a $YA_MAKE_OUTPUT || true
-            fi
-            
-            if [ $RC -ne 0 ]; then
-              echo "Error detected. Checking logs..." | tee -a $YA_MAKE_OUTPUT
-              if [ -f "$PUBLIC_DIR/ya_log.txt" ]; then
-                echo "Last 50 lines of ya_log.txt:" | tee -a $YA_MAKE_OUTPUT
-                tail -50 "$PUBLIC_DIR/ya_log.txt" | tee -a $YA_MAKE_OUTPUT
-              else
-                echo "ya_log.txt not found." | tee -a $YA_MAKE_OUTPUT
-              fi
-            fi
           else
             ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
               $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \

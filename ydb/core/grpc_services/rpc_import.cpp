@@ -127,10 +127,6 @@ public:
         }
 
         if constexpr (IsFsImport) {
-            if (settings.base_path().empty()) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Base path is not set");
-            }
-            
             if (!settings.base_path().StartsWith("/")) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
                     "base_path must be an absolute path");

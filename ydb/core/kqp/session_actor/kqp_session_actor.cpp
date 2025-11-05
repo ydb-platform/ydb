@@ -1411,8 +1411,8 @@ public:
         }
 
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.HasTableWrite || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table and topic operations");
+        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
             return false;
         }
 

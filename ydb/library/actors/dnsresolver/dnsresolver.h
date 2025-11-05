@@ -100,6 +100,8 @@ namespace NDnsResolver {
         bool KeepSocket = true;
         // Force tcp to perform dns requests
         bool ForceTcp = false;
+        // Add trailing dot to hostname
+        bool AddTrailingDot = false;
     };
 
     IActor* CreateSimpleDnsResolver(TSimpleDnsResolverOptions options = TSimpleDnsResolverOptions());

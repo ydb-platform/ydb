@@ -47,6 +47,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         return;
     }
     auto batch = preparedConclusion.DetachResult();
+
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {

@@ -3,7 +3,7 @@
 namespace NKikimr {
 
 TControlWrapper SlowDiskThresholdDefaultControl =
-        TControlWrapper(std::round(DefaultSlowDiskThreshold * 10000), 1, 1'000'000);
+        TControlWrapper(std::round(DefaultSlowDiskThreshold * 1000), 1, 1'000'000);
 
 TControlWrapper PredictedDelayMultiplierDefaultControl =
         TControlWrapper(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000);

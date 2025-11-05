@@ -257,7 +257,7 @@ class Platform(object):
 
     @property
     def library_path_variables(self):
-        return ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']
+        return ['DYLD_LIBRARY_PATH']
 
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:

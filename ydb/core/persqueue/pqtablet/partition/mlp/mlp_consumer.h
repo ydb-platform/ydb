@@ -21,7 +21,7 @@ class TConsumerActor : public TBaseTabletActor<TConsumerActor>
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
 
 public:
-    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config);
+    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config, std::optional<TDuration> reteintion);
 
     void Bootstrap();
     void PassAway() override;

@@ -82,19 +82,20 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
     readWAL->SetIncludeData(true);
 }
 
-TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
+TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config, std::optional<TDuration> reteintion)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
     , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
+    Storage->SetReteintion(reteintion);
 }
 
 void TConsumerActor::Bootstrap() {
     LOG_D("Start MLP consumer " << Config.GetName());
     Become(&TConsumerActor::StateInit);
 
-    // TODO MLP Update consumer config
+    // TODO MLP Update consumer config and reteintion
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
 
@@ -666,8 +667,9 @@ NActors::IActor* CreateConsumerActor(
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
-    const NKikimrPQ::TPQTabletConfig_TConsumer& config) {
-    return new TConsumerActor(tabletId, tabletActorId, partitionId, partitionActorId, config);
+    const NKikimrPQ::TPQTabletConfig_TConsumer& config,
+    const std::optional<TDuration> reteintion) {
+    return new TConsumerActor(tabletId, tabletActorId, partitionId, partitionActorId, config, reteintion);
 }
 
 }

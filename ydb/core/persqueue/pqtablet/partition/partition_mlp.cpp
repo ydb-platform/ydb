@@ -112,12 +112,22 @@ void TPartition::InitializeMLPConsumers() {
 
         LOG_I("Creating MLP consumer '" << name << "'");
 
+        std::optional<TDuration> reteintion;
+        if (!consumer.GetImportant()) {
+            if (consumer.HasAvailabilityPeriodMs()) {
+                reteintion = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+            } else {
+                reteintion = TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
+            }
+        }
+
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
             TabletId,
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
-            consumer
+            consumer,
+            reteintion
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }

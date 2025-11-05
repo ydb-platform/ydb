@@ -139,7 +139,7 @@ public:
 
     void SetKeepMessageOrder(bool keepMessageOrder);
     void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
-    void SetReteintion(TDuration reteintion);
+    void SetReteintion(std::optional<TDuration> reteintion);
 
     ui64 GetFirstOffset() const;
     size_t GetMessageCount() const;
@@ -215,7 +215,7 @@ private:
 
     bool KeepMessageOrder = false;
     ui32 MaxMessageReceiveCount = 1000;
-    TDuration Reteintion = TDuration::Days(365);
+    std::optional<TDuration> Reteintion = TDuration::Days(365);
 
     // Offset of the first message loaded for processing. All messages with a smaller offset
     // have either already been committed or deleted from the partition.

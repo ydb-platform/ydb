@@ -166,6 +166,7 @@ public:
             if (partitionId == Partition) {
                 TabletId = partition.GetTabletId();
                 partitionFound = true;
+                break;
             }
         }
         if (!partitionFound) {

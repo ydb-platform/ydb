@@ -489,6 +489,8 @@ void TConsumerActor::ProcessEventQueue() {
 void TConsumerActor::Persist() {
     LOG_D("Persist");
 
+    Storage->Compact();
+
     auto batch = Storage->GetBatch();
     if (batch.Empty()) {
         LOG_D("Batch is empty");
@@ -526,8 +528,6 @@ void TConsumerActor::Persist() {
 
     if (!withWAL || LastWALIndex % MaxWALCount == 0) {
         HasSnapshot = true;
-
-        Storage->Compact();
 
         NKikimrPQ::TMLPStorageSnapshot snapshot;
 

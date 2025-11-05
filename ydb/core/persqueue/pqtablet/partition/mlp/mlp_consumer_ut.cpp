@@ -86,9 +86,10 @@ Y_UNIT_TEST(Reload) {
         new NKikimr::TEvPQ::TEvGetMLPConsumerStateRequest("/Root/topic1", "mlp-consumer", 0));
     auto result = runtime.GrabEdgeEvent<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse>();
 
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Committed);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, TStorage::EMessageStatus::Locked);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[2].Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, TStorage::EMessageStatus::Unprocessed);
 }
 
 }

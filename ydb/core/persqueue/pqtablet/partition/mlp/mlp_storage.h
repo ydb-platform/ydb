@@ -107,6 +107,7 @@ public:
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
 
+        void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
 
     private:
@@ -118,6 +119,7 @@ public:
         std::deque<ui64> DLQ;
         std::deque<ui64> MovedToSlowZone;
         std::deque<ui64> DeletedFromSlowZone;
+        size_t CompactedMessages = 0;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;

@@ -3,6 +3,8 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <util/string/join.h>
+
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -197,6 +199,8 @@ size_t TStorage::Compact() {
     FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
 
+    Batch.Compacted(removed);
+
     return removed;
 }
 
@@ -238,11 +242,11 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
             switch (message.Status) {
                 case EMessageStatus::Unprocessed:
                 case EMessageStatus::Locked:
+                case EMessageStatus::DLQ:
                     SlowMessages[FirstOffset] = message;
                     Batch.MoveToSlow(FirstOffset);
                     break;
                 case EMessageStatus::Committed:
-                case EMessageStatus::DLQ:
                     RemoveMessage(message);
                     break;
             }
@@ -388,13 +392,17 @@ bool TStorage::DoCommit(ui64 offset) {
 
     switch(message->Status) {
         case EMessageStatus::Unprocessed:
-            Batch.AddChange(offset);
-
+            if (!slowZone) {
+                Batch.AddChange(offset);
+                ++Metrics.CommittedMessageCount;
+            }
             --Metrics.UnprocessedMessageCount;
-            ++Metrics.CommittedMessageCount;
             break;
         case EMessageStatus::Locked:
-            Batch.AddChange(offset);
+            if (!slowZone) {
+                Batch.AddChange(offset);
+                ++Metrics.CommittedMessageCount;
+            }
 
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
@@ -403,22 +411,27 @@ bool TStorage::DoCommit(ui64 offset) {
                 }
             }
 
-            if (slowZone) {
-                SlowMessages.erase(offset);
-                Batch.DeleteFromSlow(offset);
-                --Metrics.InflyMessageCount;
-            } else {
-                ++Metrics.CommittedMessageCount;
-            }
             break;
         case EMessageStatus::Committed:
             return false;
         case EMessageStatus::DLQ:
+            if (!slowZone) {
+                Batch.AddChange(offset);
+                ++Metrics.CommittedMessageCount;
+            }
+
+            --Metrics.DLQMessageCount;
             break;
     }
 
-    message->Status = EMessageStatus::Committed;
-    message->DeadlineDelta = 0;
+    if (slowZone) {
+        SlowMessages.erase(offset);
+        Batch.DeleteFromSlow(offset);
+        --Metrics.InflyMessageCount;
+    } else {
+        message->Status = EMessageStatus::Committed;
+        message->DeadlineDelta = 0;
+    }
 
     UpdateFirstUncommittedOffset();
 
@@ -565,7 +578,7 @@ TString TStorage::DebugString() const {
          << " Messages: [";
     
     auto dump = [&](const auto offset, const auto& message, auto zone) {
-        sb << zone <<"{" << " " << offset << ", "
+        sb << zone <<"{" << offset << ", "
             << static_cast<EMessageStatus>(message.Status) << ", "
             << message.DeadlineDelta << ", "
             << message.WriteTimestampDelta << "} ";
@@ -578,7 +591,7 @@ TString TStorage::DebugString() const {
         dump(FirstOffset + i, Messages[i], 'f');
     }
 
-    sb << "]";
+    sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId.begin(), LockedMessageGroupsId.end()) << "]";
     return sb;
 }
 
@@ -610,6 +623,10 @@ void TStorage::TBatch::DeleteFromSlow(ui64 offset) {
     DeletedFromSlowZone.push_back(offset);
 }
 
+void TStorage::TBatch::Compacted(size_t count) {
+    CompactedMessages += count;
+}
+
 void TStorage::TBatch::MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp) {
     BaseDeadline = baseDeadline;
     BaseWriteTimestamp = baseWriteTimestamp;
@@ -622,7 +639,8 @@ bool TStorage::TBatch::Empty() const {
         && !BaseDeadline.has_value()
         && !BaseWriteTimestamp.has_value()
         && MovedToSlowZone.empty()
-        && DeletedFromSlowZone.empty();
+        && DeletedFromSlowZone.empty()
+        && CompactedMessages == 0;
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

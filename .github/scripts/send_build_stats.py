@@ -97,7 +97,7 @@ VALUES
 
             text_query = "\n".join(text_query_builder)
 
-            # Получение размеров бинарника
+            # Get binary sizes
             binary_size_bytes = subprocess.check_output(
                 ["bash", "-c", "cat {} | wc -c".format(ydbd_path)]
             )

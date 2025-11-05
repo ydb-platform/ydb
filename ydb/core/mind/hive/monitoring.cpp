@@ -2962,7 +2962,7 @@ public:
 class TReassignTabletWaitActor : public TActor<TReassignTabletWaitActor>, public ISubActor {
 public:
     TActorId Source;
-    ui32 TabletsTotal = std::numeric_limits<ui32>::max();
+    ui32 TabletsTotal = 0;
     ui32 TabletsDone = 0;
     THive* Hive;
 
@@ -2989,12 +2989,21 @@ public:
         return SelfId().LocalId();
     }
 
-    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
-        ++TabletsDone;
+    void AddTablet(TLeaderTabletInfo* tablet) {
+        tablet->ActorsToNotifyOnRestart.push_back(SelfId());
+        ++TabletsTotal;
+    }
+
+    void CheckCompletion() {
         if (TabletsDone >= TabletsTotal) {
             Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"total\":" << TabletsDone << "}"));
             PassAway();
         }
+    }
+
+    void Handle(TEvPrivate::TEvRestartComplete::TPtr&) {
+        ++TabletsDone;
+        CheckCompletion();
     }
 
     STATEFN(StateWork) {
@@ -3115,12 +3124,12 @@ public:
                 continue;
             }
             if (Wait) {
-                tablet->ActorsToNotifyOnRestart.emplace_back(waitActorId); // volatile settings, will not persist upon restart
+                waitActor->AddTablet(tablet);
             }
             operations.emplace_back(new TEvHive::TEvReassignTablet(tablet->Id, channels, forcedGroupIds));
         }
         if (Wait) {
-            waitActor->TabletsTotal = operations.size();
+            waitActor->CheckCompletion();
         }
         for (auto& op : operations) {
             ctx.Send(Self->SelfId(), op.Release());

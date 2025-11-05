@@ -532,6 +532,11 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 set TablePathPrefix = "/Root/";
                 select sum(t1.c), t1.b from t1 group by t1.b order by t1.b;
             )",
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select max(t1.a), min(t1.a), min(t1.b) as min_b from t1;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -544,6 +549,7 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["2";"0"]])",
             R"([["6"];["4"]])",
             R"([["4";"1"];["6";"2"]])",
+            R"([["4";"0";"1"]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

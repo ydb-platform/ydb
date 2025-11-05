@@ -121,8 +121,8 @@ union TBasicKikimrServicesMask {
     void SetTinyMode() {
         EnableSelfPing = false;
         EnableMemoryTracker = false;
-
-        // TODO: set EnableStatsCollector to false as well
+        EnableStatsCollector = false;
+        EnableTabletCountersAggregator = false;
     }
 
     TBasicKikimrServicesMask() {

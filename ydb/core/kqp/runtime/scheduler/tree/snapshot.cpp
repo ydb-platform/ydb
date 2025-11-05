@@ -81,6 +81,7 @@ void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
         // TODO: stable sort children by weight
 
         auto leftFairShare = FairShare;
+        allowFairShareOverlimit = allowFairShareOverlimit && (leftFairShare > 0);
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {

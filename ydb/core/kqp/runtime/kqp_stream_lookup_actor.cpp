@@ -46,7 +46,7 @@ public:
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
         , IsolationLevel(settings.GetIsolationLevel())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
@@ -610,6 +610,13 @@ private:
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
+
+        YQL_ENSURE(!Input.IsInvalid());
+        if (Input.IsFinish() || !Input.HasValue()) {
+            LastFetchStatus = NUdf::EFetchStatus::Finish;
+            return;
+        }
+
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
         }

@@ -293,9 +293,6 @@
     "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args3-row_/result.output"
     },
-    "test_ydb_scheme.TestSchemeDescribe.test_describe_view": {
-        "uri": "file://test_ydb_scheme.TestSchemeDescribe.test_describe_view/result.output"
-    },
     "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_disabled]": {
         "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_disabled_/result.output"
     },
@@ -662,6 +659,12 @@
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_tsv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_ignore_excess_parameters_tsv_sql_/result.output"
     },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_rows_csv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_rows_csv_sql_/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_rows_tsv[sql]": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_rows_tsv_sql_/result.output"
+    },
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_csv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_csv_sql_/result.output"
     },
@@ -670,12 +673,6 @@
     },
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_tsv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_simple_tsv_sql_/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_csv[sql]": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_csv_sql_/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_tsv[sql]": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_skip_rows_tsv_sql_/result.output"
     },
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_csv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_csv_sql_/result.output"
@@ -691,6 +688,12 @@
     },
     "test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithStdinDetection.test_empty_stdin_no_params": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithStdinDetection.test_empty_stdin_no_params/result.output"
+    },
+    "test_ydb_sql.TestExecuteSqlWithStdinDetection.test_pipe_with_data_success": {
+        "uri": "file://test_ydb_sql.TestExecuteSqlWithStdinDetection.test_pipe_with_data_success/result.output"
     },
     "test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv": {
         "uri": "file://test_ydb_table.TestExecuteQueryWithFormats.test_data_query_csv/result.output"

@@ -12810,6 +12810,16 @@ END DO)",
         }
 
         {
+            auto schemeClient = kikimr->GetSchemeClient(TCommonClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+            const auto result = schemeClient.DescribePath("/Root/MyFolder/MyStreamingQuery").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            const auto& entry = result.GetEntry();
+            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "MyStreamingQuery");
+            UNIT_ASSERT_VALUES_EQUAL(entry.Owner, BUILTIN_ACL_ROOT);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::StreamingQuery);
+        }
+
+        {
             const auto result = db.ExecuteQuery(R"(
                 CREATE OR REPLACE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = FALSE
@@ -13551,11 +13561,50 @@ END DO)",
         )", settings));
 
         const auto queryName = TStringBuilder() << tenantName << "/MyStreamingQuery";
+        TString queryText = " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
             {"resource_pool", "default"},
-            {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            {"__query_text", queryText}
         });
+
+        const auto checkSysView = [&](const TString& text, bool expectExistance = true, const TString& filter = "") {
+            const auto& result = ydb->ExecuteQuery(
+                TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` " << filter
+            , settings);
+            NWorkload::TSampleQueries::CheckSuccess(result);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSets.size(), 1);
+            NYdb::TResultSetParser resultParser(result.ResultSets[0]);
+
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.RowsCount(), expectExistance);
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnsCount(), 13);
+
+            if (expectExistance) {
+                UNIT_ASSERT(resultParser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Path").GetOptionalUtf8(), queryName);
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Status").GetOptionalUtf8(), "RUNNING");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Issues").GetOptionalUtf8(), "{}");
+                UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Plan").GetOptionalUtf8(), "Write MySource");
+                UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Ast").GetOptionalUtf8(), "/Root/test-serverless/MySource");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Text").GetOptionalUtf8(), text);
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Run").GetOptionalBool(), true);
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("RetryCount").GetOptionalUint64(), 0);
+                UNIT_ASSERT(!resultParser.ColumnParser("LastFailAt").GetOptionalTimestamp());
+                UNIT_ASSERT(!resultParser.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+                UNIT_ASSERT(!resultParser.ColumnParser("LastExecutionId").GetOptionalUtf8()->empty());
+                UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("PreviousExecutionIds").GetOptionalUtf8(), "[");
+            }
+        };
+
+        Sleep(TDuration::Seconds(2));
+        checkSysView(queryText);
+        checkSysView(queryText, true, TStringBuilder() << "WHERE Path = '" << queryName << "'");
+        checkSysView(queryText, true, TStringBuilder() << "WHERE Path >= '" << queryName << "'");
+        checkSysView(queryText, true, TStringBuilder() << "WHERE Path <= '" << queryName << "'");
+        checkSysView(queryText, false, TStringBuilder() << "WHERE Path > '" << queryName << "'");
+        checkSysView(queryText, false, TStringBuilder() << "WHERE Path < '" << queryName << "'");
 
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
             ALTER STREAMING QUERY MyStreamingQuery SET (
@@ -13563,17 +13612,22 @@ END DO)",
             ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO
         )", settings));
 
+        queryText = " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic ";
         CheckObjectProperties(*ydb->GetRuntime(), queryName, {
             {"run", "true"},
             {"resource_pool", "default"},
-            {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+            {"__query_text", queryText}
         });
+
+        Sleep(TDuration::Seconds(2));
+        checkSysView(queryText);
 
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
             DROP STREAMING QUERY MyStreamingQuery
         )", settings));
 
         CheckObjectNotFound(*ydb->GetRuntime(), queryName);
+        checkSysView(queryText, false);
     }
 
     Y_UNIT_TEST_TWIN(CreateSecret, UseQueryService) {
@@ -13723,9 +13777,39 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(SecretsDisabled) {
+    Y_UNIT_TEST(SecretsEnabledByDefault) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // create
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name-1` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // alter
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name-1` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // drop
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name-1`;
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+        Y_UNIT_TEST(SecretsDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(false);
         const auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
+            .SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

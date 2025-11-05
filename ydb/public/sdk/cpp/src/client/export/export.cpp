@@ -29,7 +29,8 @@ const std::string TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305
 namespace {
 
 std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {
-    std::vector<TExportItemProgress> result(proto.size());
+    std::vector<TExportItemProgress> result;
+    result.reserve(proto.size());
 
     for (const auto& protoItem : proto) {
         auto& item = result.emplace_back();

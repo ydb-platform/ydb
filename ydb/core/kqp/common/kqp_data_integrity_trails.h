@@ -53,7 +53,7 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
             ? AppData()->DataIntegrityTrailsConfig.GetQueryTextLogMode()
             : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
         if (queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
-            LogKeyValue("QueryText", request->Get()->GetQuery(), ss);
+            LogKeyValue("QueryText", EscapeC(request->Get()->GetQuery()), ss);
         } else {
             std::string hashedQueryText;
             hashedQueryText.resize(SHA256_DIGEST_LENGTH);

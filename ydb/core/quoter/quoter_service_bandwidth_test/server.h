@@ -23,6 +23,7 @@ public:
 
     void RunQuotaRequesters(TRequestStats& stats);
 
+    static TString GetDomainPath();
     static std::pair<TString, TString> GetKesusPathAndName(size_t i);
     static TString GetKesusPath(size_t i);
     static TString GetKesusResource(size_t i);

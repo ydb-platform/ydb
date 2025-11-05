@@ -1,7 +1,7 @@
 #include "link_manager.h"
 #include "ctx.h"
-
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include "ctx_impl.h"
+#include <mutex>
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -58,15 +58,15 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
-            Cerr << "Unalbe to load ibverbs library: " << ex.what() << Endl;
             return;
         }
-        ScanDevices();
     }
-private:
-    TCtxsMap CtxMap;
 
     void ScanDevices() {
+        std::lock_guard<std::mutex> lock(Mtx);
+        if (Inited) {
+            return;
+        }
         int numDevices = 0;
         int err;
         ibv_device** deviceList = ibv_get_device_list(&numDevices);
@@ -124,7 +124,7 @@ private:
         // check for duplicates
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
-            ctx->DeviceIndex = i;
+            ctx->Impl->DeviceIndex = i;
 
             if (i > 0) {
                 auto prevCtx = CtxMap[i - 1].second;
@@ -133,10 +133,16 @@ private:
                 }
             }
         }
+        Inited = true;
     }
 
+private:
+    TCtxsMap CtxMap;
     int ErrNo = 0;
     TString Err;
+    std::mutex Mtx;
+    bool Inited = false;
+
 
 } RdmaLinkManager;
 
@@ -160,6 +166,10 @@ TRdmaCtx* GetCtx(const in6_addr& ip) {
 
 const TCtxsMap& GetAllCtxs() {
     return RdmaLinkManager.GetAllCtxs();
+}
+
+void Init() {
+    RdmaLinkManager.ScanDevices();
 }
 
 } 

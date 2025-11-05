@@ -30,6 +30,7 @@ using TRowTypes = TVector<std::pair<TString, Ydb::Type>>;
 static void DoStartUploadTestRows(
         const Tests::TServer::TPtr& server,
         const TActorId& sender,
+        const TString& database,
         const TString& tableName,
         Ydb::Type::PrimitiveTypeId typeId,
         bool uploadNull)
@@ -53,7 +54,7 @@ static void DoStartUploadTestRows(
         rows->emplace_back(serializedKey, serializedValue);
     }
 
-    auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows);
+    auto actor = NTxProxy::CreateUploadRowsInternal(sender, database, tableName, types, rows);
     runtime.Register(actor);
 }
 
@@ -69,10 +70,11 @@ static void DoWaitUploadTestRows(
 }
 
 static void DoUploadTestRows(Tests::TServer::TPtr server, const TActorId& sender,
-                             const TString& tableName, Ydb::Type::PrimitiveTypeId typeId,
+                             const TString& database, const TString& tableName,
+                             Ydb::Type::PrimitiveTypeId typeId,
                              Ydb::StatusIds::StatusCode expected, bool uploadNull)
 {
-    DoStartUploadTestRows(server, sender, tableName, typeId, uploadNull);
+    DoStartUploadTestRows(server, sender, database, tableName, typeId, uploadNull);
     DoWaitUploadTestRows(server, sender, expected);
 }
 
@@ -101,8 +103,8 @@ Y_UNIT_TEST_SUITE(KqpUserConstraint) {
 
         CreateShardedTable(server, sender, "/Root", "table-1", std::move(opts));
 
-        DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS, UploadNull);
-            
+        DoUploadTestRows(server, sender, "/Root", "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS, UploadNull);
+
         auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1`", true);
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);

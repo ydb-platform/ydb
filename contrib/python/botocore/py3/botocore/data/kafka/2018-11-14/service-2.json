@@ -2413,6 +2413,11 @@
           "shape" : "StorageMode",
           "locationName" : "storageMode",
           "documentation" : "\n            <p>This controls storage mode for supported storage tiers.</p>\n         "
+        },
+        "CustomerActionStatus": {
+          "shape": "CustomerActionStatus",
+          "locationName": "customerActionStatus",
+          "documentation": "\n            <p>Determines if there is an action required from the customer.</p>\n         "
         }
       },
       "documentation": "\n            <p>Returns information about a cluster.</p>\n         "
@@ -2712,6 +2717,11 @@
           "shape" : "StorageMode",
           "locationName" : "storageMode",
           "documentation" : "\n            <p>This controls storage mode for supported storage tiers.</p>\n         "
+        },
+        "CustomerActionStatus": {
+          "shape": "CustomerActionStatus",
+          "locationName": "customerActionStatus",
+          "documentation": "\n            <p>Determines if there is an action required from the customer.</p>\n         "
         }
       },
       "required": [
@@ -3542,6 +3552,11 @@
         }
       },
       "documentation" : "\n            <p>Returns information about a cluster operation.</p>"
+    },
+    "CustomerActionStatus": {
+      "type": "string",
+      "documentation": "\n            <p>A type of an action required from the customer.</p>",
+      "enum": [ "CRITICAL_ACTION_REQUIRED", "ACTION_RECOMMENDED", "NONE" ]
     },
     "DeleteClusterRequest": {
       "type": "structure",
@@ -5466,6 +5481,22 @@
       },
       "documentation": "<p>Summarized information of replication between clusters.</p>"
     },
+    "ReplicationStartingPosition" : {
+      "type" : "structure",
+      "members" : {
+        "Type" : {
+          "shape" : "ReplicationStartingPositionType",
+          "locationName" : "type",
+          "documentation": "<p>The type of replication starting position.</p>"
+        }
+      },
+      "documentation": "<p>Configuration for specifying the position in the topics to start replicating from.</p>"
+    },
+    "ReplicationStartingPositionType" : {
+      "type" : "string",
+      "enum" : [ "LATEST", "EARLIEST" ],
+      "documentation": "<p>The type of replication starting position.</p>"
+    },
     "ReplicationStateInfo" : {
       "type" : "structure",
       "members" : {
@@ -5676,6 +5707,11 @@
           "shape": "__boolean",
           "locationName": "detectAndCopyNewTopics",
           "documentation": "<p>Whether to periodically check for new topics and partitions.</p>"
+        },
+        "StartingPosition" : {
+          "shape" : "ReplicationStartingPosition",
+          "locationName" : "startingPosition",
+          "documentation": "<p>Configuration for specifying the position in the topics to start replicating from.</p>"
         },
         "TopicsToExclude": {
           "shape": "__listOf__stringMax249",

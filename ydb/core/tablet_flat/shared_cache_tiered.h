@@ -32,6 +32,11 @@ namespace NKikimr::NSharedCache {
             return CacheTiers[tier].Insert(page);
         }
 
+        TIntrusiveList<TPage> InsertUntouched(TPage *page) Y_WARN_UNUSED_RESULT {
+            ui32 tier = TPageTraits::GetTier(page);
+            return CacheTiers[tier].InsertUntouched(page);
+        }
+
         void Erase(TPage *page) {
             ui32 tier = TPageTraits::GetTier(page);
             CacheTiers[tier].Erase(page);
@@ -41,6 +46,12 @@ namespace NKikimr::NSharedCache {
             ui64 tryKeepInMemoryLimit = Min(limit, tryKeepInMemoryBytes);
             RegularTier->UpdateLimit(limit - tryKeepInMemoryLimit);
             TryKeepInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
+        }
+
+        TIntrusiveList<TPage> EnsureLimits() Y_WARN_UNUSED_RESULT {
+            auto evicted = RegularTier->EnsureLimits();
+            evicted.Append(TryKeepInMemoryTier->EnsureLimits());
+            return evicted;
         }
 
         ui64 GetLimit() const {

@@ -244,6 +244,21 @@ public:
         }
 
         {
+            auto status = client.CreateUser("/Root", "useronlyreadrights", "AbAcAbA");
+            UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
+
+            NYdb::NScheme::TSchemeClient schemeClient(*Driver);
+            NYdb::NScheme::TPermissions permissions("useronlyreadrights", {"ydb.generic.read"});
+
+            auto result = schemeClient
+                              .ModifyPermissions(
+                                  "/Root", NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions))
+                              .ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
             // Access Server Mock
             grpc::ServerBuilder builder;
             builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
@@ -1811,6 +1826,38 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, firstTopicName, minActivePartitions, {firstConsumerName, secondConsumerName, anotherConsumerName});
         CreateTopic(pqClient, secondTopicName, minActivePartitions, {firstConsumerName});
+        {
+            // authenticating as user with only read rights
+            TKafkaTestClient client(testServer.Port);
+            TString userName = "useronlyreadrights@/Root";
+            TString userPassword = "AbAcAbA";
+            client.AuthenticateToKafka(userName, userPassword);
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsets.emplace_back(i, 0, commitedMetaData);
+            }
+
+            offsets[secondTopicName] = partitionsAndOffsets;
+            auto msg = client.OffsetCommit(notExistsConsumerName2, offsets);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            for (const auto& topic : msg->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
+                }
+            }
+            auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+            auto result = pqClient.DescribeTopic(secondTopicName, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            const auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_EQUAL(consumers.size(), 1);
+            std::vector<TString> secondTopicConsumerNames;
+            for (const  NYdb::NTopic::TConsumer& consumer : consumers) {
+                secondTopicConsumerNames.push_back(TString(consumer.GetConsumerName()));
+            }
+            UNIT_ASSERT(std::find(secondTopicConsumerNames.begin(), secondTopicConsumerNames.end(), notExistsConsumerName2) == secondTopicConsumerNames.end());
+        }
 
         {
             TKafkaTestClient client(testServer.Port);
@@ -1974,78 +2021,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     }
 
-    Y_UNIT_TEST(FetchConsumerAutocreationScenario) {
-        TInsecureTestServer testServer("2", false, true, false, true, true, true);
-        TString nonExistedTopicName1 = "non-existent-topic-1";
-        TString nonExistedTopicName2 = "non-existent-topic-2";
-        TString nonExistedTopicName3 = "non-existent-topic-3";
-        TString topicName = "existent-topic";
-        TString consumerName = "my-consumer";
-        TString newConsumer1 = "new-consumer-1";
-        TString newConsumer2 = "new-consumer-2";
-        ui64 totalPartitions = 3;
-        TString protocolType = "consumer";
-        TString protocolName = "range";
-
-        {
-            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-            CreateTopic(pqClient, topicName, totalPartitions, {consumerName});
-        }
-
-        {
-            // authenticating as user with read and write rights
-            // checking that new consumer is added to a topic
-            TKafkaTestClient client(testServer.Port);
-            TString userName = "user123@/Root";
-            TString userPassword = "UsErPassword";
-            client.AuthenticateToKafka(userName, userPassword);
-            std::vector<TString> topics = {topicName};
-            i32 heartbeatTimeout = 15000;
-            auto joinRespA = client.JoinAndSyncGroupAndWaitPartitions(topics, newConsumer1, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
-            auto fetchResponse1 = client.Fetch({{topicName, {0, 1}}});
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Topic, topicName);
-            UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions.size(), 2);
-            for (const auto& partitionResponse : fetchResponse1->Responses[0].Partitions) {
-                UNIT_ASSERT_VALUES_EQUAL(partitionResponse.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-            }
-        }
-
-        {
-            // authenticating as user with no write rights
-            // checking that an error is returned on attempt to add new consumer to the topic
-            // or fetch data from topic with an existing consumer
-            TKafkaTestClient client(testServer.Port);
-            TString userName = "usernorights@/Root";
-            TString userPassword = "dummyPass";
-            client.AuthenticateToKafka(userName, userPassword);
-            std::vector<TString> topics = {topicName};
-            i32 heartbeatTimeout = 15000;
-            {
-                auto joinRespA = client.JoinAndSyncGroupAndWaitPartitions(topics, newConsumer2, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
-                auto fetchResponse1 = client.Fetch({{topicName, {0, 1}}});
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Topic, topicName);
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions.size(), 2);
-                for (const auto& partitionResponse : fetchResponse1->Responses[0].Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partitionResponse.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
-                }
-            }
-            {
-                auto joinRespA = client.JoinAndSyncGroupAndWaitPartitions(topics, newConsumer1, totalPartitions, protocolName, totalPartitions, heartbeatTimeout);
-                auto fetchResponse1 = client.Fetch({{topicName, {0, 1}}});
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses.size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Topic, topicName);
-                UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions.size(), 2);
-                for (const auto& partitionResponse : fetchResponse1->Responses[0].Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partitionResponse.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
-                }
-            }
-        }
-    }
     Y_UNIT_TEST(OffsetCommitAndFetchScenario) {
         TInsecureTestServer testServer("2", false, true, false, false);
         testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
@@ -3499,6 +3474,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString consumerName = "my-consumer";
         TString newConsumer1 = "new-consumer-1";
         TString newConsumer2 = "new-consumer-2";
+        TString newConsumer3 = "new-consumer-3";
 
         ui32 defaultPartitionsCount = testServer.KikimrServer.get()->ServerSettings->AppConfig->GetKafkaProxyConfig().GetTopicCreationDefaultPartitions();
 
@@ -3675,6 +3651,41 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
         }
+
+        {
+            TKafkaTestClient client(testServer.Port);
+            // authenticating as a user with only read rights
+            TString userName = "useronlyreadrights@/Root";
+            TString userPassword = "AbAcAbA";
+            client.AuthenticateToKafka(userName, userPassword);
+
+            std::map<TString, std::vector<i32>> topicsToPartions;
+            topicsToPartions[nonExistedTopicName3] = std::vector<i32>{0};
+            auto msg = client.OffsetFetch(newConsumer1, topicsToPartions);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+
+            std::map<TString, std::vector<i32>> topicsToPartions1;
+            topicsToPartions1[existedTopicName] = std::vector<i32>{0};
+            auto msg1 = client.OffsetFetch(newConsumer3, topicsToPartions1);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg1->Groups[0].Topics[0].Partitions[0].ErrorCode, EKafkaErrors::RESOURCE_NOT_FOUND);
+
+
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+            auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
+            auto result = pqClient.DescribeTopic(existedTopicName, describeTopicSettings).GetValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            const auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_EQUAL(consumers.size(), 3);
+            std::vector<TString> topicConsumerNames;
+            for (const  NYdb::NTopic::TConsumer& consumer : consumers) {
+                topicConsumerNames.push_back(TString(consumer.GetConsumerName()));
+            }
+            UNIT_ASSERT(std::find(topicConsumerNames.begin(), topicConsumerNames.end(), newConsumer3) == topicConsumerNames.end());
+        }
     }
 
     Y_UNIT_TEST(MetadataTopicAutocreationEnabledScenario) {
@@ -3707,7 +3718,20 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             }
         }
 
-         {
+        {
+            // check that if user has only read rights, topic is not created
+            TKafkaTestClient client(testServer.Port);
+            TString userName = "useronlyreadrights@/Root";
+            TString userPassword = "AbAcAbA";
+            client.AuthenticateToKafka(userName, userPassword);
+            TVector<TString> nonExistentTopic = {nonExistedTopicName2};
+            auto msg = client.Metadata(nonExistentTopic);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].ErrorCode, EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        }
+
+        {
             // check that if user has no rights, topic is not created
             TKafkaTestClient client(testServer.Port);
             TString userName = "usernorights@/Root";

@@ -12,7 +12,7 @@ config:
 ---
 sankey-beta
 
-Activity Components,"KQP", 20
+Activity Components,"QP", 20
 Activity Components,Compaction, 10
 
 Cache Components,Shared cache, 40
@@ -30,7 +30,7 @@ YDB process memory,Other,10
 
 - [Общий кеш](../../concepts/glossary.md#shared-cache): хранит недавно доступные страницы данных, считанные из [распределённого хранилища](../../concepts/glossary.md#distributed-storage), чтобы уменьшить количество операций ввода-вывода с диска и ускорить получение данных.
 - [MemTable](../../concepts/glossary.md#memtable): содержит данные, которые ещё не были записаны в [SST](../../concepts/glossary.md#sst).
-- [KQP](../../concepts/glossary.md#kqp): хранит промежуточные результаты обработки запросов.
+- [Query Processor](../../concepts/glossary.md#kqp): хранит промежуточные результаты обработки запросов.
 - [Compaction](../../concepts/glossary.md#compaction): процесс упорядочивания и очистки данных, который выполняется автоматически (в «фоновом» режиме) для оптимизации объёма хранения данных.
 - Кеши аллокатора: хранят блоки памяти, которые были освобождены, но ещё не возвращены операционной системе.
 
@@ -104,7 +104,7 @@ memory_controller_config:
 
 К компонентам-активностям относятся:
 
-- KQP;
+- Query Processor;
 - Компактизация.
 
 Лимит памяти для каждого из компонентов-активностей указывает максимальное количество памяти, которое он может попытаться использовать. Однако, чтобы предотвратить превышение процессом {{ ydb-short-name }} мягкого лимита памяти, общее потребление компонентов-активностей ограничивается дополнительным лимитом, называемым лимитом памяти для активностей. Если общее использование памяти активными компонентами превышает этот лимит, любые дополнительные запросы на память будут отклонены. Когда выполнение запросов приближается к лимитам памяти, {{ ydb-short-name }} активирует [спиллинг](../../concepts/spilling.md) для временного сохранения промежуточных данных на диск, предотвращая нарушение лимитов памяти.
@@ -113,7 +113,7 @@ memory_controller_config:
 
 Существуют и другие компоненты-активности, которые в настоящее время не имеют каких-либо индивидуальных лимитов памяти.
 
-Пример секции `memory_controller_config` с указанным лимитом для KQP:
+Пример секции `memory_controller_config` с указанным лимитом для QP:
 
 ```yaml
 memory_controller_config:
@@ -144,5 +144,5 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Максимальный порог для лимита памяти общего кеша. |
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Минимальный порог для лимита памяти MemTable. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Максимальный порог для лимита памяти MemTable. |
-| `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | Лимит памяти для KQP. |
+| `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | Лимит памяти для QP. |
 | `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Лимит памяти для компактизации. |

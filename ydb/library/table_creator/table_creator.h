@@ -79,6 +79,7 @@ NActors::IActor* CreateTableCreator(
     TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
     const TString& database = {},
     bool isSystemUser = false,
-    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
+    TMaybe<NACLib::TDiffACL> newTableAcl = Nothing());
 
 } // namespace NKikimr

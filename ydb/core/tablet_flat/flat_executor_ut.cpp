@@ -6954,6 +6954,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // should be cached
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -6963,6 +6964,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 20);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 24);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestTryKeepInMemory) {
@@ -6990,6 +6992,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -6999,6 +7002,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestTryKeepInMemoryMain) {
@@ -7026,6 +7030,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7034,6 +7039,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 10); // 10 historic[1] pages
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 14); // 10 historic[1] pages, 4 cache misses before preloading
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestTryKeepInMemoryAlt_FlatIndex) {
@@ -7062,6 +7068,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7070,6 +7077,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0], 3 index pages are sticky
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 8); // 1 groups[0], 1 historic[0], 6 cache misses before preloading, 3 index pages are sticky
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestTryKeepInMemoryAlt_BTreeIndex) {
@@ -7098,6 +7106,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7106,6 +7115,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // index root nodes, 1 groups[0], 1 historic[0]
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading, should be index root nodes?
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestTryKeepInMemoryAll) {
@@ -7134,6 +7144,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7143,6 +7154,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4); // should be no more cache misses
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestAlterAddFamilyTryKeepInMemory) {
@@ -7174,6 +7186,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7183,6 +7196,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         // 4 cache misses before preloading, all old and new colums in try-keep-in-memory family sould be preloaded
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestAlterAddFamilyPartiallyTryKeepInMemory) {
@@ -7213,6 +7227,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7222,6 +7237,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0);
         // 4 cache misses before preloading, if at least one family of a group is for memory load it 
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestAlterFamilyDisableTryKeepInMemoryAll) {
@@ -7254,6 +7270,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7263,6 +7280,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 12);
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 16); // 1 groups[0], 1 historic[0], 10 historic[1] pages, 4 cache misses before preloading
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 
     Y_UNIT_TEST(TestAlterFamilyDisableTryKeepInMemoryPartially) {
@@ -7294,6 +7312,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 0); // in shared cache
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
 
         // restart tablet
         RestartAndClearCache(env, 8_MB);
@@ -7303,6 +7322,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_TryKeepInMemory) {
         DoFullScan(env, failedAttempts, true);
         UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2); // 1 groups[0], 1 historic[0]
         UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissPages->Val(), 6); // 1 groups[0], 1 historic[0], 4 cache misses before preloading
+        UNIT_ASSERT_VALUES_EQUAL(cacheCounters->CacheMissInMemoryPages->Val(), 0);
     }
 }
 

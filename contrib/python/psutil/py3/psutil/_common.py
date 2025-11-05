@@ -22,7 +22,6 @@ from socket import AF_INET
 from socket import SOCK_DGRAM
 from socket import SOCK_STREAM
 
-
 try:
     from socket import AF_INET6
 except ImportError:
@@ -409,7 +408,7 @@ def memoize(fun):
         except KeyError:
             try:
                 ret = cache[key] = fun(*args, **kwargs)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 raise err from None
             return ret
 
@@ -458,14 +457,14 @@ def memoize_when_activated(fun):
             # case 2: we never entered oneshot() ctx
             try:
                 return fun(self)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 raise err from None
         except KeyError:
             # case 3: we entered oneshot() ctx but there's no cache
             # for this entry yet
             try:
                 ret = fun(self)
-            except Exception as err:  # noqa: BLE001
+            except Exception as err:
                 raise err from None
             try:
                 self._cache[fun] = ret
@@ -523,7 +522,6 @@ def path_exists_strict(path):
         return True
 
 
-@memoize
 def supports_ipv6():
     """Return True if IPv6 is supported on this platform."""
     if not socket.has_ipv6 or AF_INET6 is None:

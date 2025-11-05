@@ -4,8 +4,6 @@
 
 #include <yql/essentials/parser/proto_ast/collect_issues/collect_issues.h>
 
-#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
@@ -44,31 +42,11 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
     if (ansiLexer && !anlr4Parser) {
-        google::protobuf::Message* res = nullptr;
-        if (parsers.Antlr3Ansi) {
-            res = parsers.Antlr3Ansi->MakeParser()->Parse(query, queryName, err, arena);
-            if (!res) {
-                return res;
-            }
-        } else {
-            ReportError(err, "antlr3_ansi");
-            return nullptr;
-        }
-
-        return res;
+        ReportError(err, "antlr3_ansi");
+        return nullptr;
     } else if (!ansiLexer && !anlr4Parser) {
-        google::protobuf::Message* res = nullptr;
-        if (parsers.Antlr3) {
-            res = parsers.Antlr3->MakeParser()->Parse(query, queryName, err, arena);
-            if (!res) {
-                return res;
-            }
-        } else {
-            ReportError(err, "antlr3");
-            return nullptr;
-        }
-
-        return res;
+        ReportError(err, "antlr3");
+        return nullptr;
     } else if (ansiLexer && anlr4Parser) {
         google::protobuf::Message* res = nullptr;
         if (parsers.Antlr4Ansi) {

@@ -19,33 +19,33 @@ protected:
 
 TEST_F(TPatternFormatterTest, EmptyPattern)
 {
-    Formatter.AddProperty("key", "value");
+    Formatter.SetProperty("key", "value");
     EXPECT_FORMAT("", "");
 }
 
 TEST_F(TPatternFormatterTest, PatternWithoutProperties)
 {
-    Formatter.AddProperty("key", "value");
+    Formatter.SetProperty("key", "value");
     EXPECT_FORMAT("some text", "some text");
 }
 
 TEST_F(TPatternFormatterTest, PropertyWithEmptyName1)
 {
-    Formatter.AddProperty("", "");
+    Formatter.SetProperty("", "");
     EXPECT_FORMAT("<<-$()->>", "<<-->>");
 }
 
 TEST_F(TPatternFormatterTest, PropertyWithEmptyName2)
 {
-    Formatter.AddProperty("", "foobar");
+    Formatter.SetProperty("", "foobar");
     EXPECT_FORMAT("<<-$()->>", "<<-foobar->>");
 }
 
 TEST_F(TPatternFormatterTest, CommonCase)
 {
-    Formatter.AddProperty("a", "1");
-    Formatter.AddProperty("b", "10");
-    Formatter.AddProperty("c", "100");
+    Formatter.SetProperty("a", "1");
+    Formatter.SetProperty("b", "10");
+    Formatter.SetProperty("c", "100");
     EXPECT_FORMAT("$(a)", "1");
     EXPECT_FORMAT(
         "Hello! You own me $(a)$(b) dollars; not $(c)!",
@@ -55,17 +55,17 @@ TEST_F(TPatternFormatterTest, CommonCase)
 
 TEST_F(TPatternFormatterTest, MultiplePropertyDeclaration)
 {
-    Formatter.AddProperty("x", "1");
+    Formatter.SetProperty("x", "1");
     EXPECT_FORMAT("<$(x)>", "<1>");
-    Formatter.AddProperty("x", "2");
+    Formatter.SetProperty("x", "2");
     EXPECT_FORMAT("<$(x)>", "<2>");
-    Formatter.AddProperty("x", "3");
+    Formatter.SetProperty("x", "3");
     EXPECT_FORMAT("<$(x)>", "<3>");
 }
 
 TEST_F(TPatternFormatterTest, MultiplePropertyUsage)
 {
-    Formatter.AddProperty("x", "2");
+    Formatter.SetProperty("x", "2");
     EXPECT_FORMAT("$(x) = 2", "2 = 2");
     EXPECT_FORMAT("$(x) + $(x) = 4", "2 + 2 = 4");
     EXPECT_FORMAT("$(x) + $(x) + $(x) = 6", "2 + 2 + 2 = 6");
@@ -73,15 +73,15 @@ TEST_F(TPatternFormatterTest, MultiplePropertyUsage)
 
 TEST_F(TPatternFormatterTest, UndefinedValue)
 {
-    Formatter.AddProperty("a", "b");
-    Formatter.AddProperty("key", "value");
+    Formatter.SetProperty("a", "b");
+    Formatter.SetProperty("key", "value");
     EXPECT_FORMAT("$(a) $(kkeeyy)", "b $(kkeeyy)");
     EXPECT_FORMAT("$$(a)", "$b");
 }
 
 TEST_F(TPatternFormatterTest, NoRightParenthesis)
 {
-    Formatter.AddProperty("a", "b");
+    Formatter.SetProperty("a", "b");
     EXPECT_FORMAT("$(a", "$(a");
 }
 

@@ -55,7 +55,9 @@ public:
         : TYtForwardingGatewayBase(std::move(slave)),
         Coordinator_(coordinator),
         RandomProvider_(settings.RandomProvider),
+        TimeProvider_(settings.TimeProvider),
         TimeToSleepBetweenGetOperationRequests_(settings.TimeToSleepBetweenGetOperationRequests),
+        CoordinatorPingInterval_(settings.CoordinatorPingInterval),
         FmrServices_(fmrServices),
         MkqlCompiler_(MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>()),
         YtJobService_(fmrServices->YtJobService)
@@ -116,11 +118,53 @@ public:
             }
         };
         GetOperationStatusesThread_ = std::thread(getOperationStatusesFunc);
+
+        auto pingGatewaySessionFunc = [this] {
+            YQL_LOG_CTX_ROOT_SCOPE("PingGatewaySession");
+            while (!StopFmrGateway_) {
+                std::unordered_map<TString, NThreading::TFuture<TPingSessionResponse>> pingFutures;
+                with_lock(Mutex_) {
+                    for (const auto& [sessionId, sessionInfo]: Sessions_) {
+                        YQL_CLOG(TRACE, FastMapReduce) << "Pinging gateway session " << sessionId;
+                        try {
+                            auto pingFuture = Coordinator_->PingSession(TPingSessionRequest{.SessionId = sessionId});
+                            pingFutures.emplace(sessionId, pingFuture);
+                        } catch (...) {
+                            YQL_CLOG(ERROR, FastMapReduce) << "Exception while pinging gateway session " << sessionId
+                                << ": " << CurrentExceptionMessage();
+                        }
+                    }
+                }
+                if (!pingFutures.empty()) {
+                    std::vector<NThreading::TFuture<TPingSessionResponse>> futures;
+                    futures.reserve(pingFutures.size());
+                    for (const auto& [sessionId, pingFuture] : pingFutures) {
+                        futures.push_back(pingFuture);
+                    }
+                    NThreading::WaitAll(futures).Wait();
+
+                    for (auto& [sessionId, pingFuture] : pingFutures) {
+                        try {
+                            auto pingResult = pingFuture.GetValue();
+                            if (!pingResult.Success) {
+                                YQL_CLOG(WARN, FastMapReduce) << "Failed to ping gateway session " << sessionId;
+                            }
+                        } catch (...) {
+                            YQL_CLOG(ERROR, FastMapReduce) << "Exception while getting ping result for session " << sessionId
+                                << ": " << CurrentExceptionMessage();
+                        }
+                    }
+                }
+                Sleep(CoordinatorPingInterval_);
+            }
+        };
+        PingSessionThread_ = std::thread(pingGatewaySessionFunc);
     }
 
     ~TFmrYtGateway() {
         StopFmrGateway_ = true;
         GetOperationStatusesThread_.join();
+        PingSessionThread_.join();
     }
 
     TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) final {
@@ -335,6 +379,10 @@ public:
                     SetTablePresenceStatus(fmrOutputTableId, sessionId, ETablePresenceStatus::OnlyInFmr);
                     SetAnonymousTableFmrIdAlias(fmrOutputTableId, inputFmrId, sessionId);
 
+                    TYtTableMetaInfo meta;
+                    meta.DoesExist = true;
+                    SetFmrTableMeta(fmrOutputTableId, meta, sessionId);
+
                     TPublishResult publishResult;
                     publishResult.SetSuccess();
                     return MakeFuture<TPublishResult>(publishResult);
@@ -387,6 +435,88 @@ public:
             return UploadSeveralFmrTablesToYt<TPublishResult, TPublishOptions>(outputTablesByCluster, std::move(options), nodePos);
         }
         return Slave_->Publish(node, ctx, std::move(options));
+    }
+
+    TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override {
+        TMaybe<TFuture<TDropTablesResponse>> fmrFuture;
+        TMaybe<TFuture<TDropTrackablesResult>> ytFuture;
+        TVector<TFuture<void>> allFutures;
+
+        with_lock(Mutex_) {
+            TString sessionId = options.SessionId();
+            std::vector<TString> fmrTableIds;
+            TVector<IYtGateway::TDropTrackablesOptions::TClusterAndPath> ytPaths;
+
+            for (const auto& path : options.Pathes()) {
+                TFmrTableId tableId(path.Cluster, path.Path);
+
+                auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster);
+                auto transformedTableId = GetTransformedPath(sessionId, path.Path, tmpFolder);
+                auto status = GetTablePresenceStatus(transformedTableId, sessionId);
+
+                if (status == ETablePresenceStatus::OnlyInFmr || status == ETablePresenceStatus::Both) {
+                    fmrTableIds.push_back(tableId.Id);
+                }
+
+                if (status == ETablePresenceStatus::OnlyInYt || status == ETablePresenceStatus::Both) {
+                    ytPaths.push_back(path);
+                }
+            }
+
+            if (!fmrTableIds.empty()) {
+                TDropTablesRequest fmrRequest{
+                    .TableIds = fmrTableIds,
+                    .SessionId = sessionId
+                };
+                fmrFuture = Coordinator_->DropTables(fmrRequest);
+            }
+
+            if (!ytPaths.empty()) {
+                options.Pathes() = std::move(ytPaths);
+                ytFuture = Slave_->DropTrackables(std::move(options));
+            }
+
+            RemoveFmrTablesWithDependents(fmrTableIds, sessionId);
+
+            if (fmrFuture) {
+                allFutures.push_back(fmrFuture->IgnoreResult());
+            }
+            if (ytFuture) {
+                allFutures.push_back(ytFuture->IgnoreResult());
+            }
+        }
+
+        return WaitExceptionOrAll(allFutures).Apply([fmrFuture, ytFuture](const TFuture<void>&) mutable {
+            TDropTrackablesResult finalResult;
+            bool fmrSuccess = true;
+
+            if (fmrFuture) {
+                try {
+                    fmrFuture->GetValue();
+                } catch (...) {
+                    fmrSuccess = false;
+                    FillResultFromCurrentException(finalResult);
+                }
+            }
+
+            bool ytSuccess = true;
+            if (ytFuture) {
+                auto ytResult = ytFuture->GetValue();
+                if (!ytResult.Success()) {
+                    ytSuccess = false;
+                    if (!ytResult.Issues().Empty()) {
+                        YQL_CLOG(ERROR, FastMapReduce) << "YT Slave DropTrackables failed: " << ytResult.Issues().ToString();
+                    }
+                    finalResult.AddIssues(ytResult.Issues());
+                }
+            }
+
+            if (fmrSuccess && ytSuccess) {
+                finalResult.SetSuccess();
+            }
+
+            return MakeFuture<TDropTrackablesResult>(finalResult);
+        });
     }
 
     TFuture<TTableInfoResult> GetTableInfo(TGetTableInfoOptions&& options) final {
@@ -499,8 +629,16 @@ public:
             if (Sessions_.contains(sessionId)) {
                 YQL_LOG_CTX_THROW yexception() << "Session already exists: " << sessionId;
             }
+        }
+
+        TOpenSessionRequest openRequest{.SessionId = sessionId};
+        Coordinator_->OpenSession(openRequest).GetValueSync();
+
+        with_lock(Mutex_) {
             Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider());
         }
+        YQL_CLOG(INFO, FastMapReduce) << "Registered session " << sessionId << " with coordinator";
+
         Slave_->OpenSession(std::move(options));
     }
 
@@ -525,6 +663,39 @@ public:
     }
 
 private:
+    void RemoveFmrTablesWithDependents(
+        const std::vector<TString>& tableIdsToRemove,
+        const TString& sessionId)
+    {
+        if (tableIdsToRemove.empty()) {
+            return;
+        }
+
+        auto& fmrTables = Sessions_[sessionId]->FmrTables;
+
+        std::unordered_set<TFmrTableId> anonymousTablesToDelete;
+
+        for (const auto& tableIdStr : tableIdsToRemove) {
+            TFmrTableId tableId(tableIdStr);
+
+            for (auto& [anonTableId, anonTableInfo] : fmrTables) {
+                if (anonTableInfo.AnonymousTableFmrIdAlias && *anonTableInfo.AnonymousTableFmrIdAlias == tableId) {
+                    YQL_CLOG(DEBUG, FastMapReduce)
+                    << "Clearing alias in anonymous table " << anonTableId
+                    << " (was pointing to " << tableId << ")";
+                    anonTableInfo.TableMeta = fmrTables[tableId].TableMeta;
+                    anonTableInfo.TableStats = fmrTables[tableId].TableStats;
+                    anonTableInfo.AnonymousTableFmrIdAlias = Nothing();
+                }
+            }
+        }
+
+        for (const auto& tableIdStr : tableIdsToRemove) {
+            TFmrTableId tableId(tableIdStr);
+            YQL_CLOG(DEBUG, FastMapReduce) << "Removing table " << tableId;
+            fmrTables.erase(tableId);
+        }
+    }
     TString GenerateId() {
         return GetGuidAsString(RandomProvider_->GenGuid());
     }
@@ -940,8 +1111,11 @@ private:
     TMutex Mutex_;
     std::unordered_map<TString, TFmrSession::TPtr> Sessions_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
+    const TIntrusivePtr<ITimeProvider> TimeProvider_;
     TDuration TimeToSleepBetweenGetOperationRequests_;
+    TDuration CoordinatorPingInterval_;
     std::thread GetOperationStatusesThread_;
+    std::thread PingSessionThread_;
     std::atomic<bool> StopFmrGateway_;
     TFmrServices::TPtr FmrServices_;
     TConfigClusters::TPtr Clusters_;

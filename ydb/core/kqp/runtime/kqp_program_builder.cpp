@@ -354,5 +354,40 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
+{
+    // Validate text argument - should be a String or Utf8 or optional String or Utf8
+    const auto& textType = text.GetStaticType();
+    const TDataType* textDataType = nullptr;
+    
+    if (textType->IsOptional()) {
+        auto optionalType = static_cast<const TOptionalType*>(textType);
+        auto itemType = optionalType->GetItemType();
+        MKQL_ENSURE(itemType->IsData(), "Expected data type inside optional for text.");
+        textDataType = static_cast<const TDataType*>(itemType);
+    } else {
+        MKQL_ENSURE(textType->IsData(), "Expected data or optional data type for text.");
+        textDataType = static_cast<const TDataType*>(textType);
+    }
+    
+    MKQL_ENSURE(textDataType->GetSchemeType() == NScheme::NTypeIds::String
+        || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected String or Utf8 for text column.");
+
+    // Return type: List<String or Utf8>
+    auto stringType = TDataType::Create(textDataType->GetSchemeType(), Env);
+    auto listType = TListType::Create(stringType, Env);
+
+    // Validate settings argument - should be a string (serialized proto)
+    const auto& settingsType = settings.GetStaticType();
+    MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
+    const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
+    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
+
+    TCallableBuilder callableBuilder(Env, __func__, listType);
+    callableBuilder.Add(text);
+    callableBuilder.Add(settings);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

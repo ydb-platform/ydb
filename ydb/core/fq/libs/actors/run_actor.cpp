@@ -930,6 +930,7 @@ private:
         if (Params.Resources.rate_limiter_path()) {
             const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
             for (auto& task : *ev->Get()->GraphParams.MutableTasks()) {
+                task.SetRateLimiterDatabase(Params.TenantName);
                 task.SetRateLimiter(Params.Resources.rate_limiter_path());
                 task.SetRateLimiterResource(rateLimiterResource);
             }
@@ -1613,18 +1614,11 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            NKikimrConfig::TCheckpointsConfig config;
-            const auto& oldConfig = Params.Config.GetCheckpointCoordinator();
-            config.SetEnabled(oldConfig.GetEnabled());
-            config.SetCheckpointingPeriodMillis(oldConfig.GetCheckpointingPeriodMillis());
-            config.SetMaxInflight(oldConfig.GetMaxInflight());
-            config.SetCheckpointingSnapshotRotationPeriod(oldConfig.GetCheckpointingSnapshotRotationPeriod());
-
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                config,
+                Params.Config.GetCheckpointCoordinator(),
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
@@ -1707,7 +1701,6 @@ private:
         apply("WatermarksMode", "disable");
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
-        apply("WatermarksIdlePartitions", "true");
         apply("EnableChannelStats", "true");
         apply("ExportStats", "true");
 
@@ -2056,7 +2049,15 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels, Params.NodeIds));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(
+                pqGateway,
+                /* supportRtmrMode */ false,
+                dbResolver,
+                std::move(disposition),
+                Params.TaskSensorLabels,
+                Params.NodeIds,
+                Params.Config.GetCommon().GetUseActorSystemThreadsInTopicClient()
+            ));
         }
 
         {

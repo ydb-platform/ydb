@@ -6,21 +6,13 @@
 #include <arrow/type.h>
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/tuple.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 
 namespace NKikimr::NMiniKQL {
 
 class IBlockLayoutConverter : private TNonCopyable {
 public:
-    struct TPackResult {
-        std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
-        std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
-        ui32 NTuples{0};
-    };
-
-    using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
-    using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
-
-public:
+    using TPackResult = ::NKikimr::NMiniKQL::TPackResult;
     using TPtr = std::unique_ptr<IBlockLayoutConverter>;
 
 public:
@@ -31,6 +23,7 @@ public:
     virtual void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
     // Can not be called multiple times due to immutability of arrow arrays
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
+    // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };
 

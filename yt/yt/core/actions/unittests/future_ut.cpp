@@ -1776,6 +1776,15 @@ TEST_F(TFutureTest, CancelAppliedToUncancellable)
     EXPECT_TRUE(future2.IsSet());
     EXPECT_EQ(NYT::EErrorCode::Canceled, future2.Get().GetCode());
 
+    auto immediatelyCancelable2 = future.ToImmediatelyCancelable(/*propagateCancelation*/ false);
+    auto future3 = immediatelyCancelable2.Apply(BIND([&] () -> void {}));
+    future3.Cancel(TError("Cancel"));
+    EXPECT_FALSE(promise.IsSet());
+    EXPECT_FALSE(promise.IsCanceled());
+    EXPECT_TRUE(immediatelyCancelable2.IsSet());
+    EXPECT_TRUE(future3.IsSet());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, future3.Get().GetCode());
+
     promise.Set();
     EXPECT_TRUE(uncancelable.IsSet());
     EXPECT_TRUE(future1.IsSet());

@@ -85,10 +85,6 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 }
 
 namespace NFulltext {
-    // TODO: support utf-8 in fulltext index
-    inline constexpr auto TokenType = Ydb::Type::STRING;
-    inline constexpr const char* TokenTypeName = "String";
-
     inline constexpr const char* TokenColumn = "__ydb_token";
 }
 

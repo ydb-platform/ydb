@@ -1,23 +1,51 @@
 #pragma once
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
-
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 #include <util/system/env.h>
 
-#include <ydb/core/protos/config.pb.h>
+namespace NKikimrConfig {
+
+class TStreamingQueriesConfig_TExternalStorageConfig;
+
+} // namespace NKikimrConfig
 
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TExternalStorageSettings {
+public:
+    TExternalStorageSettings() = default;
+    TExternalStorageSettings(const NConfig::TYdbStorageConfig& config);
+    TExternalStorageSettings(const NKikimrConfig::TStreamingQueriesConfig_TExternalStorageConfig& config);
+
+private:
+    YDB_ACCESSOR_DEF(TString, Endpoint);
+    YDB_ACCESSOR_DEF(TString, Database);
+    YDB_ACCESSOR_DEF(TString, PathPrefix);
+    YDB_ACCESSOR_DEF(TString, Token);
+    YDB_ACCESSOR_DEF(TString, TokenFile);
+    YDB_ACCESSOR_DEF(TString, SaKeyFile);
+    YDB_ACCESSOR_DEF(TString, CaCertFile);
+    YDB_ACCESSOR(bool, UseSsl, false);
+    YDB_ACCESSOR(bool, UseLocalMetadataService, false);
+    YDB_ACCESSOR_DEF(TString, IamEndpoint);
+    YDB_ACCESSOR(ui64, MaxActiveQuerySessions, 50); // 50 - default in TSessionPoolSettings
+    YDB_ACCESSOR(TDuration, ClientTimeout, TDuration::Max());
+    YDB_ACCESSOR_DEF(TDuration, OperationTimeout);
+    YDB_ACCESSOR_DEF(TDuration, CancelAfter);
+};
 
 struct TYdbConnection : public TThrRefBase {
     NYdb::TDriver Driver;
@@ -29,12 +57,7 @@ struct TYdbConnection : public TThrRefBase {
     const TString TablePathPrefix;
 
     TYdbConnection(
-        const NConfig::TYdbStorageConfig& config,
-        const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
-        const NYdb::TDriver& driver);
-
-    TYdbConnection(
-        const NKikimrConfig::TExternalStorage& config,
+        const TExternalStorageSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const NYdb::TDriver& driver);
 };
@@ -115,8 +138,7 @@ using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
-TYdbConnectionPtr NewYdbConnection(const NKikimrConfig::TExternalStorage& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
+TYdbConnectionPtr NewYdbConnection(const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory, const NYdb::TDriver& driver);
 
 NYdb::TStatus MakeErrorStatus(
     NYdb::EStatus code,
@@ -147,28 +169,10 @@ NThreading::TFuture<NYdb::TStatus> CheckGeneration(const TGenerationContextPtr& 
 
 NThreading::TFuture<NYdb::TStatus> RollbackTransaction(const TGenerationContextPtr& context);
 
-template <class TStorageConfig>
-NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const TStorageConfig& config) {
-    TString oauth;
-    if (config.GetToken()) {
-        oauth = config.GetToken();
-    } else if (config.GetOAuthFile()) {
-        oauth = StripString(TFileInput(config.GetOAuthFile()).ReadAll());
-    } else {
-        oauth = GetEnv("YDB_TOKEN");
-    }
+NKikimr::TYdbCredentialsSettings GetYdbCredentialSettings(const TExternalStorageSettings& config);
 
-    NKikimr::TYdbCredentialsSettings credSettings;
-    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
-    credSettings.OAuthToken = oauth;
-    credSettings.SaKeyFile = config.GetSaKeyFile();
-    credSettings.IamEndpoint = config.GetIamEndpoint();
-    return credSettings;
-}
-
-template <class TSettings, class TStorageConfig>
-TSettings GetClientSettings(const TStorageConfig& config,
-                            const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
+template <class TSettings>
+TSettings GetClientSettings(const TExternalStorageSettings& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
     TSettings settings;
     settings
         .DiscoveryEndpoint(config.GetEndpoint())
@@ -180,14 +184,14 @@ TSettings GetClientSettings(const TStorageConfig& config,
         settings.SslCredentials(NYdb::TSslCredentials(true));
     }
 
-    if (config.GetCertificateFile()) {
-        auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
+    if (config.GetCaCertFile()) {
+        auto cert = StripString(TFileInput(config.GetCaCertFile()).ReadAll());
         settings.SslCredentials(NYdb::TSslCredentials(true, cert));
     }
+
     if constexpr (std::is_same_v<TSettings, NYdb::NTable::TClientSettings>) {
-        auto maxActiveSessions = config.GetTableClientMaxActiveSessions();
         settings.SessionPoolSettings(NYdb::NTable::TSessionPoolSettings()
-            .MaxActiveSessions(maxActiveSessions ? maxActiveSessions : 50));    // 50 - default in TSessionPoolSettings
+            .MaxActiveSessions(config.GetMaxActiveQuerySessions()));
     }
 
     return settings;

@@ -9,6 +9,7 @@
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -31,6 +32,17 @@ public:
              const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
      );
+
+     TCommitOffsetActor(
+             NKikimr::NGRpcService::IRequestOpCtx* ctx, const NPersQueue::TTopicsListController& topicsHandler,
+             const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
+             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
+     );
+
+     TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx* ctx);
+
+     TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request);
+     
     ~TCommitOffsetActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -94,7 +106,8 @@ private:
 
     TActorId PipeClient;
 
-    NPersQueue::TTopicsListController TopicsHandler;
+    std::shared_ptr<NPersQueue::TTopicNamesConverterFactory> TopicConverterFactory;
+    std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler = nullptr;
 
     std::unique_ptr<TDistributedCommitHelper> Kqp;
 };

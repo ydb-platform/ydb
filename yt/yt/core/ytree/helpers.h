@@ -51,6 +51,11 @@ void ValidateYTreeKey(
     IAttributeDictionary::TKeyView key,
     int maxLength = std::numeric_limits<int>::max());
 
+void ValidateYTreeChildCount(
+    TYPathBuf path,
+    int childCount,
+    int maxChildCount);
+
 [[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path);
 
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth);

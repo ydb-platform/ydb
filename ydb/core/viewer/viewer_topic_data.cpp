@@ -202,7 +202,11 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
             if (codec == nullptr) {
                 return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
-            setData(*messageProto, std::move(codec->Decompress(dataChunk.GetData())));
+            try {
+                setData(*messageProto, std::move(codec->Decompress(dataChunk.GetData())));
+            } catch (const std::exception& e) {
+                setData(*messageProto, ">>> Message decompression failed <<<");
+            }
         } else {
             setData(*messageProto, std::move(*dataChunk.MutableData()));
         }

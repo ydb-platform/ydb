@@ -28,10 +28,12 @@ struct TEvKesusProxy {
         "expected EvEnd <= EventSpaceEnd(TKikimrEvents::ES_KESUS_PROXY)");
 
     struct TEvResolveKesusProxy : public TEventLocal<TEvResolveKesusProxy, EvResolveKesusProxy> {
+        const TString Database;
         const TString KesusPath;
 
-        explicit TEvResolveKesusProxy(const TString& kesusPath)
-            : KesusPath(kesusPath)
+        TEvResolveKesusProxy(const TString& database, const TString& kesusPath)
+            : Database(database)
+            , KesusPath(kesusPath)
         {}
     };
 

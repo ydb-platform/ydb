@@ -182,7 +182,7 @@
             },
             "formula": "build/platform/clang/clang20.json"
         },
-        "clangd": {
+        "clangd-18": {
             "executable": {
                 "clangd": [
                     "bin",
@@ -190,6 +190,23 @@
                 ]
             },
             "formula": "build/platform/clang/clangd/clangd18.json"
+        },
+        "clangd-20": {
+            "executable": {
+                "clangd": [
+                    "bin",
+                    "clangd"
+                ]
+            },
+            "formula": "build/platform/clang/clangd/clangd20.json"
+        },
+        "contexts_difference": {
+            "executable": {
+                "contexts_difference": [
+                    "contexts_difference"
+                ]
+            },
+            "formula": "build/yandex_specific/autocheck/contexts_difference/resources.json"
         },
         "gdb": {
             "executable": {
@@ -2112,8 +2129,122 @@
             ],
             "tools": {
                 "clangd": {
-                    "bottle": "clangd",
+                    "bottle": "clangd-20",
                     "executable": "clangd"
+                }
+            }
+        },
+        "clangd-18": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clangd-18": {
+                    "bottle": "clangd-18",
+                    "executable": "clangd"
+                }
+            }
+        },
+        "clangd-20": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clangd-20": {
+                    "bottle": "clangd-20",
+                    "executable": "clangd"
+                }
+            }
+        },
+        "contexts_difference": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "contexts_difference": {
+                    "bottle": "contexts_difference",
+                    "executable": "contexts_difference"
                 }
             }
         },
@@ -2644,6 +2775,16 @@
         },
         "clangd": {
             "description": "Run clangd language server"
+        },
+        "clangd-18": {
+            "description": "Run clangd language server (18 version)"
+        },
+        "clangd-20": {
+            "description": "Run clangd language server (20 version)"
+        },
+        "contexts_difference": {
+            "description": "Run contexts_difference tool",
+            "visible": false
         },
         "gcov": {
             "description": "Run gcov"

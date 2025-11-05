@@ -126,8 +126,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTestExtSubdomainReboots) {
                     NLs::DomainSchemeshard(0),
                     NLs::DomainHive(0)
                 });
-                TSubDomainKey subdomainKey = TSubDomainKey(describe.GetPathDescription().GetDomainDescription().GetDomainKey());
-                subdomainPathId = TPathId(subdomainKey.GetSchemeShard(), subdomainKey.GetPathId());
+                const auto& domainKey = describe.GetPathDescription().GetDomainDescription().GetDomainKey();
+                subdomainPathId = TPathId::FromDomainKey(domainKey);
                 UNIT_ASSERT_VALUES_EQUAL(subdomainPathId.LocalPathId, 3);
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"), {

@@ -771,6 +771,7 @@ private:
             << " ], StatRequestsCount[ " << request.StatRequests.size() << " ]");
 
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = ev->Get()->Database;
         navigate->Cookie = requestId;
         for (const auto& req : request.StatRequests) {
             AddNavigateEntry(navigate->ResultSet, req.PathId, true);
@@ -811,6 +812,7 @@ private:
             SA_LOG_D("[TStatService::TEvNavigateKeySetResult] RequestId[ " << requestId
                 << " ] resolve DatabasePath[ " << pathId << " ]");
             auto navigateRequest = std::make_unique<TNavigate>();
+            navigateRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             AddNavigateEntry(navigateRequest->ResultSet, pathId);
 
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()), 0, ev->Cookie);
@@ -882,6 +884,7 @@ private:
 
         auto navigateDomainKey = [this, cookie = ev->Cookie] (const TPathId& domainKey) {
             auto navigateRequest = std::make_unique<TNavigate>();
+            navigateRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             AddNavigateEntry(navigateRequest->ResultSet, domainKey);
             navigateRequest->Cookie = ResolveSACookie;
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
@@ -1466,14 +1469,6 @@ private:
                 HTML(str) {
                     FORM_CLASS("form-horizontal") {
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("col-sm-2 control-label", "database") {
-                                str << "Database";
-                            }
-                            DIV_CLASS("col-sm-8") {
-                                str << "<input type='text' id='database' name='database' class='form-control' placeholder='/full/database/path'>";
-                            }
-                        }
-                        DIV_CLASS("form-group") {
                             LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
                                 str << "Path";
                             }
@@ -1634,14 +1629,7 @@ private:
                 return;
             }
 
-            const auto database = getRequestParam("database");
-            if (database.empty()) {
-                ReplyToMonitoring("'Database' parameter is required");
-                return;
-            }
-
             HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
-                { THttpRequest::EParamType::DATABASE, database },
                 { THttpRequest::EParamType::PATH, path },
                 { THttpRequest::EParamType::COLUMN_NAME, column },
                 { THttpRequest::EParamType::CELL_VALUE, cell }

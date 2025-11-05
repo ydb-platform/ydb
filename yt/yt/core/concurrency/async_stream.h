@@ -219,6 +219,11 @@ IAsyncZeroCopyInputStreamPtr CreateConcurrentAdapter(
 void PipeInputToOutput(
     const IAsyncZeroCopyInputStreamPtr& input,
     const IAsyncOutputStreamPtr& output);
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncZeroCopyOutputStreamPtr& output);
+
+void DrainInput(const IAsyncZeroCopyInputStreamPtr& input);
 
 ////////////////////////////////////////////////////////////////////////////////
 

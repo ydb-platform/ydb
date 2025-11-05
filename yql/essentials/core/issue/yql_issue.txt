@@ -696,6 +696,10 @@ ids {
   severity: S_WARNING
 }
 ids {
+  code: CORE_SIMPLE_PG
+  severity: S_WARNING
+}
+ids {
   code: YT_SECURE_DATA_IN_COMMON_TMP
   severity: S_WARNING
 }

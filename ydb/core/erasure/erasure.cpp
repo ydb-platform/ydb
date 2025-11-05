@@ -3206,6 +3206,16 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
     }
 }
 
+bool TErasureType::IsCrcModeValid(ui32 crcModeRaw) {
+    switch (crcModeRaw) {
+    case static_cast<ui32>(ECrcMode::CrcModeNone):
+    case static_cast<ui32>(ECrcMode::CrcModeWholePart):
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // NKikimr
 
 Y_DECLARE_OUT_SPEC(, NKikimr::TErasureType::EErasureSpecies, stream, value) {

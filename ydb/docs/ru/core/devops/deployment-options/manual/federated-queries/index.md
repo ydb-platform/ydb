@@ -35,30 +35,50 @@
 
 1. Выполните шаги инструкции по развёртыванию динамического узла {{ ydb-short-name }} до [подготовки конфигурационных файлов](../initial-deployment.md#config) включительно.
 2. Если для доступа к нужному вам источнику требуется развернуть коннектор, сделайте это [согласно инструкции](./connector-deployment.md).
-3. Если для доступа к нужному вам источнику трубуется развернуть коннектор, в конфигурационном файле {{ ydb-short-name }} в секции `query_service_config` добавьте подсекцию `generic` по приведённому ниже образцу. В полях `connector.endpoint.host` и `connector.endpoint.port` укажите сетевой адрес коннектора (по умолчанию `localhost` и `2130`). При совместном размещении коннектора и динамического узла {{ ydb-short-name }} на одном сервере установка шифрованных соединений между ними *не требуется*, но в случае необходимости вы можете включить шифрование, передав значение `true` в поле `connector.use_ssl` и указав путь до сертификата CA, использованного для подписи TLS-ключей коннектора, в `connector.ssl_ca_crt`:
+3. [В конфигурационном файле](../../../../reference/configuration/index.md) {{ ydb-short-name }} в секции `feature_flags` включите флаг `enable_external_data_sources`:
+
+```yaml
+feature_flags:
+  enable_external_data_sources: true
+```
+
+4. [В конфигурационный файл](../../../../reference/configuration/index.md) {{ ydb-short-name }} добавьте [настройки внешних источников данных](../../../../reference/configuration/query_service_config.md).
+
+{% list tabs %}
+
+- Без использования коннектора
 
     ```yaml
     query_service_config:
-        generic:
-            connector:
-                endpoint:
-                    host: localhost                 # имя хоста, где развернут коннектор
-                    port: 2130                      # номер порта для слушающего сокета коннектора
-                use_ssl: false                      # флаг, включающий шифрование соединений
-                ssl_ca_crt: "/opt/ydb/certs/ca.crt" # (опционально) путь к сертификату CA
-            default_settings:
-                - name: DateTimeFormat
-                  value: string
-                - name: UsePredicatePushdown
-                  value: "true"
+      generic:
+        default_settings:
+        - name: UsePredicatePushdown
+          value: "true"
+      all_external_data_sources_are_available: false
+      available_external_data_sources:
+      - ObjectStorage
     ```
 
-4. В конфигурационном файле {{ ydb-short-name }} добавьте секцию `feature_flags` следующего содержания:
+- С использованием коннектора
 
     ```yaml
-    feature_flags:
-        enable_external_data_sources: true
-        enable_script_execution_operations: true
+    query_service_config:
+      generic:
+        connector:
+          endpoint:
+            host: localhost                   # имя хоста, где развернут коннектор
+            port: 2130                        # номер порта коннектора
+          use_ssl: false                      # флаг, включающий шифрование соединений
+          ssl_ca_crt: "/opt/ydb/certs/ca.crt" # путь к сертификату CA
+        default_settings:
+        - name: UsePredicatePushdown
+          value: "true"
+      all_external_data_sources_are_available: false
+      available_external_data_sources:
+      - ClickHouse
+      - MySQL
     ```
+
+{% endlist %}
 
 5. Продолжайте развёртывание динамического узла {{ ydb-short-name }} по [инструкции](../initial-deployment.md).

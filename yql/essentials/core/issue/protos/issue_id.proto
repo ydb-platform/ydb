@@ -41,6 +41,7 @@ message TIssuesIds {
         CORE_DEPRECATED_LANG_VER = 1113;
         CORE_UNSUPPORTED_LANG_VER = 1114;
         CORE_SINGULAR_TYPE_ENSURE = 1115;
+        CORE_SIMPLE_PG = 1116;
 
 // core informational
         CORE_TOP_UNSUPPORTED_BLOCK_TYPES = 1200;

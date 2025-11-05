@@ -280,3 +280,495 @@ SELECT SetSymmetricDifference(
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
 
+## DictInsert {#dictinsert}
+
+#### Signature
+
+```yql
+DictInsert(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Returns a new dictionary with the specified key and value added. If the key already exists, the dictionary is not modified.
+When working with a `Set`, the `Void()` function should be passed as the value.
+
+#### Examples
+
+```yql
+SELECT DictInsert({'foo':1}, 'bar', 2); -- {'foo':1,'bar':2}
+SELECT DictInsert({'foo':1}, 'foo', 2); -- {'foo':1}
+SELECT DictInsert({'foo'}, 'bar', Void()); -- {'foo','bar'}
+```
+
+## DictUpsert {#dictupsert}
+
+#### Signature
+
+```yql
+DictUpsert(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Returns a new dictionary with the specified key and value added or replaced. If the key already exists, the value is updated.
+
+#### Examples
+
+```yql
+SELECT DictUpsert({'foo':1}, 'bar', 2); -- {'foo':1,'bar':2}
+SELECT DictUpsert({'foo':1}, 'foo', 2); -- {'foo':2}
+```
+
+## DictUpdate {#dictupdate}
+
+#### Signature
+
+```yql
+DictUpdate(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Returns a new dictionary with the replaced value of the given key. If the key does not exist, the dictionary is not modified.
+
+#### Examples
+
+```yql
+SELECT DictUpdate({'foo':1}, 'bar', 2); -- {'foo':1}
+SELECT DictUpdate({'foo':1}, 'foo', 2); -- {'foo':2}
+```
+
+## DictRemove {#dictremove}
+
+#### Signature
+
+```yql
+DictRemove(Dict<K,V>,K)->Dict<K,V>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Returns a new dictionary without the given key. If the key does not exist, the dictionary is not modified.
+
+#### Examples
+
+```yql
+SELECT DictRemove({'foo':1}, 'bar'); -- {'foo':1}
+SELECT DictRemove({'foo':1}, 'foo'); -- {}
+```
+
+## ToMutDict {#tomutdict}
+
+#### Signature
+
+```yql
+ToMutDict(Dict<K,V>,dependArg1...)->Linear<mutDictType for Dict<K,V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Converts a dictionary to its mutable version. One or more dependent expressions must also be passed, for example, using the `lambda` argument in the [`Block`](basic.md#block) function.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictCreate {#mutdictcreate}
+
+#### Signature
+
+```yql
+MutDictCreate(KeyType,ValueType,dependArg1...)->Linear<mutDictType for Dict<K,V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Builds an empty mutable dictionary with the specified key and value types. You must also pass one or more dependent expressions, for example, by using the `lambda` argument in the [`Block`](basic.md#block) function.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        return FromMutDict($dict);
+    }); -- {}
+```
+
+## FromMutDict {#frommutdict}
+
+#### Signature
+
+```yql
+FromMutDict(Linear<mutDictType for Dict<K,V>>)->Dict<K,V>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Consumes a mutable dictionary and converts it to an immutable one.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictInsert {#mutdictinsert}
+
+#### Signature
+
+```yql
+MutDictInsert(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Adds the specified key and value to a mutable dictionary and returns the same mutable dictionary. If the key already exists in the dictionary, the dictionary is not modified.
+When working with a `Set`, the `Void()` function should be passed as the value.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictInsert($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictInsert($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1,'bar':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo'}, $arg);
+        $dict = MutDictInsert($dict,'bar', Void());
+        return FromMutDict($dict);
+    }); -- {'foo','bar'}
+```
+
+## MutDictUpsert {#mutdictupsert}
+
+#### Signature
+
+```yql
+MutDictUpsert(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Adds or replaces the specified key and value in a mutable dictionary and returns the same mutable dictionary. If the key already exists in the dictionary, the value is updated.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpsert($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpsert($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1,'bar':2}
+```
+
+## MutDictUpdate {#mutdictupdate}
+
+#### Signature
+
+```yql
+MutDictUpdate(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Replaces the value in a mutable dictionary with the specified key and returns the same mutable dictionary. If the key does not exist in the dictionary, the dictionary is not modified.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpdate($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpdate($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictRemove {#mutdictremove}
+
+#### Signature
+
+```yql
+MutDictRemove(Linear<mutDictType for Dict<K,V>>,K)->Linear<mutDictType for Dict<K,V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Removes the value from a mutable dictionary by the given key and returns the same mutable dictionary. If the key does not exist in the dictionary, the dictionary is not modified.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictRemove($dict,'foo');
+        return FromMutDict($dict);
+    }); --{}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictRemove($dict,'bar');
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictPop {#mutdictpop}
+
+#### Signature
+
+```yql
+MutDictPop(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,V?>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Removes the value from a mutable dictionary by the given key and returns the same mutable dictionary and the value by the removed key. If the key did not exist in the dictionary, the dictionary is not modified and an empty Optional is returned.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPop($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPop($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},null)
+```
+
+## MutDictContains {#mutdictcontains}
+
+#### Signature
+
+```yql
+MutDictContains(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,Bool>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Checks for the existence of a key in a mutable dictionary, returns the same mutable dictionary and the result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictContains($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},True)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictContains($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},False)
+```
+
+## MutDictLookup {#mutdictlookup}
+
+#### Signature
+
+```yql
+MutDictLookup(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,V?>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Gets a value by key in a mutable dictionary, returns the same mutable dictionary and an optional result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLookup($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLookup($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},null)
+```
+
+## MutDictHasItems {#mutdicthasitems}
+
+#### Signature
+
+```yql
+MutDictHasItems(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,Bool>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Checks whether a mutable dictionary is not empty and returns the same mutable dictionary and the result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictHasItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},True)
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictHasItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},False)
+```
+
+## MutDictLength {#mutdictlength}
+
+#### Signature
+
+```yql
+MutDictLength(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,Uint64>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Gets the number of elements in a mutable dictionary and returns the same mutable dictionary and the result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLength($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictLength($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},0)
+```
+
+## MutDictKeys {#mutdictkeys}
+
+#### Signature
+
+```yql
+MutDictKeys(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<K>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Gets a list of keys in a mutable dictionary and returns the same mutable dictionary and the result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictKeys($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},['foo'])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictKeys($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```
+
+## MutDictPayloads {#mutdictpayloads}
+
+#### Signature
+
+```yql
+MutDictPayloads(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<V>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Gets a list of values ​​in a mutable dictionary and returns the same mutable dictionary and the result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPayloads($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},['1'])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictPayloads($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```
+
+## MutDictItems {#mutdictitems}
+
+#### Signature
+
+```yql
+MutDictItems(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<Tuple<K,V>>>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+Gets a list of tuples with key-value pairs in a mutable dictionary, returns the same mutable dictionary and the result.
+
+#### Examples
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},[('foo',1)])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```

@@ -8,6 +8,7 @@ namespace NKikimr::NPQ::NEvents {
 enum class EServices {
     GLOBAL = 0,
     DESCRIBER_SERVICE,
+    MLP,
     END
 };
 

@@ -54,6 +54,9 @@ struct TSession: public TSessionBase {
 
     TTransactionCache TxCache_;
 
+    const TQContext QContext_;
+    const IYtFullCapture::TPtr FullCapture_;
+
 private:
     void StopQueueAndTracker();
 };

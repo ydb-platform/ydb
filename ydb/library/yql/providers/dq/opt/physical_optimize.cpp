@@ -215,7 +215,8 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
-        return DqBuildAggregationResultStage(node, ctx, optCtx);
+        const TBuildAggregationResultStageOptions options{true, true};
+        return DqBuildAggregationResultStage(node, ctx, optCtx, options);
     }
 
     template <bool IsGlobal>
@@ -289,7 +290,8 @@ protected:
 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
-        return DqBuildScalarPrecompute(node, ctx, optCtx, *getParents(), IsGlobal);
+        const TBuildAggregationResultStageOptions options{false, true};
+        return DqBuildScalarPrecompute(node, ctx, optCtx, *getParents(), IsGlobal, options);
     }
 
     TMaybeNode<TExprBase> BuildPrecompute(TExprBase node, TExprContext& ctx) {

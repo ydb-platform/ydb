@@ -124,9 +124,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                                 joinOp = Token(block.GetAlt4().GetToken1());
                                 break;
                             case TRule_join_op_TAlt2_TBlock2_TAlt1_TBlock1::ALT_NOT_SET:
-                                Ctx_.IncrementMonCounter("sql_errors", "UnknownJoinOperation");
-                                AltNotImplemented("join_op", node);
-                                return false;
+                                Y_UNREACHABLE();
                         }
                     }
                     if (alt.GetBlock2().GetAlt1().HasBlock2()) {
@@ -148,18 +146,14 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                     joinOp = Token(alt.GetBlock2().GetAlt3().GetToken1());
                     break;
                 case TRule_join_op::TAlt2::TBlock2::ALT_NOT_SET:
-                    Ctx_.IncrementMonCounter("sql_errors", "UnknownJoinOperation");
-                    AltNotImplemented("join_op", node);
-                    return false;
+                    Y_UNREACHABLE();
             }
             Ctx_.IncrementMonCounter("sql_features", "Join");
             Ctx_.IncrementMonCounter("sql_join_operations", joinOp);
             break;
         }
         case TRule_join_op::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownJoinOperation2");
-            AltNotImplemented("join_op", node);
-            return false;
+            Y_UNREACHABLE();
     }
     joinOp = NormalizeJoinOp(joinOp);
     if (linkSettings.Strategy != TJoinLinkSettings::EStrategy::Default && joinOp == "Cross") {
@@ -226,9 +220,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
             return join->GetJoin()->BuildJoinKeys(Ctx_, names);
         }
         case TRule_join_constraint::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownJoinConstraint");
-            AltNotImplemented("join_constraint", node);
-            break;
+            Y_UNREACHABLE();
     }
     return nullptr;
 }
@@ -309,9 +301,7 @@ bool TSqlSelect::FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& fla
             break;
         }
         case TRule_flatten_by_arg::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownFlattenByArg");
-            AltNotImplemented("flatten_by_arg", node);
-            return false;
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -356,8 +346,7 @@ TSourcePtr TSqlSelect::FlattenSource(const TRule_flatten_source& node) {
             }
 
             case TRule_flatten_source::TBlock2::TBlock2::ALT_NOT_SET:
-                Ctx_.IncrementMonCounter("sql_errors", "UnknownOrdinaryNamedColumn");
-                AltNotImplemented("flatten_source", flatten2);
+                Y_UNREACHABLE();
         }
     }
     return source;
@@ -455,7 +444,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
                         implicitLabel = true;
                         break;
                     case TRule_result_column_TAlt2_TBlock2::ALT_NOT_SET:
-                        Y_ABORT("You should change implementation according to grammar changes");
+                        Y_UNREACHABLE();
                 }
                 term->SetLabel(label, Ctx_.Pos());
                 term->MarkImplicitLabel(implicitLabel);
@@ -464,9 +453,7 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
             break;
         }
         case TRule_result_column::ALT_NOT_SET:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownResultColumn");
-            AltNotImplemented("result_column", node);
-            return false;
+            Y_UNREACHABLE();
     }
     return true;
 }
@@ -555,9 +542,7 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             return TSqlValues(Ctx_, Mode_).Build(alt.GetRule_values_stmt2(), pos, derivedColumns, derivedColumnsPos);
         }
         case TRule_single_source::ALT_NOT_SET:
-            AltNotImplemented("single_source", node);
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownSingleSource");
-            return nullptr;
+            Y_UNREACHABLE();
     }
 }
 
@@ -608,7 +593,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 }
                 break;
             case TRule_named_single_source_TBlock3_TBlock1::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
         singleSource->SetLabel(label);
     }
@@ -662,7 +647,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
                 Ctx_.IncrementMonCounter("sql_features", "SampleClause");
             } break;
             case TRule_named_single_source::TBlock4::ALT_NOT_SET:
-                Y_ABORT("SampleClause: does not corresond to grammar changes");
+                Y_UNREACHABLE();
         }
         if (!singleSource->SetSamplingOptions(Ctx_, pos, sampleClause, mode, samplingRateNode, samplingSeedNode)) {
             Ctx_.IncrementMonCounter("sql_errors", "IncorrectSampleClause");
@@ -699,7 +684,7 @@ bool TSqlSelect::ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_
             columnName = Id(node.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
             break;
         case TRule_without_column_name::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     if (columnName.empty()) {
@@ -1341,7 +1326,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             break;
         }
         case TRule_select_kind_TBlock2::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     return res;
@@ -1657,7 +1642,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::BuildAtom(
                 break;
             }
             case NSQLv1Generated::TRule_select_or_expr::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     } else if (placement.IsFirstInSelectOp && placement.IsLastInSelectOp) {
         result = SelectKind(node, pos, /* placement = */ Nothing());

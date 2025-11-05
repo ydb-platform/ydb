@@ -20,7 +20,7 @@ class TRopeAlignedBuffer : public IContiguousChunk {
     static constexpr size_t Alignment = 16;
     static constexpr size_t MallocAlignment = sizeof(size_t);
 
-    ui32 Size;
+    const ui32 Size;
     const ui32 Capacity;
     const ui32 Offset;
     alignas(Alignment) char Data[];
@@ -36,6 +36,13 @@ class TRopeAlignedBuffer : public IContiguousChunk {
 public:
     static TIntrusivePtr<TRopeAlignedBuffer> Allocate(size_t size) {
         return new(malloc(sizeof(TRopeAlignedBuffer) + size + Alignment - MallocAlignment)) TRopeAlignedBuffer(size);
+    }
+
+    IContiguousChunk::TPtr Clone() override {
+        TIntrusivePtr<TRopeAlignedBuffer> buf = Allocate(Size);
+        TContiguousSpan src = GetData();
+        ::memcpy(buf->UnsafeGetDataMut().GetData(), src.Data(), src.GetSize());
+        return buf;
     }
 
     void *operator new(size_t) {
@@ -59,7 +66,7 @@ public:
         return {Data + Offset, Size};
     }
 
-    TMutableContiguousSpan GetDataMut() override {
+    TMutableContiguousSpan UnsafeGetDataMut() override {
         return {Data + Offset, Size};
     }
 
@@ -308,18 +315,18 @@ private:
             return *Iter;
         }
 
+        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
+        TRcBuf& GetChunk() {
+            CheckValid();
+            return *Iter;
+        }
+
     private:
         friend class TRope;
 
         typename TTraits::TListIterator operator ->() const {
             CheckValid();
             return Iter;
-        }
-
-        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
-        TRcBuf& GetChunk() {
-            CheckValid();
-            return *Iter;
         }
 
         typename TTraits::TListIterator GetChainBegin() const {

@@ -46,12 +46,14 @@ struct TEventWithDatabaseId : public TEventLocal<TEv, TEventType> {
 };
 
 struct TEvForgetScriptExecutionOperation : public TEventWithDatabaseId<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , OperationId(id)
+        , UserSID(userSID)
     {}
 
     const NOperationId::TOperationId OperationId;
+    const std::optional<TString> UserSID;
 };
 
 struct TEvForgetScriptExecutionOperationResponse : public TEventLocal<TEvForgetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponse> {
@@ -66,12 +68,14 @@ struct TEvForgetScriptExecutionOperationResponse : public TEventLocal<TEvForgetS
 };
 
 struct TEvGetScriptExecutionOperation : public TEventWithDatabaseId<TEvGetScriptExecutionOperation, TKqpScriptExecutionEvents::EvGetScriptExecutionOperation> {
-    TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , OperationId(id)
+        , UserSID(userSID)
     {}
 
-    NOperationId::TOperationId OperationId;
+    const NOperationId::TOperationId OperationId;
+    const std::optional<TString> UserSID;
     bool CheckLeaseState = true;
 };
 
@@ -132,14 +136,16 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
 };
 
 struct TEvListScriptExecutionOperations : public TEventWithDatabaseId<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {
-    TEvListScriptExecutionOperations(const TString& database, const ui64 pageSize, const TString& pageToken)
+    TEvListScriptExecutionOperations(const TString& database, const ui64 pageSize, const TString& pageToken, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , PageSize(pageSize)
         , PageToken(pageToken)
+        , UserSID(userSID)
     {}
 
-    ui64 PageSize;
-    TString PageToken;
+    const ui64 PageSize;
+    const TString PageToken;
+    const std::optional<TString> UserSID;
 };
 
 struct TEvListScriptExecutionOperationsResponse : public TEventLocal<TEvListScriptExecutionOperationsResponse, TKqpScriptExecutionEvents::EvListScriptExecutionOperationsResponse> {
@@ -185,12 +191,14 @@ struct TEvCheckAliveResponse : public TEventPB<TEvCheckAliveResponse, NKikimrKqp
 };
 
 struct TEvCancelScriptExecutionOperation : public TEventWithDatabaseId<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {
-    TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , OperationId(id)
+        , UserSID(userSID)
     {}
 
-    NOperationId::TOperationId OperationId;
+    const NOperationId::TOperationId OperationId;
+    const std::optional<TString> UserSID;
 };
 
 struct TEvResetScriptExecutionRetriesResponse : public TEventLocal<TEvResetScriptExecutionRetriesResponse, TKqpScriptExecutionEvents::EvResetScriptExecutionRetriesResponse> {
@@ -317,7 +325,7 @@ struct TEvSaveScriptExternalEffectResponse : public TEventLocal<TEvSaveScriptExt
 };
 
 struct TEvSaveScriptPhysicalGraphRequest : public TEventLocal<TEvSaveScriptPhysicalGraphRequest, TKqpScriptExecutionEvents::EvSaveScriptPhysicalGraphRequest> {
-    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph&& physicalGraph)
+    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph physicalGraph)
         : PhysicalGraph(std::move(physicalGraph))
     {}
 
@@ -335,14 +343,16 @@ struct TEvSaveScriptPhysicalGraphResponse : public TEventLocal<TEvSaveScriptPhys
 };
 
 struct TEvGetScriptPhysicalGraphResponse : public TEventLocal<TEvGetScriptPhysicalGraphResponse, TKqpScriptExecutionEvents::EvGetScriptPhysicalGraphResponse> {
-    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, NYql::TIssues issues)
+    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, i64 generation, NYql::TIssues issues)
         : Status(status)
         , PhysicalGraph(std::move(physicalGraph))
+        , Generation(generation)
         , Issues(std::move(issues))
     {}
 
     Ydb::StatusIds::StatusCode Status;
     NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    i64 Generation = 0;
     NYql::TIssues Issues;
 };
 

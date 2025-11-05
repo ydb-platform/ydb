@@ -7,7 +7,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
@@ -120,12 +119,19 @@ struct TEvPrivate {
         EvRefreshClusters = EvBegin + 23,
         EvReceivedClusters = EvBegin + 24,
         EvDescribeTopicResult = EvBegin + 25,
+        EvPartitionIdleness = EvBegin + 26,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvProcessState : public NActors::TEventLocal<TEvProcessState, EvProcessState> {};
     struct TEvNotifyCA : public NActors::TEventLocal<TEvNotifyCA, EvNotifyCA> {};
+    struct TEvPartitionIdleness : public NActors::TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
+        explicit TEvPartitionIdleness(TInstant notifyTime)
+            : NotifyTime(notifyTime)
+        {}
+        const TInstant NotifyTime;
+    };
     struct TEvRefreshClusters : public NActors::TEventLocal<TEvRefreshClusters, EvRefreshClusters> {};
     struct TEvReceivedClusters : public NActors::TEventLocal<TEvReceivedClusters, EvReceivedClusters> {
         explicit TEvReceivedClusters(
@@ -225,7 +231,6 @@ private:
     NActors::TActorId LocalRowDispatcherActorId;
     // Set on Children
     std::queue<TReadyBatch> ReadyBuffer;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     // Set on Parent
     EState State = EState::INIT;
     bool Inited = false;
@@ -358,6 +363,7 @@ public:
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvProcessState::TPtr&);
     void Handle(TEvPrivate::TEvNotifyCA::TPtr&);
+    void Handle(TEvPrivate::TEvPartitionIdleness::TPtr&);
     void Handle(TEvPrivate::TEvRefreshClusters::TPtr&);
     void Handle(TEvPrivate::TEvReceivedClusters::TPtr&);
     void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr&);
@@ -382,6 +388,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvProcessState, Handle);
         hFunc(TEvPrivate::TEvNotifyCA, Handle);
+        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvRefreshClusters, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
@@ -410,6 +417,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, IgnoreEvent);
         hFunc(TEvPrivate::TEvProcessState, IgnoreEvent);
         hFunc(TEvPrivate::TEvNotifyCA, IgnoreEvent);
+        hFunc(TEvPrivate::TEvPartitionIdleness, IgnoreEvent);
         hFunc(TEvPrivate::TEvRefreshClusters, IgnoreEvent);
         hFunc(TEvPrivate::TEvReceivedClusters, IgnoreEvent);
         hFunc(TEvPrivate::TEvDescribeTopicResult, IgnoreEvent);
@@ -428,12 +436,10 @@ public:
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
-    void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
     TDuration GetCpuTime() override;
-    void InitWatermarkTracker();
     std::vector<ui64> GetPartitionsToRead() const;
     void AddMessageBatch(TRope&& serializedBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer);
     void ProcessState();
@@ -447,6 +453,8 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
+    void SchedulePartitionIdlenessCheck(TInstant) override;
+    void InitWatermarkTracker() override;
     void SendStartSession(TSession& sessionInfo);
     void Init();
     void InitChild();
@@ -623,10 +631,11 @@ void TDqPqRdReadActor::ProcessGlobalState() {
         }
         auto partitionToRead = GetPartitionsToRead();
         if (WatermarkTracker) {
+            auto now = TInstant::Now();
             TPartitionKey partitionKey { .Cluster = Cluster };
             for (auto partitionId: partitionToRead) {
                 partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey);
+                WatermarkTracker->RegisterPartition(partitionKey, now);
             }
         }
         auto cookie = ++CoordinatorRequestCookie;
@@ -707,11 +716,6 @@ void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
     sessionInfo.EventsQueue.Send(event, sessionInfo.Generation);
 }
 
-void TDqPqRdReadActor::LoadState(const TSourceState& state) {
-    TDqPqReadActorBase::LoadState(state);
-    InitWatermarkTracker();
-}
-
 void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) {
 }
 
@@ -754,6 +758,22 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     InFlyAsyncInputData = false;
     buffer.clear();
     watermark = Nothing();
+
+    if (WatermarkTracker) {
+        const auto now = TInstant::Now();
+        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
+
+        if (idleWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " Idleness watermark " << idleWatermark << " was produced");
+            if (ReadyBuffer.empty()) {
+                watermark = *idleWatermark;
+            } else {
+                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
+                ReadyBuffer.back().Watermark = *idleWatermark;
+            }
+        }
+        MaybeSchedulePartitionIdlenessCheck(now);
+    }
 
     if (freeSpace == 0 || ReadyBuffer.empty()) {
         return 0;
@@ -798,20 +818,16 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
+void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
+    Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
+}
+
 void TDqPqRdReadActor::InitWatermarkTracker() {
-    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
-
-    if (!SourceParams.GetWatermarks().GetEnabled()) {
-        return;
-    }
-
-    WatermarkTracker.ConstructInPlace(
-        TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
-        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        TDuration::Zero(),
-        TInstant::Now()
-    );
+    auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+    TDqPqReadActorBase::InitWatermarkTracker(
+            TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
+            TDuration::MicroSeconds(idleDelayUs));
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1521,6 +1537,12 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvRefreshClusters::TPtr&) {
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
     Schedule(TDuration::Seconds(NotifyCAPeriodSec), new TEvPrivate::TEvNotifyCA());
     NotifyCA();
+}
+
+void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
+    if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+        NotifyCA();
+    }
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

@@ -123,7 +123,7 @@ public:
         , Lead{std::move(lead)}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Uploader(request.GetScanSettings())
+        , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
         , ScanSettings(request.GetScanSettings())
@@ -434,7 +434,7 @@ protected:
     void FeedSample(TArrayRef<const TCell> row)
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
-        if (!Clusters->IsExpectedSize(embedding)) {
+        if (!Clusters->IsExpectedFormat(embedding)) {
             return;
         }
 

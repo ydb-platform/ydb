@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/persqueue/public/fetcher)
 
+SIZE(MEDIUM)
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(

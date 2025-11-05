@@ -158,9 +158,6 @@ def get_md5(*args, **kwargs):
     """
     Attempts to get an md5 hashing object.
 
-    :param raise_error_if_unavailable: raise an error if md5 is unavailable on
-        this system. If False, None will be returned if it is unavailable.
-    :type raise_error_if_unavailable: bool
     :param args: Args to pass to the MD5 constructor
     :param kwargs: Key word arguments to pass to the MD5 constructor
     :return: An MD5 hashing object if available. If it is unavailable, None

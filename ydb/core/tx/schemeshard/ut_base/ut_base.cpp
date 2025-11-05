@@ -10900,12 +10900,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);
 
         ui64 txId = 100;
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -11034,6 +11034,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         );
         env.TestWaitNotification(runtime, txId);
 
+        // altering non-default column families is not allowed
+        TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
+                Name: "indexImplTable"
+                KeyColumnNames: ["key", "value"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Name: "test1"
+                        ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                    }
+                }
+            )",
+            {TEvSchemeShard::EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
+
         {
             TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
                         Name: "indexImplTable"
@@ -11045,6 +11060,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                     SizeThreshold: 100500
                                     RowCountThreshold: 100500
                                 }
+                            }
+                            ColumnFamilies {
+                                Name: "default"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                             }
                         }
                )"
@@ -11094,7 +11113,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
                             NLs::NoMaxPartitionsCount,
-                            NLs::SizeToSplitEqual(100500)});
+                            NLs::SizeToSplitEqual(100500),
+                            NLs::ColumnFamiliesCount(1),
+                            NLs::ColumnFamiliesHas(0),
+                            [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                                const auto& partConfig = tableDescription.GetPartitionConfig();
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    (int)partConfig.GetColumnFamilies(0).GetColumnCacheMode(),
+                                    (int)NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory
+                                );
+                            }});
     }
 
     template <typename TCreateFn, typename TDropFn>
@@ -12214,5 +12243,164 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                               }
                             })", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(DefaultStorageConfigTableWithChannelProfileIdBuildIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // Create a legacy table when there are no storage pools yet
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ChannelProfileId: 0
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Add a single storage pool so new tables could have it inferred
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Build index over a legacy table
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Index", {"value"});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CannotAddChannelProfileIdToStorageConfigTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // Add a single storage pool
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create a storage config table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Log {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Data {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                        }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Specifying ChannelProfileId should be an error
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                PartitionConfig {
+                    ChannelProfileId: 0
+                }
+            )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(AlterMixedStorageConfigAndChannelProfileIdTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // Add a single storage pool
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create a table that has both default family with both StorageConfig
+        // and ChannelProfileId specified. Historically there is no validation
+        // for such mixed tables (StorageConfig wins out).
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ChannelProfileId: 0
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Log {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Data {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                        }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // It should be possible to alter tables while specifying the same
+        // exact mixed settings partition config.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "value2" Type: "Uint32" }
+                PartitionConfig {
+                    ChannelProfileId: 0
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Log {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Data {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                        }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Changing ChannelProfileId should not be allowed
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "value2" Type: "Uint32" }
+                PartitionConfig {
+                    ChannelProfileId: 1
+                }
+            )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
     }
 }

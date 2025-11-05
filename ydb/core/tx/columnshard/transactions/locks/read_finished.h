@@ -10,7 +10,7 @@ private:
     TTxConflicts Conflicts;
 
     virtual bool DoCheckInteraction(
-        const ui64 /*selfTxId*/, TInteractionsContext& /*context*/, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
+        const ui64 /*selfLockId*/, TInteractionsContext& /*context*/, TTxConflicts& conflicts, TTxConflicts& /*notifications*/) const override {
         conflicts = Conflicts;
         return true;
     }

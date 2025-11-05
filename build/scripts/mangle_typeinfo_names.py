@@ -175,7 +175,7 @@ def patch_elf_symbol_sizes(elf_data, elf64, sections, symbol_sizes):
     if not symtab:
         return
 
-    for sym_i in range(symtab.size / symtab.entry_size):
+    for sym_i in range(symtab.size // symtab.entry_size):
         symtab_entry_offset = symtab.data_offset + symtab.entry_size * sym_i
         symtab_entry = elf_data[symtab_entry_offset : symtab_entry_offset + symtab.entry_size]
 

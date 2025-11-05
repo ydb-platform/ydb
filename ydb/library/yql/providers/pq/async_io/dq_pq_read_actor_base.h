@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -21,6 +22,8 @@ public:
     TVector<NPq::NProto::TDqReadTaskParams> ReadParams;
     const NActors::TActorId ComputeActorId;
     ui64 TaskId;
+    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    // << Initialized when watermark tracking is enabled
 
     TDqPqReadActorBase(
         ui64 inputIndex,
@@ -38,9 +41,19 @@ public:
     ui64 GetInputIndex() const override;
     const TDqAsyncStats& GetIngressStats() const override;
 
+    virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
+
+    virtual void InitWatermarkTracker() = 0;
+    void InitWatermarkTracker(TDuration, TDuration);
+    void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
+    bool RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime); // return true if any watermark check was expired
+
     virtual TString GetSessionId() const {
         return TString{"empty"};
     }
+private:
+    bool HasEarlierPartitionIdlenessChecks(TInstant time);
+    std::deque<TInstant> InflyIdlenessChecks; // strictly increasing queue of scheduled idle partitions checks; normally contains at most one check; only used when idle watermarks enabled
 };
 
 } // namespace NYql::NDq

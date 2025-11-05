@@ -57,7 +57,6 @@ private:
 
     size_t FetchRequestCurrentPartitionIndex;
     ui64 FetchRequestCurrentReadTablet;
-    ui32 PendingAlterTopicResponses = 0;
     ui32 FetchRequestBytesLeft;
     bool ProcessingFinished = false;
     THolder<TEvPQ::TEvFetchResponse> Response;
@@ -216,55 +215,6 @@ public:
 
 
     void OnMetadataReceived(const TActorContext& ctx) {
-        if (!AppData(ctx)->KafkaProxyConfig.GetAutoCreateConsumersEnable()) {
-            return OnTopicAltered(ctx);
-        }
-
-        if (Settings.Consumer == NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER) {
-            return OnTopicAltered(ctx);
-        }
-
-        for (auto& [topicPath, info]: TopicInfo) {
-            if (HasConsumer(info.PQInfo->Description.GetPQTabletConfig(), Settings.Consumer)) {
-                continue;
-            }
-
-            EnsureYdbProxy();
-
-            const auto settings = NYdb::NTopic::TAlterTopicSettings()
-                .BeginAddConsumer()
-                    .ConsumerName(Settings.Consumer)
-                .EndAddConsumer();
-
-            Send(YdbProxy, new NReplication::TEvYdbProxy::TEvAlterTopicRequest(topicPath, settings));
-            ++PendingAlterTopicResponses;
-        }
-
-        if (PendingAlterTopicResponses == 0) {
-            return OnTopicAltered(ctx);
-        }
-
-        Become(&TPQFetchRequestActor::StateAlterTopics);
-    }
-
-    void Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
-        NYdb::TStatus& result = ev->Get()->Result;
-        auto logLevel = result.GetStatus() == NYdb::EStatus::SUCCESS ? NActors::NLog::PRI_DEBUG :NActors::NLog::PRI_INFO;
-        LOG(logLevel, "Handling TEvAlterTopicResponse. Status: " << result.GetStatus());
-
-        --PendingAlterTopicResponses;
-        if (PendingAlterTopicResponses == 0) {
-            OnTopicAltered(ctx);
-        }
-    }
-
-    STRICT_STFUNC(StateAlterTopics,
-        HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
-        HFunc(TEvents::TEvWakeup, Handle);
-        CFunc(NActors::TEvents::TSystem::Poison, Die);
-    )
-
-    void OnTopicAltered(const TActorContext& ctx) {
         for (auto& [name, info]: TopicInfo) {
             ProcessTopicMetadata(name, info, ctx);
         }

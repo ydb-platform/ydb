@@ -8,6 +8,7 @@
 #include <yql/essentials/core/url_preprocessing/interface/url_preprocessing.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/core/layers/remote_layer_provider.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
@@ -65,6 +66,7 @@ public:
     void EnableRangeComputeFor();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
     void SetUdfResolverLogfile(const TString& path);
+    void AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider);
 
     TProgramPtr Create(
         const TFile& file,
@@ -105,6 +107,7 @@ private:
     bool EnableRangeComputeFor_ = false;
     IArrowResolver::TPtr ArrowResolver_;
     TMaybe<TString> UdfResolverLogfile_;
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -352,6 +355,12 @@ public:
     }
 
     TString GetSourceCode() const;
+    bool IsFullCaptureReady() const;
+    void CommitFullCapture() const;
+
+    void SetEnableLineage() {
+        EnableLineage_ = true;
+    }
 
 private:
     TProgram(
@@ -381,7 +390,8 @@ private:
         const IArrowResolver::TPtr& arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
-        TMaybe<TString> gatewaysForMerge);
+        TMaybe<TString> gatewaysForMerge,
+        THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -483,8 +493,11 @@ private:
     TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
+    bool EnableLineage_ = false;
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 
 void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch = {});
+bool HasFullCapture(const IQReaderPtr& reader);
 
 } // namespace NYql

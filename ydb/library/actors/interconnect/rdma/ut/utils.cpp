@@ -1,6 +1,6 @@
 #include "utils.h"
 
-#include <ydb/library/actors/interconnect/rdma/cq_actor.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/link_manager.h>
@@ -48,7 +48,7 @@ std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntim
     TString ip = env ?: defIp;
 
     NInterconnect::TAddress address(ip, 7777);
-    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
+    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(GetV6CompatAddr(address));
     RDMA_UT_EXPECT_TRUE(ctx);
     Cerr << "Using verbs context: " << *ctx << ", on addr: " << ip << Endl;
 

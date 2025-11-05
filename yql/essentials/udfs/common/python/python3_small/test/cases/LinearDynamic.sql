@@ -18,9 +18,8 @@ def g(x):
     return x.extract() * 2
 @@;
 
-$l = DynamicLinearType(Int32);
-$p = Python::f(Callable<(Int32)->$l>, $s);
-$c = Python::g(Callable<($l)->Int32>, $s);
+$p = Python::f(Callable<(Int32)->DynamicLinear<Int32>>, $s);
+$c = Python::g(Callable<(DynamicLinear<Int32>)->Int32>, $s);
 
 select $c($p(1));
 

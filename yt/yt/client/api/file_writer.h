@@ -34,5 +34,15 @@ DEFINE_REFCOUNTED_TYPE(IFileWriter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NApi
+struct IFileFragmentWriter
+    : public virtual IFileWriter
+{
+    //! Returns signed write result. Only safe to use after |Close|.
+    virtual NFileClient::TSignedWriteFileFragmentResultPtr GetWriteFragmentResult() const = 0;
+};
 
+DEFINE_REFCOUNTED_TYPE(IFileFragmentWriter)
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NApi

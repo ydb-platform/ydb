@@ -13,11 +13,14 @@
 #include <util/stream/printf.h>
 #include <util/stream/str.h>
 #include <util/stream/file.h>
+#include <util/system/mutex.h>
 #include <util/system/spinlock.h>
 #include <util/system/guard.h>
 #include <util/system/file.h>
 #include <util/generic/mem_copy.h>
 
+static TMutex g_InitLoggerMutex;
+static bool g_LoggerInitialized = false;
 
 namespace NYql {
 
@@ -139,6 +142,7 @@ public:
                 // Log format can be distinct from that is YqlLogger,
                 // but we do not care as it is a debug buffer.
                 TString out = NLog::LegacyFormat(record);
+                out.append('\n');
 
                 const char* ptr = out.data();
                 size_t remaining = out.length();
@@ -169,13 +173,27 @@ private:
 };
 
 void SetYtLoggerGlobalBackend(int level, size_t debugLogBufferSize, const TString& debugLogFile, bool debugLogAlwaysWrite) {
-    // Important to initialize YT API before setting logger. Otherwise YT API initialization will rest it to default
-    InitYtApiOnce();
-    if (level >= 0 || (debugLogBufferSize && debugLogFile)) {
-        NYT::SetLogger(new TGlobalLoggerImpl(level, debugLogBufferSize, debugLogFile, debugLogAlwaysWrite));
+    bool isNonTrivialLogger = level >= 0 || (debugLogBufferSize && debugLogFile);
+
+    with_lock (g_InitLoggerMutex) {
+        if (g_LoggerInitialized) {
+            return;
+        }
+
+        // Important to initialize YT API before setting logger. Otherwise YT API initialization will reset it to default
+        InitYtApiOnce();
+
+        if (isNonTrivialLogger) {
+            NYT::SetLogger(new TGlobalLoggerImpl(level, debugLogBufferSize, debugLogFile, debugLogAlwaysWrite));
+        } else {
+            NYT::SetLogger(NYT::ILoggerPtr());
+        }
+
+        g_LoggerInitialized = true;
+    }
+
+    if (isNonTrivialLogger) {
         NYql::NBacktrace::AddAfterFatalCallback([](int ){ NYql::FlushYtDebugLog(); });
-    } else {
-        NYT::SetLogger(NYT::ILoggerPtr());
     }
 }
 

@@ -89,8 +89,9 @@ public:
     }
 };
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
-    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
     ui32 chunkIdx = 0;
     for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {
         std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
@@ -117,11 +118,11 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
                         NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
                     }
                 },
-                [&](const std::string_view data, const ui64 hashBase) {
+                [&](const NJson::TJsonValue& data, const ui64 hashBase) {
                     auto& filterBits = filtersBuilder.MutableFilter(hashBase);
                     const ui32 size = filterBits.Size();
                     for (ui64 i = 0; i < HashesCount; ++i) {
-                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
+                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data.GetStringRobust(), i);
                         filterBits.Set(hash % size);
                     }
                 });

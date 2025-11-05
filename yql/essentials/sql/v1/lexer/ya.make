@@ -16,8 +16,6 @@ SUPPRESSIONS(
 END()
 
 RECURSE(
-    antlr3
-    antlr3_ansi
     antlr4
     antlr4_ansi
     antlr4_pure

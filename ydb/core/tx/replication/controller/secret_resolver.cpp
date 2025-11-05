@@ -108,6 +108,7 @@ public:
         }
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.TableId = PathId;

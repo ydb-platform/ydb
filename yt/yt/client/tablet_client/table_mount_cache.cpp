@@ -195,4 +195,18 @@ TTableMountInfoPtr TTableMountInfo::Clone() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TTabletRedirectionHint::Register(TRegistrar registrar)
+{
+    registrar.Parameter("previous_mount_revision", &TThis::PreviousMountRevision)
+        .Default();
+    registrar.Parameter("mount_revision", &TThis::MountRevision)
+        .Default();
+    registrar.Parameter("cell_id", &TThis::CellId)
+        .Default();
+    registrar.Parameter("cell_descriptor", &TThis::CellDescriptor)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTabletClient

@@ -648,6 +648,8 @@ template <typename TOnDemandValue>
             callbacks.OnCloseMap();
             break;
         }
+        case simdjson::ondemand::json_type::unknown:
+            return simdjson::UNEXPECTED_ERROR;
     }
 
     return simdjson::SUCCESS;

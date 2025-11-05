@@ -27,6 +27,9 @@ public:
         static inline constexpr char Run[] = "run";
         static inline constexpr char ResourcePool[] = "resource_pool";
         static inline constexpr char Force[] = "force";
+
+        // Internal query info
+        static inline constexpr char QueryTextRevision[] = "__query_text_revision";
     };
 };
 
@@ -39,6 +42,7 @@ public:
     TString QueryText;
     bool Run = false;
     TString ResourcePool;
+    ui64 QueryTextRevision = 0;
 };
 
 }  // namespace NKikimr::NKqp

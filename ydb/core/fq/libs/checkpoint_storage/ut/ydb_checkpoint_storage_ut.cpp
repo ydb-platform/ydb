@@ -23,7 +23,7 @@ const TCheckpointId CheckpointId4(13, 2);
 ////////////////////////////////////////////////////////////////////////////////
 
 TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGenerator::TPtr entityIdGenerator = CreateEntityIdGenerator("id")) {
-    NKikimrConfig::TExternalStorage checkpointStorageConfig;
+    NConfig::TYdbStorageConfig checkpointStorageConfig;
     checkpointStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
     checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
     checkpointStorageConfig.SetToken("");

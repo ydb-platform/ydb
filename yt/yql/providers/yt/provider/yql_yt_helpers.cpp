@@ -63,14 +63,6 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (lambdaBody.IsCallable("udf") && lambdaBody.ChildrenSize() == 8) {
-        for (const auto& setting: lambdaBody.Child(7)->Children()) {
-            if (setting->HeadPtr()->Content() == "layers") {
-                return false;
-            }
-        }
-    }
-
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
         if (auto maybeRead = maybeLength.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
@@ -1495,6 +1487,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1521,6 +1514,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1545,6 +1539,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1774,6 +1769,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                         .Done();
                 }
                 updatedPaths.push_back(path);
@@ -1853,6 +1849,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done();
     }
 
@@ -1917,6 +1914,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         .Columns<TCoVoid>().Build()
         .Ranges<TCoVoid>().Build()
         .Stat<TCoVoid>().Build()
+        .QLFilter<TCoVoid>().Build()
         .Done();
 }
 
@@ -2337,6 +2335,7 @@ TYtReadTable ConvertContentInputToRead(TExprBase input, TMaybeNode<TCoNameValueT
                     .Columns(columns)
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings(settings.Cast())

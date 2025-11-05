@@ -78,7 +78,7 @@ NThreading::TFuture<void> TTableClient::TImpl::Stop() {
     return Drain();
 }
 
-void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) {
+void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout) {
     Connections_->ScheduleOneTimeTask(std::move(fn), timeout);
 }
 
@@ -332,7 +332,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
             //TODO: Do we realy need it?
             Client->ScheduleTaskUnsafe([promise{std::move(Promise)}, val{std::move(val)}]() mutable {
                 promise.SetValue(std::move(val));
-            }, TDuration());
+            }, TDeadline::Duration::zero());
         }
         NThreading::TPromise<TCreateSessionResult> Promise;
         std::shared_ptr<TTableClient::TImpl> Client;
@@ -1032,16 +1032,17 @@ TAsyncBulkUpsertResult TTableClient::TImpl::BulkUpsert(const std::string& table,
 
     request->set_table(TStringType{table});
 
-    if (rows.GetType().Impl_.use_count() == 1) {
-        request->mutable_rows()->mutable_type()->Swap(&rows.GetType().GetProto());
-    } else {
-        *request->mutable_rows()->mutable_type() = rows.GetType().GetProto();
-    }
-
+    auto* mutable_rows = request->mutable_rows();
     if (rows.Impl_.use_count() == 1) {
-        request->mutable_rows()->mutable_value()->Swap(&rows.GetProto());
+        mutable_rows->mutable_value()->Swap(&rows.GetProto());
+        if (rows.GetType().Impl_.use_count() == 1) {
+            mutable_rows->mutable_type()->Swap(&rows.GetType().GetProto());
+        } else {
+            *mutable_rows->mutable_type() = rows.GetType().GetProto();
+        }
     } else {
-        *request->mutable_rows()->mutable_value() = rows.GetProto();
+        *mutable_rows->mutable_value() = rows.GetProto();
+        *mutable_rows->mutable_type() = rows.GetType().GetProto();
     }
 
     auto promise = NewPromise<TBulkUpsertResult>();

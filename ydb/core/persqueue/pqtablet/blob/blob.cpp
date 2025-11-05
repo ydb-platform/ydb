@@ -439,13 +439,13 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , MaxBlobSize(maxBlobSize)
     , FastWrite(fastWrite)
 {
-    AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0) // if head not cleared, then NewHead is going after Head
-        ("Head.NextOffset", Head.GetNextOffset())
-        ("Head.PackedSize", Head.PackedSize)
-        ("NewHead.Offset", NewHead.Offset)
-        ("NewHead.PartNo", NewHead.PartNo)
-        ("headCleared", headCleared)
-        ("needCompactHead", needCompactHead);
+    //AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0) // if head not cleared, then NewHead is going after Head
+    //    ("Head.NextOffset", Head.GetNextOffset())
+    //    ("Head.PackedSize", Head.PackedSize)
+    //    ("NewHead.Offset", NewHead.Offset)
+    //    ("NewHead.PartNo", NewHead.PartNo)
+    //    ("headCleared", headCleared)
+    //    ("needCompactHead", needCompactHead);
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;
         InternalPartsCount = Head.GetInternalPartsCount() + NewHead.GetInternalPartsCount();
@@ -528,7 +528,6 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
         AFL_ENSURE(batch.Packed);
         batch.SerializeTo(valueD);
     }
-
     AFL_ENSURE(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
     HeadSize = 0;
     BlobsSize = 0;

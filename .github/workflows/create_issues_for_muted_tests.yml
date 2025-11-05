@@ -21,10 +21,11 @@ jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-        (github.event_name == 'pull_request_review' && 
-        github.event.review.state == 'approved' && 
-        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
-        github.event_name == 'workflow_dispatch'
+      ((github.event_name == 'pull_request_review' && 
+      github.event.review.state == 'approved' && 
+      contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
+      github.event.pull_request.base.ref == 'main') || 
+      github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Set environment variables for branches

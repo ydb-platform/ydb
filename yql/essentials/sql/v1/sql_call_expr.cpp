@@ -160,7 +160,7 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
             break;
         }
         case TRule_value_constructor::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     PositionalArgs_ = Args_;
     return true;
@@ -239,7 +239,7 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
             break;
         }
         case TRule_using_call_expr::TBlock1::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
     YQL_ENSURE(!DistinctAllowed_);
     UsingCallExpr_ = true;
@@ -354,7 +354,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 }
                 break;
             case TRule_invoke_expr::TBlock2::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -383,7 +383,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 return false;
             }
             case TRule_invoke_expr_tail::TBlock1::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }
 
@@ -423,7 +423,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
                 break;
             }
             case TRule_window_name_or_specification::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
         Ctx_.IncrementMonCounter("sql_features", "WindowFunctionOver");
     }

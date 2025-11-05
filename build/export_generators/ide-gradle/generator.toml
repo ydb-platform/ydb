@@ -31,6 +31,10 @@ is_extra_target = true
 is_test = true
 is_extra_target = true
 
+[targets.junit6]
+is_test = true
+is_extra_target = true
+
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
@@ -39,6 +43,7 @@ required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
 junit5_test="flag"
+junit6_test="flag"
 test_cwd="list"
 test_env="list"
 app_main_class="str"

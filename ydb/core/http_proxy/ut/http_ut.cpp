@@ -1,3 +1,5 @@
+#include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
+
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
 
@@ -10,8 +12,6 @@
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
 using namespace NActors;
-
-#include "datastreams_fixture.h"
 
 Y_UNIT_TEST_SUITE(TestMalformedRequest) {
 

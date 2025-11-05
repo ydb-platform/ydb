@@ -1,10 +1,11 @@
 #include "sql_highlight.h"
 
+#include "data_language_json.h"
+
 #include <yql/essentials/sql/v1/lexer/regex/regex.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
 #include <util/generic/algorithm.h>
@@ -57,9 +58,14 @@ TUnit MakeUnit<EUnitKind::Keyword>(Syntax& s) {
     using NSQLReflect::TLexerGrammar;
 
     TUnit unit = {.Kind = EUnitKind::Keyword};
+
     for (const auto& keyword : s.Grammar->KeywordNames) {
         const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
         unit.Patterns.push_back(CaseInsensitive(content));
+    }
+
+    for (const TString& type : LoadHints()) {
+        unit.Patterns.emplace_back(CaseInsensitive(type));
     }
 
     unit.Patterns = {Merged(std::move(unit.Patterns))};
@@ -113,31 +119,22 @@ TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
                 .Before = TStringBuilder() << "PRAGMA" << s.Get("WS"),
                 .IsCaseInsensitive = true,
             },
-            {
-                .Body = s.Get("ID_PLAIN"),
-                .Before = TStringBuilder() << "WITH" << s.Get("WS"),
-                .IsCaseInsensitive = true,
-            },
-            {
-                .Body = s.Get("ID_PLAIN"),
-                .After = " ?" + s.Get("EQUALS"),
-                .IsCaseInsensitive = true,
-            }},
+        },
     };
 }
 
 template <>
 TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
     TVector<NSQLTranslationV1::TRegexPattern> types;
-    NJson::TJsonValue json = NJson::ReadJsonFastTree(NResource::Find("types.json"));
-    for (const NJson::TJsonValue& value : json.GetArraySafe()) {
-        types.emplace_back(CaseInsensitive(value["name"].GetStringSafe()));
+    for (const TString& type : LoadTypes()) {
+        types.emplace_back(CaseInsensitive(type));
     }
 
     return {
         .Kind = EUnitKind::TypeIdentifier,
         .Patterns = {
             {s.Get("ID_PLAIN"), s.Get("LESS")},
+            {.Body = "DECIMAL", .IsCaseInsensitive = true},
             {Merged(std::move(types))},
         },
     };
@@ -182,13 +179,16 @@ template <>
 TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
+        .RangePatterns = {
+            {R"(')", R"(')", R"re(\\.)re"},
+            {R"(")", R"(")", R"re(\\.)re"},
+            {TRangePattern::EmbeddedPythonBegin, R"(@@)", R"re(\@\@\@\@)re"},
+            {TRangePattern::EmbeddedJavaScriptBegin, R"(@@)", R"re(\@\@\@\@)re"},
+            {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
+        },
         .Patterns = {{s.Get("STRING_VALUE")}},
         .PatternsANSI = TVector<TRegexPattern>{
             TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
-        },
-        .RangePattern = TRangePattern{
-            .Begin = R"(@@)",
-            .End = R"(@@)",
         },
         .IsPlain = false,
     };
@@ -198,12 +198,9 @@ template <>
 TUnit MakeUnit<EUnitKind::Comment>(Syntax& s) {
     return {
         .Kind = EUnitKind::Comment,
+        .RangePatterns = {{R"(/*)", R"(*/)"}},
         .Patterns = {{s.Get("COMMENT")}},
         .PatternsANSI = Nothing(),
-        .RangePattern = TRangePattern{
-            .Begin = R"(/*)",
-            .End = R"(*/)",
-        },
         .IsPlain = false,
     };
 }
@@ -245,8 +242,8 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
     h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::OptionIdentifier>(s));
-    h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));

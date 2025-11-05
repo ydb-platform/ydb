@@ -218,6 +218,17 @@ struct TEvStateStorage::TEvListStateStorageResult : public TEventLocal<TEvListSt
     {}
 };
 
+struct TEvStateStorage::TEvListBoard : public TEventLocal<TEvListBoard, EvListBoard> {
+};
+
+struct TEvStateStorage::TEvListBoardResult : public TEventLocal<TEvListBoardResult, EvListBoardResult> {
+    TIntrusiveConstPtr<TStateStorageInfo> Info;
+
+    TEvListBoardResult(const TIntrusiveConstPtr<TStateStorageInfo> &info)
+        : Info(info)
+    {}
+};
+
 struct TEvStateStorage::TEvPublishActorGone : public TEventLocal<TEvPublishActorGone, EvPublishActorGone> {
     TActorId Replica;
 

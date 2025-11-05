@@ -1,6 +1,6 @@
 #ifndef SIMDJSON_CONCEPTS_H
 #define SIMDJSON_CONCEPTS_H
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
 
 #include <concepts>
 #include <type_traits>
@@ -32,7 +32,9 @@ SIMDJSON_IMPL_CONCEPT(op_append, operator+=)
 #undef SIMDJSON_IMPL_CONCEPT
 } // namespace details
 
-
+template <typename T>
+concept is_pair = requires { typename T::first_type; typename T::second_type; } &&
+                  std::same_as<T, std::pair<typename T::first_type, typename T::second_type>>;
 template <typename T>
 concept string_view_like = std::is_convertible_v<T, std::string_view> &&
                            !std::is_convertible_v<T, const char*>;
@@ -115,17 +117,70 @@ concept optional_type = requires(std::remove_cvref_t<T> obj) {
   { obj.value() } -> std::same_as<typename std::remove_cvref_t<T>::value_type&>;
   requires requires(typename std::remove_cvref_t<T>::value_type &&val) {
     obj.emplace(std::move(val));
-    obj = std::move(val);
     {
       obj.value_or(val)
     } -> std::convertible_to<typename std::remove_cvref_t<T>::value_type>;
   };
   { static_cast<bool>(obj) } -> std::same_as<bool>; // convertible to bool
+  { obj.reset() } noexcept -> std::same_as<void>;
 };
 
 
 
+// Types we serialize as JSON strings (not as containers)
+template <typename T>
+concept string_like =
+  std::is_same_v<std::remove_cvref_t<T>, std::string> ||
+  std::is_same_v<std::remove_cvref_t<T>, std::string_view> ||
+  std::is_same_v<std::remove_cvref_t<T>, const char*> ||
+  std::is_same_v<std::remove_cvref_t<T>, char*>;
+
+// Concept that checks if a type is a container but not a string (because
+// strings handling must be handled differently)
+// Now uses iterator-based approach for broader container support
+template <typename T>
+concept container_but_not_string =
+  std::ranges::input_range<T> && !string_like<T> && !concepts::string_view_keyed_map<T>;
+
+
+
+// Concept: Indexable container that is not a string or associative container
+// Accepts: std::vector, std::array, std::deque (have operator[], value_type, not string_like)
+// Rejects: std::string (string_like), std::list (no operator[]), std::map (has key_type)
+template<typename Container>
+concept indexable_container = requires {
+  typename Container::value_type;
+  requires !concepts::string_like<Container>;
+  requires !requires { typename Container::key_type; };  // Reject maps/sets
+  requires requires(Container& c, std::size_t i) {
+    { c[i] } -> std::convertible_to<typename Container::value_type>;
+  };
+};
+
+
+// Variable template to use with std::meta::substitute
+template<typename Container>
+constexpr bool indexable_container_v = indexable_container<Container>;
+
 } // namespace concepts
+
+
+/**
+ * We use tag_invoke as our customization point mechanism.
+ */
+template <typename Tag, typename... Args>
+concept tag_invocable = requires(Tag tag, Args... args) {
+  tag_invoke(std::forward<Tag>(tag), std::forward<Args>(args)...);
+};
+
+template <typename Tag, typename... Args>
+concept nothrow_tag_invocable =
+    tag_invocable<Tag, Args...> && requires(Tag tag, Args... args) {
+      {
+        tag_invoke(std::forward<Tag>(tag), std::forward<Args>(args)...)
+      } noexcept;
+    };
+
 } // namespace simdjson
-#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
+#endif // SIMDJSON_SUPPORTS_CONCEPTS
 #endif // SIMDJSON_CONCEPTS_H

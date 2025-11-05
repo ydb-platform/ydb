@@ -241,6 +241,19 @@ SELECT * FROM test;
 
 `WarnUntypedStringLiterals` является [scoped](#pragmascope) настройкой.
 
+## SimplePg
+
+`SimplePg`/`DisableSimplePg`
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Флаг | false |
+
+При включенном режиме в глобальное пространство функций импортируются все функции из модуля [SimplePg](../../udf/list/simple_pg.md).
+При выключенном режиме для вызова этих функций требуется префикс `SimplePg::`.
+
+`SimplePg` является [scoped](#pragmascope) настройкой.
+
 ## AllowDotInAlias
 
 | Тип значения | По умолчанию |

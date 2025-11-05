@@ -12,7 +12,8 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
@@ -36,7 +37,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImp
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase)
+            {
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     if (hashBase) {
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
@@ -48,9 +50,9 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImp
                     }
                 }
             },
-            [&](const std::string_view data, const ui64 hashBase) {
+            [&](const NJson::TJsonValue& data, const ui64 hashBase) {
                 for (ui64 i = 0; i < HashesCount; ++i) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
+                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data.GetStringRobust(), i);
                     if (hashBase) {
                         filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
                     } else {

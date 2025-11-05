@@ -1126,9 +1126,6 @@ public:
                 FilterDatabase = false;
             }
         }
-        if (FilterPath && FieldsNeeded(FieldsTablets)) {
-            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
-        }
         if (!FilterStoragePools.empty()) {
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             GroupsResponse = MakeCachedRequestBSControllerGroups();
@@ -1138,9 +1135,13 @@ public:
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
-
-        if (With != EWith::Everything) {
-            PDisksResponse = MakeCachedRequestBSControllerPDisks();
+        if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
+            if (!PDisksResponse) {
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
+            }
+        }
+        if (FilterPath && FieldsNeeded(FieldsTablets)) {
+            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();

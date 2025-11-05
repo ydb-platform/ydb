@@ -237,13 +237,13 @@ namespace NYql {
             protoDecimalType->set_precision(precision);
             protoDecimalType->set_scale(scale);
 
-            // extract decimal value itself 
+            // extract decimal value itself
             auto decimal = NDecimal::FromString(coDecimal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
             static_assert(sizeof(decimal) == 16, "wrong TInt128 size");
-            
+
             // Set the bytes value with the 16 buffer containing the decimal value bytes
             protoTypedValue->mutable_value()->set_bytes_value(reinterpret_cast<char*>(&decimal), sizeof(decimal));
-            
+
             return true;
         }
 
@@ -1161,13 +1161,5 @@ namespace NYql {
     ) {
         TSerializationContext serializationContext = {.Arg = predicate.Args().Arg(0), .Err = err, .Ctx = ctx};
         return SerializeExpression(predicate.Body(), proto, serializationContext, 0);
-    }
-
-    TString FormatWhere(const TPredicate& predicate) {
-        auto stream = FormatPredicate(predicate);
-        if (stream.empty()) {
-            return "";
-        }
-        return "WHERE " + stream;
     }
 } // namespace NYql

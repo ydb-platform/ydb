@@ -66,6 +66,7 @@ void LogStructuredEvent(
 //     YT_SLOG_EVENT(Logger(), ELogLevel::Error, "Invalid request: " + request.GetID());
 #define YT_SLOG_EVENT(logger, level, message, ...)                                                   \
     do {                                                                                             \
+        /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */               \
         const auto& logger__ = (logger)();                                                           \
         auto level__ = (level);                                                                      \
         if (!logger__.IsLevelEnabled(level__)) {                                                     \
@@ -77,6 +78,7 @@ void LogStructuredEvent(
             level__,                                                                                 \
             message__                                                                                \
                 __VA_OPT__(, Y_MAP_ARGS_WITH_LAST(YT_SLOG_TUPLE, YT_SLOG_TUPLE_LAST, __VA_ARGS__))); \
+        /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */                 \
     } while (false)
 
 #define STRUCTURED_LOG_INL_H_

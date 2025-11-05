@@ -2,9 +2,7 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:2)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
@@ -20,6 +18,7 @@ SRCS(
     block_race.cpp
     bsc_cache.cpp
     counting_events.cpp
+    corrupted_reads.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp

@@ -372,9 +372,9 @@ class WorkloadManagerComputeSchedulerP3(WorkloadManagerComputeScheduler):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_30', ['testuser1'], total_cpu_limit_percent_per_node=30, resource_weight=4),
-            ResourcePool('test_pool_40', ['testuser2'], total_cpu_limit_percent_per_node=40, resource_weight=4),
-            ResourcePool('test_pool_50', ['testuser3'], total_cpu_limit_percent_per_node=50, resource_weight=4),
+            ResourcePool('test_pool_30', ['testuser30'], total_cpu_limit_percent_per_node=30, resource_weight=4),
+            ResourcePool('test_pool_40', ['testuser40'], total_cpu_limit_percent_per_node=40, resource_weight=4),
+            ResourcePool('test_pool_50', ['testuser50'], total_cpu_limit_percent_per_node=50, resource_weight=4),
         ]
 
 
@@ -384,7 +384,7 @@ class WorkloadManagerComputeSchedulerP1(WorkloadManagerComputeScheduler):
     @classmethod
     def get_resource_pools(cls) -> list[ResourcePool]:
         return [
-            ResourcePool('test_pool_100', ['testuser1'], total_cpu_limit_percent_per_node=100, resource_weight=4),
+            ResourcePool('test_pool_100', ['testuser100'], total_cpu_limit_percent_per_node=100, resource_weight=4),
         ]
 
 

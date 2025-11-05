@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
     std::unordered_map<TString, NDescriber::TTopicInfo> WaitResult(NActors::TTestActorRuntime& runtime) {
         auto ev = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>();
-        return ev->Topics;
+        return std::move(ev->Topics);
     }
 
     Y_UNIT_TEST(TopicExists) {

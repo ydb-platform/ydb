@@ -327,7 +327,7 @@ private:
 };
 
 TUnversionedValueToSkiffConverter CreateMissingCompositeValueConverter(TString name) {
-    return [name=std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
+    return [name = std::move(name)] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext*) {
         if (value.Type != EValueType::Null) {
             THROW_ERROR_EXCEPTION("Cannot represent nonnull value of column %Qv absent in schema as composite Skiff value",
                     name);
@@ -519,7 +519,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
     TYsonToSkiffConverterConfig config;
     config.AllowOmitTopLevelOptional = isSparse;
     auto ysonToSkiff = CreateYsonToSkiffConverter(descriptor, skiffSchema, config);
-    return [ysonToSkiff=ysonToSkiff] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* skiffWriter, TWriteContext* /*context*/) {
+    return [ysonToSkiff = ysonToSkiff] (const TUnversionedValue& value, TCheckedInDebugSkiffWriter* skiffWriter, TWriteContext* /*context*/) {
         TMemoryInput input;
         if (value.Type == EValueType::Any || value.Type == EValueType::Composite) {
             // NB. value.Type might be EValueType::Any if user has used override_intermediate_table_schema

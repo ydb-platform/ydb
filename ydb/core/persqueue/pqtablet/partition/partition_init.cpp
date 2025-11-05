@@ -921,6 +921,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
+                    PQ_LOG_D("add batch");
                     head.AddBatch(it.GetBatch());
                 }
                 head.PackedSize += size;
@@ -946,6 +947,8 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
         };
     }
+
+    Partition()->InitFirstCompactionPart();
 
     Done(ctx);
 }
@@ -1057,8 +1060,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
                                                                          Config.GetYdbDatabasePath()));
+
+            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(EscapeBadChars(TopicName()),
+                                                                                  Partition.InternalPartitionId,
+                                                                                  Config.GetYdbDatabasePath()));
         } else {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
+            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(TopicName(),
+                                                                                  Partition.InternalPartitionId));
         }
     }
 
@@ -1086,7 +1095,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition,
+            Config.GetYdbDatabasePath(), Config.GetOffloadConfig()));
     }
 
     LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);

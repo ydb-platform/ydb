@@ -30,7 +30,7 @@ inline TString DecodePreparedQueryId(const TString& in) {
             << "got empty preparedQueryId message";
     }
     TString decodedStr;
-    bool decoded = NOperationId::DecodePreparedQueryIdCompat(in, decodedStr);
+    bool decoded = NOperationId::DecodePreparedQueryIdCompat(in, decodedStr.MutRef());
     if (decoded) {
         return decodedStr;
     } else {

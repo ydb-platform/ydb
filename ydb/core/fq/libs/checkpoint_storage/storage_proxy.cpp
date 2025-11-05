@@ -66,9 +66,9 @@ struct TRequestContext : public TThrRefBase {
 };
 
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
-    NKikimrConfig::TCheckpointsConfig Config;
+    TCheckpointStorageSettings Config;
     TString IdsPrefix;
-    NKikimrConfig::TExternalStorage StorageConfig;
+    TExternalStorageSettings StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
@@ -79,7 +79,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
 
 public:
     explicit TStorageProxy(
-        const NKikimrConfig::TCheckpointsConfig& config,
+        const TCheckpointStorageSettings& config,
         const TString& idsPrefix,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYdb::TDriver driver,
@@ -116,31 +116,18 @@ private:
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
 };
 
-static void FillDefaultParameters(NKikimrConfig::TCheckpointsConfig& checkpointCoordinatorConfig, NKikimrConfig::TExternalStorage& ydbStorageConfig) {
-    auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits();
-    if (!limits.GetMaxGraphCheckpointsSizeBytes()) {
-        limits.SetMaxGraphCheckpointsSizeBytes(1099511627776);
+static void FillDefaultParameters(TCheckpointStorageSettings& checkpointCoordinatorConfig, TExternalStorageSettings& ydbStorageConfig) {
+    if (!checkpointCoordinatorConfig.GetExternalStorage().GetToken() && checkpointCoordinatorConfig.GetExternalStorage().GetTokenFile()) {
+        checkpointCoordinatorConfig.MutableExternalStorage().SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetExternalStorage().GetTokenFile()).ReadAll()));
     }
 
-    if (!limits.GetMaxTaskStateSizeBytes()) {
-        limits.SetMaxTaskStateSizeBytes(1099511627776);
-    }
-
-    if (!limits.GetMaxRowSizeBytes()) {
-        limits.SetMaxRowSizeBytes(MaxYdbStringValueLength);
-    }
-
-    if (!checkpointCoordinatorConfig.GetExternalStorage().GetToken() && checkpointCoordinatorConfig.GetExternalStorage().GetOAuthFile()) {
-        checkpointCoordinatorConfig.MutableExternalStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetExternalStorage().GetOAuthFile()).ReadAll()));
-    }
-
-    if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetOAuthFile()) {
-        ydbStorageConfig.SetToken(StripString(TFileInput(ydbStorageConfig.GetOAuthFile()).ReadAll()));
+    if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetTokenFile()) {
+        ydbStorageConfig.SetToken(StripString(TFileInput(ydbStorageConfig.GetTokenFile()).ReadAll()));
     }
 }
 
 TStorageProxy::TStorageProxy(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
@@ -453,7 +440,7 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TString& idsPrefix,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,

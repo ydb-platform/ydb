@@ -226,11 +226,17 @@ message TFeatureFlags {
     optional bool EnableMirroredTopicSplitMerge = 200 [default = false];
     optional bool EnableFulltextIndex = 201 [default = false];
     optional bool EnableSetColumnConstraint = 202 [default = false];
-    optional bool EnableSchemaSecrets = 203 [default = false];
+    optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = false];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
     optional bool EnableStreamingQueries = 206 [default = false];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = false];
     optional bool EnableCompileCacheView = 209 [default = false];
+    optional bool EnableSecureScriptExecutions = 210 [default = false];
+    optional bool EnableColumnshardBool = 211 [default = false];
+    optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
+    optional bool EnableOlapRejectProbability = 213 [default = false];
+    optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
 }

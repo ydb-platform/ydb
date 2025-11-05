@@ -51,7 +51,7 @@ public:
         const std::optional<TLlvmSettings>& llvmSettings)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(formatsSettings), counters, executerConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter", false)
+            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter")
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -59,19 +59,6 @@ public:
         YQL_ENSURE(Request.LocksOp == ELocksOp::Unspecified);
         YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
         YQL_ENSURE(Request.Snapshot.IsValid());
-
-        size_t resultsSize = Request.Transactions[0].Body->ResultsSize();
-        YQL_ENSURE(resultsSize != 0);
-
-        TasksGraph.GetMeta().StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
-
-        if (TasksGraph.GetMeta().StreamResult) {
-            YQL_ENSURE(resultsSize == 1);
-        } else {
-            for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == TasksGraph.GetMeta().StreamResult);
-            }
-        }
     }
 
 public:
@@ -177,8 +164,7 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(true, EnableReadsMerge, LlvmSettings,
-            Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(), ShardsOnNode.size(), nullptr);
+        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get(), nullptr);
         OnEmptyResult();
 
         TIssue validateIssue;

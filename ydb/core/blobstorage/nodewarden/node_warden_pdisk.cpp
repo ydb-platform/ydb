@@ -58,7 +58,9 @@ namespace NKikimr::NStorage {
         if (pdisk.HasExpectedSerial()) {
             pdiskConfig->ExpectedSerial = pdisk.GetExpectedSerial();
         }
-        pdiskConfig->MaxCommonLogChunks = deviceType == NPDisk::DEVICE_TYPE_ROT ? MaxCommonLogChunksHDD : MaxCommonLogChunksSSD;
+        pdiskConfig->MaxCommonLogChunks = deviceType == NPDisk::DEVICE_TYPE_ROT ?
+            MaxCommonLogChunksHDD : MaxCommonLogChunksSSD;
+        pdiskConfig->CommonStaticLogChunks = CommonStaticLogChunks;
 
         if (pdisk.HasReadOnly()) {
             pdiskConfig->ReadOnly = pdisk.GetReadOnly();

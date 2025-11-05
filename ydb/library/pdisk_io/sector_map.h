@@ -19,6 +19,12 @@
 #include <array>
 #include <atomic>
 #include <optional>
+#include <random>
+#include <deque>
+#include <algorithm>
+#include <variant>
+
+#include <util/random/random.h>
 
 #include "device_type.h"
 
@@ -26,6 +32,13 @@ namespace NKikimr {
 namespace NPDisk {
 
 namespace NSectorMap {
+
+struct TFailureProbabilities {
+    std::atomic<double> WriteErrorProbability;
+    std::atomic<double> ReadErrorProbability;
+    std::atomic<double> SilentWriteFailProbability;
+    std::atomic<double> ReadReplayProbability;
+};
 
 enum EDiskMode {
     DM_NONE = 0,
@@ -195,12 +208,20 @@ public:
     std::atomic<ui64> ReadIoErrorEveryNthRequests;
 
     std::atomic<ui64> AllocatedBytes;
+    NSectorMap::TFailureProbabilities FailureProbabilities;
+
+    std::atomic<ui64> EmulatedWriteErrors;
+    std::atomic<ui64> EmulatedReadErrors;
+    std::atomic<ui64> EmulatedSilentWriteFails;
+    std::atomic<ui64> EmulatedReadReplays;
 
 private:
-    THashMap<ui64, TString> Map;
+    THashMap<ui64, std::variant<TString, std::pair<TString, TString>>> Map;
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
     std::function<void()> ReadCallback = nullptr;
+
+    std::mt19937_64 RandomGenerator{RandomNumber<ui64>()};
 
 public:
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE)
@@ -211,6 +232,14 @@ public:
       , AllocatedBytes(0)
       , DiskMode(diskMode)
     {
+        FailureProbabilities.WriteErrorProbability = 0.0;
+        FailureProbabilities.ReadErrorProbability = 0.0;
+        FailureProbabilities.SilentWriteFailProbability = 0.0;
+        FailureProbabilities.ReadReplayProbability = 0.0;
+        EmulatedWriteErrors = 0;
+        EmulatedReadErrors = 0;
+        EmulatedSilentWriteFails = 0;
+        EmulatedReadReplays = 0;
         InitSectorOperationThrottler();
     }
 
@@ -249,9 +278,13 @@ public:
         Write((ui8*)str.Detach(), bytes, 0);
     }
 
-    void Read(ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
+    bool Read(ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
         Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
         Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
+
+        if (ShouldFailRead()) {
+            return false;
+        }
 
         i64 dataSize = size;
         ui64 dataOffset = offset;
@@ -262,8 +295,20 @@ public:
             if (auto it = Map.find(offset); it == Map.end()) {
                 memset(data, 0x33, NSectorMap::SECTOR_SIZE);
             } else {
+                const TString* value = nullptr;
+                const auto& dataVar = it->second;
+                if (std::holds_alternative<TString>(dataVar)) {
+                    value = &std::get<TString>(dataVar);
+                } else {
+                    const auto& pair = std::get<std::pair<TString, TString>>(dataVar);
+                    if (ShouldReplayRead()) {
+                        value = &pair.first;
+                    } else {
+                        value = &pair.second;
+                    }
+                }
                 char tmp[4 * NSectorMap::SECTOR_SIZE];
-                int processed = LZ4_decompress_safe(it->second.data(), tmp, it->second.size(), 4 * NSectorMap::SECTOR_SIZE);
+                int processed = LZ4_decompress_safe(value->data(), tmp, value->size(), 4 * NSectorMap::SECTOR_SIZE);
                 Y_VERIFY_S(processed == NSectorMap::SECTOR_SIZE, "processed# " << processed);
                 memcpy(data, tmp, NSectorMap::SECTOR_SIZE);
             }
@@ -278,11 +323,19 @@ public:
         if (ReadCallback) {
             ReadCallback();
         }
+        return true;
     }
 
-    void Write(const ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
+    bool Write(const ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
         Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
         Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
+
+        if (ShouldFailWrite()) {
+            return false;
+        }
+        if (ShouldSilentWriteFail()) {
+            return true;
+        }
 
         i64 dataSize = size;
         ui64 dataOffset = offset;
@@ -296,13 +349,36 @@ public:
                 Y_VERIFY_S(written > 0, "written# " << written);
                 TString str = TString::Uninitialized(written);
                 memcpy(str.Detach(), tmp, written);
+
+                bool replay = FailureProbabilities.ReadReplayProbability.load(std::memory_order_relaxed) > 0;
+                i64 allocatedBytesDelta = 0;
                 if (auto it = Map.find(offset); it != Map.end()) {
-                    AllocatedBytes.fetch_sub(it->second.size());
-                    it->second = str;
+                    if (std::holds_alternative<TString>(it->second)) {
+                        TString& old_val = std::get<TString>(it->second);
+                        if (replay) {
+                            allocatedBytesDelta = str.size();
+                            it->second = std::make_pair(std::move(old_val), str);
+                        } else {
+                            allocatedBytesDelta = (i64)str.size() - (i64)old_val.size();
+                            it->second = str;
+                        }
+                    } else {
+                        auto& pair = std::get<std::pair<TString, TString>>(it->second);
+                        if (replay) {
+                            allocatedBytesDelta = (i64)str.size() - (i64)pair.first.size();
+                            pair.first = std::move(pair.second);
+                            pair.second = str;
+                        } else {
+                            allocatedBytesDelta = -(i64)(pair.first.size() + pair.second.size()) + str.size();
+                            it->second = str;
+                        }
+                    }
                 } else {
                     Map[offset] = str;
+                    allocatedBytesDelta = str.size();
                 }
-                AllocatedBytes.fetch_add(Map[offset].size());
+
+                AllocatedBytes.fetch_add(allocatedBytesDelta);
                 offset += NSectorMap::SECTOR_SIZE;
                 data += NSectorMap::SECTOR_SIZE;
             }
@@ -311,6 +387,7 @@ public:
         if (SectorOperationThrottler.Get() != nullptr) {
             SectorOperationThrottler->ThrottleWrite(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
+        return true;
     }
 
     void Trim(i64 size, ui64 offset) {
@@ -319,7 +396,14 @@ public:
         Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
         for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
             if (auto it = Map.find(offset); it != Map.end()) {
-                AllocatedBytes.fetch_sub(it->second.size());
+                size_t previousSize = 0;
+                if (std::holds_alternative<TString>(it->second)) {
+                    previousSize = std::get<TString>(it->second).size();
+                } else {
+                    auto& pair = std::get<std::pair<TString, TString>>(it->second);
+                    previousSize = pair.first.size() + pair.second.size();
+                }
+                AllocatedBytes.fetch_sub(previousSize);
                 Map.erase(it);
             }
             offset += NSectorMap::SECTOR_SIZE;
@@ -365,6 +449,54 @@ public:
             return SectorOperationThrottler->GetDiskModeParams();
         }
         return nullptr;
+    }
+
+    NSectorMap::TFailureProbabilities* GetFailureProbabilities() {
+        return &FailureProbabilities;
+    }
+
+    bool ShouldFailWrite() {
+        if (CheckFailure(FailureProbabilities.WriteErrorProbability.load(std::memory_order_relaxed))) {
+            EmulatedWriteErrors.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
+    }
+
+    bool ShouldFailRead() {
+        if (CheckFailure(FailureProbabilities.ReadErrorProbability.load(std::memory_order_relaxed))) {
+            EmulatedReadErrors.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
+    }
+
+    bool ShouldSilentWriteFail() {
+        if (CheckFailure(FailureProbabilities.SilentWriteFailProbability.load(std::memory_order_relaxed))) {
+            EmulatedSilentWriteFails.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
+    }
+
+    bool ShouldReplayRead() {
+        if (CheckFailure(FailureProbabilities.ReadReplayProbability.load(std::memory_order_relaxed))) {
+            EmulatedReadReplays.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        }
+        return false;
+    }
+
+private:
+    bool CheckFailure(double probability) {
+        if (probability <= 0.0) {
+            return false;
+        }
+        if (probability >= 1.0) {
+            return true;
+        }
+        std::uniform_real_distribution<double> distribution(0.0, 1.0);
+        return distribution(RandomGenerator) < probability;
     }
 };
 

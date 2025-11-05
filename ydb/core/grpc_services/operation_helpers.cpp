@@ -29,19 +29,6 @@ namespace NGRpcService {
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
 
-IEventBase* CreateNavigateForPath(const TString& path) {
-    auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-
-    request->DatabaseName = path;
-
-    auto& entry = request->ResultSet.emplace_back();
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-    entry.Path = ::NKikimr::SplitPath(path);
-    entry.RedirectRequired = false;
-
-    return new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release());
-}
-
 TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) {
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = {.RetryLimitCount = 3};

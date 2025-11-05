@@ -15,9 +15,11 @@ namespace NKikimr {
     struct TRecIndexBase : public TThrRefBase {
 #pragma pack(push, 4)
         struct TRec {
+        private:
             TKey Key;
             TMemRec MemRec;
 
+        public:
             TRec() = default;
 
             TRec(const TKey &key)
@@ -29,6 +31,14 @@ namespace NKikimr {
                 : Key(key)
                 , MemRec(memRec)
             {}
+
+            TKey GetKey() const {
+                return ReadUnaligned<TKey>(&Key);
+            }
+
+            TMemRec GetMemRec() const {
+                return ReadUnaligned<TMemRec>(&MemRec);
+            }
 
             struct TLess {
                 bool operator ()(const TRec &x, const TKey &key) const {
@@ -122,6 +132,10 @@ namespace NKikimr {
                 ui64 X;
             } Raw;
 
+            TLogoBlobIdLow() {
+                Raw.X = 0;
+            }
+
             explicit TLogoBlobIdLow(const TLogoBlobID& id) {
                 Raw.X = id.GetRaw()[2];
             }
@@ -150,16 +164,30 @@ namespace NKikimr {
         static_assert(sizeof(TLogoBlobIdLow) == 8, "expect sizeof(TLogoBlobIdLow) == 8");
 
         struct TRecHigh {
+        private:
             TLogoBlobIdHigh Key;
             ui32 LowRangeEndIndex;
 
+        public:
             TRecHigh(TLogoBlobIdHigh key)
                 : Key(key)
             {}
 
+            TLogoBlobIdHigh GetKey() const {
+                return ReadUnaligned<TLogoBlobIdHigh>(&Key);
+            }
+
+            ui32 GetLowRangeEndIndex() const {
+                return LowRangeEndIndex;
+            }
+
+            void SetLowRangeEndIndex(ui32 i) {
+                LowRangeEndIndex = i;
+            }
+
             struct TLess {
                 bool operator ()(const TRecHigh& l, const TLogoBlobIdHigh& r) const {
-                    return l.Key < r;
+                    return l.GetKey() < r;
                 }
             };
         };
@@ -167,17 +195,27 @@ namespace NKikimr {
         static_assert(sizeof(TRecHigh) == 20, "expect sizeof(TRecHigh) == 20");
 
         struct TRecLow {
+        private:
             TLogoBlobIdLow Key;
             TMemRecLogoBlob MemRec;
 
+        public:
             TRecLow(TLogoBlobIdLow key, TMemRecLogoBlob memRec)
                 : Key(key)
                 , MemRec(memRec)
             {}
 
+            TLogoBlobIdLow GetKey() const {
+                return ReadUnaligned<TLogoBlobIdLow>(&Key);
+            }
+
+            TMemRecLogoBlob GetMemRec() const {
+                return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
+            }
+
             struct TLess {
                 bool operator ()(const TRecLow& l, const TLogoBlobIdLow& r) const {
-                    return l.Key < r;
+                    return l.GetKey() < r;
                 }
             };
         };
@@ -214,30 +252,30 @@ namespace NKikimr {
 
             const TRec* rec = linearIndex.begin();
 
-            auto blobId = rec->Key.LogoBlobID();
+            auto blobId = rec->GetKey().LogoBlobID();
             TLogoBlobIdHigh high(blobId);
             TLogoBlobIdLow low(blobId);
             TLogoBlobIdHigh highPrev = high;
 
             IndexHigh.emplace_back(high);
-            IndexLow.emplace_back(low, rec->MemRec);
+            IndexLow.emplace_back(low, rec->GetMemRec());
             ++rec;
 
             for (; rec != linearIndex.end(); ++rec) {
-                auto blobId = rec->Key.LogoBlobID();
+                auto blobId = rec->GetKey().LogoBlobID();
                 TLogoBlobIdHigh high(blobId);
                 TLogoBlobIdLow low(blobId);
 
                 if (Y_UNLIKELY(high != highPrev)) {
-                    IndexHigh.back().LowRangeEndIndex = IndexLow.size();
+                    IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
                     IndexHigh.emplace_back(high);
                     highPrev = high;
                 }
 
-                IndexLow.emplace_back(low, rec->MemRec);
+                IndexLow.emplace_back(low, rec->GetMemRec());
             }
 
-            IndexHigh.back().LowRangeEndIndex = IndexLow.size();
+            IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
             IndexHigh.shrink_to_fit();
         }
 
@@ -251,18 +289,19 @@ namespace NKikimr {
 
             const TRecHigh* high = IndexHigh.begin();
             const TRecLow* low = IndexLow.begin();
-            const TRecLow* lowRangeEnd = low + high->LowRangeEndIndex;
+            const TRecLow* lowRangeEnd = low + high->GetLowRangeEndIndex();
 
             while (low != IndexLow.end()) {
-                auto& highKey = high->Key;
-                TLogoBlobID blobId(highKey.Raw.X[0], highKey.Raw.X[1], low->Key.Raw.X);
-                linearIndex->emplace_back(TKeyLogoBlob(blobId), low->MemRec);
+                auto highKey = high->GetKey();
+                auto lowKey = low->GetKey();
+                TLogoBlobID blobId(highKey.Raw.X[0], highKey.Raw.X[1], lowKey.Raw.X);
+                linearIndex->emplace_back(TKeyLogoBlob(blobId), low->GetMemRec());
 
                 ++low;
                 if (Y_UNLIKELY(low == lowRangeEnd)) {
                     ++high;
                     if (high != IndexHigh.end()) {
-                        lowRangeEnd = IndexLow.begin() + high->LowRangeEndIndex;
+                        lowRangeEnd = IndexLow.begin() + high->GetLowRangeEndIndex();
                     }
                 }
             }

@@ -18,6 +18,7 @@ using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
+static const TString kDatabaseName = "/Root";
 static const TString kMainTable = "/Root/table-main";
 static const TString kPrefixTable = "/Root/table-prefix";
 static const TString kLevelTable = "/Root/table-level";
@@ -70,6 +71,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         rec.SetPrefixName(kPrefixTable);
 
+        rec.SetDatabaseName(kDatabaseName);
         rec.SetLevelName(kLevelTable);
         rec.SetOutputName(kPostingTable);
         rec.SetPrefixName(kPrefixTable);
@@ -124,6 +126,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.SetPrefixColumns(1);
                 rec.AddSourcePrimaryKeyColumns("key");
 
+                rec.SetDatabaseName(kDatabaseName);
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
                 rec.SetOutputName(kPostingTable);
@@ -252,9 +255,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
         }, "{ <main>: Error: vector_type should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
-            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_BIT);
-        }, "{ <main>: Error: Unsupported vector_type: VECTOR_TYPE_BIT }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvPrefixKMeansRequest& request) {
             request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
         }, "{ <main>: Error: either distance or similarity should be set }");
 
@@ -330,17 +330,17 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (user, key, embedding, data)
         VALUES )"
-                "(\"user-1\", 11, \"\x30\x30\3\", \"1-one\"),"
-                "(\"user-1\", 12, \"\x31\x31\3\", \"1-two\"),"
-                "(\"user-1\", 13, \"\x32\x32\3\", \"1-three\"),"
-                "(\"user-1\", 14, \"\x65\x65\3\", \"1-four\"),"
-                "(\"user-1\", 15, \"\x75\x75\3\", \"1-five\"),"
+                "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+                "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\"),"
+                "(\"user-1\", 13, \"\x32\x32\2\", \"1-three\"),"
+                "(\"user-1\", 14, \"\x65\x65\2\", \"1-four\"),"
+                "(\"user-1\", 15, \"\x75\x75\2\", \"1-five\"),"
 
-                "(\"user-2\", 21, \"\x30\x30\3\", \"2-one\"),"
-                "(\"user-2\", 22, \"\x31\x31\3\", \"2-two\"),"
-                "(\"user-2\", 23, \"\x32\x32\3\", \"2-three\"),"
-                "(\"user-2\", 24, \"\x65\x65\3\", \"2-four\"),"
-                "(\"user-2\", 25, \"\x75\x75\3\", \"2-five\");");
+                "(\"user-2\", 21, \"\x30\x30\2\", \"2-one\"),"
+                "(\"user-2\", 22, \"\x31\x31\2\", \"2-two\"),"
+                "(\"user-2\", 23, \"\x32\x32\2\", \"2-three\"),"
+                "(\"user-2\", 24, \"\x65\x65\2\", \"2-four\"),"
+                "(\"user-2\", 25, \"\x75\x75\2\", \"2-five\");");
 
         auto create = [&] {
             CreatePrefixTable(server, sender, options);
@@ -370,11 +370,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = mm\3\n"
-                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = mm\2\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = 11\2\n"
 
-                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\2\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 14, data = 1-four\n"
@@ -404,11 +404,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = 11\2\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775850, __ydb_centroid = mm\2\n"
 
-                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = 11\2\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775853, __ydb_centroid = mm\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
@@ -437,9 +437,9 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\3\n"
+                "__ydb_parent = 40, __ydb_id = 9223372036854775849, __ydb_centroid = II\2\n"
 
-                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\3\n"
+                "__ydb_parent = 43, __ydb_id = 9223372036854775852, __ydb_centroid = II\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
                 "__ydb_parent = 9223372036854775849, key = 11, data = 1-one\n"
@@ -483,17 +483,17 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (user, key, embedding, data)
         VALUES )"
-                "(\"user-1\", 11, \"\x30\x30\3\", \"1-one\"),"
-                "(\"user-1\", 12, \"\x31\x31\3\", \"1-two\"),"
-                "(\"user-1\", 13, \"\x32\x32\3\", \"1-three\"),"
-                "(\"user-1\", 14, \"\x65\x65\3\", \"1-four\"),"
-                "(\"user-1\", 15, \"\x75\x75\3\", \"1-five\"),"
+                "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+                "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\"),"
+                "(\"user-1\", 13, \"\x32\x32\2\", \"1-three\"),"
+                "(\"user-1\", 14, \"\x65\x65\2\", \"1-four\"),"
+                "(\"user-1\", 15, \"\x75\x75\2\", \"1-five\"),"
 
-                "(\"user-2\", 21, \"\x30\x30\3\", \"2-one\"),"
-                "(\"user-2\", 22, \"\x31\x31\3\", \"2-two\"),"
-                "(\"user-2\", 23, \"\x32\x32\3\", \"2-three\"),"
-                "(\"user-2\", 24, \"\x65\x65\3\", \"2-four\"),"
-                "(\"user-2\", 25, \"\x75\x75\3\", \"2-five\");");
+                "(\"user-2\", 21, \"\x30\x30\2\", \"2-one\"),"
+                "(\"user-2\", 22, \"\x31\x31\2\", \"2-two\"),"
+                "(\"user-2\", 23, \"\x32\x32\2\", \"2-three\"),"
+                "(\"user-2\", 24, \"\x65\x65\2\", \"2-four\"),"
+                "(\"user-2\", 25, \"\x75\x75\2\", \"2-five\");");
 
         auto create = [&] {
             CreatePrefixTable(server, sender, options);
@@ -523,24 +523,24 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\3\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\3\n"
+                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = mm\2\n"
+                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = 11\2\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\2\n"
+                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
-                "__ydb_parent = 41, key = 14, embedding = \x65\x65\3, data = 1-four\n"
-                "__ydb_parent = 41, key = 15, embedding = \x75\x75\3, data = 1-five\n"
-                "__ydb_parent = 42, key = 11, embedding = \x30\x30\3, data = 1-one\n"
-                "__ydb_parent = 42, key = 12, embedding = \x31\x31\3, data = 1-two\n"
-                "__ydb_parent = 42, key = 13, embedding = \x32\x32\3, data = 1-three\n"
+                "__ydb_parent = 41, key = 14, embedding = \x65\x65\2, data = 1-four\n"
+                "__ydb_parent = 41, key = 15, embedding = \x75\x75\2, data = 1-five\n"
+                "__ydb_parent = 42, key = 11, embedding = \x30\x30\2, data = 1-one\n"
+                "__ydb_parent = 42, key = 12, embedding = \x31\x31\2, data = 1-two\n"
+                "__ydb_parent = 42, key = 13, embedding = \x32\x32\2, data = 1-three\n"
 
-                "__ydb_parent = 44, key = 21, embedding = \x30\x30\3, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, embedding = \x31\x31\3, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, embedding = \x32\x32\3, data = 2-three\n"
-                "__ydb_parent = 45, key = 24, embedding = \x65\x65\3, data = 2-four\n"
-                "__ydb_parent = 45, key = 25, embedding = \x75\x75\3, data = 2-five\n"
+                "__ydb_parent = 44, key = 21, embedding = \x30\x30\2, data = 2-one\n"
+                "__ydb_parent = 44, key = 22, embedding = \x31\x31\2, data = 2-two\n"
+                "__ydb_parent = 44, key = 23, embedding = \x32\x32\2, data = 2-three\n"
+                "__ydb_parent = 45, key = 24, embedding = \x65\x65\2, data = 2-four\n"
+                "__ydb_parent = 45, key = 25, embedding = \x75\x75\2, data = 2-five\n"
             );
             recreate();
         }}
@@ -557,24 +557,24 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = 11\2\n"
+                "__ydb_parent = 40, __ydb_id = 42, __ydb_centroid = mm\2\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\3\n"
-                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\3\n"
+                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = 11\2\n"
+                "__ydb_parent = 43, __ydb_id = 45, __ydb_centroid = mm\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
-                "__ydb_parent = 41, key = 11, embedding = \x30\x30\3, data = 1-one\n"
-                "__ydb_parent = 41, key = 12, embedding = \x31\x31\3, data = 1-two\n"
-                "__ydb_parent = 41, key = 13, embedding = \x32\x32\3, data = 1-three\n"
-                "__ydb_parent = 42, key = 14, embedding = \x65\x65\3, data = 1-four\n"
-                "__ydb_parent = 42, key = 15, embedding = \x75\x75\3, data = 1-five\n"
+                "__ydb_parent = 41, key = 11, embedding = \x30\x30\2, data = 1-one\n"
+                "__ydb_parent = 41, key = 12, embedding = \x31\x31\2, data = 1-two\n"
+                "__ydb_parent = 41, key = 13, embedding = \x32\x32\2, data = 1-three\n"
+                "__ydb_parent = 42, key = 14, embedding = \x65\x65\2, data = 1-four\n"
+                "__ydb_parent = 42, key = 15, embedding = \x75\x75\2, data = 1-five\n"
 
-                "__ydb_parent = 44, key = 21, embedding = \x30\x30\3, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, embedding = \x31\x31\3, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, embedding = \x32\x32\3, data = 2-three\n"
-                "__ydb_parent = 45, key = 24, embedding = \x65\x65\3, data = 2-four\n"
-                "__ydb_parent = 45, key = 25, embedding = \x75\x75\3, data = 2-five\n"
+                "__ydb_parent = 44, key = 21, embedding = \x30\x30\2, data = 2-one\n"
+                "__ydb_parent = 44, key = 22, embedding = \x31\x31\2, data = 2-two\n"
+                "__ydb_parent = 44, key = 23, embedding = \x32\x32\2, data = 2-three\n"
+                "__ydb_parent = 45, key = 24, embedding = \x65\x65\2, data = 2-four\n"
+                "__ydb_parent = 45, key = 25, embedding = \x75\x75\2, data = 2-five\n"
             );
             recreate();
         }}
@@ -590,22 +590,22 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 "user = user-2, __ydb_id = 43\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(level,
-                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\3\n"
+                "__ydb_parent = 40, __ydb_id = 41, __ydb_centroid = II\2\n"
 
-                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\3\n"
+                "__ydb_parent = 43, __ydb_id = 44, __ydb_centroid = II\2\n"
             );
             UNIT_ASSERT_VALUES_EQUAL(posting,
-                "__ydb_parent = 41, key = 11, embedding = \x30\x30\3, data = 1-one\n"
-                "__ydb_parent = 41, key = 12, embedding = \x31\x31\3, data = 1-two\n"
-                "__ydb_parent = 41, key = 13, embedding = \x32\x32\3, data = 1-three\n"
-                "__ydb_parent = 41, key = 14, embedding = \x65\x65\3, data = 1-four\n"
-                "__ydb_parent = 41, key = 15, embedding = \x75\x75\3, data = 1-five\n"
+                "__ydb_parent = 41, key = 11, embedding = \x30\x30\2, data = 1-one\n"
+                "__ydb_parent = 41, key = 12, embedding = \x31\x31\2, data = 1-two\n"
+                "__ydb_parent = 41, key = 13, embedding = \x32\x32\2, data = 1-three\n"
+                "__ydb_parent = 41, key = 14, embedding = \x65\x65\2, data = 1-four\n"
+                "__ydb_parent = 41, key = 15, embedding = \x75\x75\2, data = 1-five\n"
 
-                "__ydb_parent = 44, key = 21, embedding = \x30\x30\3, data = 2-one\n"
-                "__ydb_parent = 44, key = 22, embedding = \x31\x31\3, data = 2-two\n"
-                "__ydb_parent = 44, key = 23, embedding = \x32\x32\3, data = 2-three\n"
-                "__ydb_parent = 44, key = 24, embedding = \x65\x65\3, data = 2-four\n"
-                "__ydb_parent = 44, key = 25, embedding = \x75\x75\3, data = 2-five\n"
+                "__ydb_parent = 44, key = 21, embedding = \x30\x30\2, data = 2-one\n"
+                "__ydb_parent = 44, key = 22, embedding = \x31\x31\2, data = 2-two\n"
+                "__ydb_parent = 44, key = 23, embedding = \x32\x32\2, data = 2-three\n"
+                "__ydb_parent = 44, key = 24, embedding = \x65\x65\2, data = 2-four\n"
+                "__ydb_parent = 44, key = 25, embedding = \x75\x75\2, data = 2-five\n"
             );
             recreate();
         }}

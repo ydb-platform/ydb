@@ -1244,22 +1244,21 @@ class TestPqRowDispatcher(TestYdsBase):
         logging.debug(f"Topic session node: {session_node_index}")
 
         message_count = 20
+        expected = "hello"
         for i in range(message_count):
             self.write_stream(['{"time": 100, "data": "hello"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
-        self.read_stream(message_count, topic_path=self.output_topic)
+        self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
         kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
-        data = ['{"time": 101, "data": "hello"}']
-        self.write_stream(data)
-        expected = ['hello']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        # data = ['{"time": 101, "data": "hello"}']
+        # self.write_stream(data)
+        # expected = ['hello']
+        # assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 
         logging.debug(f"Stopping node: {session_node_index}")
         kikimr.compute_plane.kikimr_cluster.nodes[session_node_index].stop()
 
-        #time.sleep(10)
-
-        data = ['{"time": 101, "data": "Relativitätstheorie"}']
-        self.write_stream(data)
-        expected = ['Relativitätstheorie']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        expected = "Relativitätstheorie"
+        for i in range(message_count):
+            self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
+        assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count

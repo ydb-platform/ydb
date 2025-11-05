@@ -350,6 +350,13 @@ public:
         AssertDataWithWatermarks(expected, actual);
     }
 
+    void MockCoordinatorDistributionReset(NActors::TActorId coordinatorId) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset();
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0, cookie));
+        });
+    }
+
 public:
     NYql::NPq::NProto::TDqPqTopicSource Settings = BuildPqTopicSourceSettings(
         "topic",
@@ -887,6 +894,16 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             };
             f.ReadMessages(expected);
         }
+    }
+
+    Y_UNIT_TEST_F(RebalanceAfterDistributionReset, TFixture) {
+        StartSession(Settings);
+        MockCoordinatorDistributionReset(CoordinatorId1);
+
+        auto req = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, req->Cookie);
+        ExpectStartSession({}, RowDispatcherId1, 1);
+        MockAck(RowDispatcherId1, 1, PartitionId1);
     }
 }
 

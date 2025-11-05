@@ -55,6 +55,7 @@ public:
         YDB_ACCESSOR(bool, LocalMode, false);
         YDB_ACCESSOR_MUTABLE(TExternalStorageSettings, Database, {});
         YDB_ACCESSOR_DEF(TString, CoordinationNodePath);
+        YDB_ACCESSOR(TDuration, RebalancingTimeout, TDuration::Seconds(120));
     };
 
     enum class EConsumerMode {

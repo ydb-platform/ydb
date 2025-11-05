@@ -24,18 +24,18 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
             `status` Utf8,
             `status_description` Utf8,
             `owners` Utf8,
-            PRIMARY KEY (`run_timestamp`, `full_name`, `job_name`, `branch`, `build_type`, test_id)
+            PRIMARY KEY (`run_timestamp`, `build_type`, `branch`, `full_name`, `job_name`, `test_id`)
         )
-        PARTITION BY HASH(run_timestamp)
+        PARTITION BY HASH(`run_timestamp`, `build_type`, `branch`, `full_name`)
         WITH (
         STORE = COLUMN,
-        TTL = Interval("P7D") ON run_timestamp
+        TTL = Interval("P60D") ON run_timestamp
         )
     """
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def get_missed_data_for_upload(ydb_wrapper):
+def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table):
     query = f"""
        SELECT 
         build_type, 
@@ -53,13 +53,13 @@ def get_missed_data_for_upload(ydb_wrapper):
         status,
         status_description,
         owners
-    FROM `test_results/test_runs_column`  as all_data
+    FROM `{test_runs_table}`  as all_data
     LEFT JOIN (
-        select distinct run_timestamp  from `test_results/analytics/test_history_fast`
+        select distinct run_timestamp  from `{test_history_fast_table}`
     ) as fast_data_missed
     ON all_data.run_timestamp = fast_data_missed.run_timestamp
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
+        all_data.run_timestamp >= CurrentUtcDate() - 2*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
         and (CASE 
             WHEN String::Contains(all_data.test_name, 'sole chunk') 
@@ -78,28 +78,29 @@ def get_missed_data_for_upload(ydb_wrapper):
 
 
 def main():
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         
         
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
         
-        table_path = "test_results/analytics/test_history_fast"
-        full_table_path = f'{ydb_wrapper.database_path}/{table_path}'
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        test_history_fast_table = ydb_wrapper.get_table_path("test_history_fast")
+        
+        table_path = test_history_fast_table
         batch_size = 1000
 
-        # Create table if it doesn't exist
-        create_test_history_fast_table(ydb_wrapper, full_table_path)
+        # Create table if it doesn't exist (wrapper will add database_path automatically)
+        create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
-        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper)
+        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table)
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:
-            # Подготавливаем column_types один раз (те же поля, что возвращает get_missed_data_for_upload)
+            # Prepare column_types once (same fields as returned by get_missed_data_for_upload)
             column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -119,8 +120,8 @@ def main():
                 .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
-            # Используем bulk_upsert_batches для агрегированной статистики
-            ydb_wrapper.bulk_upsert_batches(full_table_path, prepared_for_upload_rows, column_types, batch_size)
+            # Use bulk_upsert_batches for aggregated statistics (wrapper will add database_path automatically)
+            ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_upload_rows, column_types, batch_size)
             print('Tests uploaded')
         else:
             print('Nothing to upload')

@@ -26,10 +26,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'   - branch: {branch}')
     print(f'   - build_type: {build_type}')
 
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return []
@@ -37,6 +34,10 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         # geting last date from history
         today = datetime.date.today().strftime('%Y-%m-%d')
         print(f'📅 Using date: {today}')
+        
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        testowners_table = ydb_wrapper.get_table_path("testowners")
         
         if job_id and branch:  # extend all tests from main by new tests from pr
             print(f'🔄 Mode: Extend all tests from main by new tests from PR')
@@ -49,7 +50,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 full_name
-                from `test_results/analytics/testowners`
+                from `{testowners_table}`
             WHERE  
                 run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
                 and run_timestamp_last <= Date('{today}') + Interval("P1D")
@@ -58,7 +59,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 suite_folder,
                 test_name,
                 suite_folder || '/' || test_name as full_name
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE
                 job_id = {job_id} 
                 and branch = '{branch}'
@@ -77,13 +78,13 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             t.owners as owners,
             trc.run_timestamp_last as run_timestamp_last,
             Date('{today}') as date
-        FROM `test_results/analytics/testowners` t
+        FROM `{testowners_table}` t
         INNER JOIN (
             SELECT 
                 suite_folder,
                 test_name,
                 MAX(run_timestamp) as run_timestamp_last
-            FROM `test_results/test_runs_column`
+            FROM `{test_runs_table}`
             WHERE branch = '{branch}'
             AND build_type = '{build_type}'
             GROUP BY suite_folder, test_name
@@ -133,25 +134,22 @@ def write_to_file(text, file):
 def upload_muted_tests(tests):
     print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
     
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return
-
-        table_path = f'test_results/all_tests_with_owner_and_mute'
+        
+        # Get table path from config
+        table_path = ydb_wrapper.get_table_path("all_tests_with_owner_and_mute")
         print(f'📋 Target table: {table_path}')
 
         print(f'🏗️  Creating table if not exists...')
         create_tables(ydb_wrapper, table_path)
         
-        full_path = f"{ydb_wrapper.database_path}/{table_path}"
-        print(f'📤 Starting bulk upsert to: {full_path}')
+        print(f'📤 Starting bulk upsert to: {table_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        # Подготавливаем column_types
+        # Prepare column_types
         column_types = (
             ydb.BulkUpsertColumns()
             .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
@@ -164,8 +162,8 @@ def upload_muted_tests(tests):
             .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
         )
         
-        # Используем bulk_upsert_batches
-        ydb_wrapper.bulk_upsert_batches(full_path, tests, column_types, batch_size=1000)
+        # Use bulk_upsert_batches (wrapper will construct full path internally)
+        ydb_wrapper.bulk_upsert_batches(table_path, tests, column_types, batch_size=1000)
         
         print(f'✅ Bulk upsert completed successfully')
         print(f'📊 Successfully uploaded {len(tests)} test records')

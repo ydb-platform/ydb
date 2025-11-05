@@ -812,6 +812,7 @@ message TGRpcConfig {
     }
 
     optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
+    optional TXdsBootstrap XdsBootstrap = 32;
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
@@ -827,6 +828,35 @@ message TGRpcConfig {
     optional string EndpointId = 108;
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
+
+    message TXdsBootstrap {
+        message TXdsServer {
+            message TChannelCred {
+                optional string Type = 1;
+                optional string Config = 2; // String in JSON format containing config for the type
+            }
+
+            optional string ServerUri = 1;
+            repeated TChannelCred ChannelCreds = 2;
+            repeated string ServerFeatures = 3;
+        }
+
+        message TNode {
+            message TLocality {
+                optional string Region = 1;
+                optional string Zone = 2;
+                optional string SubZone = 3;
+            }
+
+            optional string Id = 1;
+            optional string Cluster = 2;
+            optional TLocality Locality = 3;
+            optional string Meta = 4; // String in JSON format containing opaque metadata extending the node identifier
+        }
+
+        repeated TXdsServer XdsServers = 1;
+        optional TNode Node = 2;
+    }
 }
 
 message TDynamicNodeConfig {

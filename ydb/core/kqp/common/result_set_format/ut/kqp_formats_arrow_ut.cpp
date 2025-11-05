@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/result_set_format/ut/kqp_formats_ut_helpers.h>
 #include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
@@ -280,21 +281,46 @@ struct TTestContext {
         return values;
     }
 
-    TType* GetListOfJsonsType() {
-        TType* itemType = TDataType::Create(NUdf::TDataType<NUdf::TJson>::Id, TypeEnv);
-        return TListType::Create(itemType, TypeEnv);
+    TType* GetList(TType* itemType, bool optional = false) {
+        if (optional) {
+            itemType = TOptionalType::Create(itemType, TypeEnv);
+        }
+        auto listType = TListType::Create(itemType, TypeEnv);
+        if (optional) {
+            return TOptionalType::Create(listType, TypeEnv);
+        }
+        return listType;
     }
 
-    TUnboxedValueVector CreateListOfJsons(ui32 quantity) {
+    TUnboxedValueVector CreateList(ui32 quantity, TType* itemType, bool optional = false) {
         TUnboxedValueVector values;
+        values.reserve(quantity);
+
         for (ui64 value = 0; value < quantity; ++value) {
+            if (optional && value % 2 == 0) {
+                values.emplace_back(NUdf::TUnboxedValuePod());
+                continue;
+            }
+
             TUnboxedValueVector items;
             items.reserve(value);
             for (ui64 i = 0; i < value; ++i) {
-                std::string json = TStringBuilder() << "{'item':" << i << "}";
-                items.push_back(MakeString(NUdf::TStringRef(json.data(), json.size())));
+                if (optional) {
+                    if (i % 2 == 0) {
+                        items.push_back(NUdf::TUnboxedValuePod());
+                    } else {
+                        items.push_back(GetValueOfBasicType(itemType, i).MakeOptional());
+                    }
+                } else {
+                    items.push_back(GetValueOfBasicType(itemType, i));
+                }
             }
+
             auto listValue = Vb.NewList(items.data(), value);
+            if (optional) {
+                listValue = std::move(listValue).MakeOptional();
+            }
+
             values.emplace_back(std::move(listValue));
         }
         return values;
@@ -1048,6 +1074,38 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
     Y_UNIT_TEST(DataType_EmptyDict) {
         TestSingularTypeConversion<TType::EKind::EmptyDict>();
     }
+
+    // Nested types
+    Y_UNIT_TEST_TWIN(NestedType_List, IsOptional) {
+        TTestContext context;
+
+        for (auto itemType: context.BasicTypes) {
+            auto listType = context.GetList(itemType, IsOptional);
+            auto values = context.CreateList(100, itemType, IsOptional);
+
+            auto array = MakeArrowArray(values, listType);
+            UNIT_ASSERT(array->ValidateFull().ok());
+            UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
+            UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+
+            if (IsOptional) {
+                auto listArray = static_pointer_cast<arrow::ListArray>(array);
+                for (size_t i = 0; i < values.size(); ++i) {
+                    if (i % 2 == 0) {
+                        UNIT_ASSERT(listArray->IsNull(i));
+                        continue;
+                    }
+
+                    UNIT_ASSERT(!listArray->IsNull(i));
+                    auto slice = listArray->value_slice(i);
+
+                    for (size_t j = 0; j < static_cast<size_t>(slice->length()); ++j) {
+                        UNIT_ASSERT(j % 2 == 0 ? slice->IsNull(j) : !slice->IsNull(j));
+                    }
+                }
+            }
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
@@ -1128,39 +1186,6 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
             auto uIntValue = value.GetElement(2).Get<ui8>();
             auto uIntArrow = uint8Array->Value(index);
             UNIT_ASSERT(uIntValue == uIntArrow);
-            ++index;
-        }
-    }
-
-    Y_UNIT_TEST(ListOfJsons) {
-        TTestContext context;
-
-        auto listType = context.GetListOfJsonsType();
-        Y_ABORT_UNLESS(IsArrowCompatible(listType));
-
-        auto values = context.CreateListOfJsons(100);
-        auto array = MakeArrowArray(values, listType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
-
-        UNIT_ASSERT(listArray->num_fields() == 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRING);
-        auto jsonArray = static_pointer_cast<arrow::StringArray>(listArray->values());
-        auto index = 0;
-        auto innerIndex = 0;
-        for (const auto& value: values) {
-            UNIT_ASSERT(value.GetListLength() == static_cast<ui64>(listArray->value_length(index)));
-            const auto iter = value.GetListIterator();
-            for (NUdf::TUnboxedValue item; iter.Next(item);) {
-                auto view = jsonArray->GetView(innerIndex);
-                std::string itemArrow(view.data(), view.size());
-                auto stringRef = item.AsStringRef();
-                std::string itemList(stringRef.Data(), stringRef.Size());
-                UNIT_ASSERT(itemList == itemArrow);
-                ++innerIndex;
-            }
             ++index;
         }
     }
@@ -1817,21 +1842,6 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
         for (ui64 index = 0; index < values.size(); ++index) {
             AssertUnboxedValuesAreEqual(values[index], restoredValues[index], dictType);
-        }
-    }
-
-    Y_UNIT_TEST(ListOfJsons) {
-        TTestContext context;
-
-        auto listType = context.GetListOfJsonsType();
-        Y_ABORT_UNLESS(IsArrowCompatible(listType));
-
-        auto values = context.CreateListOfJsons(100);
-        auto array = MakeArrowArray(values, listType);
-        auto restoredValues = ExtractUnboxedVector(array, listType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], listType);
         }
     }
 

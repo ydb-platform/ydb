@@ -23,12 +23,16 @@ SRCS(
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 #TIMEOUT(60)
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(
+    ya:fat
+)
+
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:24 cpu:4)
 ELSE()
-    REQUIREMENTS(ram:24 cpu:2)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 END()

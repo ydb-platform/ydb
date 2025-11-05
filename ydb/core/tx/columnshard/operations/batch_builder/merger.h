@@ -39,17 +39,25 @@ public:
     TYdbConclusionStatus AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data);
 };
 
-class TInsertMerger: public IMerger {
-private:
-    using TBase = IMerger;
-    virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
-        NJson::TJsonValue json = NJson::JSON_ARRAY;
-        auto cursor = exists.BuildSortingCursor();
-        const auto pkNames = Schema->GetPKColumnNames();
-        const auto& pkColumns = Schema->GetIndexInfo().GetPrimaryKeyColumns();
+struct TSortingKeyMapping {
+    struct TItem {
+        TString Name;
+        TString Type;
+        TString Value;
+    };
+
+    std::vector<TItem> Items;
+
+    static TSortingKeyMapping Build(const std::shared_ptr<ISnapshotSchema>& schema,
+        const NArrow::NMerger::TSortableBatchPosition& position)
+    {
+        TSortingKeyMapping mapping;
+        auto cursor = position.BuildSortingCursor();
+        const auto pkNames = schema->GetPKColumnNames();
+        const auto& pkColumns = schema->GetIndexInfo().GetPrimaryKeyColumns();
         std::vector<std::shared_ptr<arrow::Field>> pkFields;
         pkFields.reserve(pkNames.size());
-        const auto& allFields = Schema->GetSchema()->fields();
+        const auto& allFields = schema->GetSchema()->fields();
         for (auto&& name : pkNames) {
             std::shared_ptr<arrow::Field> found;
             for (const auto& f : allFields) {
@@ -67,42 +75,62 @@ private:
         auto rb = cursor.ExtractSortingPosition(pkFields);
         AFL_VERIFY(pkColumns.size() == (size_t)rb->num_columns());
         for (int i = 0; i < rb->num_columns(); ++i) {
-            NJson::TJsonValue item = NJson::JSON_MAP;
-            item.InsertValue("name", pkFields[i]->name());
+            TItem item;
+            item.Name = pkFields[i]->name();
             const auto& arr = rb->column(i);
-            TString valueStr;
             if (pkColumns[i].second.GetTypeId() == NScheme::NTypeIds::Bool) {
                 auto sres = arr->GetScalar(0);
                 if (sres.ok()) {
                     TString s = (*sres)->ToString();
                     if (s == "0") {
-                        valueStr = "false";
+                        item.Value = "false";
                     } else if (s == "1") {
-                        valueStr = "true";
+                        item.Value = "true";
                     } else {
-                        valueStr = s;
+                        item.Value = s;
                     }
                 } else {
-                    valueStr = sres.status().ToString();
+                    item.Value = sres.status().ToString();
                 }
 
-                item.InsertValue("type", "bool");
-                item.InsertValue("value", valueStr);
+                item.Type = "bool";
             } else {
                 auto sres = arr->GetScalar(0);
                 if (sres.ok()) {
-                    item.InsertValue("value", (*sres)->ToString());
+                    item.Value = (*sres)->ToString();
                 } else {
-                    item.InsertValue("value", sres.status().ToString());
+                    item.Value = sres.status().ToString();
                 }
 
-                item.InsertValue("type", pkFields[i]->type()->ToString());
+                item.Type = pkFields[i]->type()->ToString();
             }
 
-            json.AppendValue(item);
+            mapping.Items.emplace_back(std::move(item));
         }
 
-        return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Conflict with existing key. " << json.GetStringRobust());
+        return mapping;
+    }
+
+    NJson::TJsonValue ToJson() const {
+        NJson::TJsonValue json = NJson::JSON_ARRAY;
+        for (const auto& i : Items) {
+            NJson::TJsonValue itemJson = NJson::JSON_MAP;
+            itemJson.InsertValue("name", i.Name);
+            itemJson.InsertValue("type", i.Type);
+            itemJson.InsertValue("value", i.Value);
+            json.AppendValue(itemJson);
+        }
+        return json;
+    }
+};
+
+class TInsertMerger: public IMerger {
+private:
+    using TBase = IMerger;
+    virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        const auto mapping = TSortingKeyMapping::Build(Schema, exists);
+        return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED,
+            TStringBuilder() << "Conflict with existing key. " << mapping.ToJson().GetStringRobust());
     }
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         return TYdbConclusionStatus::Success();

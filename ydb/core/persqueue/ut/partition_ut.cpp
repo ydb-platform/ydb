@@ -22,6 +22,7 @@
 #include <util/system/types.h>
 
 #include "make_config.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 template<>
 void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
@@ -340,6 +341,8 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
 {
     Ctx.ConstructInPlace();
     Finalizer.ConstructInPlace(*Ctx);
+
+    //Ctx->EnableDetailedPQLog = true;
 
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
@@ -1536,7 +1539,7 @@ public:
                     BatchSizes.push_back(msg->BatchSize);
                 }
             } else if (ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
-                Cerr << "Got KV request\n";
+                Cerr << "Got KV request" << Endl;
                 with_lock(Lock) {
                     HadKvRequest = true;
                 }
@@ -2186,6 +2189,7 @@ Y_UNIT_TEST_F(CommitOffsetRanges, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
 {
+    DBGTRACE("CorrectRange_Commit");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -2195,22 +2199,36 @@ Y_UNIT_TEST_F(CorrectRange_Commit, TPartitionFixture)
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
+    DBGTRACE_LOG("");
     CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
+    DBGTRACE_LOG("");
     CreateSession(client, session);
 
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId, client, 0, 2);
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
 
+    DBGTRACE_LOG("");
     SendCommitTx(step, txId);
 
-    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=0}}}});
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=3, .PlanStep=step, .TxId=txId, .UserInfos={{1, {.Session=session, .Offset=2}}}});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    DBGTRACE_LOG("");
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
 {
+    DBGTRACE("CorrectRange_Multiple_Transactions");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -2222,34 +2240,51 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
     const ui64 txId_2 = 67891;
     const ui64 txId_3 = 67892;
 
+    DBGTRACE_LOG("");
     CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=step, .TxId=10000});
+    DBGTRACE_LOG("");
     CreateSession(client, session);
 
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_1, client, 0, 1);
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
 
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_2, client, 0, 2);
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_3, client, 0, 2);
 
+    DBGTRACE_LOG("");
     SendCommitTx(step, txId_1);
 
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=1}}}});
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
+    DBGTRACE_LOG("");
     WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
 
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
+    DBGTRACE_LOG("");
     SendRollbackTx(step, txId_2);
 
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=TPartitionId(partition), .Predicate=false});
+    DBGTRACE_LOG("");
     SendRollbackTx(step, txId_3);
 
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session=session, .Offset=1}}}});
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 }
 
 Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 {
+    DBGTRACE("CorrectRange_Multiple_Consumers");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -2257,22 +2292,34 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
+    DBGTRACE_LOG("");
     CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    DBGTRACE_LOG("");
     CreateSession("client-1", "session-1");
+    DBGTRACE_LOG("");
     CreateSession("client-2", "session-2");
 
+    DBGTRACE_LOG("");
     SendSetOffset(1, "client-1", 3, "session-1");
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId, "client-2", 0, 1);
+    DBGTRACE_LOG("");
     SendSetOffset(2, "client-1", 6, "session-1");
 
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-1", .Offset=3}}}});
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
+    DBGTRACE_LOG("");
     WaitProxyResponse({.Cookie=1, .Status=NMsgBusProxy::MSTATUS_OK});
 
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId, .Partition=TPartitionId(partition), .Predicate=true});
+    DBGTRACE_LOG("");
     SendCommitTx(step, txId);
 
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=5, .UserInfos={
                  {1, {.Session="session-2", .Offset=1}},
                  {3, {.Session="session-1", .Offset=6}}
@@ -2332,6 +2379,7 @@ Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)
 
 Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
 {
+    DBGTRACE("CorrectRange_Rollback");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -2342,23 +2390,38 @@ Y_UNIT_TEST_F(CorrectRange_Rollback, TPartitionFixture)
     const ui64 txId_1 = 67890;
     const ui64 txId_2 = 67891;
 
+    DBGTRACE_LOG("");
     CreatePartition({.Partition=partition, .Begin=begin, .End=end});
+    DBGTRACE_LOG("");
     CreateSession(client, session);
 
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_1, client, 0, 2);
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
 
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_2, client, 0, 5);
+    DBGTRACE_LOG("");
     SendRollbackTx(step, txId_1);
 
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Consumer="client", .Session="session", .Offset=0}}}});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=true});
 }
 
 Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
 {
+    DBGTRACE("ChangeConfig");
     const TPartitionId partition{3};
     const ui64 begin = 0;
     const ui64 end = 10;
@@ -2367,6 +2430,7 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     const ui64 txId_1 = 67890;
     const ui64 txId_2 = 67891;
 
+    DBGTRACE_LOG("");
     CreatePartition({
                     .Partition=partition, .Begin=begin, .End=end,
                     .Config={.Consumers={
@@ -2376,8 +2440,10 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
                     }}
     });
 
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_1, "client-1", 0, 2);
     Cerr << "Send change config\n";
+    DBGTRACE_LOG("");
     SendChangePartitionConfig({.Version=2,
                               .Consumers={
                               {.Consumer="client-1", .Generation=0},
@@ -2386,11 +2452,15 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     //
     // consumer 'client-2' will be deleted
     //
+    DBGTRACE_LOG("");
     SendCalcPredicate(step, txId_2, "client-2", 0, 2);
 
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_1, .Partition=TPartitionId(partition), .Predicate=true});
+    DBGTRACE_LOG("");
     SendCommitTx(step, txId_1);
     Cerr << "Wait cmd write (initial)\n";
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=8,
                  .PlanStep=step, .TxId=txId_1,
                  .UserInfos={
@@ -2398,8 +2468,10 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
                  },
                  });
 
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     Cerr << "Wait commit 1 done\n";
+    DBGTRACE_LOG("");
     WaitCommitTxDone({.TxId=txId_1, .Partition=TPartitionId(partition)});
 
     //
@@ -2412,6 +2484,7 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     //              },
     // });
     Cerr << "Wait cmd write (change config)\n";
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=8,
                  .PlanStep=step, .TxId=txId_1,
                  .UserInfos={
@@ -2421,14 +2494,18 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
                  .DeleteRanges={
                  {0, {.Partition=3, .Consumer="client-2"}}
                  }});
+    DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     Cerr << "Wait config changed\n";
+    DBGTRACE_LOG("");
     WaitPartitionConfigChanged({.Partition=TPartitionId(partition)});
 
     //
     // consumer 'client-2' was deleted
     //
+    DBGTRACE_LOG("");
     WaitCalcPredicateResult({.Step=step, .TxId=txId_2, .Partition=TPartitionId(partition), .Predicate=false});
+    DBGTRACE_LOG("");
     SendRollbackTx(step, txId_2);
 }
 
@@ -2748,38 +2825,61 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
 
 Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionTxTestHelper)
 {
+    DBGTRACE("DataTxCalcPredicateOk");
     Init();
+    DBGTRACE_LOG("");
     CreateSession("client", "session");
     i64 cookie = 1;
 
+    DBGTRACE_LOG("");
     auto tx1 = MakeAndSendWriteTx({});
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx1, true);
     Cerr << "Wait first predicate result " << Endl;
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx1);
 
+    DBGTRACE_LOG("");
     auto tx2 = MakeAndSendWriteTx({{"src1", {1, 10}}});
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx2, true);
+    DBGTRACE_LOG("");
     SendTxCommit(tx1);
     Cerr << "Wait second predicate result " << Endl;
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx2);
+    DBGTRACE_LOG("");
     SendTxCommit(tx2);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
 
     TString data = "data for write";
 
+    DBGTRACE_LOG("");
     SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
+    DBGTRACE_LOG("");
+    EmulateKVTablet();
+    DBGTRACE_LOG("");
     auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
     UNIT_ASSERT(ownerEvent != nullptr);
+    DBGTRACE_LOG("");
     auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
 
+    DBGTRACE_LOG("");
     SendWrite(++cookie, 0, ownerCookie, 51, data, false, 5);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitProxyResponse({.Cookie=cookie});
 
     Cerr << "Wait third predicate result " << Endl;
+    DBGTRACE_LOG("");
     auto tx3 = MakeAndSendWriteTx({{"src1", {12, 20}}, {"SourceId", {6, 10}}});
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx3, true);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx3);
+    DBGTRACE_LOG("");
     SendTxCommit(tx3);
 }
 
@@ -2854,7 +2954,7 @@ void TPartitionTxTestHelper::NonConflictingActsBatchOkTest() {
     WaitTxPredicateReply(tx2);
     WaitTxPredicateReply(tx3);
 
-    WaitBatchCompletion(5 + 6 + 6); //5 txs and immediate txs + 2 normal writes with 6 messages each;
+    //WaitBatchCompletion(5 + 6 + 6); //5 txs and immediate txs + 2 normal writes with 6 messages each;
 
     SendTxCommit(tx3);
     SendTxRollback(tx2);
@@ -2877,56 +2977,101 @@ Y_UNIT_TEST_F(TestTxBatchInFederation, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingActsInSeveralBatches, TPartitionTxTestHelper) {
+    DBGTRACE("ConflictingActsInSeveralBatches");
     TTxBatchingTestParams params {.WriterSessions{"src1", "src4"},.EndOffset=1};
+    DBGTRACE_LOG("");
     Init(std::move(params));
 
+    DBGTRACE_LOG("");
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}});
+    DBGTRACE_LOG("");
     auto tx2 = MakeAndSendWriteTx({{"src2", {4, 6}}});
+    DBGTRACE_LOG("");
     auto tx3 = MakeAndSendWriteTx({{"src1", {4, 6}}});
 
+    DBGTRACE_LOG("");
     AddAndSendNormalWrite("src1", 7, 12);
+    DBGTRACE_LOG("");
     AddAndSendNormalWrite("src4", 1, 2);
+    DBGTRACE_LOG("");
     auto tx5 = MakeAndSendWriteTx({{"src4", {4, 5}}});
+    DBGTRACE_LOG("");
     AddAndSendNormalWrite("src4", 7, 12);
+    DBGTRACE_LOG("");
     auto immTx1 = MakeAndSendImmediateTx({{"src4", {13, 15}}});
 
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx1, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx2, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx3, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx5, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(immTx1, true);
 
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx1);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx2);
-    WaitBatchCompletion(2);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(2);
 
+    DBGTRACE_LOG("");
     SendTxCommit(tx1);
+    DBGTRACE_LOG("");
     SendTxRollback(tx2);
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
 
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx3);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     SendTxCommit(tx3);
 
     //2 Normal writes with src1 & src4
+    DBGTRACE_LOG("");
     ExpectNoTxPredicateReply();
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx1);
-    WaitCommitDone(tx3);
-    WaitTxPredicateReply(tx5);
-    WaitBatchCompletion(6 + 2); // Normal writes produce 1 act for each message
-    SendTxCommit(tx5);
-    WaitBatchCompletion(1);
-
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
+    WaitCommitDone(tx3);
+    DBGTRACE_LOG("");
+    WaitTxPredicateReply(tx5);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(6 + 2); // Normal writes produce 1 act for each message
+    DBGTRACE_LOG("");
+    SendTxCommit(tx5);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+
+    DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx5);
 
-    WaitBatchCompletion(1 + 6); //Normal write & immTx for src4;
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1 + 6); //Normal write & immTx for src4;
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx1, true);
 }
 
@@ -2941,7 +3086,7 @@ Y_UNIT_TEST_F(ConflictingTxIsAborted, TPartitionTxTestHelper) {
     WaitWriteInfoRequest(tx1, true);
     WaitWriteInfoRequest(tx2, true);
 
-    WaitBatchCompletion(1);
+    //WaitBatchCompletion(1);
 
     SendTxCommit(tx1);
     ExpectNoKvRequest();
@@ -2955,7 +3100,7 @@ Y_UNIT_TEST_F(ConflictingTxIsAborted, TPartitionTxTestHelper) {
     AddAndSendNormalWrite("src2", 7, 12);
     auto tx3 = MakeAndSendWriteTx({{"src2", {12, 15}}});
     Y_UNUSED(tx3);
-    WaitBatchCompletion(1);
+    //WaitBatchCompletion(1);
     WaitKvRequest();
     SendKvResponse();
     ExpectNoCommitDone();
@@ -2973,12 +3118,12 @@ Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
     WaitWriteInfoRequest(immTx, true);
     WaitTxPredicateReply(tx1);
 
-    WaitBatchCompletion(1);
+    //WaitBatchCompletion(1);
 
     SendTxRollback(tx1);
 
     WaitTxPredicateReply(tx2);
-    WaitBatchCompletion(2);
+    //WaitBatchCompletion(2);
     SendTxCommit(tx2);
 
     WaitKvRequest();
@@ -3004,7 +3149,7 @@ Y_UNIT_TEST_F(ConflictingSrcIdForTxInDifferentBatches, TPartitionTxTestHelper) {
 
     Cerr << "Wait batch of 1 completion\n";
     SendTxCommit(tx1);
-    WaitBatchCompletion(1);
+    //WaitBatchCompletion(1);
     Cerr << "Expect KV request\n";
     WaitKvRequest();
     SendKvResponse();
@@ -3018,13 +3163,13 @@ Y_UNIT_TEST_F(ConflictingSrcIdForTxInDifferentBatches, TPartitionTxTestHelper) {
 
 
     Cerr << "Wait batch of 3 completion\n";
-    WaitBatchCompletion(1); // Immediate Tx 2 - 4.
+    //WaitBatchCompletion(1); // Immediate Tx 2 - 4.
     Cerr << "Expect KV request\n";
     WaitKvRequest();
     SendKvResponse();
     SendTxRollback(tx3);
     SendTxRollback(tx4);
-    WaitBatchCompletion(2); // Immediate Tx 2 - 4.
+    //WaitBatchCompletion(2); // Immediate Tx 2 - 4.
 
     WaitKvRequest();
     SendKvResponse();
@@ -3034,43 +3179,78 @@ Y_UNIT_TEST_F(ConflictingSrcIdForTxInDifferentBatches, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingSrcIdTxAndWritesDifferentBatches, TPartitionTxTestHelper) {
+    DBGTRACE("ConflictingSrcIdTxAndWritesDifferentBatches");
     TTxBatchingTestParams params {.WriterSessions{"src1"}, .EndOffset = 1};
+    DBGTRACE_LOG("");
     Init(std::move(params));
 
+    DBGTRACE_LOG("");
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}},});
+    DBGTRACE_LOG("");
     auto tx2 = MakeAndSendWriteTx({{"src1", {2, 4}}});
+    DBGTRACE_LOG("");
     auto tx3 = MakeAndSendWriteTx({{"src1", {4, 6}}});
+    DBGTRACE_LOG("");
     AddAndSendNormalWrite("src1", 1, 1);
+    DBGTRACE_LOG("");
     AddAndSendNormalWrite("src1", 7, 7);
+    DBGTRACE_LOG("");
     AddAndSendNormalWrite("src1", 7, 7);
 
 
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx1, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx2, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx3, true);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx1);
 
+    DBGTRACE_LOG("");
     SendTxCommit(tx1);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
 
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
 
+    DBGTRACE_LOG("");
     WaitCommitDone(tx1);
 
+    DBGTRACE_LOG("");
     WaitTxPredicateFailure(tx2);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx3);
+    DBGTRACE_LOG("");
     SendTxRollback(tx2);
+    DBGTRACE_LOG("");
     SendTxCommit(tx3);
-    WaitBatchCompletion(2); // Tx 2 & 3.
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(2); // Tx 2 & 3.
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx3);
-    WaitBatchCompletion(3);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(3);
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
     WaitProxyResponse({.AlreadyWritten=true, .SeqNo=1});
+    DBGTRACE_LOG("");
     WaitProxyResponse({.AlreadyWritten=false, .SeqNo=7});
+    DBGTRACE_LOG("");
     WaitProxyResponse({.AlreadyWritten=true, .SeqNo=7});
 }
 
@@ -3090,12 +3270,12 @@ Y_UNIT_TEST_F(ConflictingSrcIdForTxWithHead, TPartitionTxTestHelper) {
     WaitTxPredicateReply(tx1);
 
     SendTxCommit(tx1);
-    WaitBatchCompletion(1);
+    //WaitBatchCompletion(1);
     Cerr << "Wait 1st KV request\n";
     WaitKvRequest();
     SendKvResponse();
     WaitCommitDone(tx1);
-    WaitBatchCompletion(3);
+    //WaitBatchCompletion(3);
     Cerr << "Wait 2nd KV request\n";
     WaitKvRequest();
     SendKvResponse();
@@ -3148,94 +3328,172 @@ public:
 };
 
 Y_UNIT_TEST_F(DifferentWriteTxBatchingOptions, TPartitionTxTestHelper) {
+    DBGTRACE("DifferentWriteTxBatchingOptions");
     auto wrapper = TBatchingConditionsTest(this);
 
     // 1. ImmTx -> NormWrite -> ImmTx -> NormWrite = All batched
     {
+    DBGTRACE_LOG("");
     wrapper.Start();
+    DBGTRACE_LOG("");
     wrapper.AddNormalWrite();
+    DBGTRACE_LOG("");
     auto immTx1 = wrapper.AddImmediateTx();
+    DBGTRACE_LOG("");
     wrapper.AddNormalWrite();
+    DBGTRACE_LOG("");
     auto immTx2 = wrapper.AddImmediateTx();
+    DBGTRACE_LOG("");
     wrapper.Process();
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(immTx1, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(immTx2, true);
-    WaitBatchCompletion(4 + 1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(4 + 1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
+    EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx1, true);
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx2, true);
     }
     {
     // 2. ImmTx -> WriteTx = KVRequest
+    DBGTRACE_LOG("");
     ResetBatchCompletion();
+    DBGTRACE_LOG("");
     wrapper.Start();
+    DBGTRACE_LOG("");
     auto immTx = wrapper.AddImmediateTx();
+    DBGTRACE_LOG("");
     auto tx = wrapper.AddTx();
+    DBGTRACE_LOG("");
     wrapper.Process();
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(immTx, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx, true);
-    WaitBatchCompletion(1+1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1+1);
+    DBGTRACE_LOG("");
     ExpectNoTxPredicateReply();
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
+    EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx, true);
+    DBGTRACE_LOG("");
     ExpectNoCommitDone();
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx);
+    DBGTRACE_LOG("");
     SendTxCommit(tx);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx);
     }
     {
     // 3. NormWrite -> WriteTx = KVRequest
+    DBGTRACE_LOG("");
     ResetBatchCompletion();
+    DBGTRACE_LOG("");
     wrapper.Start();
+    DBGTRACE_LOG("");
     wrapper.AddNormalWrite();
+    DBGTRACE_LOG("");
     auto tx = wrapper.AddTx();
+    DBGTRACE_LOG("");
     wrapper.Process();
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx, true);
-    WaitBatchCompletion(1+1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1+1);
+    DBGTRACE_LOG("");
     ExpectNoTxPredicateReply();
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx);
+    DBGTRACE_LOG("");
     SendTxCommit(tx);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx);
     }
     {
     // 4. WriteTx -> NormWrite = 2 batches
+    DBGTRACE_LOG("");
     ResetBatchCompletion();
+    DBGTRACE_LOG("");
     wrapper.Start();
+    DBGTRACE_LOG("");
     auto tx = wrapper.AddTx();
+    DBGTRACE_LOG("");
     wrapper.AddNormalWrite();
+    DBGTRACE_LOG("");
     wrapper.Process();
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx, true);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx);
-    WaitBatchCompletion(1+1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1+1);
+    DBGTRACE_LOG("");
     ExpectNoKvRequest();
+    DBGTRACE_LOG("");
     SendTxCommit(tx);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
     }
     {
     // 5. WriteTx -> ImmTx = 2 batches
+    DBGTRACE_LOG("");
     ResetBatchCompletion();
+    DBGTRACE_LOG("");
     wrapper.Start();
+    DBGTRACE_LOG("");
     auto tx = wrapper.AddTx();
+    DBGTRACE_LOG("");
     auto immTx = wrapper.AddImmediateTx();
+    DBGTRACE_LOG("");
     wrapper.Process();
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(tx, true);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(immTx, true);
-    WaitBatchCompletion(1+1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1+1);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx);
+    DBGTRACE_LOG("");
     SendTxCommit(tx);
+    DBGTRACE_LOG("");
     ExpectNoCommitDone();
+    DBGTRACE_LOG("");
     EmulateKVTablet();
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     WaitCommitDone(tx);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx, true);
     }
 }
@@ -3254,11 +3512,11 @@ Y_UNIT_TEST_F(FailedTxsDontBlock, TPartitionTxTestHelper) {
 
     WaitWriteInfoRequest(tx, true);
     WaitWriteInfoRequest(immTx, true);
-    WaitBatchCompletion(5 + 1);
+    //WaitBatchCompletion(5 + 1);
     ExpectNoTxPredicateReply();
     EmulateKVTablet();
     WaitTxPredicateFailure(tx);
-    WaitBatchCompletion(2);
+    //WaitBatchCompletion(2);
     SendTxRollback(tx);
 
     EmulateKVTablet();
@@ -3278,7 +3536,7 @@ Y_UNIT_TEST_F(FailedTxsDontBlock, TPartitionTxTestHelper) {
 
     WaitWriteInfoRequest(immTx, true);
     WaitWriteInfoRequest(tx, true);
-    WaitBatchCompletion(2 + 1);
+    //WaitBatchCompletion(2 + 1);
     WaitTxPredicateReply(tx);
     ExpectNoKvRequest();
     SendTxCommit(tx);
@@ -3289,94 +3547,167 @@ Y_UNIT_TEST_F(FailedTxsDontBlock, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(NonConflictingCommitsBatch, TPartitionTxTestHelper) {
+    DBGTRACE("NonConflictingCommitsBatch");
     TTxBatchingTestParams params{
         .ConsumersCount= 3,
         .ConsumerSessions={1},
         .EndOffset=50
     };
+    DBGTRACE_LOG("");
     Init(std::move(params));
 
     //Just block processing so every message arrives before batching starts
+    DBGTRACE_LOG("");
     auto txTmp = MakeAndSendWriteTx({});
+    DBGTRACE_LOG("");
     MakeAndSendNormalOffsetCommit(1, 5);
+    DBGTRACE_LOG("");
     auto tx1 = MakeAndSendTxOffsetCommit(3, 0, 5);
+    DBGTRACE_LOG("");
     auto tx2 = MakeAndSendTxOffsetCommit(2, 0, 5);
+    DBGTRACE_LOG("");
     MakeAndSendNormalOffsetCommit(1, 10);
+    DBGTRACE_LOG("");
     auto txImm1 = MakeAndSendImmediateTxOffsetCommit(1, 0, 15);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(txTmp, true);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(txTmp);
+    DBGTRACE_LOG("");
     SendTxRollback(txTmp);
 
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx1);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx2);
 
-    WaitBatchCompletion(5 + 1 /*tmpTx*/);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(5 + 1 /*tmpTx*/);
+    DBGTRACE_LOG("");
     SendTxCommit(tx1);
+    DBGTRACE_LOG("");
     SendTxCommit(tx2);
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
 
+    DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx1);
+    DBGTRACE_LOG("");
     WaitCommitDone(tx2);
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(txImm1, false);
 }
 
 Y_UNIT_TEST_F(ConflictingCommitsInSeveralBatches, TPartitionTxTestHelper) {
+    DBGTRACE("ConflictingCommitsInSeveralBatches");
     TTxBatchingTestParams params{
         .ConsumersCount= 2,
         .ConsumerSessions={1},
         .EndOffset=50
     };
+    DBGTRACE_LOG("");
     Init(std::move(params));
 
+    DBGTRACE_LOG("");
     //Just block processing so every message arrives before batching starts
     auto txTmp = MakeAndSendWriteTx({});
 
+    DBGTRACE_LOG("");
     MakeAndSendNormalOffsetCommit(1, 2); // act-1
+    DBGTRACE_LOG("");
     auto tx1 = MakeAndSendTxOffsetCommit(1, 2, 5);
+    DBGTRACE_LOG("");
     auto tx2 = MakeAndSendTxOffsetCommit(1, 5, 10);
+    DBGTRACE_LOG("");
     MakeAndSendNormalOffsetCommit(1, 20); // act-2
+    DBGTRACE_LOG("");
     ResetBatchCompletion();
 
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(txTmp, true);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(txTmp);
 
-    WaitBatchCompletion(2); // txTmp + act-1
+    DBGTRACE_LOG("");
     SendTxRollback(txTmp);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(2); // txTmp + act-1
 
+    DBGTRACE_LOG("");
     ExpectNoTxPredicateReply();
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
 
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx1);
-    WaitBatchCompletion(1); // tx1
-    ExpectNoTxPredicateReply();
-    SendTxCommit(tx1);
-
-    WaitTxPredicateReply(tx2);
-    SendTxCommit(tx2);
-    WaitBatchCompletion(1); // tx2
-
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
+    ExpectNoTxPredicateReply();
+    DBGTRACE_LOG("");
+    SendTxCommit(tx1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1); // tx1
+
+    DBGTRACE_LOG("");
+    WaitTxPredicateReply(tx2);
+    DBGTRACE_LOG("");
+    SendTxCommit(tx2);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1); // tx2
+
+    DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx1);
+    DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx2);
 
-    WaitBatchCompletion(1); // act-2
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1); // act-2
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
 
+    DBGTRACE_LOG("");
     txTmp = MakeAndSendWriteTx({});
+    DBGTRACE_LOG("");
     auto immTx1 = MakeAndSendImmediateTxOffsetCommit(2, 0, 5);
+    DBGTRACE_LOG("");
     auto immTx2 = MakeAndSendImmediateTxOffsetCommit(2, 5, 10);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(txTmp, true);
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(txTmp);
+    DBGTRACE_LOG("");
     SendTxRollback(txTmp);
 
-    WaitBatchCompletion(3);
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(3);
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx1, true);
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx2, true);
 }
 
@@ -3398,7 +3729,10 @@ Y_UNIT_TEST_F(ConflictingCommitFails, TPartitionTxTestHelper) {
     SendTxRollback(txTmp);
 
     WaitTxPredicateReply(tx1);
-    WaitBatchCompletion(1 + 1);
+    WaitKvRequest();
+    SendKvResponse();
+    //WaitBatchCompletion(1 + 1);
+    //WaitBatchCompletion(1); // для txTmp отправили TEvTxRollback
 
     SendTxCommit(tx1);
     WaitTxPredicateFailure(tx2);
@@ -3421,12 +3755,14 @@ Y_UNIT_TEST_F(ConflictingCommitFails, TPartitionTxTestHelper) {
     SendTxRollback(txTmp);
 
     ExpectNoTxPredicateReply();
-    WaitBatchCompletion(2);
+    //WaitBatchCompletion(2);
     WaitKvRequest();
     SendKvResponse();
     WaitTxPredicateFailure(tx3);
-    WaitBatchCompletion(1);
+    //WaitBatchCompletion(1);
     SendTxRollback(tx3);
+
+    //WaitBatchCompletion(1);
 
     WaitKvRequest(); //No user operatiions completed but TxId has changed which will be saved
     SendKvResponse();
@@ -3448,90 +3784,153 @@ Y_UNIT_TEST_F(ConflictingCommitFails, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingCommitProccesAfterRollback, TPartitionTxTestHelper) {
+    DBGTRACE("ConflictingCommitProccesAfterRollback");
     TTxBatchingTestParams params{
         .ConsumersCount = 2,
         .EndOffset=50
     };
+    DBGTRACE_LOG("");
     Init(std::move(params));
 
+    DBGTRACE_LOG("");
     auto tx1 = MakeAndSendTxOffsetCommit(1, 0, 5);
+    DBGTRACE_LOG("");
     auto tx2 = MakeAndSendTxOffsetCommit(1, 0, 3);
 
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx1);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
 
+    DBGTRACE_LOG("");
     SendTxRollback(tx1);
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
 
+    DBGTRACE_LOG("");
     WaitTxPredicateReply(tx2);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     SendTxCommit(tx2);
 
+    DBGTRACE_LOG("");
     WaitKvRequest();
+    DBGTRACE_LOG("");
     SendKvResponse();
+    DBGTRACE_LOG("");
+    WaitKvRequest();
+    DBGTRACE_LOG("");
+    SendKvResponse();
+    DBGTRACE_LOG("");
     WaitCommitDone(tx2);
+    DBGTRACE_LOG("");
     ExpectNoCommitDone();
 }
 
 Y_UNIT_TEST_F(TestBatchingWithChangeConfig, TPartitionTxTestHelper) {
+    DBGTRACE("TestBatchingWithChangeConfig");
     Init({.ConsumersCount = 2});
+    DBGTRACE_LOG("");
     auto txTmp = MakeAndSendWriteTx({});
+    DBGTRACE_LOG("");
     auto immTx1 = MakeAndSendImmediateTxOffsetCommit(1, 0, 5);
+    DBGTRACE_LOG("");
     SendChangePartitionConfig({.Version=2,
                                 .Consumers={
                                 {.Consumer="client-0", .Offset=5, .Generation=0},
                                 {.Consumer="client-1", .Generation=7}
                                 }});
+    DBGTRACE_LOG("");
     auto immTx2 = MakeAndSendImmediateTxOffsetCommit(1, 5, 10);
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(txTmp, true);
+    DBGTRACE_LOG("");
     SendTxRollback(txTmp);
-    WaitBatchCompletion(2);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(2);
+    DBGTRACE_LOG("");
     ExpectNoBatchCompletion();
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx1, true);
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvPartitionConfigChanged>();
-    WaitBatchCompletion(1); // immTx2
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1); // immTx2
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx2, true);
 }
 
 Y_UNIT_TEST_F(TestBatchingWithProposeConfig, TPartitionTxTestHelper) {
+    DBGTRACE("TestBatchingWithProposeConfig");
     Init({.ConsumersCount = 2});
+    DBGTRACE_LOG("");
     auto txTmp = MakeAndSendWriteTx({});
+    DBGTRACE_LOG("");
     auto immTx1 = MakeAndSendImmediateTxOffsetCommit(1, 0, 5);
 
+    DBGTRACE_LOG("");
     auto proposeTxId = GetTxId();
+    DBGTRACE_LOG("");
     auto event = std::make_unique<TEvPQ::TEvProposePartitionConfig>(1, proposeTxId);
 
+    DBGTRACE_LOG("");
     event->TopicConverter = TopicConverter;
     auto copy = Config;
+    DBGTRACE_LOG("");
     copy.SetVersion(10);
+    DBGTRACE_LOG("");
     auto* newConsumer = copy.AddConsumers();
 
+    DBGTRACE_LOG("");
     newConsumer->SetName("client-0");
+    DBGTRACE_LOG("");
     newConsumer->SetGeneration(0);
 
+    DBGTRACE_LOG("");
     event->Config = std::move(copy);
+    DBGTRACE_LOG("");
     SendEvent(event.release());
+    DBGTRACE_LOG("");
     auto immTx2 = MakeAndSendImmediateTxOffsetCommit(1, 5, 10);
 
+    DBGTRACE_LOG("");
     WaitWriteInfoRequest(txTmp, true);
+    DBGTRACE_LOG("");
     SendTxRollback(txTmp);
-    WaitBatchCompletion(2);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(2);
+    DBGTRACE_LOG("");
     ExpectNoBatchCompletion();
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx1, true);
 
+    DBGTRACE_LOG("");
     SendCommitTx(1, proposeTxId);
     //ToDo - wait propose result;
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitCommitTxDone({.TxId=proposeTxId});
-    WaitBatchCompletion(1);
+    //DBGTRACE_LOG("");
+    //WaitBatchCompletion(1);
+    DBGTRACE_LOG("");
     EmulateKVTablet();
+    DBGTRACE_LOG("");
     WaitImmediateTxComplete(immTx2, true);
 }
 

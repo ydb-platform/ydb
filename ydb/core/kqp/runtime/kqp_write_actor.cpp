@@ -1442,6 +1442,7 @@ public:
         std::vector<ui32> KeyIndexes;
         std::vector<ui32> DeleteKeyIndexes;
         std::vector<ui32> FullKeyIndexes;
+        std::vector<ui32> PkInFullKeyIndexes;
         IKqpBufferTableLookup* Lookup = nullptr;
     };
 
@@ -1609,7 +1610,8 @@ private:
                     KeyColumnTypes,
                     lookupInfo.Lookup->GetKeyColumnTypes(),
                     lookupInfo.KeyIndexes,
-                    lookupInfo.FullKeyIndexes);
+                    lookupInfo.FullKeyIndexes,
+                    lookupInfo.PkInFullKeyIndexes);
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
@@ -1619,7 +1621,7 @@ private:
                     }
                 }
 
-                const auto [uniqueSecondaryKeys, _] = std::move(collector).BuildUniqueSecondaryKeys();
+                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
 
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
@@ -1726,7 +1728,8 @@ private:
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes,
-                        lookupInfo.FullKeyIndexes);
+                        lookupInfo.FullKeyIndexes,
+                        lookupInfo.PkInFullKeyIndexes);
 
                 // TODO: skip initial unchanged rows.
                 for (const auto& row : writeRows) {
@@ -1736,7 +1739,7 @@ private:
                     }
                 }
 
-                const auto [uniqueSecondaryKeys, _] = std::move(collector).BuildUniqueSecondaryKeys();
+                const auto uniqueSecondaryKeys = std::move(collector).BuildUniqueSecondaryKeys();
                 lookupInfo.Lookup->AddUniqueCheckTask(
                     Cookie,
                     std::vector<TConstArrayRef<TCell>>{uniqueSecondaryKeys.begin(), uniqueSecondaryKeys.end()},
@@ -1773,25 +1776,22 @@ private:
                         KeyColumnTypes,
                         lookupInfo.Lookup->GetKeyColumnTypes(),
                         lookupInfo.KeyIndexes,
-                        lookupInfo.FullKeyIndexes);
+                        lookupInfo.FullKeyIndexes,
+                        lookupInfo.PkInFullKeyIndexes);
+                std::vector<TOwnedCellVec> extractedRows;
+                lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
+                    extractedRows.emplace_back(cells);
+                    AFL_ENSURE(collector.AddSecondaryTableRow(extractedRows.back()));
+                });
+
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
-                        AFL_ENSURE(collector.AddRow(row));
+                        if (!collector.AddRow(row)) {
+                            Error = "TODO";
+                            return false;
+                        }
                     }
                 }
-                const auto [uniqueSecondaryKeys, uniqueSecondaryKeysWithPk]  = std::move(collector).BuildUniqueSecondaryKeys();
-
-                lookupInfo.Lookup->ExtractResult(Cookie, [&](TConstArrayRef<TCell> cells) {
-                    AFL_ENSURE(cells.size() == lookupInfo.FullKeyIndexes.size());
-                    if (!IsError()
-                            && uniqueSecondaryKeys.contains(cells.first(lookupInfo.KeyIndexes.size()))
-                            && !uniqueSecondaryKeysWithPk.contains(cells)) {
-                        Error = "TODO";
-                    }
-                });
-            }
-            if (IsError()) {
-                return false;
             }
         }
 
@@ -2678,6 +2678,17 @@ public:
                             indexSettings.KeyColumns,
                             keyWriteIndex,
                             /* preferAdditionalInputColumns */ false),
+                        .PkInFullKeyIndexes = [&](){ // primary key in full secondary table keys
+                            THashMap<TStringBuf, ui32> ColumnNameToIndex;
+                            for (ui32 index = 0; index < indexSettings.KeyColumns.size(); ++index) {
+                                ColumnNameToIndex[indexSettings.KeyColumns[index].GetName()] = index;
+                            }
+                            std::vector<ui32> result(settings.KeyColumns.size());
+                            for (ui32 index = 0; index < settings.KeyColumns.size(); ++index) {
+                                result[index] = ColumnNameToIndex[settings.KeyColumns[index].GetName()];
+                            }
+                            return result;
+                        }(),
                         .Lookup = lookupActor,
                     });
 
@@ -2704,6 +2715,9 @@ public:
                 auto lookupActor = lookupInfo.Actors.at(settings.TableId.PathId).LookupActor;
                 lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
                     .KeyIndexes = {},
+                    .DeleteKeyIndexes = {},
+                    .FullKeyIndexes = {},
+                    .PkInFullKeyIndexes = {},
                     .Lookup = lookupActor,
                 });
 

@@ -1202,84 +1202,105 @@ TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
     const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
     const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
     const TConstArrayRef<ui32> secondaryKeyColumns,
-    const TConstArrayRef<ui32> secondaryTableKeyColumns)
+    const TConstArrayRef<ui32> secondaryTableKeyColumns,
+    const TConstArrayRef<ui32> pkInSecondaryTableKeyColumns)
         : PrimaryKeyColumnTypes(primaryKeyColumnTypes)
         , SecondaryKeyColumnTypes(secondaryKeyColumnTypes)
         , SecondaryKeyColumns(secondaryKeyColumns)
-        , SecondaryTableKeyColumns(secondaryTableKeyColumns) {
+        , SecondaryTableKeyColumns(secondaryTableKeyColumns)
+        , PkInSecondaryTableKeyColumns(pkInSecondaryTableKeyColumns) {
+    AFL_ENSURE(PkInSecondaryTableKeyColumns.size() == primaryKeyColumnTypes.size());
+    AFL_ENSURE(PkInSecondaryTableKeyColumns.size() <= secondaryTableKeyColumns.size());
+    AFL_ENSURE(secondaryTableKeyColumns.size() == secondaryKeyColumnTypes.size());
     AFL_ENSURE(secondaryKeyColumns.size() <= secondaryTableKeyColumns.size());
     AFL_ENSURE(secondaryTableKeyColumns.size() <= primaryKeyColumnTypes.size() + secondaryKeyColumnTypes.size());
 }
 
 bool TUniqueSecondaryKeyCollector::AddRow(const TConstArrayRef<TCell> row) {
-    bool rowHasNull = false;
-    {
-        Cells.emplace_back();
-        Cells.back().reserve(SecondaryKeyColumns.size());
-        for (const auto& index : SecondaryTableKeyColumns) {
-            if (row[index].IsNull()) {
-                // In case on unique indexes NULL != NULL,
-                // so we don't need to check if rows with NULLs are unique. 
-                Cells.pop_back();
-                rowHasNull = true;
-                break;
-            }
-            Cells.back().push_back(row[index]);
-        }
+    Cells.emplace_back();
+    Cells.back().reserve(SecondaryTableKeyColumns.size());
+    for (const auto& index : SecondaryTableKeyColumns) {
+        Cells.back().push_back(row[index]);
     }
 
-    const auto& primaryKey = row.first(PrimaryKeyColumnTypes.size());
+    return AddRowImpl();
+}
+
+bool TUniqueSecondaryKeyCollector::AddSecondaryTableRow(const TConstArrayRef<TCell> row) {
+    AFL_ENSURE(row.size() == SecondaryTableKeyColumns.size());
+    Cells.emplace_back();
+    Cells.back().reserve(SecondaryTableKeyColumns.size());
+    for (const auto& cell : row) {
+        Cells.back().push_back(cell);
+    }
+
+    return AddRowImpl();
+}
+
+bool TUniqueSecondaryKeyCollector::AddRowImpl() {
+    const auto& row = TConstArrayRef<TCell>(Cells.back());
+
+    auto createPrimaryKey = [&](TConstArrayRef<TCell> data) {
+        std::vector<TCell> primaryKey(PrimaryKeyColumnTypes.size());
+        for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
+            primaryKey[index] = data[PkInSecondaryTableKeyColumns[index]];
+        }
+        return primaryKey;
+    };
+
+    const auto primaryKey = createPrimaryKey(row);
     const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
 
+    // In case on unique indexes NULL != NULL,
+    // so we don't need to check if rows with NULLs are unique. 
+    const bool rowHasNull = std::any_of(row.begin(), row.end(), [](const TCell& cell) { return cell.IsNull(); });
     if (rowHasNull) {
         // Can't conflict with other keys
         if (iterPrimary != PrimaryToSecondary.end()) {
-            const auto& oldSecondaryKey = iterPrimary->second;
+            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second)).first(SecondaryKeyColumns.size());
             SecondaryToPrimary.erase(oldSecondaryKey);
             PrimaryToSecondary.erase(primaryKey);
         }
     } else {
-        const auto& secondaryTableKey = TConstArrayRef<TCell>(Cells.back());
-        const auto& secondaryKey = secondaryTableKey.first(SecondaryKeyColumns.size());
+        const auto& secondaryKey = row.first(SecondaryKeyColumns.size());
         const auto iterSecondary = SecondaryToPrimary.find(secondaryKey);
 
-        if (iterSecondary != SecondaryToPrimary.end()
-                && 0 == CompareTypedCellVectors(
-                            iterSecondary->second.data(),
+        if (iterSecondary != SecondaryToPrimary.end()) {
+            const auto oldPrimaryKey = createPrimaryKey(Cells.at(iterSecondary->second));
+            if (0 != CompareTypedCellVectors(
+                            oldPrimaryKey.data(),
                             primaryKey.data(),
                             PrimaryKeyColumnTypes.data(),
                             PrimaryKeyColumnTypes.size())) {
-            // Error: duplicate secondary key
-            return false;
+                // Error: duplicate secondary key
+                return false;
+            }
         }
 
         if (iterPrimary != PrimaryToSecondary.end()) {
-            const auto& oldSecondaryKey = iterPrimary->second;
+            const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second)).first(SecondaryKeyColumns.size());
             if (0 == CompareTypedCellVectors(
                     secondaryKey.data(),
                     oldSecondaryKey.data(),
                     SecondaryKeyColumnTypes.data(),
-                    SecondaryKeyColumnTypes.size())) {
+                    secondaryKey.size())) {
                 // Nothing changed. Skip this row.
                 return true;
             }
             SecondaryToPrimary.erase(oldSecondaryKey);
         }
 
-        PrimaryToSecondary[primaryKey] = secondaryKey;
-        SecondaryToPrimary[secondaryKey] = primaryKey;
+        PrimaryToSecondary[std::vector<TCell>(primaryKey.begin(), primaryKey.end())] = Cells.size() - 1;
+        SecondaryToPrimary[std::vector<TCell>(secondaryKey.begin(), secondaryKey.end())] = Cells.size() - 1;
 
-        // TODO: only one set (UniqueWithPkCellsSet, UniqueCellsSet = UniqueWithPkCellsSet.first(secondarykey)) 
-        if (UniqueCellsSet.insert(secondaryKey).second) {
-            UniqueWithPkCellsSet.insert(secondaryTableKey);
-        }
+        UniqueCellsSet.insert(secondaryKey);
     }
 
     return true;
 }
 
-std::pair<TUniqueSecondaryKeyCollector::TKeysSet, TUniqueSecondaryKeyCollector::TKeysSet> TUniqueSecondaryKeyCollector::BuildUniqueSecondaryKeys() && {
-    return {std::move(UniqueCellsSet), std::move(UniqueWithPkCellsSet)};
+TUniqueSecondaryKeyCollector::TKeysSet TUniqueSecondaryKeyCollector::BuildUniqueSecondaryKeys() {
+    return std::move(UniqueCellsSet);
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,

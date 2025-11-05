@@ -107,25 +107,29 @@ public:
         const TConstArrayRef<NScheme::TTypeInfo> primaryKeyColumnTypes,
         const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
         const TConstArrayRef<ui32> secondaryKeyColumns,
-        const TConstArrayRef<ui32> secondaryTableKeyColumns);
+        const TConstArrayRef<ui32> secondaryTableKeyColumns,
+        const TConstArrayRef<ui32> pkInSecondaryTableKeyColumns);
 
     bool AddRow(const TConstArrayRef<TCell> row);
+    bool AddSecondaryTableRow(const TConstArrayRef<TCell> row);
 
     using TKeysSet = THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals>;
 
-    std::pair<TKeysSet, TKeysSet> BuildUniqueSecondaryKeys() &&;
+    TKeysSet BuildUniqueSecondaryKeys();
 
 private:
+    bool AddRowImpl();
+
     const TConstArrayRef<NScheme::TTypeInfo> PrimaryKeyColumnTypes;
     const TConstArrayRef<NScheme::TTypeInfo> SecondaryKeyColumnTypes;
     const TConstArrayRef<ui32> SecondaryKeyColumns;
     const TConstArrayRef<ui32> SecondaryTableKeyColumns;
+    const TConstArrayRef<ui32> PkInSecondaryTableKeyColumns;
 
     std::vector<std::vector<TCell>> Cells;
     TKeysSet UniqueCellsSet;
-    TKeysSet UniqueWithPkCellsSet;
-    THashMap<TConstArrayRef<TCell>, TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
-    THashMap<TConstArrayRef<TCell>, TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
+    THashMap<std::vector<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
+    THashMap<std::vector<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
 };
 
 class IShardedWriteController : public TThrRefBase {

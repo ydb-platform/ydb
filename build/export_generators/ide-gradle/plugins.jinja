@@ -8,10 +8,6 @@ plugins {
 {%- if proto_template %}
     id("com.google.protobuf") version "{{ ver_protobuf }}"
 {%- endif -%}
-{%- if publish %}
-    `maven-publish`
-    `signing`
-{%- endif -%}
 {%- if with_kotlin and kotlin_version %}
     kotlin("jvm") version "{{ kotlin_version }}"
 {%-     if with_kotlinc_plugin_allopen|length %}

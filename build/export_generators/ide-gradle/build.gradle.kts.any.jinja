@@ -78,7 +78,4 @@
 {%- include "[generator]/build.gradle.kts.common.jinja" -%}
 {%- include "[generator]/dependencies.jinja" -%}
 {%- include "extra-tests.gradle.kts" ignore missing -%}
-{%- if publish -%}
-{%-     include 'publish.gradle.kts' ignore missing -%}
-{%- endif -%}
 {%- include "[generator]/debug.jinja" ignore missing -%}

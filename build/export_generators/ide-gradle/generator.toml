@@ -65,9 +65,9 @@ resource_sets-realdir="str"
 resource_sets-globs="list"
 resource_sets-prefix="str"
 
-publish="flag"
-publish_group="str"
-publish_version="str"
+publish="skip"
+publish_group="skip"
+publish_version="skip"
 
 proto_files="list"
 proto_namespace="str"

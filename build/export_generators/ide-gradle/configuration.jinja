@@ -8,14 +8,15 @@ application {
     mainClass.set("{{ mainClass }}")
 }
 
+{% else %}
+configurations.api {
+    isTransitive = false
+}
+
 {%  endif -%}
 java {
     withSourcesJar()
     withJavadocJar()
-}
-
-configurations.api {
-    isTransitive = false
 }
 
 configurations.implementation {

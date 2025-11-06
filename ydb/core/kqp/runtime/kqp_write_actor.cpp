@@ -1878,8 +1878,10 @@ private:
         Y_UNUSED(size);
 
         try {
-            Batcher->AddData(data);
-            DataBuffer.emplace(Batcher->Build());
+            if (!data.empty()) {
+                Batcher->AddData(data);
+                DataBuffer.emplace(Batcher->Build());
+            }
 
             if (checkpoint) {
                 DataBuffer.emplace(*checkpoint);

@@ -1395,7 +1395,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
 
     auto txIter = TransactionsInflight.begin();
     if (txIter->second->ProposeConfig) {
-        Y_ABORT_UNLESS(!ChangeConfig);
+        PQ_ENSURE(!ChangeConfig);
         ChangeConfig =
             MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                               txIter->second->ProposeConfig->Config);
@@ -2279,9 +2279,6 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
     }
 }
 
-//
-// TODO(abcdef): переименовать в ProcessUserActionAndTxs
-//
 void TPartition::ProcessTxsAndUserActs(const TActorContext&)
 {
     if (KVWriteInProgress) {
@@ -2327,79 +2324,8 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
     }
     CurrentBatchSize = 0;
 
-    //if (UserActionAndTxPendingWrite.empty()) {
-    //    LOG_D("Waiting for the commits to arrive");
-    //    return;
-    //}
-
     LOG_D("Try persist");
     RunPersist();
-}
-
-//void TPartition::ProcessTxsAndUserActsOriginal(const TActorContext& ctx)
-//{
-//    if (KVWriteInProgress) {
-//        LOG_D("Writing. Can't process transactions and user actions");
-//        return;
-//    }
-//    if (DeletePartitionState == DELETION_INITED) {
-//        if (!PersistRequest) {
-//            PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
-//        }
-//        ScheduleNegativeReplies();
-//        ScheduleDeletePartitionDone();
-//
-//        AddCmdDeleteRangeForAllKeys(*PersistRequest);
-//
-//        ctx.Send(BlobCache, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
-//        PersistRequest = nullptr;
-//        CurrentPersistRequestSpan = std::move(PersistRequestSpan);
-//        PersistRequestSpan = NWilson::TSpan();
-//        DeletePartitionState = DELETION_IN_PROCESS;
-//        KVWriteInProgress = true;
-//
-//        return;
-//    }
-//    LOG_D("Batching state before ContinueProcessTxsAndUserActs: " << (int)BatchingState);
-//    if (CanProcessUserActionAndTransactionEvents()) {
-//        ContinueProcessTxsAndUserActs(ctx);
-//    }
-//    // Still preprocessing? Waiting for something
-//    if (CanProcessUserActionAndTransactionEvents()) {
-//        LOG_D("Still preprocessing - waiting for something");
-//        return;
-//    }
-//    LOG_D("Batching state after ContinueProcessTxsAndUserActs: " << (int)BatchingState);
-//
-//    // Preprocessing complete;
-//    if (CurrentBatchSize > 0) {
-//        LOG_D("Batch completed (" << CurrentBatchSize << ")");
-//        Send(SelfId(), new TEvPQ::TEvTxBatchComplete(CurrentBatchSize));
-//    }
-//    CurrentBatchSize = 0;
-//
-//    if (UserActionAndTxPendingCommit.empty()) {
-//        // Processing stopped and nothing to commit - finalize
-//        BatchingState = ETxBatchingState::Finishing;
-//    } else {
-//        // Process commit queue
-//        ProcessCommitQueue();
-//    }
-//    // BatchingState can go to Finishing in ContinueProcessTxsAndUserActs. Therefore, it is necessary to check
-//    // the size of the UserActionAndTxPendingCommit queue here.
-//    if (!UserActionAndTxPendingCommit.empty()) {
-//        // Still pending for come commits
-//        LOG_D("Still pending for come commits");
-//        return;
-//    }
-//    LOG_D("Try persist");
-//    // Here we have an empty UserActionAndTxPendingCommit queue and BatchingState is equal to Finishing.
-//    RunPersist();
-//}
-
-bool TPartition::CanProcessUserActionAndTransactionEvents() const
-{
-    return (BatchingState == ETxBatchingState::PreProcessing);
 }
 
 void TPartition::ProcessUserActionAndTxEvents()
@@ -2421,7 +2347,6 @@ void TPartition::ProcessUserActionAndTxEvents()
         switch (std::visit(visitor, front.Event)) {
             case EProcessResult::Continue:
                 MoveUserActionAndTxToPendingCommitQueue();
-                FirstEvent = false;
                 break;
             case EProcessResult::ContinueDrop:
                 UserActionAndTransactionEvents.pop_front();
@@ -2429,7 +2354,6 @@ void TPartition::ProcessUserActionAndTxEvents()
             case EProcessResult::Break:
                 MoveUserActionAndTxToPendingCommitQueue();
                 BatchingState = ETxBatchingState::Finishing;
-                FirstEvent = false;
                 break;
             case EProcessResult::Blocked:
                 BatchingState = ETxBatchingState::Executing;
@@ -2444,8 +2368,7 @@ void TPartition::DumpTheSizeOfInternalQueues() const
 {
     LOG_D("Events: " << UserActionAndTransactionEvents.size() <<
           ", PendingCommits: " << UserActionAndTxPendingCommit.size() <<
-          ", PendingWrites: " << UserActionAndTxPendingWrite.size() <<
-          ", FirstEvent: " << FirstEvent);
+          ", PendingWrites: " << UserActionAndTxPendingWrite.size());
 }
 
 TString GetTransactionType(const TTransaction& tx)
@@ -2482,12 +2405,6 @@ auto TPartition::ProcessUserActionAndTxEvent(TMessage& msg,
 {
     LOG_D("TPartition::ProcessUserActionAndTxEvent(TMessage)");
     return PreProcessUserActionOrTransaction(msg, affectedSourceIdsAndConsumers);
-}
-
-
-void TPartition::MoveUserActionAndTxToPendingCommitQueue()
-{
-    MoveUserActOrTxToCommitState();
 }
 
 void TPartition::ProcessUserActionAndTxPendingCommits() {
@@ -2553,54 +2470,6 @@ void TPartition::ProcessUserActionAndTxPendingCommit(TMessage& msg,
     ExecUserActionOrTransaction(msg, request);
 }
 
-//void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
-//{
-//    PQ_ENSURE(!KVWriteInProgress);
-//
-//    if (WriteCycleSizeEstimate >= MAX_WRITE_CYCLE_SIZE || WriteKeysSizeEstimate >= MAX_KEYS) {
-//        BatchingState = ETxBatchingState::Finishing;
-//        return;
-//    }
-//    while (CanProcessUserActionAndTransactionEvents() && !UserActionAndTransactionEvents.empty()) {
-//        if (ChangingConfig) {
-//            BatchingState = ETxBatchingState::Finishing;
-//            break;
-//        }
-//        auto& front = UserActionAndTransactionEvents.front();
-//        if (TMessage* msg = std::get_if<TMessage>(&front.Event); msg && msg->WaitPreviousWriteSpan) {
-//            msg->WaitPreviousWriteSpan.End();
-//        }
-//        auto visitor = [this, &front](auto& event) {
-//            return this->PreProcessUserActionOrTransaction(event, front.AffectedSourceIdsAndConsumers);
-//        };
-//        switch (std::visit(visitor, front.Event)) {
-//            case EProcessResult::Continue:
-//                MoveUserActOrTxToCommitState();
-//                FirstEvent = false;
-//                break;
-//            case EProcessResult::ContinueDrop:
-//                UserActionAndTransactionEvents.pop_front();
-//                break;
-//            case EProcessResult::Break:
-//                MoveUserActOrTxToCommitState();
-//                BatchingState = ETxBatchingState::Finishing;
-//                FirstEvent = false;
-//                break;
-//            case EProcessResult::Blocked:
-//                BatchingState = ETxBatchingState::Executing;
-//                return;
-//            case EProcessResult::NotReady:
-//                return;
-//        }
-//        CurrentBatchSize += 1;
-//    }
-//    if (UserActionAndTransactionEvents.empty()) {
-//        BatchingState = ETxBatchingState::Executing;
-//        return;
-//    }
-//
-//}
-
 static void AppendToSet(const TVector<TString>& p, THashMap<TString, size_t>& q)
 {
     for (const auto& s : p) {
@@ -2638,21 +2507,15 @@ void TPartition::DeleteAffectedSourceIdsAndConsumers()
         }
     }
 
-    //Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
-    //Y_ABORT_UNLESS(TxAffectedSourcesIds.empty());
-    //Y_ABORT_UNLESS(WriteAffectedSourcesIds.empty());
-    //Y_ABORT_UNLESS(TxAffectedConsumers.empty());
-    //Y_ABORT_UNLESS(SetOffsetAffectedConsumers.empty());
-
     UserActionAndTxPendingWrite.clear();
 }
 
-static void DeleteFromSet(const TVector<TString>& p, THashMap<TString, size_t>& q)
+void TPartition::DeleteFromSet(const TVector<TString>& p, THashMap<TString, size_t>& q) const
 {
     for (const auto& s : p) {
         auto i = q.find(s);
-        Y_ABORT_UNLESS(i != q.end());
-        Y_ABORT_UNLESS(i->second > 0);
+        PQ_ENSURE(i != q.end());
+        PQ_ENSURE(i->second > 0);
         if (--i->second) {
             continue;
         }
@@ -2667,56 +2530,15 @@ void TPartition::DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAnd
     DeleteFromSet(affectedSourceIdsAndConsumers.TxReadConsumers, TxAffectedConsumers);
     DeleteFromSet(affectedSourceIdsAndConsumers.ReadConsumers, SetOffsetAffectedConsumers);
 
-    Y_ABORT_UNLESS(WriteKeysSizeEstimate >= affectedSourceIdsAndConsumers.WriteKeysSize);
+    PQ_ENSURE(WriteKeysSizeEstimate >= affectedSourceIdsAndConsumers.WriteKeysSize);
     WriteKeysSizeEstimate -= affectedSourceIdsAndConsumers.WriteKeysSize;
 }
 
-//
-// TODO(abcdef) переименовать в MoveUserActionAndTxToPendingCommitQueue
-//
-void TPartition::MoveUserActOrTxToCommitState() {
+void TPartition::MoveUserActionAndTxToPendingCommitQueue() {
     auto& front = UserActionAndTransactionEvents.front();
     AppendAffectedSourceIdsAndConsumers(front.AffectedSourceIdsAndConsumers);
     UserActionAndTxPendingCommit.push_back(std::move(front));
     UserActionAndTransactionEvents.pop_front();
-}
-
-void TPartition::ProcessCommitQueue() {
-    CurrentBatchSize = 0;
-
-    PQ_ENSURE(!KVWriteInProgress);
-    if (!PersistRequest) {
-        PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
-    }
-    while (!UserActionAndTxPendingCommit.empty()) {
-        auto& front = UserActionAndTxPendingCommit.front();
-        auto state = ECommitState::Committed;
-
-        if (auto* tx = get_if<TSimpleSharedPtr<TTransaction>>(&front.Event)) {
-            state = tx->Get()->State;
-        }
-
-        switch (state) {
-            case ECommitState::Pending:
-                return;
-            case ECommitState::Aborted:
-                break;
-            case ECommitState::Committed:
-                break;
-        }
-
-        UserActionAndTxPendingWrite.push_back(std::move(front));
-        UserActionAndTxPendingCommit.pop_front();
-
-        auto& event = UserActionAndTxPendingWrite.back().Event;
-        auto visitor = [this, request = PersistRequest.Get()](auto& event) {
-            return this->ExecUserActionOrTransaction(event, request);
-        };
-        std::visit(visitor, event);
-    }
-    if (UserActionAndTxPendingCommit.empty()) {
-        BatchingState = ETxBatchingState::Finishing;
-    }
 }
 
 ui64 TPartition::NextReadCookie()
@@ -2728,9 +2550,6 @@ ui64 TPartition::NextReadCookie()
 }
 
 void TPartition::RunPersist() {
-    //TransactionsInflight.clear();
-
-    //PQ_ENSURE(UserActionAndTxPendingCommit.empty());
     const auto& ctx = ActorContext();
     const auto now = ctx.Now();
     if (!PersistRequest) {
@@ -2764,11 +2583,6 @@ void TPartition::RunPersist() {
     if (TryAddDeleteHeadKeysToPersistRequest()) {
         haveChanges = true;
     }
-
-    LOG_D("haveChanges=" << haveChanges <<
-          ", TxIdHasChanged=" << TxIdHasChanged <<
-          ", AffectedUsers.size=" << AffectedUsers.size() <<
-          ", ChangeConfig=" << (ChangeConfig ? 1 : 0));
 
     if (haveChanges || TxIdHasChanged || !AffectedUsers.empty() || ChangeConfig) {
         WriteCycleStartTime = now;
@@ -3389,15 +3203,9 @@ void TPartition::ExecChangePartitionConfig() {
 }
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) {
-    FirstEvent = true;
     DeleteAffectedSourceIdsAndConsumers();
-    //TxAffectedConsumers.clear();
-    //TxAffectedSourcesIds.clear();
-    //WriteAffectedSourcesIds.clear();
-    //SetOffsetAffectedConsumers.clear();
     BatchingState = ETxBatchingState::PreProcessing;
     WriteCycleSizeEstimate = 0;
-    //WriteKeysSizeEstimate = 0;
 
     if (ChangeConfig) {
         EndChangePartitionConfig(std::move(ChangeConfig->Config),

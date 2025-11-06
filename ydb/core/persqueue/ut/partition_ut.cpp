@@ -336,8 +336,6 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
     Ctx.ConstructInPlace();
     Finalizer.ConstructInPlace(*Ctx);
 
-    //Ctx->EnableDetailedPQLog = true;
-
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
 }

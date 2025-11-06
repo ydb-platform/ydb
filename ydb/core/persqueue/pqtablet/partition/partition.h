@@ -354,9 +354,6 @@ private:
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
-    void ProcessTxsAndUserActsOriginal(const TActorContext& ctx);
-    void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
-    void ProcessCommitQueue();
     void RunPersist();
 
     enum class EProcessResult;
@@ -380,7 +377,6 @@ private:
     void ProcessUserActionAndTxPendingCommit(TMessage& msg,
                                              TEvKeyValue::TEvRequest* request);
 
-    void MoveUserActOrTxToCommitState();
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
@@ -823,10 +819,6 @@ private:
     mutable TMaybe<TString> InitLogPrefix;
     mutable TMaybe<TString> UnknownLogPrefix;
 
-    //template <class T> T& GetUserActionAndTransactionEventsFront();
-    //template <class T> T& GetCurrentEvent();
-    //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
-
     struct TAffectedSourceIdsAndConsumers {
         TVector<TString> TxWriteSourcesIds;
         TVector<TString> WriteSourcesIds;
@@ -839,10 +831,8 @@ private:
 
     void DeleteAffectedSourceIdsAndConsumers();
     void DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    void DeleteFromSet(const TVector<TString>& p, THashMap<TString, size_t>& q) const;
 
-    //
-    // TODO(abcdef): переименовать в ProcessUserActionAndTxEvent
-    //
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
                                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx,
@@ -883,7 +873,6 @@ private:
     EProcessResult ApplyWriteInfoResponse(TTransaction& tx,
                                           TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
-    bool FirstEvent = true;
     bool HaveWriteMsg = false;
     bool HaveCheckDisk = false;
     bool HaveDrop = false;
@@ -1213,7 +1202,6 @@ private:
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
     TDeque<NWilson::TSpan> TxForPersistSpans;
 
-    bool CanProcessUserActionAndTransactionEvents() const;
     ui64 GetCompactedBlobSizeLowerBound() const;
 
     bool CompactRequestedBlob(const TRequestedBlob& requestedBlob,

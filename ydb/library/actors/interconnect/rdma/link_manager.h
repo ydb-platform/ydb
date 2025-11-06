@@ -30,6 +30,10 @@ union ibv_gid {
 
 struct in6_addr;
 
+namespace NInterconnect {
+class TAddress;
+}
+
 namespace NInterconnect::NRdma {
 class TRdmaCtx;
 }
@@ -43,6 +47,12 @@ using TCtxsMap = std::vector<std::pair<ibv_gid, std::shared_ptr<NInterconnect::N
 
 TRdmaCtx* GetCtx(int sockfd);
 TRdmaCtx* GetCtx(const in6_addr& );
+TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr);
 const TCtxsMap& GetAllCtxs();
 bool Init();
+  
+#if not defined(_win32_)
+in6_addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept;
+#endif
+
 }

@@ -27,7 +27,7 @@
 namespace NInterconnect {
     namespace {
         inline int
-        LastSocketError() {
+        LastSocketError() noexcept {
 #if defined(_win_)
             return WSAGetLastError();
 #else
@@ -90,6 +90,27 @@ namespace NInterconnect {
             err = LastSocketError();
         }
         return err;
+    }
+
+    std::variant<TAddress, int> TSocket::GetSockName() const noexcept {
+        sockaddr_storage addr;
+        Zero(addr);
+
+        socklen_t len = sizeof(addr);
+
+        if (getsockname(Descriptor, (sockaddr*)&addr, &len) == -1) {
+            return LastSocketError();
+        }
+
+        if (addr.ss_family == AF_INET) {
+            sockaddr_in* addr_in = (sockaddr_in*)&addr;
+            return TAddress(addr_in->sin_addr, addr_in->sin_port);
+        } else if (addr.ss_family == AF_INET6) {
+            sockaddr_in6* addr_in6 = (sockaddr_in6*)&addr;
+            return TAddress(addr_in6->sin6_addr, addr_in6->sin6_port);
+        } else {
+            return EINVAL;
+        }
     }
 
     /////////////////////////////////////////////////////////////////

@@ -23,6 +23,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/actors/interconnect/ut/lib
+    ydb/library/actors/interconnect/rdma/ut/utils
     ydb/library/actors/interconnect/ut/protos
     ydb/library/actors/testlib
     library/cpp/digest/md5

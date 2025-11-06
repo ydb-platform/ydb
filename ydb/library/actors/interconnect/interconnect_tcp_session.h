@@ -212,7 +212,9 @@ namespace NActors {
                          ui32 nodeId,
                          ui64 lastConfirmed,
                          TDuration deadPeerTimeout,
-                         TSessionParams params);
+                         TSessionParams params,
+                         NInterconnect::NRdma::TQueuePair::TPtr qp,
+                         NInterconnect::NRdma::ICq::TPtr cq);
 
     private:
         friend class TActorBootstrapped<TInputSessionTCP>;
@@ -252,6 +254,8 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
         const ui32 NodeId;
         const TSessionParams Params;
+        NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
         XXH3_state_t XxhashState;
         XXH3_state_t XxhashXdcState;
 
@@ -664,6 +668,7 @@ namespace NActors {
         NHPTimer::STime PartUpdateTimestamp = 0;
 
         NInterconnect::TInterconnectZcProcessor ZcProcessor;
+        NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
 
         void UpdateState(std::optional<EState> newState = std::nullopt) {
             if (!newState || *newState != State) {

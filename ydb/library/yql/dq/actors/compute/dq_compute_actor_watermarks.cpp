@@ -120,8 +120,9 @@ TMaybe<TInstant> TDqComputeActorWatermarks::GetMaxWatermark() const {
 
 TMaybe<TInstant> TDqComputeActorWatermarks::PrepareIdlenessCheck() {
     if (auto notifyTime = Impl.GetNextIdlenessCheckAt()) {
-        if (Impl.AddScheduledIdlenessCheck(*notifyTime))
+        if (Impl.AddScheduledIdlenessCheck(*notifyTime)) {
             return notifyTime;
+        }
     }
     return Nothing();
 }

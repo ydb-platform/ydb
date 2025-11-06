@@ -1616,7 +1616,7 @@ protected:
 
     void ScheduleIdlenessCheck() {
         if (auto checkTime = WatermarksTracker.PrepareIdlenessCheck()) {
-            CA_LOG_T("Schedule next idleness check from " << checkTime);
+            CA_LOG_T("Schedule next idleness check at " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
     }

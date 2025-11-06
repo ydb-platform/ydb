@@ -155,6 +155,12 @@ TComputedStatistics TStatistics::ComputeStatistics() const {
     };
 }
 
+void TStatistics::Merge(const TStatistics& other) {
+    Samples_.insert(Samples_.end(), other.Samples_.begin(), other.Samples_.end());
+    Min_ = std::min(Min_, other.Min_);
+    Max_ = std::max(Max_, other.Max_);
+}
+
 TStatistics TStatistics::operator-(const TStatistics &statsRHS) const {
     auto op = [](double lhs, double rhs) {
         return lhs - rhs;

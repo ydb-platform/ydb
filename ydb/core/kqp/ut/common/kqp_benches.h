@@ -80,11 +80,7 @@ public:
         return Max_;
     }
 
-    void Merge(TStatistics other) {
-        Samples_.insert(Samples_.end(), other.Samples_.begin(), other.Samples_.end());
-        Min_ = std::min(Min_, other.Min_);
-        Max_ = std::min(Max_, other.Max_);
-    }
+    void Merge(const TStatistics& other);
 
     // Operations on two random values, very expensive.
     // Each operation produces cartesian product of all possibilities if

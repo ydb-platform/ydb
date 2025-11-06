@@ -711,6 +711,31 @@ Y_UNIT_TEST(ReturningWithListParameterNotNullColumns) {
     auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     CompareYson(R"([[[1u];["test"]];[[2u];["test2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+    // Test with explicit column names in SELECT and RETURNING
+    const auto queryExplicit = Q_(R"(
+        DECLARE $data2 AS List<Struct<id: UInt64, value: Utf8>>;
+
+        UPSERT INTO test_table
+        SELECT id, value FROM AS_TABLE($data2)
+        RETURNING id, value;
+    )");
+
+    auto params2 = TParamsBuilder()
+        .AddParam("$data2")
+            .BeginList()
+            .AddListItem()
+                .BeginStruct()
+                .AddMember("id").Uint64(3).Build()
+                .AddMember("value").Utf8("test3").Build()
+                .EndStruct()
+            .EndList()
+            .Build()
+        .Build();
+
+    auto result2 = session.ExecuteDataQuery(queryExplicit, TTxControl::BeginTx().CommitTx(), params2).GetValueSync();
+    UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+    CompareYson(R"([[[3u];["test3"]]])", FormatResultSetYson(result2.GetResultSet(0)));
 }
 
 }

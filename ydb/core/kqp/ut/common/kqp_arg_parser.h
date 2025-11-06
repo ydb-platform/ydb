@@ -10,9 +10,7 @@
 #include <regex>
 #include <stdexcept>
 
-
 namespace NKikimr::NKqp {
-
 
 class TArgs {
 public:
@@ -144,24 +142,23 @@ public:
         return Values_.contains(key);
     }
 
-
 private:
     std::map<std::string, std::string> Values_;
 
 private:
-    static void LTrim(std::string &input) {
+    static void LTrim(std::string& input) {
         input.erase(input.begin(), std::find_if(input.begin(), input.end(), [](unsigned char ch) {
             return !std::isspace(ch);
         }));
     }
 
-    static void RTrim(std::string &input) {
+    static void RTrim(std::string& input) {
         input.erase(std::find_if(input.rbegin(), input.rend(), [](unsigned char ch) {
             return !std::isspace(ch);
         }).base(), input.end());
     }
 
-    static void Trim(std::string &input) {
+    static void Trim(std::string& input) {
         LTrim(input);
         RTrim(input);
     }
@@ -243,17 +240,27 @@ private:
         double value = std::stod(match[1]);
         std::string unit = match[2];
 
-        if (unit == "ns") return std::chrono::nanoseconds(static_cast<uint64_t>(value));
-        if (unit == "us") return std::chrono::microseconds(static_cast<uint64_t>(value));
-        if (unit == "ms") return std::chrono::milliseconds(static_cast<uint64_t>(value));
-        if (unit == "s")  return std::chrono::seconds(static_cast<uint64_t>(value));
-        if (unit == "m")  return std::chrono::minutes(static_cast<uint64_t>(value));
-        if (unit == "h")  return std::chrono::hours(static_cast<uint64_t>(value));
+        if (unit == "ns") {
+            return std::chrono::nanoseconds(static_cast<uint64_t>(value));
+        }
+        if (unit == "us") {
+            return std::chrono::microseconds(static_cast<uint64_t>(value));
+        }
+        if (unit == "ms") {
+            return std::chrono::milliseconds(static_cast<uint64_t>(value));
+        }
+        if (unit == "s") {
+            return std::chrono::seconds(static_cast<uint64_t>(value));
+        }
+        if (unit == "m") {
+            return std::chrono::minutes(static_cast<uint64_t>(value));
+        }
+        if (unit == "h") {
+            return std::chrono::hours(static_cast<uint64_t>(value));
+        }
 
         throw std::invalid_argument("Unknown unit");
     }
-
 };
 
-
-}
+} // namespace NKikimr::NKqp

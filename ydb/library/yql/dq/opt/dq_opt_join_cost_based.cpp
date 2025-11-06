@@ -314,7 +314,7 @@ class TOptimizerNativeNew: public IOptimizerNew {
 public:
     TOptimizerNativeNew(
         IProviderContext& ctx,
-        const TOptimizerSettings &optimizerSettings,
+        const TCBOSettings& optimizerSettings,
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
@@ -506,7 +506,7 @@ private:
     }
 
 private:
-    TOptimizerSettings OptimizerSettings_;
+    TCBOSettings OptimizerSettings_;
     TExprContext& ExprCtx;
     bool EnableShuffleElimination;
 
@@ -516,7 +516,7 @@ private:
 
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& pctx,
-    const TOptimizerSettings &settings,
+    const TCBOSettings& settings,
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,

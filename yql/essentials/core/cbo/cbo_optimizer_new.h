@@ -385,7 +385,7 @@ struct IOptimizerNew {
 
 struct TExprContext;
 
-struct TOptimizerSettings {
+struct TCBOSettings {
     ui32 MaxDPhypDPTableSize = 100000;
     ui32 ShuffleEliminationJoinNumCutoff = 14;
 };
@@ -397,7 +397,7 @@ public:
 
     virtual ~IOptimizerFactory() = default;
 
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TOptimizerSettings& settings) const = 0;
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TCBOSettings& settings) const = 0;
 
     struct TPGSettings {
         TLogger Logger = [](const TString&) {};

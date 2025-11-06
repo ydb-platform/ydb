@@ -1,35 +1,33 @@
+#include "kqp_join_topology_generator.h"
+
+#include <library/cpp/testing/common/env.h>
+#include <util/generic/array_size.h>
+#include <util/generic/ptr.h>
+#include <util/stream/file.h>
+#include <util/stream/output.h>
+#include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
+#include <ydb/core/kqp/ut/common/kqp_benches.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <random>
 #include <stdexcept>
 #include <string>
-#include <util/generic/ptr.h>
-#include <util/stream/file.h>
-#include <util/stream/output.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/kqp/ut/common/kqp_benches.h>
-#include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/lib/ydb_cli/common/format.h>
-
-#include <library/cpp/testing/common/env.h>
-
-#include "kqp_join_topology_generator.h"
-
-
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
-    std::optional<TString> ExplainQuery(NYdb::NQuery::TSession session, const std::string &query) {
+    std::optional<TString> ExplainQuery(NYdb::NQuery::TSession session, const std::string& query) {
         auto explainRes = session.ExecuteQuery(query,
           NYdb::NQuery::TTxControl::NoTx(),
           NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
@@ -60,16 +58,15 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return true;
     }
 
-    void JustPrintPlan(const TString &plan) {
-      NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
-          NYdb::NConsoleClient::EDataFormat::PrettyTable,
-          /*analyzeMode=*/true, Cout, /*maxWidth=*/0
-      );
+    void JustPrintPlan(const TString& plan) {
+        NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(
+            NYdb::NConsoleClient::EDataFormat::PrettyTable,
+            /*analyzeMode=*/true, Cout, /*maxWidth=*/0);
 
-      queryPlanPrinter.Print(plan);
+        queryPlanPrinter.Print(plan);
     }
 
-    std::string ConfigureQuery(const std::string &query, bool enableShuffleElimination = false, unsigned optLevel = 2) {
+    std::string ConfigureQuery(const std::string& query, bool enableShuffleElimination = false, unsigned optLevel = 2) {
         std::string queryWithShuffleElimination = "PRAGMA ydb.OptShuffleElimination=\"";
         queryWithShuffleElimination += enableShuffleElimination ? "true" : "false";
         queryWithShuffleElimination += "\";\n";
@@ -97,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             return std::nullopt;
         }
 
-        assert(savedPlan);
+        Y_ASSERT(savedPlan);
         JustPrintPlan(*savedPlan);
         Cout << "--------------------------------------------------------------------------\n";
 
@@ -146,7 +143,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         std::optional<TStatistics> withShuffleElimination;
         if (resultType.contains("SE")) {
             Cout << "--------------------------------- CBO+SE ---------------------------------\n";
-            withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
+            withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true, /*optLevel=*/2));
 
             if (resultType.contains("0")) {
                 results.emplace("SE-0", (*withShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
@@ -181,7 +178,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     std::unique_ptr<TKikimrRunner> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
         TVector<NKikimrKqp::TKqpSetting> settings;
 
-        assert(!stats.empty());
+        Y_ASSERT(!stats.empty());
 
         NKikimrKqp::TKqpSetting setting;
         setting.SetName("OptOverrideStatistics");
@@ -233,7 +230,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return BenchmarkShuffleElimination(config, session, resultType, query);
     }
 
-
     template <typename TValue>
     void OverrideWithArg(std::string key, TArgs args, auto& value) {
         if (args.HasArg(key)) {
@@ -241,7 +237,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
     }
 
-    void OverrideRepeatedTestConfig(std::string prefix, TArgs args, TRepeatedTestConfig &config) {
+    void OverrideRepeatedTestConfig(std::string prefix, TArgs args, TRepeatedTestConfig& config) {
         OverrideWithArg<uint64_t>(prefix + ".MinRepeats", args, config.MinRepeats);
         OverrideWithArg<uint64_t>(prefix + ".MaxRepeats", args, config.MaxRepeats);
         OverrideWithArg<std::chrono::nanoseconds>(prefix + ".Timeout", args, config.Timeout);
@@ -273,43 +269,22 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return config;
     }
 
-    void DumpBenchmarkConfig(IOutputStream &OS, TBenchmarkConfig config) {
-        OS << "config = {\n";
-        OS << "    .Warmup = {\n";
-        OS << "         .MinRepeats = " << config.Warmup.MinRepeats << ",\n";
-        OS << "         .MaxRepeats = " << config.Warmup.MaxRepeats << ",\n";
-        OS << "         .Timeout = " << TimeFormatter::Format(config.Warmup.Timeout) << "\n";
-        OS << "    },\n\n";
-        OS << "    .Bench = {\n";
-        OS << "        .MinRepeats = " << config.Bench.MinRepeats << ",\n";
-        OS << "        .MaxRepeats = " << config.Bench.MaxRepeats << ",\n";
-        OS << "        .Timeout = " << TimeFormatter::Format(config.Bench.Timeout) << "\n";
-        OS << "    },\n\n";
-        OS << "    .SingleRunTimeout = " << TimeFormatter::Format(config.SingleRunTimeout) << ",\n";
-        OS << "    .MADThreshold = " << config.MADThreshold << "\n";
-        OS << "}\n";
+    void DumpBenchmarkConfig(IOutputStream& os, TBenchmarkConfig config) {
+        os << "config = {\n";
+        os << "    .Warmup = {\n";
+        os << "         .MinRepeats = " << config.Warmup.MinRepeats << ",\n";
+        os << "         .MaxRepeats = " << config.Warmup.MaxRepeats << ",\n";
+        os << "         .Timeout = " << TimeFormatter::Format(config.Warmup.Timeout) << "\n";
+        os << "    },\n\n";
+        os << "    .Bench = {\n";
+        os << "        .MinRepeats = " << config.Bench.MinRepeats << ",\n";
+        os << "        .MaxRepeats = " << config.Bench.MaxRepeats << ",\n";
+        os << "        .Timeout = " << TimeFormatter::Format(config.Bench.Timeout) << "\n";
+        os << "    },\n\n";
+        os << "    .SingleRunTimeout = " << TimeFormatter::Format(config.SingleRunTimeout) << ",\n";
+        os << "    .MADThreshold = " << config.MADThreshold << "\n";
+        os << "}\n";
     }
-
-
-    class TDegreeDistributionGenerator {
-    public:
-        virtual std::vector<int> Initialize(TArgs args) = 0;
-        virtual std::vector<int> GenerateDegreeSequence(TRNG &rng) = 0;
-
-        virtual ~TDegreeDistributionGenerator() = default;
-    };
-
-    class TTopologyTester {
-    public:
-        virtual void Initialize(TArgs args) = 0;
-        virtual TRelationGraph ProduceGraph(TRNG &rng) = 0;
-        virtual void DumpParamsHeader(IOutputStream &OS) = 0;
-        virtual void DumpParams(IOutputStream &OS) = 0;
-        virtual void Loop(std::function<void()>) {}
-
-        virtual ~TTopologyTester() = default;
-    };
-
 
     TPitmanYorConfig GetPitmanYorConfig(TArgs args) {
         return TPitmanYorConfig{
@@ -337,7 +312,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         static TBenchState fromHex(const std::string& hex) {
             TBenchState state;
             ui32* parts[] = {&state.Seed, &state.TopologyCounter, &state.MCMCCounter, &state.KeyCounter};
-            for (ui32 i = 0; i < 4; ++ i) {
+            for (ui32 i = 0; i < Y_ARRAY_SIZE(parts); ++ i) {
                 *parts[i] = std::stoul(hex.substr(i * 8, 8), nullptr, 16);
             }
 
@@ -355,7 +330,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         std::string OutputDir;
         std::map<std::string, TUnbufferedFileOutput> Streams = {};
-
     };
 
     TTestContext CreateTestContext(TArgs args, std::string outputDir = "") {
@@ -377,10 +351,10 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        return { std::move(kikimr), std::move(db), std::move(session), state, std::move(rng), outputDir };
+        return {std::move(kikimr), std::move(db), std::move(session), state, std::move(rng), outputDir};
     }
 
-    std::string WriteGraph(TTestContext &ctx, ui32 graphID, const TRelationGraph &graph) {
+    std::string WriteGraph(TTestContext& ctx, ui32 graphID, const TRelationGraph& graph) {
         if (ctx.OutputDir.empty()) {
             return "";
         }
@@ -399,10 +373,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return graphName;
     }
 
-    void WriteAllStats(TTestContext &ctx, const std::string& prefix,
+    void WriteAllStats(TTestContext& ctx, const std::string& prefix,
                        const std::string& header, const std::string& params,
                        const std::map<std::string, TStatistics>& stats) {
-
         if (ctx.OutputDir.empty()) {
             return;
         }
@@ -411,16 +384,16 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             std::filesystem::create_directories(ctx.OutputDir);
         }
 
-        for (const auto &[key, stat]: stats) {
+        for (const auto& [key, stat] : stats) {
             std::string name = prefix + key;
 
             if (!ctx.Streams.contains(name)) {
                 auto filename = TString(ctx.OutputDir + "/" + name + ".csv");
-                auto &os = ctx.Streams.emplace(name, TUnbufferedFileOutput(filename)).first->second;
+                auto& os = ctx.Streams.emplace(name, TUnbufferedFileOutput(filename)).first->second;
                 os << header << "\n";
             }
 
-            auto &os = ctx.Streams.find(name)->second;
+            auto& os = ctx.Streams.find(name)->second;
 
             os << params << ",";
             stat.ComputeStatistics().ToCSV(os);
@@ -430,7 +403,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
     void AccumulateAllStats(std::map<std::string, TStatistics>& cummulative,
                             const std::map<std::string, TStatistics>& stats) {
-        for (auto &[key, stat] : stats) {
+        for (auto& [key, stat] : stats) {
             if (!cummulative.contains(key)) {
                 cummulative.emplace(key, stat);
             }
@@ -439,12 +412,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
     }
 
-
-    using TTopologyFunction = TRelationGraph (*) (TRNG rng, ui32 n, double mu, double sigma);
+    using TTopologyFunction = TRelationGraph (*)(TRNG& rng, ui32 n, double mu, double sigma);
     template <auto TTrivialTopologyGenerator>
     TTopologyFunction GetTrivialTopology() {
-        return []([[maybe_unused]] TRNG rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
-            return TTrivialTopologyGenerator(rng, n);
+        return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
+            return TTrivialTopologyGenerator(n);
         };
     }
 
@@ -454,19 +426,21 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         if (topologyName == "path") {
-            return GetTrivialTopology<GenerateLine>();
+            return GetTrivialTopology<GeneratePath>();
         }
 
         if (topologyName == "clique") {
-            return GetTrivialTopology<GenerateFullyConnected>();
+            return GetTrivialTopology<GenerateClique>();
         }
 
         if (topologyName == "random-tree") {
-            return GetTrivialTopology<GenerateRandomTree>();
+            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
+                return GenerateRandomTree(rng, n);
+            };
         }
 
         if (topologyName == "mcmc") {
-            return []([[maybe_unused]] TRNG rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
+            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
                 Cout << "================================= METRICS ================================\n";
                 auto sampledDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 Cout << "sampled degrees: " << JoinSeq(", ", sampledDegrees) << "\n";
@@ -480,7 +454,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         }
 
         if (topologyName == "chung-lu") {
-            return []([[maybe_unused]] TRNG rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
+            return []([[maybe_unused]] TRNG& rng, ui32 n, [[maybe_unused]] double mu, [[maybe_unused]] double sigma) {
                 Cout << "================================= METRICS ================================\n";
                 auto initialDegrees = GenerateLogNormalDegrees(rng, n, mu, sigma);
                 Cout << "initial degrees: " << JoinSeq(", ", initialDegrees) << "\n";
@@ -493,7 +467,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         throw std::runtime_error("Unknown topology: '" + topologyName + "'");
     }
 
-    void RunBenches(TTestContext &ctx, TBenchmarkConfig config, TArgs args) {
+    void RunBenches(TTestContext& ctx, TBenchmarkConfig config, TArgs args) {
         std::string resultType = args.GetStringOrDefault("result", "SE");
 
         ui64 topologyGenerationRepeats = args.GetArgOrDefault<uint64_t>("gen-n", "1").GetValue();
@@ -587,17 +561,14 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                 }
                             }
 
-
                             WriteAllStats(ctx, "aggregate-", headerAggregate, commonParams.str(), aggregate);
                         }
-                        stop:;
+                    stop:;
                     }
                 }
             }
         }
     }
-
-
 
     Y_UNIT_TEST(Benchmark) {
         TArgs args{GetTestParam("TOPOLOGY")};
@@ -614,7 +585,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         RunBenches(ctx, config, args);
     }
 
-    void Check(TRunningStatistics& stats, ui32 n, double min, double max, double median, double mad, double q1, double q3, double iqr, double mean, double stdev) {
+    void CheckStats(TRunningStatistics& stats, ui32 n, double min, double max, double median, double mad, double q1, double q3, double iqr, double mean, double stdev) {
         const double TOLERANCE = 0.0001;
 
         UNIT_ASSERT_EQUAL(stats.GetN(), n);
@@ -641,79 +612,77 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         UNIT_ASSERT_DOUBLES_EQUAL(report.Stdev, stdev, TOLERANCE);
     }
 
-
     Y_UNIT_TEST(TStatistics) {
         TRunningStatistics stats;
 
         stats.AddValue(1);
         stats.AddValue(1);
-        Check(stats, 2, 1, 1, 1, 0, 1, 1, 0, 1, 0);
+        CheckStats(stats, 2, 1, 1, 1, 0, 1, 1, 0, 1, 0);
 
         stats.AddValue(1);
-        Check(stats, 3, 1, 1, 1, 0, 1, 1, 0, 1, 0);
+        CheckStats(stats, 3, 1, 1, 1, 0, 1, 1, 0, 1, 0);
 
         stats.AddValue(1);
-        Check(stats, 4, 1, 1, 1, 0, 1, 1, 0, 1, 0);
+        CheckStats(stats, 4, 1, 1, 1, 0, 1, 1, 0, 1, 0);
 
         stats.AddValue(3);
-        Check(stats, 5, 1, 3, 1, 0, 1, 1, 0, 1.4000, 0.8944);
+        CheckStats(stats, 5, 1, 3, 1, 0, 1, 1, 0, 1.4000, 0.8944);
 
         stats.AddValue(5);
-        Check(stats, 6, 1, 5, 1, 0, 1, 2.5000, 1.5000, 2, 1.6733);
+        CheckStats(stats, 6, 1, 5, 1, 0, 1, 2.5000, 1.5000, 2, 1.6733);
 
         stats.AddValue(7);
-        Check(stats, 7, 1, 7, 1, 0, 1, 4, 3, 2.7143, 2.4300);
+        CheckStats(stats, 7, 1, 7, 1, 0, 1, 4, 3, 2.7143, 2.4300);
 
         stats.AddValue(7);
-        Check(stats, 8, 1, 7, 2, 1, 1, 5.5000, 4.5000, 3.2500, 2.7124);
+        CheckStats(stats, 8, 1, 7, 2, 1, 1, 5.5000, 4.5000, 3.2500, 2.7124);
 
         stats.AddValue(8);
-        Check(stats, 9, 1, 8, 3, 2, 1, 7, 6, 3.7778, 2.9907);
+        CheckStats(stats, 9, 1, 8, 3, 2, 1, 7, 6, 3.7778, 2.9907);
 
         stats.AddValue(100);
-        Check(stats, 10, 1, 100, 4, 3, 1, 7, 6, 13.4000, 30.5585);
+        CheckStats(stats, 10, 1, 100, 4, 3, 1, 7, 6, 13.4000, 30.5585);
 
         stats.AddValue(12);
-        Check(stats, 11, 1, 100, 5, 4, 1, 7.5000, 6.5000, 13.2727, 28.9934);
+        CheckStats(stats, 11, 1, 100, 5, 4, 1, 7.5000, 6.5000, 13.2727, 28.9934);
 
         stats.AddValue(15);
-        Check(stats, 12, 1, 100, 6, 5, 1, 9, 8, 13.4167, 27.6486);
+        CheckStats(stats, 12, 1, 100, 6, 5, 1, 9, 8, 13.4167, 27.6486);
 
         stats.AddValue(11);
-        Check(stats, 13, 1, 100, 7, 5, 1, 11, 10, 13.2308, 26.4800);
+        CheckStats(stats, 13, 1, 100, 7, 5, 1, 11, 10, 13.2308, 26.4800);
 
         stats.AddValue(18);
-        Check(stats, 14, 1, 100, 7, 5.5000, 1.5000, 11.7500, 10.2500, 13.5714, 25.4731);
+        CheckStats(stats, 14, 1, 100, 7, 5.5000, 1.5000, 11.7500, 10.2500, 13.5714, 25.4731);
 
         stats.AddValue(19);
-        Check(stats, 15, 1, 100, 7, 6, 2, 13.5000, 11.5000, 13.9333, 24.5865);
+        CheckStats(stats, 15, 1, 100, 7, 6, 2, 13.5000, 11.5000, 13.9333, 24.5865);
 
         stats.AddValue(14);
-        Check(stats, 16, 1, 100, 7.5000, 6.5000, 2.5000, 14.2500, 11.7500, 13.9375, 23.7528);
+        CheckStats(stats, 16, 1, 100, 7.5000, 6.5000, 2.5000, 14.2500, 11.7500, 13.9375, 23.7528);
 
         stats.AddValue(21);
-        Check(stats, 17, 1, 100, 8, 7, 3, 15, 12, 14.3529, 23.0623);
+        CheckStats(stats, 17, 1, 100, 8, 7, 3, 15, 12, 14.3529, 23.0623);
 
         stats.AddValue(9);
-        Check(stats, 18, 1, 100, 8.5000, 6, 3.5000, 14.7500, 11.2500, 14.0556, 22.4092);
+        CheckStats(stats, 18, 1, 100, 8.5000, 6, 3.5000, 14.7500, 11.2500, 14.0556, 22.4092);
 
         stats.AddValue(25);
-        Check(stats, 19, 1, 100, 9, 6, 4, 16.5000, 12.5000, 14.6316, 21.9221);
+        CheckStats(stats, 19, 1, 100, 9, 6, 4, 16.5000, 12.5000, 14.6316, 21.9221);
 
         stats.AddValue(17);
-        Check(stats, 20, 1, 100, 10, 7, 4.5000, 17.2500, 12.7500, 14.7500, 21.3440);
+        CheckStats(stats, 20, 1, 100, 10, 7, 4.5000, 17.2500, 12.7500, 14.7500, 21.3440);
 
         stats.AddValue(18);
-        Check(stats, 21, 1, 100, 11, 7, 5, 18, 13, 14.9048, 20.8156);
+        CheckStats(stats, 21, 1, 100, 11, 7, 5, 18, 13, 14.9048, 20.8156);
 
         stats.AddValue(10);
-        Check(stats, 22, 1, 100, 10.5000, 7, 5.5000, 17.7500, 12.2500, 14.6818, 20.3409);
+        CheckStats(stats, 22, 1, 100, 10.5000, 7, 5.5000, 17.7500, 12.2500, 14.6818, 20.3409);
 
         stats.AddValue(22);
-        Check(stats, 23, 1, 100, 11, 7, 6, 18, 12, 15, 19.9317);
+        CheckStats(stats, 23, 1, 100, 11, 7, 6, 18, 12, 15, 19.9317);
     }
 
-}
+} // Y_UNIT_TEST_SUITE(KqpJoinTopology)
 
-}
-}
+} // namespace NKikimr::NKqp

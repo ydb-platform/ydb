@@ -1,27 +1,21 @@
 #pragma once
 
-#include <limits>
-#include <numeric>
-#include <random>
 #include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/ylimits.h>
 #include <util/stream/output.h>
 #include <util/system/types.h>
 
-#include <chrono>
-#include <cassert>
 #include <algorithm>
-#include <queue>
-#include <cmath>
+#include <chrono>
 #include <iomanip>
-
+#include <queue>
+#include <random>
 
 namespace NKikimr::NKqp {
 
-
 template <typename Lambda>
-ui64 MeasureTimeNanos(Lambda &&lambda) {
+ui64 MeasureTimeNanos(Lambda&& lambda) {
     namespace Nsc = std::chrono;
     using TClock = Nsc::high_resolution_clock;
 
@@ -29,7 +23,6 @@ ui64 MeasureTimeNanos(Lambda &&lambda) {
     lambda();
     return Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
 }
-
 
 struct TComputedStatistics {
     ui64 N;
@@ -46,16 +39,14 @@ struct TComputedStatistics {
     double Stdev;
 
     static std::string GetCSVHeader();
-    void ToCSV(IOutputStream &os) const;
+    void ToCSV(IOutputStream& os) const;
 };
-
 
 double CalculatePercentile(const std::vector<double>& data, double percentile);
 double CalculateMedian(std::vector<double>& data);
 double CalculateMAD(const std::vector<double>& data, double median, std::vector<double>& storage);
 double CalculateMean(const std::vector<double>& data);
 double CalculateSampleStdDev(const std::vector<double>& data, double mean);
-
 
 class TStatistics {
 public:
@@ -85,14 +76,14 @@ public:
     // Operations on two random values, very expensive.
     // Each operation produces cartesian product of all possibilities if
     // it's small enough or fallbacks to Monte Carlo methods if not.
-    TStatistics operator-(const TStatistics &rhs) const;
-    TStatistics operator+(const TStatistics &rhs) const;
-    TStatistics operator*(const TStatistics &rhs) const;
-    TStatistics operator/(const TStatistics &rhs) const;
+    TStatistics operator-(const TStatistics& rhs) const;
+    TStatistics operator+(const TStatistics& rhs) const;
+    TStatistics operator*(const TStatistics& rhs) const;
+    TStatistics operator/(const TStatistics& rhs) const;
 
     // Only gives precisely correct min & max if you map with monotonic function
     template <typename TMapLambda>
-    TStatistics Map(TMapLambda map) {
+    TStatistics Map(TMapLambda&& map) {
         std::vector<double> samples;
         double min = std::numeric_limits<double>::max();
         double max = std::numeric_limits<double>::min();
@@ -105,7 +96,7 @@ public:
             max = std::max(newValue, max);
         }
 
-        double candidates[] = { min, max, map(Min_), map(Max_) };
+        double candidates[] = {min, max, map(Min_), map(Max_)};
         return {
             std::move(samples),
             *std::min_element(candidates, candidates + Y_ARRAY_SIZE(candidates)),
@@ -114,7 +105,7 @@ public:
     }
 
     template <typename TFilterLambda>
-    TStatistics Filter(TFilterLambda &&filter) const {
+    TStatistics Filter(TFilterLambda&& filter) const {
         std::vector<double> samples;
 
         // That's an upper bound since this function can only remove elements.
@@ -141,7 +132,6 @@ public:
         return {std::move(samples), globalMin, globalMax};
     }
 
-
 private:
     mutable std::vector<double> Samples_;
     double Min_;
@@ -150,8 +140,7 @@ private:
     // This lets us operate on two random values, it computes distribution of values after arbitrary operation
     template <typename TCombiner>
     std::vector<double>
-        Combine(const TStatistics& rhs, TCombiner&& combine, ui64 maxSamples = 1e8) const {
-
+    Combine(const TStatistics& rhs, TCombiner&& combine, ui64 maxSamples = 1e8) const {
         std::vector<double> combined;
 
         ui64 cartesianProductSize = Samples_.size() * rhs.Samples_.size();
@@ -184,9 +173,7 @@ private:
 
         return combined;
     }
-
 };
-
 
 class TRunningStatistics {
 public:
@@ -215,17 +202,17 @@ public:
     }
 
     double GetMin() const {
-        assert(Min_);
+        Y_ASSERT(Min_);
         return *Min_;
     }
 
     double GetMax() const {
-        assert(Max_);
+        Y_ASSERT(Max_);
         return *Max_;
     }
 
     TStatistics GetStatistics() {
-        assert(GetN() > 0);
+        Y_ASSERT(GetN() > 0);
         return {Samples_, *Min_, *Max_};
     }
 
@@ -245,16 +232,13 @@ private:
     std::optional<double> Max_;
 };
 
-
-
 class TimeFormatter {
 public:
     static std::string Format(uint64_t valueNs, ui64 uncertaintyNs);
     static std::string Format(uint64_t valueNs);
 };
 
-void DumpTimeStatistics(const TComputedStatistics &stats, IOutputStream &OS);
-
+void DumpTimeStatistics(const TComputedStatistics& stats, IOutputStream& os);
 
 struct TRepeatedTestConfig {
     ui64 MinRepeats;
@@ -263,8 +247,8 @@ struct TRepeatedTestConfig {
 };
 
 template <typename TLambda>
-std::optional<TStatistics> RepeatedTest(TRepeatedTestConfig config, ui64 singleRunTimeout, double thresholdMAD, TLambda &&lambda) {
-    assert(config.MinRepeats >= 1);
+std::optional<TStatistics> RepeatedTest(TRepeatedTestConfig config, ui64 singleRunTimeout, double thresholdMAD, TLambda&& lambda) {
+    Y_ASSERT(config.MinRepeats >= 1);
 
     TRunningStatistics stats;
     do {
@@ -288,7 +272,6 @@ std::optional<TStatistics> RepeatedTest(TRepeatedTestConfig config, ui64 singleR
     return std::move(stats).GetStatistics();
 }
 
-
 struct TBenchmarkConfig {
     TRepeatedTestConfig Warmup;
     TRepeatedTestConfig Bench;
@@ -297,7 +280,7 @@ struct TBenchmarkConfig {
 };
 
 template <typename Lambda>
-std::optional<TStatistics> Benchmark(TBenchmarkConfig config, Lambda &&lambda) {
+std::optional<TStatistics> Benchmark(TBenchmarkConfig config, Lambda&& lambda) {
     if (config.Warmup.MaxRepeats != 0) {
         auto warmupStats = RepeatedTest(config.Warmup, config.SingleRunTimeout, config.MADThreshold, lambda);
         if (!warmupStats) {

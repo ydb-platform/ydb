@@ -3,37 +3,34 @@
 #include <util/stream/output.h>
 #include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
 
-#include <vector>
-#include <cassert>
+#include <queue>
 #include <random>
 #include <set>
-#include <queue>
-
+#include <vector>
 
 namespace NKikimr::NKqp {
 
-
 using TRNG = TSerializableMT19937;
-
 
 class TLexicographicalNameGenerator {
 public:
-    static std::string getName(unsigned ID, bool lowerCase = true) {
-        if (ID < Base_)
-            return std::string(1, fromDigit(ID, lowerCase));
+    static std::string getName(unsigned id, bool lowerCase = true) {
+        if (id < Base_) {
+            return std::string(1, fromDigit(id, lowerCase));
+        }
 
-        ID -= Base_;
+        id -= Base_;
 
         unsigned count = 1;
         unsigned step = Base_;
-        for (; ID >= step;) {
-            ID -= step;
+        for (; id >= step;) {
+            id -= step;
             step *= step;
             count *= 2;
         }
 
         std::string result(count, fromDigit(Base_ - 1, lowerCase));
-        return result + fromNumber(ID, result.size(), lowerCase);
+        return result + fromNumber(id, result.size(), lowerCase);
     }
 
 private:
@@ -48,29 +45,25 @@ private:
     }
 
     static char fromDigit(unsigned value, bool lowerCase) {
-        assert(0 <= value && value < Base_);
+        Y_ASSERT(0 <= value && value < Base_);
         return (lowerCase ? 'a' : 'A') + value;
     }
 
     static constexpr unsigned Base_ = 'z' - 'a' + 1;
 };
 
-
-
-
 struct TPitmanYorConfig {
     double Alpha;
     double Theta;
 
-    void DumpParamsHeader(IOutputStream &OS) {
-        OS << "alpha,theta";
+    void DumpParamsHeader(IOutputStream& os) {
+        os << "alpha,theta";
     }
 
-    void DumpParams(IOutputStream &OS) {
-        OS << Alpha << "," << Theta;
+    void DumpParams(IOutputStream& os) {
+        os << Alpha << "," << Theta;
     }
 };
-
 
 class TTable {
 public:
@@ -86,7 +79,6 @@ public:
 private:
     unsigned NumColumns_;
 };
-
 
 class TSchema {
 public:
@@ -119,7 +111,6 @@ private:
     std::vector<TTable> Tables_;
 };
 
-
 class TRelationGraph {
 public:
     TRelationGraph(unsigned numNodes)
@@ -128,80 +119,22 @@ public:
     {
     }
 
-    static TRelationGraph FromPrufer(const std::vector<unsigned>& prufer);
-
     void Connect(unsigned lhs, unsigned rhs);
-
-    void Disconnect(unsigned u, unsigned v) {
-        auto& adjacencyU = AdjacencyList_[u];
-        auto& adjacencyV = AdjacencyList_[v];
-        adjacencyU.erase(std::remove_if(adjacencyU.begin(), adjacencyU.end(), [v](TEdge edge) { return edge.Target == v; }), adjacencyU.end());
-        adjacencyV.erase(std::remove_if(adjacencyV.begin(), adjacencyV.end(), [u](TEdge edge) { return edge.Target == u; }), adjacencyV.end());
-
-    }
-
-    bool HasEdge(unsigned u, unsigned v) const {
-        for (ui32 i = 0; i < AdjacencyList_[u].size(); ++i) {
-            if (AdjacencyList_[u][i].Target == v) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    std::vector<int> FindComponents() const {
-        std::vector<int> component(GetN(), -1);
-        int numComponents = 0;
-
-        for (unsigned start = 0; start < GetN(); ++ start) {
-            if (component[start] != -1) {
-                continue;
-            }
-
-            std::queue<int> queue;
-            queue.push(start);
-            component[start] = numComponents;
-
-            while (!queue.empty()) {
-                unsigned u = queue.front();
-                queue.pop();
-                for (TEdge edge : AdjacencyList_[u]) {
-                    unsigned v = edge.Target;
-                    if (component[v] == -1) {
-                        component[v] = numComponents;
-                        queue.push(v);
-                    }
-                }
-            }
-
-            ++ numComponents;
-        }
-
-        return component;
-    }
-
-    int NumComponents() const {
-        auto comp = FindComponents();
-        return comp.empty() ? 0 : *std::max_element(comp.begin(), comp.end()) + 1;
-    }
-
-    bool IsConnected() const {
-        return NumComponents() == 1;
-    }
-
-    int NumEdges() const {
-        int count = 0;
-        for (const auto& adjacency : AdjacencyList_) {
-            count += adjacency.size();
-        }
-        return count / 2;
-    }
-
+    void Disconnect(unsigned u, unsigned v);
+    bool HasEdge(unsigned u, unsigned v) const;
 
     std::string MakeQuery() const;
 
-    void DumpGraph(IOutputStream &OS) const;
+    ui32 GetNumEdges() const;
+    unsigned GetN() const {
+        return AdjacencyList_.size();
+    }
+
+    std::vector<int> FindComponents() const;
+    int GetNumComponents() const;
+    bool IsConnected() const {
+        return GetNumComponents() == 1;
+    }
 
     const TSchema& GetSchema() const {
         return Schema_;
@@ -209,24 +142,24 @@ public:
 
     std::vector<int> GetDegrees() const;
 
-    unsigned GetN() const {
-        return AdjacencyList_.size();
-    }
-
+    // Reorder in connected order, meaning that first N vertices form
+    // a connected subgraph if the whole graph is connected. This is used
+    // to ensure that each JOIN clause only mentions tables that where
+    // already joined (or FROM clause)
     void ReorderDFS();
 
-    void Rename(const std::vector<int> &oldToNew);
+    // Update vertex numbering accroding to oldToNew map, primarily
+    // used to reorder graph in connected subgraphs-first order.
+    void Rename(const std::vector<int>& oldToNew);
 
-    void SetupKeysPitmanYor(TRNG &mt, TPitmanYorConfig config);
+    // Update keys for the whole graph accroding to Pitman-Yor distribution, 
+    // where degree is distributed into clusters and each cluster means
+    // that that number of edges joins this particular node with the same key
+    void SetupKeysPitmanYor(TRNG& rng, TPitmanYorConfig config);
 
-    ui32 GetEdges() {
-        ui32 numEdges = 0;
-        for (auto edges : AdjacencyList_) {
-            numEdges += edges.size();
-        }
-
-        return numEdges;
-    }
+    // Dump graph in undirected graphviz dot format. Neato is recommended
+    // for layouting such graphs. 
+    void DumpGraph(IOutputStream& os) const;
 
 public:
     struct TEdge {
@@ -246,7 +179,6 @@ private:
     TSchema Schema_;
 };
 
-
 class TSchemaStats {
 public:
     struct TTableStats {
@@ -260,7 +192,7 @@ public:
     {
     }
 
-    static TSchemaStats MakeRandom(TRNG &mt, const TSchema &schema, unsigned a, unsigned b);
+    static TSchemaStats MakeRandom(TRNG& rng, const TSchema& schema, unsigned a, unsigned b);
 
     std::string ToJSON() const;
 
@@ -268,31 +200,45 @@ private:
     std::vector<TTableStats> Stats_;
 };
 
+// Basic topologies, this all have fixed node layouts (not random)
+TRelationGraph GeneratePath(unsigned numNodes);
+TRelationGraph GenerateStar(unsigned numNodes);
+TRelationGraph GenerateClique(unsigned numNodes);
 
-void NormalizeProbabilities(std::vector<double>& probabilities);
+// Generate a tree from Prufer sequence (each labeled tree has a
+// corresponding unique sequence)
+TRelationGraph GenerateTreeFromPruferSequence(const std::vector<unsigned>& prufer);
 
+// Uniformly random trees based on random Prufer sequence
+TRelationGraph GenerateRandomTree(TRNG& rng, unsigned numNodes);
+
+// Random graph using Chung Lu model that approximates graph with given degrees
+TRelationGraph GenerateRandomChungLuGraph(TRNG& rng, const std::vector<int>& degrees);
+
+// Sample a degree sequence from a given probability distribution
 std::vector<int> SampleFromPMF(
     TRNG& rng,
     const std::vector<double>& probabilities,
     int numVertices, int minDegree);
 
+// Sample a degree sequence from lognormal distribution
 std::vector<int> GenerateLogNormalDegrees(
     TRNG& rng, int numVertices,
-    double logMean = 1.0, double logStdDev = 0.5,
-    int minDegree = 1, int maxDegree = -1
-);
+    double mu = 1.0, double sigma = 0.5,
+    int minDegree = 1, int maxDegree = -1);
 
-TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
-
+// Adjust degree sequence to make it graphic (realizable by simple graph
+// without self-loops and double edges) and check that it's likely possible
+// to make a connected graph with that degree sequence
+// (athough this property is not guaranteed)
 std::vector<int> MakeGraphicConnected(std::vector<int> degrees);
 
-void MCMCRandomize(TRNG &mt, TRelationGraph& graph);
+// Deterministically constructs graph for a given degree sequence
+TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
 
-TRelationGraph GenerateLine(TRNG &rng, unsigned numNodes);
-TRelationGraph GenerateStar(TRNG &rng, unsigned numNodes);
-TRelationGraph GenerateFullyConnected(TRNG &rng, unsigned numNodes);
-TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes);
-
-TRelationGraph GenerateRandomChungLuGraph(TRNG &mt, const std::vector<int>& degrees);
+// Randomize graph using ~E*log(E) l-switches (preserve degrees of all
+// verticies) Uses Metropolis-Hastings based acceptance with annealing (to make
+// switching edges ergodic and still produce connected graphs)
+void MCMCRandomize(TRNG& rng, TRelationGraph& graph);
 
 } // namespace NKikimr::NKqp

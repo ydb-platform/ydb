@@ -1,21 +1,20 @@
 #include "kqp_benches.h"
-#include <util/generic/array_size.h>
 
+#include <util/generic/array_size.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr::NKqp {
-
 
 std::string TComputedStatistics::GetCSVHeader() {
     return "median,MAD,Q1,Q3,IQR,mean,stdev,n,min,max";
 }
 
-void TComputedStatistics::ToCSV(IOutputStream &os) const {
+void TComputedStatistics::ToCSV(IOutputStream& os) const {
     os << Median << "," << MAD
         << "," << Q1 << "," << Q3 << "," << IQR
         << "," << Mean << "," << Stdev
         << "," << N << "," << Min << "," << Max;
 }
-
 
 double CalculatePercentile(std::vector<double>& data, double percentile) {
     if (data.empty()) {
@@ -49,7 +48,7 @@ double CalculateMedian(std::vector<double>& data) {
     return CalculatePercentile(data, 0.5);
 }
 
-double CalculateMAD(const std::vector<double>& data, double median, std::vector<double> &storage) {
+double CalculateMAD(const std::vector<double>& data, double median, std::vector<double>& storage) {
     storage.clear();
     storage.reserve(data.size());
 
@@ -60,14 +59,11 @@ double CalculateMAD(const std::vector<double>& data, double median, std::vector<
     return CalculatePercentile(storage, 0.5);
 }
 
-
-double CalculateMean(const std::vector<double> &data)  {
-    return std::accumulate(data.begin(), data.end(), 0.0)
-        / static_cast<double>(data.size());
+double CalculateMean(const std::vector<double>& data) {
+    return std::accumulate(data.begin(), data.end(), 0.0) / static_cast<double>(data.size());
 }
 
-
-double CalculateSampleStdDev(const std::vector<double> &data, double mean) {
+double CalculateSampleStdDev(const std::vector<double>& data, double mean) {
     if (data.size() == 0) {
         return 0;
     }
@@ -78,10 +74,8 @@ double CalculateSampleStdDev(const std::vector<double> &data, double mean) {
         deviationSquaresSum += deviation * deviation;
     };
 
-
     return std::sqrt(deviationSquaresSum / static_cast<double>(data.size() - 1));
 }
-
 
 void TRunningStatistics::AddValue(double num) {
     Samples_.push_back(num);
@@ -111,7 +105,7 @@ void TRunningStatistics::AddValue(double num) {
 }
 
 double TRunningStatistics::GetMedian() const {
-    assert(!MaxHeap_.empty() || !MinHeap_.empty());
+    Y_ASSERT(!MaxHeap_.empty() || !MinHeap_.empty());
 
     if (MaxHeap_.size() > MinHeap_.size()) {
         return MaxHeap_.top();
@@ -119,7 +113,6 @@ double TRunningStatistics::GetMedian() const {
         return (MaxHeap_.top() + MinHeap_.top()) / 2.0;
     }
 }
-
 
 double TRunningStatistics::CalculateMAD() const {
     return ::NKikimr::NKqp::CalculateMAD(Samples_, GetMedian(), MADStorage_);
@@ -139,7 +132,6 @@ TComputedStatistics TStatistics::ComputeStatistics() const {
 
     double mean = CalculateMean(Samples_);
     double stdev = CalculateSampleStdDev(Samples_, mean);
-
 
     return {
         .N = Samples_.size(),
@@ -161,31 +153,31 @@ void TStatistics::Merge(const TStatistics& other) {
     Max_ = std::max(Max_, other.Max_);
 }
 
-TStatistics TStatistics::operator-(const TStatistics &statsRHS) const {
+TStatistics TStatistics::operator-(const TStatistics& statsRHS) const {
     auto op = [](double lhs, double rhs) {
         return lhs - rhs;
     };
 
-    return TStatistics {
+    return TStatistics{
         Combine(statsRHS, op),
         Min_ - statsRHS.Max_,
         Max_ - statsRHS.Min_
     };
 }
 
-TStatistics TStatistics::operator+(const TStatistics &statsRHS) const {
+TStatistics TStatistics::operator+(const TStatistics& statsRHS) const {
     auto op = [](double lhs, double rhs) {
         return lhs - rhs;
     };
 
-    return TStatistics {
+    return TStatistics{
         Combine(statsRHS, op),
         Min_ + statsRHS.Min_,
         Max_ + statsRHS.Max_
     };
 }
 
-TStatistics TStatistics::operator*(const TStatistics &statsRHS) const {
+TStatistics TStatistics::operator*(const TStatistics& statsRHS) const {
     auto op = [](double lhs, double rhs) {
         return lhs - rhs;
     };
@@ -197,14 +189,14 @@ TStatistics TStatistics::operator*(const TStatistics &statsRHS) const {
         Max_ * statsRHS.Max_,
     };
 
-    return TStatistics {
+    return TStatistics{
         Combine(statsRHS, op),
         *std::min_element(candidates, candidates + Y_ARRAY_SIZE(candidates)),
         *std::max_element(candidates, candidates + Y_ARRAY_SIZE(candidates))
     };
 }
 
-TStatistics TStatistics::operator/(const TStatistics &statsRHS) const {
+TStatistics TStatistics::operator/(const TStatistics& statsRHS) const {
     auto op = [](double lhs, double rhs) {
         return lhs / rhs;
     };
@@ -216,13 +208,12 @@ TStatistics TStatistics::operator/(const TStatistics &statsRHS) const {
         Max_ / statsRHS.Max_,
     };
 
-    return TStatistics {
+    return TStatistics{
         Combine(statsRHS, op),
         *std::min_element(candidates, candidates + Y_ARRAY_SIZE(candidates)),
         *std::max_element(candidates, candidates + Y_ARRAY_SIZE(candidates))
     };
 }
-
 
 static std::pair<std::string, double> SelectUnit(ui64 nanoseconds) {
     if (nanoseconds >= 1'000'000'000) {
@@ -237,10 +228,12 @@ static std::pair<std::string, double> SelectUnit(ui64 nanoseconds) {
 }
 
 static int GetDecimalPlaces(double scaledUncertainty) {
-    if (scaledUncertainty < 0.01) return 2;
+    if (scaledUncertainty < 0.01) {
+        return 2;
+    }
 
-    double log_val = std::log10(scaledUncertainty);
-    int magnitude = static_cast<int>(std::floor(log_val));
+    double log = std::log10(scaledUncertainty);
+    int magnitude = static_cast<int>(std::floor(log));
 
     if (scaledUncertainty >= 100.0) {
         return 0;
@@ -254,7 +247,9 @@ static int GetDecimalPlaces(double scaledUncertainty) {
 }
 
 static int GetDecimalPlacesForValue(double scaledValue) {
-    if (scaledValue < 0.01) return 4;
+    if (scaledValue < 0.01) {
+        return 4;
+    }
 
     double absValue = std::abs(scaledValue);
 
@@ -301,20 +296,20 @@ std::string TimeFormatter::Format(ui64 valueNs) {
     return oss.str();
 }
 
-void DumpTimeStatistics(const TComputedStatistics &stats, IOutputStream &OS) {
-    OS << "Median = " << TimeFormatter::Format(stats.Median, stats.MAD) << " (MAD)\n";
+void DumpTimeStatistics(const TComputedStatistics& stats, IOutputStream& os) {
+    os << "Median = " << TimeFormatter::Format(stats.Median, stats.MAD) << " (MAD)\n";
 
-    OS <<   "Q1 = " << TimeFormatter::Format(stats.Q1)
+    os << "Q1 = " << TimeFormatter::Format(stats.Q1)
        << ", Q3 = " << TimeFormatter::Format(stats.Q3)
-       << ", IQR = " <<TimeFormatter::Format(stats.IQR) << "\n";
+       << ", IQR = " << TimeFormatter::Format(stats.IQR) << "\n";
 
-    OS << "N = " << stats.N << "\n";
-    OS << "Min, Max = [ "
-       <<         TimeFormatter::Format(stats.Min)
+    os << "N = " << stats.N << "\n";
+    os << "Min, Max = [ "
+       << TimeFormatter::Format(stats.Min)
        << ", " << TimeFormatter::Format(stats.Max)
        << " ]\n";
 
-    OS << "Mean = " << TimeFormatter::Format(stats.Mean, stats.Stdev) << " (Std. dev.)\n";
+    os << "Mean = " << TimeFormatter::Format(stats.Mean, stats.Stdev) << " (Std. dev.)\n";
 }
 
-}
+} // namespace NKikimr::NKqp

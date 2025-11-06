@@ -17,17 +17,19 @@ General-purpose script for sending messages or file contents to Telegram channel
 **Documentation:** [README_telegram.md](README_telegram.md)
 
 ### 👥 `parse_and_send_team_issues.py`
-Specialized script for parsing GitHub issues and sending team-specific notifications.
+Specialized script for parsing GitHub issues and sending team-specific notifications. Supports two modes: immediate updates and periodic trend reports.
 
 **Features:**
-- Parse team issues from formatted results
-- Send separate messages for each team
+- **On-Mute-Change Updates**: Parse team issues from formatted results and send immediate notifications
+- **Periodic Trend Updates**: Send weekly/monthly trend reports with statistics and charts
 - Support for multiple responsible users per team
 - Team lead mentions in messages
 - Support for message threads
 - Dry run mode for testing
+- Automatic team discovery from YDB data
+- Fallback to default channel for teams without specific configuration
 
-**Documentation:** [README_team_issues.md](README_team_issues.md)
+**Documentation:** [README_parse_and_send.md](README_parse_and_send.md)
 
 ## Configuration
 

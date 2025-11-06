@@ -1,0 +1,37 @@
+name: Alert Queued Jobs
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  # Can also be triggered manually
+  workflow_dispatch:
+
+jobs:
+  check-queued-jobs:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+        
+    - name: Run queued jobs checker and send to Telegram
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+        GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
+      run: |
+        python .github/scripts/telegram/alert_queued_jobs.py \
+          --chat-id 3017506311 \
+          --send-when-all-good \
+          --notify-on-api-errors \
+          --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"

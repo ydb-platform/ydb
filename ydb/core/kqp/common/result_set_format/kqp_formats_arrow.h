@@ -128,7 +128,7 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type);
  * - Data types: mapped according to SwitchMiniKQLDataTypeToArrowType
  * - Struct/Tuple: converted to arrow::StructType
  * - List: converted to arrow::ListType
- * - Dict: converted to arrow::MapType or List<Struct> (if key is Optional)
+ * - Dict: converted to arrow::ListType of arrow::StructType<Key, Value>
  * - Variant: converted to arrow::DenseUnionType
  * - Optional: nested optionals are flattened and represented via struct wrapping
  *

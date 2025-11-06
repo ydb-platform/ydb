@@ -109,22 +109,11 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TDictType* dictTyp
     auto keyType = dictType->GetKeyType();
     auto payloadType = dictType->GetPayloadType();
 
-    auto keyArrowType = NFormats::GetArrowType(keyType);
-    auto payloadArrowType = NFormats::GetArrowType(payloadType);
-
-    auto custom = std::make_shared<arrow::Field>("custom", arrow::uint64(), false);
-
-    if (keyType->GetKind() == NMiniKQL::TType::EKind::Optional) {
-        std::vector<std::shared_ptr<arrow::Field>> items;
-        items.emplace_back(std::make_shared<arrow::Field>("key", keyArrowType, true));
-        items.emplace_back(std::make_shared<arrow::Field>("payload", payloadArrowType, payloadType->IsOptional()));
-
-        auto fieldMap = std::make_shared<arrow::Field>("map", arrow::list(arrow::struct_(items)), false);
-        return arrow::struct_({fieldMap, custom});
-    }
-
-    auto fieldMap = std::make_shared<arrow::Field>("map", arrow::map(keyArrowType, payloadArrowType), false);
-    return arrow::struct_({fieldMap, custom});
+    auto structType = arrow::struct_({
+        std::make_shared<arrow::Field>("key", NFormats::GetArrowType(keyType), keyType->IsOptional()),
+        std::make_shared<arrow::Field>("payload", NFormats::GetArrowType(payloadType), payloadType->IsOptional())
+    });
+    return arrow::list(structType);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TVariantType* variantType) {
@@ -735,49 +724,23 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             arrow::ArrayBuilder* itemBuilder = nullptr;
             arrow::StructBuilder* structBuilder = nullptr;
 
-            YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-            arrow::StructBuilder* wrapBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
-            YQL_ENSURE(wrapBuilder->num_fields() == 2, "Unexpected number of fields");
+            YQL_ENSURE(builder->type()->id() == arrow::Type::LIST, "Unexpected builder type");
+            arrow::ListBuilder* listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
 
-            auto status = wrapBuilder->Append();
+            auto status = listBuilder->Append();
             YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
 
-            if (keyType->GetKind() == NMiniKQL::TType::EKind::Optional) {
-                YQL_ENSURE(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::LIST, "Unexpected builder type");
-                auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(wrapBuilder->field_builder(0));
+            YQL_ENSURE(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+            structBuilder = reinterpret_cast<arrow::StructBuilder*>(listBuilder->value_builder());
+            YQL_ENSURE(structBuilder->num_fields() == 2, "Unexpected number of fields");
 
-                auto status = listBuilder->Append();
-                YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
+            keyBuilder = structBuilder->field_builder(0);
+            itemBuilder = structBuilder->field_builder(1);
 
-                YQL_ENSURE(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-                structBuilder = reinterpret_cast<arrow::StructBuilder*>(
-                    listBuilder->value_builder());
-                YQL_ENSURE(structBuilder->num_fields() == 2, "Unexpected number of fields");
-
-                keyBuilder = structBuilder->field_builder(0);
-                itemBuilder = structBuilder->field_builder(1);
-            } else {
-                YQL_ENSURE(wrapBuilder->field_builder(0)->type()->id() == arrow::Type::MAP, "Unexpected builder type");
-                auto mapBuilder = reinterpret_cast<arrow::MapBuilder*>(wrapBuilder->field_builder(0));
-
-                auto status = mapBuilder->Append();
-                YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
-
-                keyBuilder = mapBuilder->key_builder();
-                itemBuilder = mapBuilder->item_builder();
-            }
-
-            arrow::UInt64Builder* customBuilder = reinterpret_cast<arrow::UInt64Builder*>(wrapBuilder->field_builder(1));
-            status = customBuilder->Append(0);
-            YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
-
-            // We do not sort dictionary before appending it to builder.
             const auto iter = value.GetDictIterator();
             for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
-                if (structBuilder != nullptr) {
-                    status = structBuilder->Append();
-                    YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
-                }
+                status = structBuilder->Append();
+                YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
 
                 AppendElement(key, keyBuilder, keyType);
                 AppendElement(payload, itemBuilder, payloadType);

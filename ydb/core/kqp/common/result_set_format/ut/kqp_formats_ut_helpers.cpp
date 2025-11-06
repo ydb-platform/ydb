@@ -314,42 +314,19 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 
             auto keyType = dictType->GetKeyType();
             auto payloadType = dictType->GetPayloadType();
-            auto dictBuilder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
+            auto dictBuilder = holderFactory.NewDict(dictType, 0);
 
-            std::shared_ptr<arrow::Array> keyArray = nullptr;
-            std::shared_ptr<arrow::Array> payloadArray = nullptr;
-            ui64 dictLength = 0;
-            ui64 offset = 0;
+            YQL_ENSURE(array->type_id() == arrow::Type::LIST, "Unexpected array type");
+            auto listArray = static_pointer_cast<arrow::ListArray>(array);
+            YQL_ENSURE(listArray->value_type()->id() == arrow::Type::STRUCT, "Unexpected array type");
 
-            YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
-            auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
-            YQL_ENSURE(wrapArray->num_fields() == 2, "Unexpected count of fields");
+            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(row));
+            YQL_ENSURE(static_cast<ui32>(structArray->num_fields()) == 2, "Unexpected count of fields");
 
-            auto dictSlice = wrapArray->field(0);
+            std::shared_ptr<arrow::Array> keyArray = structArray->field(0);
+            std::shared_ptr<arrow::Array> payloadArray = structArray->field(1);
 
-            if (keyType->GetKind() == NMiniKQL::TType::EKind::Optional) {
-                YQL_ENSURE(dictSlice->type_id() == arrow::Type::LIST, "Unexpected array type");
-                auto listArray = static_pointer_cast<arrow::ListArray>(dictSlice);
-
-                auto arraySlice = listArray->value_slice(row);
-                YQL_ENSURE(arraySlice->type_id() == arrow::Type::STRUCT, "Unexpected array type");
-                auto structArray = static_pointer_cast<arrow::StructArray>(arraySlice);
-                YQL_ENSURE(structArray->num_fields() == 2, "Unexpected count of fields");
-
-                dictLength = arraySlice->length();
-                keyArray = structArray->field(0);
-                payloadArray = structArray->field(1);
-            } else {
-                YQL_ENSURE(dictSlice->type_id() == arrow::Type::MAP, "Unexpected array type");
-                auto mapArray = static_pointer_cast<arrow::MapArray>(dictSlice);
-
-                dictLength = mapArray->value_length(row);
-                offset = mapArray->value_offset(row);
-                keyArray = mapArray->keys();
-                payloadArray = mapArray->items();
-            }
-
-            for (ui64 i = offset; i < offset + static_cast<ui64>(dictLength); ++i) {
+            for (ui64 i = 0; i < static_cast<ui64>(structArray->length()); ++i) {
                 auto key = ExtractUnboxedValue(keyArray, i, keyType, holderFactory);
                 auto payload = ExtractUnboxedValue(payloadArray, i, payloadType, holderFactory);
                 dictBuilder->Add(std::move(key), std::move(payload));

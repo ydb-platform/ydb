@@ -285,6 +285,27 @@ struct TTestContext {
         return values;
     }
 
+    TType* GetDictType() {
+        TType* keyType = TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv);
+        TType* payloadType = TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv);
+        return TDictType::Create(keyType, payloadType, TypeEnv);
+    }
+
+    TUnboxedValueVector CreateDicts(ui32 quantity) {
+        TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            auto dictBuilder = Vb.NewDict(GetDictType(), 0);
+            for (ui64 i = 0; i < value; ++i) {
+                NUdf::TUnboxedValue key = NUdf::TUnboxedValuePod(static_cast<double>(i));
+                NUdf::TUnboxedValue payload = NUdf::TUnboxedValuePod(static_cast<i32>(i * value));
+                dictBuilder->Add(std::move(key), std::move(payload));
+            }
+            auto dictValue = dictBuilder->Build();
+            values.emplace_back(std::move(dictValue));
+        }
+        return values;
+    }
+
     TType* GetOptionalListOfOptional() {
         TType* itemType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TypeEnv);
         return TOptionalType::Create(TListType::Create(itemType, TypeEnv), TypeEnv);
@@ -725,19 +746,18 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
             break;
         }
 
-        // case TType::EKind::Dict: {
-        //     auto dictType = static_cast<const TDictType*>(type);
-        //     auto payloadType = dictType->GetPayloadType();
+        case TType::EKind::Dict: {
+            auto dictType = static_cast<const TDictType*>(type);
+            UNIT_ASSERT_VALUES_EQUAL(left.GetDictLength(), right.GetDictLength());
 
-        //     UNIT_ASSERT_EQUAL(left.GetDictLength(), right.GetDictLength());
-        //     const auto leftIter = left.GetDictIterator();
-        //     for (NUdf::TUnboxedValue key, leftPayload; leftIter.NextPair(key, leftPayload);) {
-        //         UNIT_ASSERT(right.Contains(key));
-        //         NUdf::TUnboxedValue rightPayload = right.Lookup(key);
-        //         AssertUnboxedValuesAreEqual(leftPayload, rightPayload, payloadType);
-        //     }
-        //     break;
-        // }
+            const auto leftIter = left.GetDictIterator();
+            for (NUdf::TUnboxedValue key, leftPayload; leftIter.NextPair(key, leftPayload);) {
+                UNIT_ASSERT(right.Contains(key));
+                NUdf::TUnboxedValue rightPayload = right.Lookup(key);
+                AssertUnboxedValuesAreEqual(leftPayload, rightPayload, dictType->GetPayloadType());
+            }
+            break;
+        }
 
         // case TType::EKind::Variant: {
         //     auto variantType = static_cast<const TVariantType*>(type);
@@ -1125,6 +1145,34 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, structType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], structType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Dict) {
+        TTestContext context;
+
+        auto dictType = context.GetDictType();
+        auto values = context.CreateDicts(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(dictType));
+
+        auto array = MakeArrowArray(values, dictType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DOUBLE);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+
+            auto arrowValue = ExtractUnboxedValue(array, i, dictType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], dictType);
         }
     }
 }

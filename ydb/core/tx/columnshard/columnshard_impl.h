@@ -265,8 +265,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvReportBaseStatistics::TPtr& ev);
-    void Handle(TEvPrivate::TEvReportExecutorStatistics::TPtr& ev);
+    void Handle(TEvPrivate::TEvReportBaseStatistics::TPtr&);
+    void Handle(TEvPrivate::TEvReportExecutorStatistics::TPtr&);
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
@@ -437,7 +437,6 @@ protected:
             HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
             hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
             hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
-
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             HFunc(TEvPrivate::TEvWriteDraft, Handle);
             HFunc(TEvPrivate::TEvGarbageCollectionFinished, Handle);
@@ -520,7 +519,6 @@ private:
     NOlap::NDataAccessorControl::TDataAccessorsManagerContainer DataAccessorsManager;
     NBackgroundTasks::TControlInterfaceContainer<NOlap::NColumnFetching::TColumnDataManager> ColumnDataManager;
 
-    TActorId StatsReportPipe;
     std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
@@ -543,8 +541,11 @@ private:
     TActorId SpaceWatcherId;
     THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
 
+    TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
     ui32 JitterIntervalMS = 200;
+    ui32 BaseStatsEvInflight = 0;
+    ui32 ExecutorStatsEvInflight = 0;
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();
 
@@ -594,6 +595,8 @@ private:
     ui64 MemoryUsage() const;
 
     void SendPeriodicStats(bool);
+    void ScheduleBaseStatistics();
+    void ScheduleExecutorStatistics();
 
     void FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);
     void FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev, IExecutor* executor);

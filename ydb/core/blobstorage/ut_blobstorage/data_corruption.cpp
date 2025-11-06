@@ -156,7 +156,7 @@ struct TTestCtx : public TTestCtxBase {
                             GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", false, Erasure.GetErasure())) +
                     Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
                             GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", true, Erasure.GetErasure()));
-    
+
             UNIT_ASSERT_VALUES_UNEQUAL_C(blobsScrubbed, 0, MakePrefix());
             UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, MakePrefix());
         }
@@ -168,7 +168,7 @@ struct TTestCtx : public TTestCtxBase {
         });
 
         Env->Sim(TDuration::Seconds(100));
-        
+
         {
             TAppData* appData = Env->Runtime->GetNode(Env->Settings.ControllerNodeId)->AppData.get();
             ui64 groupsChecked = GetServiceCounters(appData->Counters, "storage_pool_stat")

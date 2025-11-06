@@ -425,7 +425,7 @@ NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId,
 NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId) {
     return new TBlobCheckerWorker(groupId, orchestratorId);
 }
-    
+
 
 } // namespace NBsController
 } // namespace NKikimr

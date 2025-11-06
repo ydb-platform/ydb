@@ -95,6 +95,7 @@ public:
     NKikimrConfig::TImmediateControlsConfig Controls;
     TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
     bool EnableStorageProxy = false;
+    bool UseLocalCheckpointsInStreamingQueries = false;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     std::optional<TTestLogSettings> LogSettings;
 
@@ -136,6 +137,7 @@ public:
     }
     TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
     TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+    TKikimrSettings& SetUseLocalCheckpointsInStreamingQueries(bool value) { UseLocalCheckpointsInStreamingQueries = value; return *this; };
     TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
     TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
 };

@@ -23,7 +23,9 @@ struct TFmrServices: public TYtBaseServices {
 
 struct TFmrYtGatewaySettings {
     TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
+    TIntrusivePtr<ITimeProvider> TimeProvider = CreateDefaultTimeProvider();
     TDuration TimeToSleepBetweenGetOperationRequests = TDuration::Seconds(1);
+    TDuration CoordinatorPingInterval = TDuration::Seconds(5);
 };
 
 IYtGateway::TPtr CreateYtFmrGateway(

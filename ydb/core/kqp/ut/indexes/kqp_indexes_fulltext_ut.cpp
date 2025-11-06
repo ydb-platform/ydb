@@ -1693,6 +1693,142 @@ Y_UNIT_TEST(UpdateRowCoveredReturning) {
     ])", NYdb::FormatResultSetYson(index));
 }
 
+Y_UNIT_TEST(Select) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db);
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"animals"];
+        [[100u];"cats"];
+        [[200u];"cats"];
+        [[300u];"cats"];
+        [[100u];"chase"];
+        [[200u];"chase"];
+        [[200u];"dogs"];
+        [[400u];"dogs"];
+        [[400u];"foxes"];
+        [[300u];"love"];
+        [[400u];"love"];
+        [[100u];"small"];
+        [[200u];"small"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    { // Select by one token
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "dogs"
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[200u]];
+            [[400u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // Select by two tokens using OR
+        TString query = R"sql(
+            SELECT DISTINCT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token IN ("foxes", "animals")
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[100u]];
+            [[400u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+    
+    { // Select by two tokens using AND
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "dogs"
+            INTERSECT
+            SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "chase"
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[200u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectCovered) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexCovered(db);
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [["cats data"];[100u];"animals"];
+        [["cats data"];[100u];"cats"];
+        [["dogs data"];[200u];"cats"];
+        [["cats cats data"];[300u];"cats"];
+        [["cats data"];[100u];"chase"];
+        [["dogs data"];[200u];"chase"];
+        [["dogs data"];[200u];"dogs"];
+        [["foxes data"];[400u];"dogs"];
+        [["foxes data"];[400u];"foxes"];
+        [["cats cats data"];[300u];"love"];
+        [["foxes data"];[400u];"love"];
+        [["cats data"];[100u];"small"];
+        [["dogs data"];[200u];"small"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    { // Select by one token
+        TString query = R"sql(
+            SELECT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "dogs"
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[200u];["dogs data"]];
+            [[400u];["foxes data"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    { // Select by two tokens using OR
+        TString query = R"sql(
+            SELECT DISTINCT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token IN ("foxes", "animals")
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[100u];["cats data"]];
+            [[400u];["foxes data"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+    
+    { // Select by two tokens using AND
+        TString query = R"sql(
+            SELECT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "dogs"
+            INTERSECT
+            SELECT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "chase"
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[200u];["dogs data"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 Y_UNIT_TEST(CreateTable) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
@@ -1812,6 +1948,66 @@ Y_UNIT_TEST(NoIndexImplTableUpdates) {
     }
     auto index = ReadIndex(db);
     CompareYson(R"([])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(Utf8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    
+    { // CreateTexts
+        TString query = R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Key Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    { // UpsertTexts
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (100, "Мышь спит"),
+                (200, "Собака ест")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    AddIndex(db);
+    { // UpsertRow
+        TString query = R"sql(
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+                (150, "Кошка ест мышь")
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[150u];"ест"];
+        [[200u];"ест"];
+        [[150u];"кошка"];
+        [[100u];"мышь"];
+        [[150u];"мышь"];
+        [[200u];"собака"];
+        [[100u];"спит"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    {
+        TString query = R"sql(
+            SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
+            WHERE __ydb_token = "ест"
+            ORDER BY Key
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[150u]];
+            [[200u]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
     
 }

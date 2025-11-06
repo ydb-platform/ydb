@@ -59,7 +59,8 @@ public:
         : Snapshot(snapshot)
         , Sorting(sorting)
         , TabletId(tabletId)
-        , PKRangesFilter(std::make_shared<NOlap::TPKRangesFilter>()) {
+        , PKRangesFilter(std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty()))
+    {
     }
 
     void SetProgram(TProgramContainer&& value) {

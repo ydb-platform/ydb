@@ -50,8 +50,7 @@ public:
                         bool multi = false, bool validateArgs = true)
         : IAggregation(pos, name, func, aggMode)
         , Factory_(!func.empty() ? BuildBind(Pos_, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr)
-        ,
-        Multi_(multi)
+        , Multi_(multi)
         , ValidateArgs_(validateArgs)
         , DynamicFactory_(!Factory_)
     {
@@ -1139,6 +1138,84 @@ TAggregationPtr BuildTopFactoryAggregation(TPosition pos, const TString& name, c
 
 template TAggregationPtr BuildTopFactoryAggregation<false>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
 template TAggregationPtr BuildTopFactoryAggregation<true>(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+
+class TReservoirSamplingAggregationFactory final: public TAggregationFactory {
+public:
+    TReservoirSamplingAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue)
+        : TAggregationFactory(pos, name, factory, aggMode)
+        , FakeSource_(BuildFakeSource(pos))
+        , IsValue_(isValue)
+    {
+    }
+
+private:
+    bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
+        ui32 adjustArgsCount = (isFactory ? 0 : 1) + !IsValue_;
+        if (exprs.size() != adjustArgsCount) {
+            ctx.Error(Pos_) << "Reservoir Samplig aggregation " << (isFactory ? "factory " : "") << " function requires exactly " << adjustArgsCount << " arguments, given: " << exprs.size();
+            return false;
+        }
+
+        if (BlockWindowAggregationWithoutFrameSpec(Pos_, GetName(), src, ctx)) {
+            return false;
+        }
+
+        Limit_ = nullptr;
+        if (!IsValue_) {
+            auto limitArgPos = exprs[1]->GetPos();
+            Limit_ = exprs[1];
+            if (!Limit_->Init(ctx, FakeSource_.Get())) {
+                return false;
+            }
+        }
+
+        if (!isFactory) {
+            Expr_ = exprs[0];
+            Name_ = src->MakeLocalName(Name_);
+        }
+
+        if (!Init(ctx, src)) {
+            return false;
+        }
+
+        if (!isFactory) {
+            node.Add("Member", "row", Q(Name_));
+            if (IsOverWindow() || IsOverWindowDistinct()) {
+                src->AddTmpWindowColumn(Name_);
+            }
+        }
+
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TReservoirSamplingAggregationFactory(Pos_, Name_, Func_, AggMode_, IsValue_);
+    }
+
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
+        Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
+        auto apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Expr_) : Expr_));
+        AddFactoryArguments(apply);
+        return apply;
+    }
+
+    void AddFactoryArguments(TNodePtr& apply) const final {
+        if (IsValue_) {
+            return;
+        }
+        apply = L(apply, Limit_);
+    }
+
+private:
+    TSourcePtr FakeSource_;
+    TNodePtr Limit_;
+    bool IsValue_;
+};
+
+TAggregationPtr BuildReservoirSamplingFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode, bool isValue) {
+    return new TReservoirSamplingAggregationFactory(pos, name, factory, aggMode, isValue);
+}
 
 class TCountDistinctEstimateAggregationFactory final: public TAggregationFactory {
 public:

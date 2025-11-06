@@ -24,6 +24,11 @@ namespace NKqp {
             kikimrSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         }
 
+        if (!kikimrSettings.AppConfig.GetColumnShardConfig().HasStatistics()) {
+            kikimrSettings.AppConfig.MutableColumnShardConfig()->MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+            kikimrSettings.AppConfig.MutableColumnShardConfig()->MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+        }
+
         Kikimr = std::make_unique<TKikimrRunner>(kikimrSettings);
         TableClient =
             std::make_unique<NYdb::NTable::TTableClient>(Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")));

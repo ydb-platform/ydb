@@ -25,7 +25,7 @@ TEST(TSensorsOwnerTest, Example)
     {
         TCounter Counter;
 
-        TChildSensors(const TProfiler& p)
+        explicit TChildSensors(const TProfiler& p)
             : Counter(p.Counter("/my_counter_2"))
         { }
     };
@@ -120,7 +120,7 @@ TEST(TSensorsOwnerTest, Simple)
         TProfiler Profiler;
         int B = 2;
 
-        TChild2(const TProfiler& p)
+        explicit TChild2(const TProfiler& p)
             : Profiler(p)
         {
         }

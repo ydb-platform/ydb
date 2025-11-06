@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
         auto consumer = MakeConsumer(
             {{"a1", "[DataType; String]"}, {"a2", "[DataType; Uint64]"}, {"a@3", "[OptionalType; [DataType; String]]"}},
             "",
-            "a2 > 100",
+            "WHERE a2 > 100", // combined test for backward compatibility YQ-4827
             [&](ui64 offset, bool filter, TMaybe<ui64> watermark) {
                 offsets.push_back(offset);
                 filters.push_back(filter);

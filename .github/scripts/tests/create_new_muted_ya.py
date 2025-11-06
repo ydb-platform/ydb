@@ -108,7 +108,16 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     logging.info(f"Date range: {start_date} to {end_date}")
     
-    query_string = f'''
+    try:
+        with YDBWrapper() as ydb_wrapper:
+            # Check credentials
+            if not ydb_wrapper.check_credentials():
+                return []
+            
+            # Get table path from config
+            tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+            
+            query_string = f'''
     SELECT 
         test_name, 
         suite_folder, 
@@ -126,23 +135,13 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
         state, 
         days_in_state,
         is_test_chunk
-    FROM `test_results/analytics/tests_monitor`
+    FROM `{tests_monitor_table}`
     WHERE date_window >= CurrentUtcDate() - 7*Interval("P1D")
         AND branch = '{branch}' 
         AND build_type = '{build_type}'
     '''
-    
-    logging.info(f"SQL Query:\n{query_string}")
-    
-    try:
-        # Initialize YDB wrapper with context manager for automatic cleanup
-        script_name = os.path.basename(__file__)
-        with YDBWrapper(script_name=script_name) as ydb_wrapper:
-            script_name = os.path.basename(__file__)
             
-            # Check credentials
-            if not ydb_wrapper.check_credentials():
-                return []
+            logging.info(f"SQL Query:\n{query_string}")
             
             logging.info("Successfully connected to YDB")
             
@@ -177,6 +176,12 @@ def aggregate_test_data(all_data, period_days):
     start_date = today - datetime.timedelta(days=period_days-1)
     start_days = (start_date - base_date).days
     
+    # Helper function to convert date to days if needed
+    def to_days(date_value):
+        if isinstance(date_value, datetime.date):
+            return (date_value - base_date).days
+        return date_value
+    
     logging.info(f"Starting aggregation for {period_days} days period...")
     logging.info(f"Processing {len(all_data)} test records...")
     
@@ -192,7 +197,7 @@ def aggregate_test_data(all_data, period_days):
             progress_percent = (processed_count / total_count) * 100
             logging.info(f"Aggregation progress: {processed_count}/{total_count} ({progress_percent:.1f}%)")
         
-        if test.get('date_window', 0) >= start_days:
+        if to_days(test.get('date_window', 0)) >= start_days:
             full_name = test.get('full_name')
             if full_name not in aggregated:
                 aggregated[full_name] = {
@@ -225,7 +230,7 @@ def aggregate_test_data(all_data, period_days):
                     aggregated[full_name]['state_dates'].append(current_date)
                 
                 # Обновляем is_muted если текущая дата новее
-                if test.get('date_window', 0) > aggregated[full_name].get('is_muted_date', 0):
+                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
             
@@ -255,7 +260,10 @@ def aggregate_test_data(all_data, period_days):
             for i, (state, date) in enumerate(zip(test_data['state_history'], test_data['state_dates'])):
                 if date:
                     # Преобразуем дату в читаемый формат
-                    date_obj = base_date + datetime.timedelta(days=date)
+                    if isinstance(date, int):
+                        date_obj = base_date + datetime.timedelta(days=date)
+                    else:
+                        date_obj = date
                     date_str = date_obj.strftime('%m-%d')
                     state_with_dates.append(f"{state}({date_str})")
                 else:
@@ -831,10 +839,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
 
 
 def mute_worker(args):
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1

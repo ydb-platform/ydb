@@ -679,12 +679,16 @@ static TString ReadFile(const TString& fileName) {
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
     GracefulShutdownSupported = true;
     DrainTimeout = TDuration::Seconds(30);
+    CheckForStopInterval = TDuration::MilliSeconds(100);
     const auto& config = runConfig.AppConfig.GetShutdownConfig();
     if (config.HasMinDelayBeforeShutdownSeconds()) {
         MinDelayBeforeShutdown = TDuration::Seconds(config.GetMinDelayBeforeShutdownSeconds());
     }
     if (config.HasDrainTimeoutSeconds()) {
         DrainTimeout = TDuration::Seconds(config.GetDrainTimeoutSeconds());
+    }
+    if (config.HasCheckForStopIntervalMilliseconds()) {
+        CheckForStopInterval = TDuration::MilliSeconds(config.GetCheckForStopIntervalMilliseconds());
     }
 }
 
@@ -1420,6 +1424,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasAwsCompatibilityConfig()) {
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
+    }
+
+    if (runConfig.AppConfig.HasAwsClientConfig()) {
+        AppData->AwsClientConfig = runConfig.AppConfig.GetAwsClientConfig();
     }
 
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
@@ -2197,8 +2205,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 void TKikimrRunner::BusyLoop() {
     auto shouldContinueState = KikimrShouldContinue.PollState();
     while (shouldContinueState == TProgramShouldContinue::Continue) {
-        // TODO make this interval configurable
-        Sleep(TDuration::MilliSeconds(10));
+        Sleep(CheckForStopInterval);
         shouldContinueState = KikimrShouldContinue.PollState();
     }
 }

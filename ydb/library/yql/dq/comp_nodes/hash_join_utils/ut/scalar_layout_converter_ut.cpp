@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Pack into buckets
         constexpr ui32 bucketsLogNum = 4;  // 16 buckets
         constexpr ui32 numBuckets = 1u << bucketsLogNum;
-        TVector<TPackResult> packResults(numBuckets);
+        std::array<TPackResult, numBuckets> packResults;
         
         converter->BucketPack(testValues.data(), numTuples, packResults.data(), bucketsLogNum);
 
@@ -588,23 +588,27 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL_C(totalTuples, numTuples, "All tuples should be distributed across buckets");
 
-        // Verify that we can unpack tuples from each bucket
-        ui32 unpackedCount = 0;
+        // Verify each bucket separately
         for (ui32 bucketIdx = 0; bucketIdx < numBuckets; ++bucketIdx) {
             const auto& packRes = packResults[bucketIdx];
+            
+            // Unpack all tuples from this bucket
             for (ui32 tupleIdx = 0; tupleIdx < static_cast<ui32>(packRes.NTuples); ++tupleIdx) {
                 NYql::NUdf::TUnboxedValue unpacked[2];
                 converter->Unpack(packRes, tupleIdx, unpacked);
                 
-                // Just verify that values are valid int64
-                UNIT_ASSERT_C(unpacked[0].Get<i64>() >= 0 && unpacked[0].Get<i64>() < static_cast<i64>(numTuples),
-                    "Key value should be in valid range");
-                UNIT_ASSERT_C(unpacked[1].Get<i64>() >= 0 && unpacked[1].Get<i64>() < static_cast<i64>(numTuples * 10),
-                    "Payload value should be in valid range");
+                // Verify values are valid (not garbage)
+                i64 key = unpacked[0].Get<i64>();
+                i64 payload = unpacked[1].Get<i64>();
                 
-                unpackedCount++;
+                UNIT_ASSERT_C(key >= 0 && key < static_cast<i64>(numTuples),
+                    "Bucket " << bucketIdx << ", tuple " << tupleIdx << ": key=" << key << " out of range");
+                
+                // Verify payload matches key relationship
+                i64 expectedPayload = key * 10;
+                UNIT_ASSERT_VALUES_EQUAL_C(payload, expectedPayload,
+                    "Bucket " << bucketIdx << ", tuple " << tupleIdx << ": payload mismatch");
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(unpackedCount, numTuples, "Should be able to unpack all tuples");
     }
 }

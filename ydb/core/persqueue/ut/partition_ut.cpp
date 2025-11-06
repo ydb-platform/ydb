@@ -2448,6 +2448,16 @@ Y_UNIT_TEST_F(ChangeConfig, TPartitionFixture)
     WaitCmdWrite({.Count=8,
                  .PlanStep=step, .TxId=txId_1,
                  .UserInfos={
+                    {1, {.Consumer="client-1", .Session="session-1", .Offset=0}},
+                 },
+                 });
+
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=8,
+                 .PlanStep=step, .TxId=txId_1,
+                 .UserInfos={
                     {1, {.Consumer="client-1", .Session="session-1", .Offset=2}},
                  },
                  });

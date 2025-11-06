@@ -348,7 +348,6 @@ class TestStreamingInYdb(TestYdsBase):
         kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
 
         message = '{"time": "time to rest"}'
-        
         for i in range(message_count):
             self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
         expected = [message for i in range(message_count)]

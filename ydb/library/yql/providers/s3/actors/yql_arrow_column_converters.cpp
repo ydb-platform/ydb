@@ -115,7 +115,7 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(const std::shared_ptr<arrow
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME)) {
+        if (baseValue < 0 || baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME)) {
             throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
         }
 
@@ -132,6 +132,8 @@ template <bool isOptional, typename TArrowType>
 std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
     ::NYql::NUdf::TFixedSizeArrayBuilder<TArrowType, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<i64, isOptional> reader;
+    const i64 minDatetime64 = static_cast<int64_t>(::NYql::NUdf::MIN_DATETIME64);
+    const i64 maxDatetime64 = static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME64);
     for (i64 i = 0; i < value->length(); ++i) {
         const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
         if constexpr (isOptional) {
@@ -144,14 +146,14 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<
         }
 
         const i64 baseValue = item.As<i64>();
-        if (baseValue < 0 && baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME)) {
-            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
+        if (baseValue < minDatetime64 * multiplier || baseValue > maxDatetime64 * multiplier) {
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [" << minDatetime64 << ", " << maxDatetime64 << "]: " << baseValue / multiplier);
         }
 
         if (baseValue % multiplier) {
             throw parquet::ParquetException(TStringBuilder() << "datetime in parquet should have integer amount of seconds, have: " << baseValue * 1.0 / multiplier);
         }
-        const TArrowType v = baseValue / static_cast<ui64>(multiplier);
+        const TArrowType v = baseValue / static_cast<i64>(multiplier);
         builder.Add(NUdf::TBlockItem(static_cast<TArrowType>(v)));
     }
     return builder.Build(true).make_array();

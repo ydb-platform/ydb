@@ -131,16 +131,11 @@ message ImportFromFsSettings {
              * '/scheme.pb' - object with information about scheme, indexes, etc;
              * '/permissions.pb' - object with information about ACL and owner;
              * '/metadata.json' - object with metadata about the backup.
+        The FS path can be either provided explicitly (relative to base_path)
+        Or, if the export contains the database objects list, you may specify the database object name,
+        and the FS prefix will be looked up in the database objects list by the import procedure
         */
-        oneof Source {
-            // The FS path prefix can be either provided explicitly
-            // (relative to base_path)
-            string source_prefix = 1;
-
-            // Or, if the export contains the database objects list, you may specify the database object name,
-            // and the FS prefix will be looked up in the database objects list by the import procedure
-            string source_path = 3;
-        }
+        string source_path = 3;
 
         // Database path to a database object to import the item to
         // Resolved relative to the default destination_path
@@ -149,8 +144,9 @@ message ImportFromFsSettings {
     }
 
     // Base path on FS where the export is located
-    // Path to the mounted directory in the case of NFS
+    // In the case of NFS, one of the directories in the path must be mounted
     // Example: /mnt/exports
+    // SchemaMapping file with the list of objects is written at this path
     string base_path = 1 [(required) = true];
 
     repeated Item items = 2; // Empty collection means import of all export objects
@@ -167,11 +163,6 @@ message ImportFromFsSettings {
 
     // Skip checksum validation during import
     bool skip_checksum_validation = 6;
-
-    // A default path prefix for all items,
-    // determines that the import works with the list of objects in the SchemaMapping file.
-    // Must be provided to import an encrypted export.
-    string source_prefix = 7;
 
     // Destination path to restore paths inside database
     // Default value is database root

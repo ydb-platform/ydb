@@ -190,17 +190,17 @@ message ExportToFsSettings {
 
         /* Tables are exported to one or more files in FS.
            The path begins with 'destination_path'.
-           Not required if the default `destination_prefix` is set.
-           If not specified, actual FS path is the default `destination_prefix` concatenated with:
+           If not specified, actual FS path is the default `base_path` concatenated with:
             * The object path relative to the global `source_path` for a non-encrypted export
             * The anonymized path for an encrypted export
         */
         string destination_path = 2;
     }
 
-    // Base path on FS where to write export
-    // Path to the mounted directory in the case of NFS
+    // Base path on FS where to write all export items
+    // In the case of NFS, one of the directories in the path must be mounted
     // Example: /mnt/exports
+    // SchemaMapping file with the list of objects is written to this path
     string base_path = 1 [(required) = true];
     
     // List of items to export
@@ -225,11 +225,6 @@ message ExportToFsSettings {
     // Database root if not provided.
     // All object names are calculated and written relative to this path.
     string source_path = 7;
-
-    // A default FS path prefix for all export items.
-    // When specified, export writes SchemaMapping file with the list of objects.
-    // Must be provided for an encrypted backup.
-    string destination_prefix = 8;
 }
 
 message ExportToFsResult {

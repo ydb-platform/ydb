@@ -3261,17 +3261,20 @@ public:
             }
         }
 
-        ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+        ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
             actor->Terminate();
         });
 
-        ForEachLookupActor([](IKqpBufferTableLookup* actor, const TActorId) {
+        ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
             actor->Terminate();
         });
 
         {
             Y_ABORT_UNLESS(Alloc);
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            WriteInfos.clear();
+            LookupInfos.clear();
+            WriteTasks.clear();
             HolderFactory.reset();
             TypeEnv.reset();
         }

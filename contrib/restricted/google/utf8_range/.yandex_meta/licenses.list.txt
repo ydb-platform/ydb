@@ -7,6 +7,10 @@ Markus Kuhn [ˈmaʳkʊs kuːn] <http://www.cl.cam.ac.uk/~mgk25/> — 2002-07-25 
 
 
 ====================COPYRIGHT====================
+// Copyright 2023 Google LLC
+
+
+====================COPYRIGHT====================
 Copyright 2008 Google Inc.  All rights reserved.
 
 

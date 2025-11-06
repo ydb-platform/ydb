@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(22.5)
+VERSION(33.0)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v22.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v33.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/abseil-cpp
@@ -20,13 +20,13 @@ PEERDIR(
 
 NO_COMPILER_WARNINGS()
 
-NO_UTIL()
+NO_RUNTIME()
 
 SRCS(
     naive.c
     range2-neon.c
     range2-sse.c
-    utf8_validity.cc
+    utf8_range.c
 )
 
 END()

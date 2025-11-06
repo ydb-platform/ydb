@@ -25,7 +25,7 @@ struct TTimeHistogramSnapshot
 {
     TTimeHistogramSnapshot() = default;
 
-    TTimeHistogramSnapshot(const THistogramSnapshot& hist)
+    explicit TTimeHistogramSnapshot(const THistogramSnapshot& hist)
         : THistogramSnapshot(hist)
     { }
 };
@@ -35,7 +35,7 @@ struct TGaugeHistogramSnapshot
 {
     TGaugeHistogramSnapshot() = default;
 
-    TGaugeHistogramSnapshot(const THistogramSnapshot& hist)
+    explicit TGaugeHistogramSnapshot(const THistogramSnapshot& hist)
         : THistogramSnapshot(hist)
     { }
 };
@@ -45,7 +45,7 @@ struct TRateHistogramSnapshot
 {
     TRateHistogramSnapshot() = default;
 
-    TRateHistogramSnapshot(const THistogramSnapshot& hist)
+    explicit TRateHistogramSnapshot(const THistogramSnapshot& hist)
         : THistogramSnapshot(hist)
     { }
 };

@@ -285,6 +285,7 @@ runs:
 
         # Scripts to checkout from main
         MAIN_SCRIPTS=(
+          ".github/scripts/config/ydb_qa_config.json"
           ".github/scripts/analytics/upload_tests_results.py"
           ".github/scripts/analytics/ydb_wrapper.py"
           ".github/scripts/send_build_stats.py"

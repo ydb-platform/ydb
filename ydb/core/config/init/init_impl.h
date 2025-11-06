@@ -1412,6 +1412,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
@@ -1420,6 +1421,7 @@ public:
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
+        tinyMode = CommonAppOptions.TinyMode;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();

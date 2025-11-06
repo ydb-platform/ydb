@@ -185,12 +185,17 @@ message EncryptionSettings {
 /// File system (FS)
 message ExportToFsSettings {
     message Item {
-        // Database path to a table to be exported
+        // Database path to a table/directory to be exported
         string source_path = 1 [(required) = true];
 
-        /* The tables are exported to one or more files in FS.
-        The files are saved to the destination_path directory. */
-        string destination_path = 2 [(required) = true];
+        /* Tables are exported to one or more files in FS.
+           The path begins with 'destination_path'.
+           Not required if the default `destination_prefix` is set.
+           If not specified, actual FS path is the default `destination_prefix` concatenated with:
+            * The object path relative to the global `source_path` for a non-encrypted export
+            * The anonymized path for an encrypted export
+        */
+        string destination_path = 2;
     }
 
     // Base path on FS where to write export
@@ -211,6 +216,20 @@ message ExportToFsSettings {
     // - zstd.
     // - zstd-N, where N is compression level, e.g. zstd-3.
     string compression = 5;
+
+    // Settings for data encryption.
+    // If encryption_settings field is not specified,
+    // the resulting data will not be encrypted.
+    EncryptionSettings encryption_settings = 6;
+
+    // Database root if not provided.
+    // All object names are calculated and written relative to this path.
+    string source_path = 7;
+
+    // A default FS path prefix for all export items.
+    // When specified, export writes SchemaMapping file with the list of objects.
+    // Must be provided for an encrypted backup.
+    string destination_prefix = 8;
 }
 
 message ExportToFsResult {

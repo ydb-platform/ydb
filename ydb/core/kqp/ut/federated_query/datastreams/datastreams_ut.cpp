@@ -128,6 +128,7 @@ public:
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
                 .LogSettings = LogSettings,
+                .UseLocalCheckpointsInStreamingQueries = true,
             });
 
             if (GetTestParam("DEFAULT_LOG", "enabled") == "enabled") {
@@ -136,6 +137,7 @@ public:
                 runtime.SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
             }
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
+            Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableStreamingQueries(true);
         }
 
         return Kikimr;
@@ -591,8 +593,8 @@ public:
     void WaitCheckpointUpdate(const TString& checkpointId) {
         std::optional<uint64_t> minSeqNo;
         WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
-            const auto& result = ExecExternalQuery(fmt::format(R"(
-                SELECT MIN(seq_no) AS seq_no FROM checkpoints_metadata
+            const auto& result = ExecQuery(fmt::format(R"(
+                SELECT MIN(seq_no) AS seq_no FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
                 WHERE graph_id = "{checkpoint_id}";
             )", "checkpoint_id"_a = checkpointId));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
@@ -1463,9 +1465,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ReadTopicMessage(outputTopicName, "A");
         WaitCheckpointUpdate(checkpointId);
 
-        const auto& result = ExecExternalQuery(fmt::format(R"(
+        const auto& result = ExecQuery(fmt::format(R"(
             SELECT COUNT(*) AS states_count FROM (
-                SELECT DISTINCT task_id FROM states
+                SELECT DISTINCT task_id FROM `.metadata/streaming/checkpoints/states`
                 WHERE graph_id = "{checkpoint_id}"
             )
         )", "checkpoint_id"_a = checkpointId));

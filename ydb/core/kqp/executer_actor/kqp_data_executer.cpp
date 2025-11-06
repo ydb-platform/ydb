@@ -2860,8 +2860,7 @@ private:
 
     void StartCheckpointCoordinator() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        bool enableCheckpointCoordinator = QueryServiceConfig.HasStreamingQueries()
-            && QueryServiceConfig.GetStreamingQueries().HasExternalStorage()
+        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
             && context && context->CheckpointId;
         if (!enableCheckpointCoordinator) {

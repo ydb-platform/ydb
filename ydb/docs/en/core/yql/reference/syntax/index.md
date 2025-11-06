@@ -110,3 +110,10 @@
 
 {% endif %}
 
+{% if feature_transfer %}
+
+* [CREATE TRANSFER](create-transfer.md)
+* [ALTER TRANSFER](alter-transfer.md)
+* [DROP TRANSFER](drop-transfer.md)
+
+{% endif %}

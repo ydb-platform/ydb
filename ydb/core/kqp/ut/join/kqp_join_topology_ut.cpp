@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             auto& adjustedWithoutTime = results.at("CBO-0");
 
             if (adjustedWithTime.ComputeStatistics().Median > adjustedWithoutTime.ComputeStatistics().Median) {
-                auto adjustedRatio = (adjustedWithTime / adjustedWithoutTime).Filter([](double value) { return value >= 1.0; });
+                auto adjustedRatio = adjustedWithTime / adjustedWithoutTime;
                 results.emplace("SE-0-div-CBO-0", adjustedRatio);
             }
         }

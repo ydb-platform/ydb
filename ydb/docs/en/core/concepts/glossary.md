@@ -361,9 +361,9 @@ The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Threa
 
 - **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
 
-- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [QP](#kqp).
 
-- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [QP](#kqp) background operations like backups, data compaction, and garbage collection.
 
 - **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
 
@@ -652,7 +652,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, QP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -680,9 +680,9 @@ During the distributed query execution, **mediator time** is the logical time be
 
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
-#### KQP {#kqp}
+#### Query Processor {#kqp}
 
-**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**QP** or **Query Processor** (previously, **KQP**) is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

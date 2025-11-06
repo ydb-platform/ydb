@@ -55,7 +55,7 @@ on:
         default: small,medium,large
         options:
           - small
-          - medium,
+          - medium
           - large
           - small,medium
           - small,medium,large

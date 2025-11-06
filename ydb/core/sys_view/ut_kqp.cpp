@@ -3701,7 +3701,7 @@ R"(CREATE TABLE `test_show_create` (
                 UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
                 const auto& columns = systemView.GetTableColumns();
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
                 UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
                 UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -3721,7 +3721,7 @@ R"(CREATE TABLE `test_show_create` (
                 const auto& columns = table.GetTableColumns();
                 const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
                 UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
                 UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 

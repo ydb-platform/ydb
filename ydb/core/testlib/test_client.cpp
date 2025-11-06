@@ -599,7 +599,7 @@ namespace Tests {
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
         const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false, false);
         }
 
         TCpuManagerConfig cpuManager;

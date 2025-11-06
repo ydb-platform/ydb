@@ -117,7 +117,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted,auto-provisioned,fat-worker] 
+    runs-on: [ self-hosted,auto-provisioned,build-preset-relwithdebinfo-asan] 
     strategy:
       fail-fast: false
       matrix:

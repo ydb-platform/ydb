@@ -63,14 +63,15 @@
 {%- include "[generator]/common_dir.jinja" -%}
 {%- include "[generator]/vars.jinja" -%}
 {%- include "[generator]/import.jinja" -%}
+{%- include "[generator]/plugins_block.jinja" -%}
 {%- include "[generator]/builddir.jinja" -%}
+{%- include "[generator]/java_toolchains.jinja" -%}
 
 {%- if proto_template -%}
 {%-     include "[generator]/protobuf.jinja" -%}
 {%-     include "[generator]/proto_prepare.jinja" -%}
 {%- endif -%}
 
-{%- include "[generator]/plugins.jinja" -%}
 {%- include "[generator]/kotlin_plugins.jinja" -%}
 {%- include "[generator]/configuration.jinja" -%}
 {%- include "[generator]/preview.jinja" -%}

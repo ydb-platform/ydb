@@ -1872,16 +1872,14 @@ private:
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
-        YQL_ENSURE(!Closed || data.empty());
+        YQL_ENSURE(!Closed || (data.empty() && checkpoint));
         Closed = finished;
         EgressStats.Resume();
         Y_UNUSED(size);
 
         try {
-            if (!data.empty()) {
-                Batcher->AddData(data);
-                DataBuffer.emplace(Batcher->Build());
-            }
+            Batcher->AddData(data);
+            DataBuffer.emplace(Batcher->Build());
 
             if (checkpoint) {
                 DataBuffer.emplace(*checkpoint);
@@ -1926,12 +1924,12 @@ private:
                         DoCheckpoint();
                     }
                 }
+            }
 
-                if (DataBuffer.empty() && Closed && !WriteTableActor->IsClosed()) {
-                    WriteTableActor->Close(WriteToken);
-                    WriteTableActor->FlushBuffers();
-                    WriteTableActor->Close();
-                }
+            if (Closed && DataBuffer.empty() && !WriteTableActor->IsClosed()) {
+                WriteTableActor->Close(WriteToken);
+                WriteTableActor->FlushBuffers();
+                WriteTableActor->Close();
             }
 
             const bool outOfMemory = GetFreeSpace() <= 0;

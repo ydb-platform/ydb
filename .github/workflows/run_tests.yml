@@ -76,7 +76,7 @@ on:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted,tiny-worker] 
     outputs:
       branch_array: ${{ steps.set-branches.outputs.branch_array }}
     steps:

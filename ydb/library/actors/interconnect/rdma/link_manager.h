@@ -49,8 +49,8 @@ TRdmaCtx* GetCtx(int sockfd);
 TRdmaCtx* GetCtx(const in6_addr& );
 TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr);
 const TCtxsMap& GetAllCtxs();
-void Init();
-
+bool Init();
+  
 #if not defined(_win32_)
 in6_addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept;
 #endif

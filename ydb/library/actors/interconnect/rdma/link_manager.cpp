@@ -50,6 +50,10 @@ public:
         return CtxMap;
     }
 
+    bool IsLoadFail() const noexcept {
+        return LoadFail;
+    }
+
     TRdmaCtx* GetCtx(const ibv_gid& gid) {
         auto it = std::lower_bound(
             CtxMap.begin(), CtxMap.end(),
@@ -70,6 +74,7 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
+            LoadFail = true;
             return;
         }
     }
@@ -154,7 +159,7 @@ private:
     TString Err;
     std::mutex Mtx;
     bool Inited = false;
-
+    bool LoadFail = false;
 
 } RdmaLinkManager;
 
@@ -180,8 +185,12 @@ const TCtxsMap& GetAllCtxs() {
     return RdmaLinkManager.GetAllCtxs();
 }
 
-void Init() {
+bool Init() {
+    if (RdmaLinkManager.IsLoadFail()) {
+        return false;
+    }
     RdmaLinkManager.ScanDevices();
+    return true;
 }
 
 #if not defined(_win32_)

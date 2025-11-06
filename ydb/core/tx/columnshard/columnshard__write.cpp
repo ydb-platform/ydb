@@ -394,7 +394,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         }
     }
 
-    const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
+    const auto inFlightLocksRangesBytes = NOlap::TPKRangesFilter::GetFiltersTotalMemorySize();
     const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
     if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
         if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock) {

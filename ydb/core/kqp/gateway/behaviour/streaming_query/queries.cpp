@@ -564,7 +564,7 @@ protected:
         LOG_D("Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(Database);
+        request->DatabaseName = Database;
         request->UserToken = GetUserToken();
 
         auto& entry = request->ResultSet.emplace_back();
@@ -1757,6 +1757,12 @@ private:
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
 
+        if (const auto statsPeriod = AppData()->QueryServiceConfig.GetProgressStatsPeriodMs()) {
+            ev->ProgressStatsPeriod = TDuration::MilliSeconds(statsPeriod);
+        } else {
+            ev->ProgressStatsPeriod = TDuration::Seconds(1);
+        }
+
         auto& record = ev->Record;
         record.SetTraceId(TStringBuilder() << "streaming-query-" << QueryPath << "-" << State.GetCurrentExecutionId());
         if (const auto& token = Context.GetUserToken()) {
@@ -2523,7 +2529,10 @@ private:
         CHECK_STATUS(validator.SaveRequired(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS(validator.SaveDefault(EName::Run, "true", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, NResourcePool::DEFAULT_POOL_ID));
-        CHECK_STATUS(validator.Save(EName::QueryTextRevision, ToString(1)));
+        CHECK_STATUS(validator.Save(
+            EName::QueryTextRevision,
+            ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
+        ));
 
         return validator.Finish();
     }

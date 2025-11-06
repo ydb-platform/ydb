@@ -16,7 +16,7 @@ jobs:
       matrix:
         include:
           - base_branch: prestable-25-4
-            head_branch: main
+            head_branch: stable-25-3
             label: sync-prestable
     steps:
       - name: checkout

@@ -67,6 +67,7 @@ struct TUserInfoBase {
     bool AnyCommits = false;
 
     bool Important = false;
+    TDuration AvailabilityPeriod;
     TInstant ReadFromTimestamp;
 
     ui64 PartitionSessionId = 0;
@@ -75,61 +76,19 @@ struct TUserInfoBase {
     std::optional<TString> CommittedMetadata = std::nullopt;
 };
 
-struct TUserInfo: public TUserInfoBase {
+struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {
     TUserInfo(
         const TActorContext& ctx,
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
         NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
         const TString& user,
-        const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
+        const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
+        const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString& session, ui64 partitionSession, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
         const TString& dbPath, bool meterRead, const TActorId& pipeClient, bool anyCommits,
         const std::optional<TString>& committedMetadata = std::nullopt
-    )
-        : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important,
-                        readFromTimestamp, partitionSession, pipeClient, committedMetadata}
-        , ActualTimestamps(false)
-        , WriteTimestamp(TInstant::Zero())
-        , CreateTimestamp(TInstant::Zero())
-        , ReadTimestamp(TAppData::TimeProvider->Now())
-        , ReadOffset(-1)
-        , ReadWriteTimestamp(TInstant::Zero())
-        , ReadCreateTimestamp(TInstant::Zero())
-        , ReadOffsetRewindSum(readOffsetRewindSum)
-        , ReadScheduled(false)
-        , HasReadRule(false)
-        , TopicConverter(topicConverter)
-        , Counter(nullptr)
-        , ActiveReads(0)
-        , ReadsInQuotaQueue(0)
-        , Subscriptions(0)
-        , Partition(partition)
-        , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
-                       {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
-        , WriteLagMs(TDuration::Minutes(1), 100)
-        , NoConsumer(user == CLIENTID_WITHOUT_CONSUMER)
-        , MeterRead(meterRead)
-    {
-        if (AppData(ctx)->Counters) {
-            if (partitionCountersSubgroup) {
-                SetupDetailedMetrics(ctx, partitionCountersSubgroup);
-            }
-
-            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                LabeledCounters.Reset(new TUserLabeledCounters(
-                    EscapeBadChars(user) + "||" + EscapeBadChars(topicConverter->GetClientsideName()), partition, dbPath));
-
-                SetupStreamCounters(streamCountersSubgroup);
-            } else {
-                LabeledCounters.Reset(new TUserLabeledCounters(
-                    user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
-                    partition));
-
-                SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
-            }
-        }
-    }
+    );
 
     void ForgetSubscription(i64 endOffset, const TInstant& now);
     void UpdateReadingState();
@@ -145,7 +104,6 @@ struct TUserInfo: public TUserInfoBase {
     void UpdateReadOffset(const i64 offset, TInstant writeTimestamp, TInstant createTimestamp, TInstant now, bool force = false);
     void AddTimestampToCache(const ui64 offset, TInstant writeTimestamp, TInstant createTimestamp, bool isUserRead, TInstant now);
     bool UpdateTimestampFromCache();
-    void SetImportant(bool important);
 
     i64 GetReadOffset() const {
         return ReadOffset == -1 ? Offset : (ReadOffset + 1); //+1 because we want to track first not readed offset
@@ -156,6 +114,12 @@ struct TUserInfo: public TUserInfoBase {
     ui64 GetWriteLagMs() const {
         return WriteLagMs.GetValue();
     }
+
+private:
+    friend class TUsersInfoStorage;
+    void SetImportant(bool important, TDuration availabilityPeriod);
+
+public:
 
     bool ActualTimestamps = false;
     // WriteTimestamp of the last committed message
@@ -244,13 +208,29 @@ public:
     const TUserInfo* GetIfExists(const TString& user) const;
     TUserInfo* GetIfExists(const TString& user);
 
-    THashMap<TString, TUserInfo>& GetAll();
+    // iterate over a mutable list of UserInfo
+    auto GetAll() {
+        auto proj = [](auto& ni) -> std::pair<const TString&, TUserInfo&> { return {ni.first, *ni.second}; };
+        return std::views::transform(UsersInfo, proj);
+    }
+
+    // iterate over a constant list of UserInfo
+    auto ViewAll() const {
+        auto proj = [](auto& ni) -> std::pair<const TString&, const TUserInfo&> { return {ni.first, *ni.second}; };
+        return std::views::transform(UsersInfo, proj);
+    }
+
+    // iterate over a constant list of UserInfo with important flag or non-zero availability period
+    auto ViewImportant() const {
+        auto proj = [](auto& ni) -> std::pair<const TString&, const TUserInfo&> { return {ni.first, *ni.second}; };
+        return std::views::transform(ImportantExtUsersInfoSlice, proj);
+    }
 
     TUserInfoBase CreateUserInfo(const TString& user,
                              TMaybe<ui64> readRuleGeneration = {}) const;
     TUserInfo& Create(
         const TActorContext& ctx,
-        const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
+        const TString& user, const ui64 readRuleGeneration, bool important, TDuration availabilityPeriod, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
         TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
         const std::optional<TString>& committedMetadata = std::nullopt
@@ -265,12 +245,15 @@ public:
     void ResetDetailedMetrics();
     bool DetailedMetricsAreEnabled() const;
 
+    void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
+
 private:
 
-    TUserInfo CreateUserInfo(const TActorContext& ctx,
+    TIntrusivePtr<TUserInfo> CreateUserInfo(const TActorContext& ctx,
                              const TString& user,
                              const ui64 readRuleGeneration,
                              bool important,
+                             const TDuration availabilityPeriod,
                              const TString& session,
                              ui64 partitionSessionId,
                              ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
@@ -279,8 +262,14 @@ private:
                              bool anyCommits,
                              const std::optional<TString>& committedMetadata = std::nullopt) const;
 
+    enum class EImportantSliceAction {
+        Insert,
+        Remove,
+    };
+    void UpdateImportantExtSlice(TUserInfo* userInfo, EImportantSliceAction action);
 private:
-    THashMap<TString, TUserInfo> UsersInfo;
+    THashMap<TString, TIntrusivePtr<TUserInfo>> UsersInfo;
+    THashMap<TString, TIntrusivePtr<TUserInfo>> ImportantExtUsersInfoSlice;
 
     const TString DCId;
     NPersQueue::TTopicConverterPtr TopicConverter;
@@ -299,6 +288,11 @@ private:
     TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
 };
+
+
+inline bool ImporantOrExtendedAvailabilityPeriod(const TUserInfoBase& userInfo) {
+    return userInfo.Important || userInfo.AvailabilityPeriod > TDuration::Zero();
+}
 
 } //NPQ
 } //NKikimr

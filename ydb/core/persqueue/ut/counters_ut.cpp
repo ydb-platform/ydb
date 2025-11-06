@@ -5,12 +5,14 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include <regex>
 
@@ -126,7 +128,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
 
     tc.Runtime->GetAppData(0).FeatureFlags.SetEnableMetricsLevel(featureFlagEnabled);
 
-    PQTabletPrepare({ .metricsLevel = 1 }, {}, tc);
+    PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
     CmdWrite(0, "sourceid0", TestData(), tc, false, {}, true);
     CmdWrite(0, "sourceid1", TestData(), tc, false);
     CmdWrite(0, "sourceid2", TestData(), tc, false);
@@ -166,7 +168,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Turn on per partition counters, check counters.
 
-        PQTabletPrepare({ .metricsLevel = 2 }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_DETAILED }, {}, tc);
 
         // partition, sourceId, data, text
         CmdWrite({ .Partition = 0, .SourceId = "sourceid3", .Data = TestData(), .TestContext = tc, .Error = false });
@@ -237,7 +239,7 @@ void PartitionLevelCounters(bool featureFlagEnabled, bool firstClassCitizen, TSt
     {
         // Disable per partition counters, the counters should be empty.
 
-        PQTabletPrepare({ .metricsLevel = 1 }, {}, tc);
+        PQTabletPrepare({ .metricsLevel = METRICS_LEVEL_OBJECT }, {}, tc);
         TString counters = getCountersHtml();
         TString referenceCounters = NResource::Find(TStringBuilder() << referenceDir << "_turned_off.html");
         counters = zeroUnreliableValues(counters) + (featureFlagEnabled ? "\n" : "");
@@ -271,7 +273,7 @@ Y_UNIT_TEST(PartitionWriteQuota) {
     data.push_back({1, s});
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+            if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                 Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                 tc.Runtime->Send(new IEventHandle(
                     ev->Sender, TActorId{},
@@ -361,7 +363,7 @@ Y_UNIT_TEST(SupportivePartitionCountersPersist) {
     data.push_back({1, s});
     tc.Runtime->SetObserverFunc(
         [&](TAutoPtr<IEventHandle>& ev) {
-            if (auto* msg = ev->CastAsLocal<TEvQuota::TEvRequest>()) {
+            if (ev->CastAsLocal<TEvQuota::TEvRequest>()) {
                 Cerr << "Captured kesus quota request event from " << ev->Sender.ToString() << Endl;
                 tc.Runtime->Send(new IEventHandle(
                     ev->Sender, TActorId{},
@@ -704,6 +706,247 @@ Y_UNIT_TEST(ImportantFlagSwitching) {
     });
 }
 
+Y_UNIT_TEST(PartitionKeyCompaction) {
+    SetEnv("FAST_UT", "1");
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        bool dbRegistered = false;
+
+        tc.EnableDetailedPQLog = true;
+        tc.Prepare(dispatchName, setup, activeZone, true, true, true);
+
+        tc.Runtime->GetAppData(0).FeatureFlags.SetEnableTopicCompactificationByKey(true);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(10_MB);
+        tc.Runtime->SetScheduledLimit(10000);
+
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+                auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+                UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+                dbRegistered = true;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(event);
+        });
+        PQTabletPrepare({.deleteTime = 3600, .writeSpeed = 2_MB, .enableCompactificationByKey = true}, {}, tc);
+
+        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+        ui64 ssId = 325;
+        BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+        auto balancerParams = TBalancerParams::FromContext("topic", {{0, {tc.TabletId, 1}}}, ssId, tc);
+        balancerParams.EnableKeyCompaction = true;
+        PQBalancerPrepare(balancerParams);
+
+        IActor* actor = CreateTabletCountersAggregator(false);
+        auto aggregatorId = tc.Runtime->Register(actor);
+        tc.Runtime->EnableScheduleForActor(aggregatorId);
+        TString s{5_MB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](const TString& key, ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                NKikimrPQClient::TDataChunk proto;
+                proto.SetSeqNo(i + 1);
+                proto.SetData(s);
+                auto* msgMeta = proto.AddMessageMeta();
+                msgMeta->set_key("__key");
+                msgMeta->set_value(key);
+                TString dataChunkStr;
+                bool res = proto.SerializeToString(&dataChunkStr);
+                Y_ABORT_UNLESS(res);
+                data.push_back({i + 1, dataChunkStr});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        writeData("key1", 1);
+        writeData("key2", 1);
+        writeData("key3", 2);
+        writeData("key4", 2);
+        writeData("key2", 2);
+
+        i64 expectedOffset = 4;
+        i64 consumerOffset = -1;
+        while (consumerOffset < expectedOffset) {
+            consumerOffset = CmdGetOffset(0, CLIENTID_COMPACTION_CONSUMER, Nothing(), tc);
+            Cerr << "Got compacter offset = " << consumerOffset << Endl;
+        }
+        UNIT_ASSERT(consumerOffset >= expectedOffset);
+
+        {
+            NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+            result->SetPath("/Root");
+            TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+            for (auto& attr : attrs) {
+                auto ua = result->MutablePathDescription()->AddUserAttributes();
+                ua->SetKey(attr);
+                ua->SetValue(attr);
+            }
+            NSchemeCache::TDescribeResult::TCPtr cres = result;
+            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+            tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        {
+            auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+            auto group = dbGroup->GetSubgroup("host", "")
+                             ->GetSubgroup("database", "/Root")
+                             ->GetSubgroup("cloud_id", "cloud_id")
+                             ->GetSubgroup("folder_id", "folder_id")
+                             ->GetSubgroup("database_id", "database_id")
+                             ->GetSubgroup("topic", "topic");
+
+            group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group = group->GetSubgroup("consumer", "__ydb_compaction_consumer");
+            group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
+            group->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
+            group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
+            group->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(300);
+
+            TStringStream countersStr;
+            dbGroup->OutputHtml(countersStr);
+            const TString referenceCounters = NResource::Find(TStringBuf("counters_topics_extended.html"));
+            Cerr << "REF: " << referenceCounters << "\n";
+            Cerr << "COUNTERS: " << countersStr.Str() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(countersStr.Str() + "\n", referenceCounters);
+        }
+        // {
+        //     auto dbGroup = GetServiceCounters(counters, "datastreams_serverless");
+        //     auto topicGroup = dbGroup->GetSubgroup("topic", "topic");
+        //     UNIT_ASSERT_VALUES_EQUAL(
+        //         topicGroup->GetNamedCounter("name", "topic.key_compaction.read_cycles_complete_total", false)->Val(),
+        //         4
+        //     );
+        //     UNIT_ASSERT_VALUES_EQUAL(
+        //         topicGroup->GetNamedCounter("name", "topic.key_compaction.write_cycles_complete_total", false)->Val(),
+        //         3
+        //     );
+        // }
+    });
+}
+
+
+Y_UNIT_TEST(PartitionBlobCompactionCounters) {
+    SetEnv("FAST_UT", "1");
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() { return tc.InitialEventsFilter.Prepare(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        bool dbRegistered = false;
+
+        tc.EnableDetailedPQLog = true;
+        tc.Prepare(dispatchName, setup, activeZone, true, true, true);
+
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(10_MB);
+        tc.Runtime->SetScheduledLimit(10000);
+
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NSysView::TEvSysView::EvRegisterDbCounters) {
+                auto database = event.Get()->Get<NSysView::TEvSysView::TEvRegisterDbCounters>()->Database;
+                UNIT_ASSERT_VALUES_EQUAL(database, "/Root/PQ");
+                dbRegistered = true;
+            } else if (event->GetTypeRewrite() == TEvPQ::EEv::EvRunCompaction) {
+                Cerr << "===Dropped TEvRunCompaction with blobs count: " << event->Get<TEvPQ::TEvRunCompaction>()->BlobsCount << Endl;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(event);
+        });
+        PQTabletPrepare({.deleteTime = 3600, .writeSpeed = 2_MB, .enableCompactificationByKey = false}, {}, tc);
+
+        TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
+        ui64 ssId = 325;
+        BootFakeSchemeShard(*tc.Runtime, ssId, state);
+
+        auto balancerParams = TBalancerParams::FromContext("topic", {{0, {tc.TabletId, 1}}}, ssId, tc);
+        balancerParams.EnableKeyCompaction = false;
+        PQBalancerPrepare(balancerParams);
+
+        IActor* actor = CreateTabletCountersAggregator(false);
+        auto aggregatorId = tc.Runtime->Register(actor);
+        tc.Runtime->EnableScheduleForActor(aggregatorId);
+        TString s{5_MB, 'c'};
+        ui64 currentOffset = 0;
+        auto writeData = [&](ui32 count) {
+            TVector<std::pair<ui64, TString>> data;
+            for (auto i = 0u; i < count; ++i) {
+                data.push_back({i + 1, s});
+            }
+            CmdWrite(0, "sourceid0", std::move(data), tc, false, {}, false, "", -1, currentOffset, false, false, true);
+            currentOffset += count;
+        };
+        writeData(3);
+        writeData(3);
+
+        {
+            NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+            result->SetPath("/Root");
+            TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+            for (auto& attr : attrs) {
+                auto ua = result->MutablePathDescription()->AddUserAttributes();
+                ua->SetKey(attr);
+                ua->SetValue(attr);
+            }
+            NSchemeCache::TDescribeResult::TCPtr cres = result;
+            auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+            TActorId pipeClient = tc.Runtime->ConnectToPipe(tc.BalancerTabletId, tc.Edge, 0, GetPipeConfigWithRetries());
+            tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+            options.FinalEvents.emplace_back(TEvPQ::EEv::EvRunCompaction);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT(processedCountersEvent);
+        }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+            auto processedCountersEvent = tc.Runtime->DispatchEvents(options);
+            UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        }
+
+        auto counters = tc.Runtime->GetAppData(0).Counters;
+        {
+            auto dbGroup = GetServiceCounters(counters, "topics_serverless", false);
+            auto group = dbGroup->GetSubgroup("host", "")
+                             ->GetSubgroup("database", "/Root")
+                             ->GetSubgroup("cloud_id", "cloud_id")
+                             ->GetSubgroup("folder_id", "folder_id")
+                             ->GetSubgroup("database_id", "database_id")
+                             ->GetSubgroup("topic", "topic");
+
+
+            TStringStream countersStr;
+            dbGroup->OutputHtml(countersStr);
+            Cerr << "COUNTERS: " << countersStr.Str() << "\n";
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                group->FindNamedCounter("name", "topic.partition.blobs.uncompacted_count_max")->Val(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(
+                group->FindNamedCounter("name", "topic.partition.blobs.uncompacted_bytes_max")->Val(), 31461348);
+            UNIT_ASSERT_GE(group->FindNamedCounter("name", "topic.partition.blobs.compaction_lag_milliseconds_max")->Val(), 1000);
+        }
+    });
+}
+
+
 Y_UNIT_TEST(NewConsumersCountersAppear) {
     TTestContext tc;
     tc.InitialEventsFilter.Prepare();
@@ -865,7 +1108,6 @@ Y_UNIT_TEST(ManyCounters) {
         i64 diff = sum - bucketSize;
         UNIT_ASSERT(std::abs(diff) < (i64)(bucketSize / 10));
     }
-
 }
 
 } // Y_UNIT_TEST_SUITE(TMultiBucketCounter)

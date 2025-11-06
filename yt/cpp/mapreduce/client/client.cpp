@@ -1409,16 +1409,13 @@ IFileReaderPtr TClient::GetJobStderr(
     return RawClient_->GetJobStderr(operationId, jobId, options);
 }
 
-std::vector<TJobTraceEvent> TClient::GetJobTrace(
+IFileReaderPtr TClient::GetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
     CheckShutdown();
-    return RequestWithRetry<std::vector<TJobTraceEvent>>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &operationId, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->GetJobTrace(operationId, options);
-        });
+    return RawClient_->GetJobTrace(operationId, jobId, options);
 }
 
 TNode::TListType TClient::SkyShareTable(
@@ -1558,6 +1555,52 @@ void TClient::CheckShutdown() const
     if (Shutdown_) {
         ythrow TApiUsageError() << "Call client's methods after shutdown";
     }
+}
+
+const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configProfile)
+{
+    auto g = Guard(ClusterConfigLock_);
+
+    if (!ClusterConfig_) {
+        TNode clusterConfigNode;
+
+        TYPath clusterConfigPath = Context_.Config->ConfigRemotePatchPath + "/" + configProfile;
+        YT_LOG_DEBUG(
+            "Fetching cluster config (ConfigPath: %v, ConfigProfile: %v)",
+            Context_.Config->ConfigRemotePatchPath,
+            configProfile);
+
+        try {
+            clusterConfigNode = Get(clusterConfigPath, TGetOptions());
+        } catch (const TErrorResponse& error) {
+            if (!error.IsResolveError()) {
+                throw;
+            }
+
+            ClusterConfig_.emplace();
+            YT_LOG_WARNING(
+                "Could not resolve, saved empty cluster config (ConfigPath: %v, ConfigProfile: %v)",
+                Context_.Config->ConfigRemotePatchPath,
+                configProfile);
+        }
+
+        if (clusterConfigNode.IsMap()) {
+            ClusterConfig_ = clusterConfigNode.UncheckedAsMap();
+            YT_LOG_DEBUG(
+                "Saved cluster config (ConfigPath: %v, ConfigProfile: %v)",
+                Context_.Config->ConfigRemotePatchPath,
+                configProfile);
+        } else if (!ClusterConfig_.has_value()) {
+            ClusterConfig_.emplace();
+            YT_LOG_WARNING(
+                "Config node has incorrect type, saved empty cluster config (NodeType: %v, ConfigPath: %v, ConfigProfile: %v)",
+                clusterConfigNode.GetType(),
+                Context_.Config->ConfigRemotePatchPath,
+                configProfile);
+        }
+    }
+
+    return *ClusterConfig_;
 }
 
 void SetupClusterContext(

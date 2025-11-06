@@ -5,6 +5,7 @@
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/util/bits.h>
 #include <util/generic/set.h>
 #include <util/ysaveload.h>
@@ -138,6 +139,7 @@ namespace NKikimr {
             static constexpr ui32 MaxNumberOfSlots = 32768; // it's not a good idea to have more slots than this
             TString VDiskLogPrefix;
             TMask ConstMask; // mask of 'all slots are free'
+            TControlWrapper ChunksSoftLocking;
             TFreeSpace FreeSpace;
             TFreeSpace LockedChunks;
             ui32 AllocatedSlots = 0;
@@ -151,9 +153,10 @@ namespace NKikimr {
             static TMask BuildConstMask(const TString &prefix, ui32 slotsInChunk);
 
         public:
-            TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize)
+            TChain(TString vdiskLogPrefix, ui32 slotsInChunk, ui32 slotSize, TControlWrapper chunksSoftLocking)
                 : VDiskLogPrefix(std::move(vdiskLogPrefix))
                 , ConstMask(BuildConstMask(vdiskLogPrefix, slotsInChunk))
+                , ChunksSoftLocking(chunksSoftLocking)
                 , SlotsInChunk(slotsInChunk)
                 , SlotSize(slotSize)
             {}
@@ -193,7 +196,7 @@ namespace NKikimr {
             void ShredNotify(const std::vector<ui32>& chunksToShred);
             void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
-            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk);
+            static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk, TControlWrapper chunksSoftLocking);
 
             template<typename T>
             void ForEachFreeSpaceChunk(T&& callback) const {
@@ -226,7 +229,10 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxHugeBlobInBytes,
-                ui32 overhead);
+                ui32 overhead,
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2,
+                TControlWrapper chunksSoftLocking);
 
             TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
 
@@ -256,6 +262,8 @@ namespace NKikimr {
 
         private:
             void BuildChains(ui32 milestoneBlobInBytes, ui32 overhead);
+            void BuildChainsV2(ui32 stepsBetweenPowersOf2);
+
             void BuildSearchTable();
             inline ui32 SizeToBlocks(ui32 size) const;
 
@@ -270,6 +278,7 @@ namespace NKikimr {
             TDynBitMap DeserializedChains; // a bit mask of chains that were deserialized from the origin stream
             std::vector<TChain> Chains;
             std::vector<ui16> SearchTable; // (NumFullBlocks - 1) -> Chain index
+            TControlWrapper ChunksSoftLocking;
         };
 
 
@@ -303,7 +312,11 @@ namespace NKikimr {
                 ui32 maxHugeBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
-                ui32 freeChunksReservation);
+                // new bucket scheme
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2,
+                ui32 freeChunksReservation,
+                TControlWrapper chunksSoftLocking);
 
             THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap);
 

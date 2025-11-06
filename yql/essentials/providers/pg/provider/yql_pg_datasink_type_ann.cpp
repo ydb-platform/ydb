@@ -13,7 +13,7 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TPgDataSinkTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     TPgDataSinkTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)

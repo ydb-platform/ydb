@@ -3,6 +3,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -50,6 +51,43 @@ void CreateTableWithGlobalIndex(TTestEnv& env, const TString& databaseName, cons
         );
     )", databaseName.c_str(), tableName.c_str()));
     FillTable(env, databaseName, tableName, rowCount);
+}
+
+void WaitForStatsUpdateFromSchemeShard(
+        TTestActorRuntime& runtime, ui64 ssTabletId, ui64 saTabletId) {
+    bool statsUpdateSent = false;
+    bool txnCommitted = false;
+    auto sendObserver = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto& ev) {
+        if (ev->Get()->Record.GetSchemeShardId() == ssTabletId) {
+            statsUpdateSent = true;
+        }
+    });
+    auto commitObserver = runtime.AddObserver<TEvTablet::TEvCommitResult>([&](auto& ev) {
+        if (statsUpdateSent && ev->Get()->TabletID == saTabletId) {
+            txnCommitted = true;
+        }
+    });
+    runtime.WaitFor("stats update from SchemeShard", [&]{ return txnCommitted; });
+}
+
+void WaitForStatsPropagate(TTestActorRuntime& runtime, ui32 nodeIdx) {
+    // First wait for the start of propagate round initiated by the aggregator,
+    // then wait for it to arrive to the target node.
+    bool propagateSentFromSA = false;
+    bool propagateSentToNode = false;
+    auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto& ev) {
+        TActorId senderServiceId = runtime.GetLocalServiceId(
+            MakeStatServiceID(ev->Sender.NodeId()),
+            ev->Sender.NodeId() - runtime.GetFirstNodeId());
+        if (ev->Sender != senderServiceId) {
+            propagateSentFromSA = true;
+        }
+        if (propagateSentFromSA && ev->Recipient.NodeId() == runtime.GetNodeId(nodeIdx)) {
+            propagateSentToNode = true;
+        }
+    });
+    runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagateSentToNode; });
+
 }
 
 } // namespace
@@ -194,39 +232,90 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         ValidateRowCount(runtime, 1, pathId2, 6);
     }
 
-    void TestNotFullStatistics(TTestEnv& env, size_t expectedRowCount) {
+    void TestNotFullStatistics(TTestEnv& env, size_t shardCount, size_t expectedRowCount) {
+        Y_ABORT_UNLESS(shardCount > 1, "Test expects more than 1 shard in the table");
+
         auto& runtime = *env.GetServer().GetRuntime();
 
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+        ui64 ssTabletId = pathId.OwnerId;
 
-        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> block(runtime);
-        runtime.WaitFor("TEvPeriodicTableStats", [&]{ return block.size() >= 3; });
-        block.Unblock(3);
+        // Block stats updates from one of the shards and pass others through.
+        std::optional<ui64> blockedShardId;
+        THashSet<ui64> updatedShardIds;
+        auto blockPredicate = [&](const TEvDataShard::TEvPeriodicTableStats::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTableLocalId() != pathId.LocalPathId) {
+                return false;
+            }
+            if (!blockedShardId) {
+                blockedShardId = record.GetDatashardId();
+                return true;
+            } else if (blockedShardId == record.GetDatashardId()) {
+                return true;
+            } else {
+                updatedShardIds.insert(record.GetDatashardId());
+                return false;
+            }
+        };
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStats(
+            runtime, blockPredicate);
 
-        bool firstStatsToSA = false;
-        auto statsObserver1 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto&){
-            firstStatsToSA = true;
-        });
-        runtime.WaitFor("TEvSchemeShardStats 1", [&]{ return firstStatsToSA; });
+        runtime.WaitFor(
+            "TEvPeriodicTableStats",
+            [&]{ return updatedShardIds.size() >= shardCount - 1; });
+        // Give SchemeShard time to process shard stats updates
+        runtime.SimulateSleep(TDuration::Seconds(1));
 
-        UNIT_ASSERT(GetRowCount(runtime, 1, pathId) == 0);
+        auto getDescribeRowCount = [&]() {
+            auto sender = runtime.AllocateEdgeActor();
+            auto describe = DescribeTable(runtime, sender, "/Root/Database/Table");
+            return describe.GetPathDescription().GetTableStats().GetRowCount();
+        };
 
-        block.Unblock();
-        block.Stop();
+        // Check that the row count in SchemeShard got partially updated.
+        UNIT_ASSERT_GT(getDescribeRowCount(), 0);
 
-        bool secondStatsToSA = false;
-        auto statsObserver2 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto&){
-            secondStatsToSA = true;
-        });
-        runtime.WaitFor("TEvSchemeShardStats 2", [&]{ return secondStatsToSA; });
+        const ui32 nodeIdx = 1;
 
-        size_t propagateCount = 0;
-        auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto&){
-            ++propagateCount;
-        });
-        runtime.WaitFor("TEvPropagateStatistics", [&]{ return propagateCount >= runtime.GetNodeCount(); });
+        // Check that the statistics service still reports 0 row count.
+        WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, 1, pathId), expectedRowCount);
+        blockShardStats.Unblock();
+        blockShardStats.Stop();
+        // Give SchemeShard time to process shard stats updates
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Check that after all shard updates reached SchemeShard,
+        // statistics service reports correct row count.
+        WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
+        WaitForStatsPropagate(runtime, nodeIdx);
+
+        // Block updates from one of the shards again and reboot SchemeShard
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockShardStatsAgain(
+            runtime, blockPredicate);
+        RebootTablet(runtime, ssTabletId, runtime.AllocateEdgeActor());
+        updatedShardIds.clear();
+        runtime.WaitFor(
+            "TEvPeriodicTableStats2",
+            [&]{ return updatedShardIds.size() >= shardCount - 1; });
+        // Give SchemeShard time to process shard stats updates
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        {
+            // Check that the row count in SchemeShard got partially updated.
+            ui64 rc = getDescribeRowCount();
+            UNIT_ASSERT_GT(rc, 0);
+            UNIT_ASSERT_LT(rc, expectedRowCount);
+        }
+
+        // Check that after an update from SchemeShard with incomplete stats for the table,
+        // statistics service still reports correct row count.
+        WaitForStatsUpdateFromSchemeShard(runtime, ssTabletId, saTabletId);
+        WaitForStatsPropagate(runtime, nodeIdx);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId), expectedRowCount);
     }
 
     Y_UNIT_TEST(NotFullStatisticsDatashard) {
@@ -235,7 +324,7 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         CreateDatabase(env, "Database");
         CreateUniformTable(env, "Database", "Table");
 
-        TestNotFullStatistics(env, 4);
+        TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ 4);
     }
 
     Y_UNIT_TEST(NotFullStatisticsColumnshard) {
@@ -244,7 +333,68 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         CreateDatabase(env, "Database");
         CreateColumnStoreTable(env, "Database", "Table", 4);
 
-        TestNotFullStatistics(env, 1000);
+        TestNotFullStatistics(env, /*shardCount=*/ 4, /*expectedRowCount=*/ ColumnTableRowsNumber);
+    }
+
+    Y_UNIT_TEST(StatisticsOnShardsRestart) {
+        TTestEnv env(1, 1);
+
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        auto dbName =  "Database";
+        auto table1 = "Table1";
+        auto table2 = "Table2";
+        auto table3 = "Table3";
+
+        auto path1 = "/Root/Database/Table1";
+        auto path2 = "/Root/Database/Table2";
+        auto path3 = "/Root/Database/Table3";
+
+        const ui32 nodeIdx = 1;
+        ui64 saTabletId = 0;
+
+        CreateDatabase(env, dbName);
+        CreateColumnStoreTable(env, dbName, table1, 4);
+        auto pathId1 = ResolvePathId(runtime, path1, nullptr, &saTabletId);
+
+        ui64 ssTabletId = pathId1.OwnerId;
+        auto sender = runtime.AllocateEdgeActor();
+
+        auto getDescribeRowCount = [&](const TString& path) {
+            auto describe = DescribeTable(runtime, sender, path);
+            return describe.GetPathDescription().GetTableStats().GetRowCount();
+        };
+
+        runtime.SimulateSleep(TDuration::Seconds(100));
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
+
+        auto ids = GetColumnTableShards(runtime, sender, path1);
+        for (auto& id : ids) {
+            RebootTablet(runtime, id, sender);
+        }
+
+        CreateColumnStoreTable(env, dbName, table2, 4);
+        auto pathId2 = ResolvePathId(runtime, path2, nullptr, &saTabletId);
+
+        runtime.SimulateSleep(TDuration::Seconds(100));
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path2), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId2), 1000);
+
+        RebootTablet(runtime, ssTabletId, runtime.AllocateEdgeActor());
+
+        CreateColumnStoreTable(env, dbName, table3, 4);
+        auto pathId3 = ResolvePathId(runtime, path3, nullptr, &saTabletId);
+
+        runtime.SimulateSleep(TDuration::Seconds(140));
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path1), 1000);
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path2), 1000);
+        UNIT_ASSERT_EQUAL(getDescribeRowCount(path3), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId1), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId2), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(GetRowCount(runtime, nodeIdx, pathId3), 1000);
     }
 
     Y_UNIT_TEST(SimpleGlobalIndex) {
@@ -374,6 +524,9 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
                 }
             });
             runtime.WaitFor("TEvSchemeShardStats", [&]{ return statsUpdateSent; });
+
+            // Give the aggregator time to (unsuccessfully) try to commit the update.
+            runtime.SimulateSleep(TDuration::Seconds(1));
 
             bool propagateSent = false;
             auto propagateObserver = runtime.AddObserver<TEvStatistics::TEvPropagateStatistics>([&](auto& ev){

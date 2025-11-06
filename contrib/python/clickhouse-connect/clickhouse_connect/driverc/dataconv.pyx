@@ -19,6 +19,7 @@ from uuid import UUID, SafeUUID
 from libc.string cimport memcpy
 from datetime import tzinfo
 
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.errors import NONE_IN_NULLABLE_COLUMN
 
 @cython.boundscheck(False)
@@ -63,7 +64,7 @@ def read_datetime_col(ResponseBuffer buffer, unsigned long long num_rows, tzinfo
     cdef char * loc = buffer.read_bytes_c(4 * num_rows)
     cdef object column = PyTuple_New(num_rows), v
     if tzinfo is None:
-        fts = datetime.utcfromtimestamp
+        fts = tzutil.utcfromtimestamp
         while x < num_rows:
             v = fts((<unsigned int*>loc)[0])
             PyTuple_SET_ITEM(column, x, v)

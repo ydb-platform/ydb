@@ -214,28 +214,28 @@ private:
     TError Error_;
 
     THashSet<TCounterStatePtr> Counters_;
-    TCube<i64> CountersCube_;
+    TCounterCube CountersCube_;
 
     THashSet<TTimeCounterStatePtr> TimeCounters_;
-    TCube<TDuration> TimeCountersCube_;
+    TTimeCounterCube TimeCountersCube_;
 
     THashSet<TGaugeStatePtr> Gauges_;
-    TCube<double> GaugesCube_;
+    TGaugeCube GaugesCube_;
 
     THashSet<TSummaryStatePtr> Summaries_;
-    TCube<TSummarySnapshot<double>> SummariesCube_;
+    TSummaryCube SummariesCube_;
 
     THashSet<TTimerSummaryStatePtr> Timers_;
-    TCube<TSummarySnapshot<TDuration>> TimersCube_;
+    TTimerCube TimersCube_;
 
     THashSet<THistogramStatePtr> TimeHistograms_;
-    TCube<TTimeHistogramSnapshot> TimeHistogramsCube_;
+    TTimeHistogramCube TimeHistogramsCube_;
 
     THashSet<THistogramStatePtr> GaugeHistograms_;
-    TCube<TGaugeHistogramSnapshot> GaugeHistogramsCube_;
+    TGaugeHistogramCube GaugeHistogramsCube_;
 
     THashSet<THistogramStatePtr> RateHistograms_;
-    TCube<TRateHistogramSnapshot> RateHistogramsCube_;
+    TRateHistogramCube RateHistogramsCube_;
 
     std::optional<ESensorType> Type_;
     TGauge CubeSize_;

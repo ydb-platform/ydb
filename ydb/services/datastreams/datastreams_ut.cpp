@@ -683,7 +683,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     createPartitionStreamEvent->Confirm();
                 } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
                     destroyPartitionStreamEvent->Confirm();
-                } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                     break;
                 }
             }
@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 break;
             }
         }
@@ -1626,7 +1626,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 break;
             }
         }
@@ -1745,7 +1745,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 UNIT_ASSERT(false);
                 break;
             } else {

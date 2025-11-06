@@ -25,4 +25,4 @@ TMaybe<TString> TPatternGroup::Match(const TString& s) const {
     return Nothing();
 }
 
-}
+} // namespace NYql

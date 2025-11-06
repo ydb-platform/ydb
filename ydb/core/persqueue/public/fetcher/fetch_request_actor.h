@@ -2,8 +2,6 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy.h>
-#include <ydb/core/tx/replication/ydb_proxy/local_proxy/local_proxy_request.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/aclib/aclib.h>
 
@@ -11,15 +9,13 @@ namespace NKikimr::NPQ {
 
 struct TPartitionFetchRequest {
     TString Topic;
-    TString ClientId;
     ui32 Partition;
     ui64 Offset;
     ui64 MaxBytes;
     ui64 ReadTimestampMs;
 
-    TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0, const TString& clientId = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER)
+    TPartitionFetchRequest(const TString& topic, ui32 partition, ui64 offset, ui64 maxBytes, ui64 readTimestampMs = 0)
         : Topic(topic)
-        , ClientId(clientId)
         , Partition(partition)
         , Offset(offset)
         , MaxBytes(maxBytes)
@@ -31,27 +27,16 @@ struct TPartitionFetchRequest {
 
 struct TFetchRequestSettings {
     TString Database;
+    TString Consumer;
     TVector<TPartitionFetchRequest> Partitions;
-    TIntrusiveConstPtr<NACLib::TUserToken> User;
-    ui64 MaxWaitTimeMs;
-    ui64 TotalMaxBytes;
-    TRlContext RlCtx;
-    bool RuPerRequest;
+    ui64 MaxWaitTimeMs = 0;
+    ui64 TotalMaxBytes = 0;
 
+    bool RuPerRequest = false;
     ui64 RequestId = 0;
-    TFetchRequestSettings(
-            const TString& database, const TVector<TPartitionFetchRequest>& partitions, ui64 maxWaitTimeMs, ui64 totalMaxBytes, TRlContext rlCtx,
-            TIntrusiveConstPtr<NACLib::TUserToken> user = {}, ui64 requestId = 0, bool ruPerRequest = false
-    )
-        : Database(database)
-        , Partitions(partitions)
-        , User(user)
-        , MaxWaitTimeMs(maxWaitTimeMs)
-        , TotalMaxBytes(totalMaxBytes)
-        , RlCtx(rlCtx)
-        , RuPerRequest(ruPerRequest)
-        , RequestId(requestId)
-    {}
+
+    TRlContext RlCtx = {};
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken = {};
 };
 
 NActors::IActor* CreatePQFetchRequestActor(const TFetchRequestSettings& settings, const NActors::TActorId& schemeCache,

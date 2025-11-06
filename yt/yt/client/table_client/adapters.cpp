@@ -266,11 +266,13 @@ void PipeReaderToWriterByBatches(
     }
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     IInputStream* input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
+    i64 totalBytes = 0;
+
     struct TWriteBufferTag { };
     TBlob buffer(GetRefCountedTypeCookie<TWriteBufferTag>(), bufferBlockSize, /*initializeStorage*/ false);
 
@@ -284,17 +286,23 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += length;
+
         output->Write(buffer.Begin(), length);
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
+    i64 totalBytes = 0;
+
     struct TWriteBufferTag { };
     auto buffer = TSharedMutableRef::Allocate<TWriteBufferTag>(bufferBlockSize, {.InitializeStorage = false});
 
@@ -306,16 +314,22 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += length;
+
         output->Write(buffer.Begin(), length);
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const IAsyncZeroCopyInputStreamPtr& input,
     IOutputStream* output)
 {
+    i64 totalBytes = 0;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -324,10 +338,14 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += data.Size();
+
         output->Write(data.Begin(), data.Size());
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

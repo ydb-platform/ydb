@@ -347,6 +347,7 @@ message TVersionedRowDigestExt
     repeated uint64 earliest_nth_timestamp = 2;
     optional bytes last_timestamp_digest = 3;
     optional bytes all_but_last_timestamp_digest = 4;
+    optional bytes first_timestamp_digest = 5;
 }
 
 // This extension is present in (hunk) chunks that store compression dictionaries.

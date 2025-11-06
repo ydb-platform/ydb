@@ -26,22 +26,6 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
-    bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
-        for (auto& item : structType.GetItems()) {
-            auto name = item->GetName();
-            auto type = item->GetItemType();
-            if (auto idx = sourceStructType.FindItem(name)) {
-                if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
-                    continue;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
     TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx) {
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;
@@ -2794,9 +2778,49 @@ namespace {
             }
         }
 
+        const TStructExprType* structType = nullptr;
+        if (auto status = InferUnionType(input->Pos(), input->ChildrenList(), structType, ctx, checkHashes);
+            status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(structType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus SelectOpPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!ctx.Types.OrderedColumns) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                << "Unable to handle positional UNION ALL with column order disabled"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TColumnOrder resultColumnOrder;
+        const TStructExprType* resultStructType = nullptr;
+        auto status = InferPositionalUnionType(input->Pos(), input->ChildrenList(), resultColumnOrder, resultStructType, ctx);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultStructType));
+        return ctx.Types.SetColumnOrder(*input, resultColumnOrder, ctx.Expr);
+    }
+
+    IGraphTransformer::TStatus InferUnionType(
+        TPositionHandle pos,
+        const TExprNode::TListType& children,
+        const TStructExprType*& resultStructType,
+        TContext& ctx,
+        const bool areHashesChecked)
+    {
         std::unordered_map<std::string_view, std::pair<const TTypeAnnotationNode*, ui32>> members;
-        const auto inputsCount = input->ChildrenSize();
-        const auto checkStructType = [&members, &ctx, inputsCount, pos = input->Pos()](TExprNode& input) -> const TStructExprType* {
+        const auto inputsCount = children.size();
+        const auto checkStructType = [&members, &ctx, inputsCount, pos](TExprNode& input) -> const TStructExprType* {
             if (!EnsureListType(input, ctx.Expr)) {
                 return nullptr;
             }
@@ -2838,7 +2862,7 @@ namespace {
         };
 
         TVector<const TStructExprType*> structTypes;
-        for (auto child : input->Children()) {
+        for (auto child : children) {
             auto structType = checkStructType(*child);
             if (!structType) {
                 return IGraphTransformer::TStatus::Error;
@@ -2874,46 +2898,23 @@ namespace {
             addResultItems(structType);
         }
 
-        if (checkHashes) {
+        if (areHashesChecked) {
             for (const auto& r : resultItems) {
                 if (!r->GetItemType()->IsHashable() || !r->GetItemType()->IsEquatable()) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected hashable and equatable type for column: " <<
-                        r->GetName() << ", but got: " << *r->GetItemType()));
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder()
+                        << "Expected hashable and equatable type for column: "
+                        << r->GetName() << ", but got: " << *r->GetItemType()));
                     return IGraphTransformer::TStatus::Error;
                 }
             }
         }
 
-        auto structType = ctx.Expr.MakeType<TStructExprType>(resultItems);
-        if (!structType->Validate(input->Pos(), ctx.Expr)) {
+        resultStructType = ctx.Expr.MakeType<TStructExprType>(resultItems);
+        if (!resultStructType->Validate(pos, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(structType));
         return IGraphTransformer::TStatus::Ok;
-    }
-
-    IGraphTransformer::TStatus SelectOpPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
-        Y_UNUSED(output);
-        if (!ctx.Types.OrderedColumns) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
-                << "Unable to handle positional UNION ALL with column order disabled"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        TColumnOrder resultColumnOrder;
-        const TStructExprType* resultStructType = nullptr;
-        auto status = InferPositionalUnionType(input->Pos(), input->ChildrenList(), resultColumnOrder, resultStructType, ctx);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultStructType));
-        return ctx.Types.SetColumnOrder(*input, resultColumnOrder, ctx.Expr);
     }
 
     IGraphTransformer::TStatus InferPositionalUnionType(TPositionHandle pos, const TExprNode::TListType& children,
@@ -7030,7 +7031,7 @@ namespace {
 
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 14, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 15, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto& item = input->ChildRef(0);
@@ -7040,6 +7041,7 @@ namespace {
         auto* hop = input->Child(3);
         auto* interval = input->Child(4);
         auto* delay = input->Child(5);
+        auto dataWatermarks = input->Child(6);
 
         auto& lambdaInit = input->ChildRef(7);
         auto& lambdaUpdate = input->ChildRef(8);
@@ -7047,6 +7049,9 @@ namespace {
         auto& loadLambda = input->ChildRef(10);
         auto& lambdaMerge = input->ChildRef(11);
         auto& lambdaFinish = input->ChildRef(12);
+
+        auto watermarkMode = input->Child(13);
+        auto hoppingColumn = input->Child(14);
 
         if (!EnsureStreamType(*item, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -7094,6 +7099,10 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
         if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*dataWatermarks, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7184,6 +7193,14 @@ namespace {
                     << *loadLambda->GetTypeAnn() << " != " << *stateType));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        if (!EnsureAtom(*watermarkMode, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*hoppingColumn, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(lambdaFinish->GetTypeAnn()));

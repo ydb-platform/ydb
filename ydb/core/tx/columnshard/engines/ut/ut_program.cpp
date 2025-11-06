@@ -480,7 +480,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
             auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 
-            TTableUpdatesBuilder result(NArrow::MakeArrowSchema({ std::make_pair("21", TTypeInfo(NTypeIds::Bool)) }));
+            auto schema = arrow::schema({arrow::field("21", arrow::boolean())});
+            TTableUpdatesBuilder result(schema);
             result.AddRow().Add<bool>(true);
             result.AddRow().Add<bool>(false);
 

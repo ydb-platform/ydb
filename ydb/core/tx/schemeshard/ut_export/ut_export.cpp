@@ -681,7 +681,9 @@ namespace {
                 const auto& topicExpected = expected.at(i);
                 const auto& topicPath = topicExpected.GetPath();
                 UNIT_ASSERT(HasS3File(topicPath));
-                UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
+                auto content = GetS3FileContent(topicPath);
+                UNIT_ASSERT_C(topicExpected.CompareWithString(content),
+                    TStringBuilder() << topicExpected.GetPublicProto().DebugString() << "\n\nVS\n\n" << content);
 
                 if (enablePermissions) {
                     auto permissionsPath = topicExpected.GetPermissions().GetPath();
@@ -2968,5 +2970,125 @@ attributes {
              NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
              NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
              NLs::IndexKeys({"value"})});
+    }
+
+    Y_UNIT_TEST(DecimalOutOfRange) {
+        EnvOptions().DisableStatsBatching(true);
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Decimal" }
+                KeyColumnNames: ["key"]
+            )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Write a normal decimal value
+        // 10.0^13-1 (scale 9) = 0x21e19e0c9ba76a53600
+        {
+            ui64 key = 1u;
+            std::pair<ui64, i64> value = { 0x19e0c9ba76a53600ULL, 0x21eULL };
+            UploadRow(Runtime(), "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+        // Write a decimal value that is out of range for precision 22
+        // 10.0^13 (scale 9) = 10^22 = 0x21e19e0c9bab2400000
+        {
+            ui64 key = 2u;
+            std::pair<ui64, i64> value = { 0x19e0c9bab2400000ULL, 0x21eULL };
+            UploadRow(Runtime(), "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT(HasS3File("/Backup1/metadata.json"));
+        UNIT_ASSERT(HasS3File("/Backup1/data_00.csv"));
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/Backup1/data_00.csv"),
+            "1,9999999999999\n"
+            "2,10000000000000\n");
+
+        TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Table2"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "Backup2"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        // Note: out-of-range values are restored as inf
+        UNIT_ASSERT(HasS3File("/Backup2/metadata.json"));
+        UNIT_ASSERT(HasS3File("/Backup2/data_00.csv"));
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/Backup2/data_00.csv"),
+            "1,9999999999999\n"
+            "2,inf\n");
+    }
+
+    Y_UNIT_TEST(CorruptedDecimalValue) {
+        EnvOptions().DisableStatsBatching(true);
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Decimal" }
+                KeyColumnNames: ["key"]
+            )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Write a decimal value that is way out of range for max precision 35
+        // 10^38 = 0x4b3b4ca85a86c47a098a224000000000
+        {
+            ui64 key = 1u;
+            std::pair<ui64, i64> value = { 0x098a224000000000ULL, 0x4b3b4ca85a86c47aULL };
+            UploadRow(Runtime(), "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 }

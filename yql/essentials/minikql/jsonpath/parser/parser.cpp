@@ -12,7 +12,7 @@
 #include <google/protobuf/message.h>
 
 #if defined(_tsan_enabled_)
-#include <util/system/mutex.h>
+    #include <util/system/mutex.h>
 #endif
 
 #include <util/string/strip.h>
@@ -25,7 +25,7 @@ using namespace NYql;
 TMutex SanitizerJsonPathTranslationMutex;
 #endif
 
-class TParseErrorsCollector : public NProtoAST::IErrorCollector {
+class TParseErrorsCollector: public NProtoAST::IErrorCollector {
 public:
     TParseErrorsCollector(TIssues& issues, size_t maxErrors)
         : IErrorCollector(maxErrors)
@@ -39,10 +39,14 @@ private:
         Issues_.back().SetCode(TIssuesIds::JSONPATH_PARSE_ERROR, TSeverityIds::S_ERROR);
     }
 
+    void AddIssue(NYql::TIssue&& issue) override {
+        Issues_.AddIssue(std::forward<NYql::TIssue>(issue));
+    }
+
     TIssues& Issues_;
 };
 
-}
+} // namespace
 
 namespace NYql::NJsonPath {
 
@@ -56,9 +60,9 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     google::protobuf::Arena arena;
     const google::protobuf::Message* rawAst = nullptr;
     {
-    #if defined(_tsan_enabled_)
+#if defined(_tsan_enabled_)
         TGuard<TMutex> guard(SanitizerJsonPathTranslationMutex);
-    #endif
+#endif
         NProtoAST::TProtoASTBuilder3<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena);
         TParseErrorsCollector collector(issues, maxParseErrors);
         rawAst = builder.BuildAST(collector);
@@ -101,4 +105,4 @@ const TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t 
     return PackBinaryJsonPath(ast);
 }
 
-}
+} // namespace NYql::NJsonPath

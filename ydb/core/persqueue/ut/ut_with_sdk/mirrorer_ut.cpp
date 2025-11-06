@@ -26,7 +26,17 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         TString srcTopicFullName = "rt3.dc1--" + srcTopic;
         TString dstTopicFullName = "rt3.dc1--" + dstTopic;
 
-        server.AnnoyingClient->CreateTopic(srcTopicFullName, partitionsCount);
+        server.AnnoyingClient->CreateTopic(
+            srcTopicFullName,
+            partitionsCount,
+            /*ui32 lowWatermark =*/ 8_MB,
+            /*ui64 lifetimeS =*/ 86400,
+            /*ui64 writeSpeed =*/ 20000000,
+            /*TString user =*/ "",
+            /*ui64 readSpeed =*/ 200000000,
+            /*TVector<TString> rr =*/ {"some_user", "user"},
+            /*TVector<TString> important =*/ {}
+        );
 
         NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
         mirrorFrom.SetEndpoint("localhost");
@@ -45,7 +55,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             /*ui64 writeSpeed =*/ 20000000,
             /*TString user =*/ "",
             /*ui64 readSpeed =*/ 200000000,
-            /*TVector<TString> rr =*/ {},
+            /*TVector<TString> rr =*/ {"user"},
             /*TVector<TString> important =*/ {},
             mirrorFrom
         );
@@ -113,7 +123,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         auto createTopicReader = [&](const TString& topic) {
             auto settings = NTopic::TReadSessionSettings()
                     .AppendTopics(NTopic::TTopicReadSettings(topic))
-                    .ConsumerName("shared/user")
+                    .ConsumerName("user")
                     .Decompress(false);
 
             return NTopic::TTopicClient(*driver).CreateReadSession(settings);
@@ -298,7 +308,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                     lockEv->Confirm();
             } else if (auto* releaseEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
                 releaseEv->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<TSessionClosedEvent>(&*event)) {
                 UNIT_ASSERT_VALUES_EQUAL(messagesGot, 5);
                 break;
             }
@@ -317,7 +327,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         while(!gotData) {
             auto event = reader->GetEvent(true);
             UNIT_ASSERT(event);
-            if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+            if (std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
                 gotData = true;
             } else if (auto* lockEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
                     lockEv->Confirm(5);

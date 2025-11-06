@@ -177,6 +177,8 @@ namespace NKikimr::NBsController {
             cmd->SetFailDomainIdx(vslot->GetFailDomainIdx());
             cmd->SetVDiskIdx(vslot->GetVDiskIdx());
             cmd->SetOnlyToLessOccupiedPDisk(true);
+            cmd->SetPreferLessOccupiedRack(Settings.PreferLessOccupiedRack);
+            cmd->SetWithAttentionToReplication(Settings.WithAttentionToReplication);
 
             return ev;
         }
@@ -375,6 +377,12 @@ namespace NKikimr::NBsController {
         }
         if (clusterBalancingSettings.HasMaxReplicatingVDisks()) {
             settings.MaxReplicatingVDisks = clusterBalancingSettings.GetMaxReplicatingVDisks();
+        }
+        if (clusterBalancingSettings.HasPreferLessOccupiedRack()) {
+            settings.PreferLessOccupiedRack = clusterBalancingSettings.GetPreferLessOccupiedRack();
+        }
+        if (clusterBalancingSettings.HasWithAttentionToReplication()) {
+            settings.WithAttentionToReplication = clusterBalancingSettings.GetWithAttentionToReplication();
         }
 
         return settings;

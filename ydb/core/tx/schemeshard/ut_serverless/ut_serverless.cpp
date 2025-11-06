@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         waitMeteringMessage();
 
         {
-            TString meteringData = R"({"usage":{"start":1600452120,"quantity":59,"finish":1600452179,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":13280},"labels":{"Category":"Table"},"id":"72057594046678944-3-1600452120-1600452179-13280","cloud_id":"CLOUD_ID_VAL","source_wt":1600452180,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
+            TString meteringData = R"({"usage":{"start":1600452180,"quantity":59,"finish":1600452239,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":13280},"labels":{"Category":"Table"},"id":"72057594046678944-3-1600452180-1600452239-13280","cloud_id":"CLOUD_ID_VAL","source_wt":1600452240,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
             MeteringDataEqual(meteringMessages, meteringData);
         }
 
@@ -265,12 +265,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
         meteringMessages.clear();
         runtime.SetObserverFunc(grabMeteringMessage);
         runtime.AdvanceCurrentTime(TDuration::Minutes(1));
-        waitMeteringMessage();
+        runtime.SimulateSleep(TDuration::Minutes(1));
 
-        {
-            TString meteringData = R"({"usage":{"start":1600452180,"quantity":59,"finish":1600452239,"type":"delta","unit":"byte*second"},"tags":{"ydb_size":0},"labels":{"Category":"Table"},"id":"72057594046678944-3-1600452180-1600452239-0","cloud_id":"CLOUD_ID_VAL","source_wt":1600452240,"source_id":"sless-docapi-ydb-storage","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})";
-            MeteringDataEqual(meteringMessages, meteringData);
-        }
+        UNIT_ASSERT(meteringMessages.empty());
     }
 
     Y_UNIT_TEST(StorageBillingLabels) {
@@ -333,6 +330,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             {"not_a_label_x", "y"},
         }));
         env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerlessDB"), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteRow(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB/Table", 0, 1, "v1");
 
         TBlockEvents<NMetering::TEvMetering::TEvWriteMeteringJson> block(runtime);
         runtime.WaitFor("metering", [&]{ return block.size() >= 1; });
@@ -618,5 +631,152 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             )",
             {{ TEvSchemeShard::EStatus::StatusPreconditionFailed, "Unsupported: feature flag EnableServerlessExclusiveDynamicNodes is off" }}
         );
+    }
+
+    Y_UNIT_TEST(ForbidInMemoryCacheModeInServerLess) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/SharedDB");
+        const auto subDomainPathId = describeResult.GetPathId();
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "SharedDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "ServerlessDB"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: %lu
+            }
+        )", TTestTxConfig::SchemeShard, subDomainPathId));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "ServerlessDB"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerlessDB"), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+        });
+
+        // try create with default in-memory family
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value1" Type: "String" }
+            Columns { Name: "value2" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+              ColumnFamilies {
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // try create with other in-memory family
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value1" Type: "String" }
+            Columns { Name: "value2" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+              ColumnFamilies {
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value1" Type: "String" }
+            Columns { Name: "value2" Type: "String" }
+            KeyColumnNames: ["key"]
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+              ColumnFamilies {
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // try alter default in-memory family
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+              ColumnFamilies {
+                Id: 1
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+
+        // try alter other in-memory family
+        TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            PartitionConfig {
+              ColumnFamilies {
+                Id: 0
+                ColumnCacheMode: ColumnCacheModeRegular
+              }
+              ColumnFamilies {
+                Id: 1
+                Name: "Other"
+                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+              }
+            }
+        )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
     }
 }

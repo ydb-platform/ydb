@@ -35,8 +35,10 @@ using namespace NYT::NConcurrency;
 ////////////////////////////////////////////////////////////////////////////////
 
 // Workaround until better solution is implemented in YT-26196.
-// This timeout is slightly greater than "replication_reader_failure_timeout" in server code.
-const TDuration TableReaderTimeout = TDuration::Minutes(11);
+// This timeout exceeds some timeouts in server code:
+//   - "replication_reader_failure_timeout"
+//   - "session_timeout"
+const TDuration TableReaderTimeout = TDuration::Minutes(35);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -915,28 +917,18 @@ IFileReaderPtr TRpcRawClient::GetJobStderr(
     return MakeIntrusive<TRpcResponseStream>(std::move(stream));
 }
 
-std::vector<TJobTraceEvent> TRpcRawClient::GetJobTrace(
+IFileReaderPtr TRpcRawClient::GetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
     auto future = Client_->GetJobTrace(
         NScheduler::TOperationId(YtGuidFromUtilGuid(operationId)),
+        NJobTrackerClient::TJobId(YtGuidFromUtilGuid(jobId)),
         SerializeOptionsForGetJobTrace(options));
-    auto jobTraceEvents = WaitAndProcess(future);
-
-    std::vector<TJobTraceEvent> result;
-    result.reserve(jobTraceEvents.size());
-    for (const auto& event : jobTraceEvents) {
-        result.push_back(TJobTraceEvent{
-            .OperationId = UtilGuidFromYtGuid(event.OperationId.Underlying()),
-            .JobId = UtilGuidFromYtGuid(event.JobId.Underlying()),
-            .TraceId = UtilGuidFromYtGuid(event.TraceId.Underlying()),
-            .EventIndex = event.EventIndex,
-            .Event = event.Event,
-            .EventTime = event.EventTime,
-        });
-    }
-    return result;
+    auto result = WaitAndProcess(future);
+    auto stream = CreateSyncAdapter(CreateCopyingAdapter(result));
+    return MakeIntrusive<TRpcResponseStream>(std::move(stream));
 }
 
 std::unique_ptr<IInputStream> TRpcRawClient::ReadFile(

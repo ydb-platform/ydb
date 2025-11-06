@@ -78,8 +78,9 @@ public:
     virtual TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) = 0;
     virtual TReadResultStats ReadAllResult(std::function<void(TConstArrayRef<TCell>)> reader) = 0;
     virtual bool AllRowsProcessed() = 0;
+    virtual bool HasPendingResults() = 0;
     virtual void ResetRowsProcessing(ui64 readId) = 0;
-    virtual bool IsOverloaded() = 0;
+    virtual std::optional<TString> IsOverloaded() = 0;
 
 protected:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
@@ -90,6 +91,7 @@ protected:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc);
 

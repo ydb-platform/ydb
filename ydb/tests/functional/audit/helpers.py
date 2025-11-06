@@ -47,9 +47,12 @@ def execute_ydbd(cluster, token, cmd, check_exit_code=True):
         assert False, f'Command\n{full_cmd}\n finished with exit code {proc_result.exit_code}, stderr:\n\n{proc_result.std_err.decode("utf-8")}\n\nstdout:\n{proc_result.std_out.decode("utf-8")}'
 
 
+def get_dstool_binary_path():
+    return yatest.common.binary_path(os.getenv('YDB_DSTOOL_BINARY'))
+
+
 def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
-    dstool_binary_path = yatest.common.build_path('ydb/apps/dstool/ydb-dstool')
-    full_cmd = [dstool_binary_path, '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
+    full_cmd = [get_dstool_binary_path(), '--endpoint', f'grpc://{cluster_endpoint(cluster)}']
     full_cmd += cmd
 
     proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
@@ -59,8 +62,7 @@ def execute_dstool_grpc(cluster, token, cmd, check_exit_code=True):
 
 
 def execute_dstool_http(cluster, token, cmd, check_exit_code=True):
-    dstool_binary_path = yatest.common.build_path('ydb/apps/dstool/ydb-dstool')
-    full_cmd = [dstool_binary_path, '--endpoint', f'http://{cluster_http_endpoint(cluster)}']
+    full_cmd = [get_dstool_binary_path(), '--endpoint', f'http://{cluster_http_endpoint(cluster)}']
     full_cmd += cmd
 
     proc_result = yatest.common.process.execute(full_cmd, check_exit_code=False, env={'YDB_TOKEN': token})
@@ -144,7 +146,7 @@ class CanonicalCaptureAuditFileOutput:
         self.__canonize_apply_regex(json_record, r'Host: \"[^\"]+\"', 'Host: \"<canonized_host_name>\"')
         self.__canonize_apply_regex(json_record, r'RestartTabletID=\d+', 'RestartTabletID=<canonized_tablet_id>')
         # source_location is used only in debug builds like relwithdebinfo and debug
-        self.__canonize_apply_regex(json_record, r', source_location: [A-Za-z0-9_/.]+\.(cpp|h):\d+', '')
+        self.__canonize_apply_regex(json_record, r', source_location: [A-Za-z0-9_\-\\/.]+\.(cpp|h):\d+', '')
         return json.dumps(json_record, sort_keys=True) + '\n'
 
     def __validate_field(self, json_record, field_name):

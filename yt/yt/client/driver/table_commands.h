@@ -159,6 +159,8 @@ private:
     //! Return cookies that can be used with read_table_partition command
     bool EnableCookies;
 
+    bool OmitInaccessibleRows;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 

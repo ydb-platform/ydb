@@ -1,6 +1,6 @@
 # CREATE RESOURCE POOL CLASSIFIER
 
-`CREATE RESOURCE POOL CLASSIFIER` создаёт [пул классификаторов ресурсов](../../../../concepts/gloassary#resource-pool-classifier.md).
+`CREATE RESOURCE POOL CLASSIFIER` создаёт [пул классификаторов ресурсов](../../../concepts/glossary.md#resource-pool-classifier.md).
 
 ## Синтаксис
 
@@ -28,7 +28,7 @@ WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 
 ## Разрешения
 
-Требуется [разрешение](../yql/reference/syntax/grant#permissions-list) `ALL` на базу данных
+Требуется [разрешение](./grant.md#permissions-list) `ALL` на базу данных
 
 Пример выдачи такого разрешения:
 

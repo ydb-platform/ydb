@@ -14,5 +14,5 @@ IComputationNode* WrapQueuePeek(TCallable& callable, const TComputationNodeFacto
 IComputationNode* WrapQueueRange(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

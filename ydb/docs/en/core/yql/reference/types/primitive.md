@@ -13,7 +13,6 @@ Notes
     ||
 || `Bool` |
 Boolean value |
-Not available for column-oriented tables
     ||
 || `Int8` |
 Signed integer
@@ -76,7 +75,13 @@ Compatible with the `Number` type in AWS DynamoDB. Not recommended for use in {{
 || `String` |
 String, can contain arbitrary binary data |
     ||
+|| `Bytes` (alias for type `String` |
+String, can contain arbitrary binary data |
+    ||
 || `Utf8` |
+Text in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding |
+    ||
+|| `Text` (alias for type `Utf8` |
 Text in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding |
     ||
 || `Json` |
@@ -129,7 +134,7 @@ A moment in time corresponding to midnight<sup>1</sup> in UTC, precision to the 
 |
 from 00:00 01.01.1970 to 00:00 01.01.2106
 |
-4
+2
 |
 —
 ||
@@ -215,7 +220,7 @@ from -292277 years to +292277 years
 |
 8
 |
-—
+Not available for column-oriented tables
 ||
 
 ||
@@ -337,7 +342,9 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Double**      | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes             | —              | No     |
 | **Decimal**     | No            | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | —       |
 | **String**      | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes      |
+| **Bytes**       | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes      |
 | **Utf8**        | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes      |
+| **Text**        | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes      |
 | **Json**        | No              | No              | No              | No              | No              | No                | No                | No                | No                | No              | No              | No      |
 | **Yson**        | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup> | Yes<sup>5</sup> | No      |
 | **Uuid**        | No            | No              | No              | No              | No              | No                | No                | No                | No                | No              | No              | No     |
@@ -373,7 +380,8 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Double**      | No  | No      | No       | No      | No    | No        | No         | No        |
 | **Decimal**     | No  | No      | No       | No      | No    | No        | No         | No        |
 | **String**      | Yes   | Yes       | Yes        | Yes       | Yes     | Yes         | Yes          | Yes         |
-| **Utf8**        | Yes   | Yes       | Yes        | Yes       | Yes     | Yes         | Yes          | Yes         |
+| **Bytes**       | Yes   | Yes       | Yes        | Yes       | Yes     | Yes         | Yes          | Yes         |
+| **Text**        | Yes   | Yes       | Yes        | Yes       | Yes     | Yes         | Yes          | Yes         |
 | **Json**        | No  | No      | No       | No      | No    | No        | No         | No        |
 | **Yson**        | No  | No      | No       | No      | No    | No        | No         | No        |
 | **Uuid**        | No  | No      | No       | No      | No    | No        | No         | No        |
@@ -388,33 +396,35 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 
 #### Casting to other data types
 
-| Type             | String         | Utf8 | Json | Yson | Uuid |
-| --------------- | -------------- | ---- | ---- | ---- | ---- |
-| **Bool**        | Yes             | No  | No  | No  | No  |
-| **Int8**        | Yes             | No  | No  | No  | No  |
-| **Int16**       | Yes             | No  | No  | No  | No  |
-| **Int32**       | Yes             | No  | No  | No  | No  |
-| **Int64**       | Yes             | No  | No  | No  | No  |
-| **Uint8**       | Yes             | No  | No  | No  | No  |
-| **Uint16**      | Yes             | No  | No  | No  | No  |
-| **Uint32**      | Yes             | No  | No  | No  | No  |
-| **Uint64**      | Yes             | No  | No  | No  | No  |
-| **Float**       | Yes             | No  | No  | No  | No  |
-| **Double**      | Yes             | No  | No  | No  | No  |
-| **Decimal**     | Yes             | No  | No  | No  | No  |
-| **String**      | —              | Yes   | Yes   | Yes   | Yes   |
-| **Utf8**        | Yes             | —    | No  | No  | No  |
-| **Json**        | Yes             | Yes   | —    | No  | No  |
-| **Yson**        | Yes<sup>1</sup> | No  | No  | No  | No  |
-| **Uuid**        | Yes             | Yes   | No  | No  | —    |
-| **Date**        | Yes             | Yes   | No  | No  | No  |
-| **Datetime**    | Yes             | Yes   | No  | No  | No  |
-| **Timestamp**   | Yes             | Yes   | No  | No  | No  |
-| **Interval**    | Yes             | Yes   | No  | No  | No  |
-| **Date32**      | Yes             | Yes   | No  | No  | No  |
-| **Datetime64**  | Yes             | Yes   | No  | No  | No  |
-| **Timestamp64** | Yes             | Yes   | No  | No  | No  |
-| **Interval64**  | Yes             | Yes   | No  | No  | No  |
+| Type            | String         | Bytes          | Utf8 | Text | Json | Yson | Uuid |
+| --------------- | -------------- | -------------- | ---- | ---- | ---- | ---- | ---- |
+| **Bool**        | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Int8**        | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Int16**       | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Int32**       | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Int64**       | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Uint8**       | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Uint16**      | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Uint32**      | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Uint64**      | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Float**       | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Double**      | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **Decimal**     | Yes            | Yes            | No   | No   | No   | No   | No   |
+| **String**      | —              | —              | Yes  | Yes  | Yes  | Yes  | Yes  |
+| **Bytes**       | —              | —              | Yes  | Yes  | Yes  | Yes  | Yes  |
+| **Utf8**        | Yes            | Yes            | —    | —    | No   | No   | No   |
+| **Text**        | Yes            | Yes            | —    | —    | No   | No   | No   |
+| **Json**        | Yes            | Yes            | Yes  | Yes  | —    | No   | No   |
+| **Yson**        | Yes<sup>1</sup>| Yes<sup>1</sup>| No   | No   | No   | —    | No   |
+| **Uuid**        | Yes            | Yes            | Yes  | Yes  | No   | No   | —    |
+| **Date**        | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Datetime**    | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Timestamp**   | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Interval**    | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Date32**      | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Datetime64**  | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Timestamp64** | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
+| **Interval64**  | Yes            | Yes            | Yes  | Yes  | No   | No   | No   |
 
 <sup>1</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 

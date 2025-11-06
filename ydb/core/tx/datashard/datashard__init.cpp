@@ -192,7 +192,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     }
 
     // Find subdomain path id if needed
-    if (Self->State == TShardState::Ready) {
+    if (Self->NeedToWatchSubDomainPathId()) {
         if (Self->SubDomainPathId) {
             Self->StartWatchingSubDomainPathId();
         } else {

@@ -115,9 +115,14 @@ namespace NKikimr::NStorage {
         TGroupRecord& group = it->second;
         group.MaxKnownGeneration = Max(group.MaxKnownGeneration, generation);
         if (newGroup) {
-            const auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(newGroup->GetErasureSpecies());
-            Y_DEBUG_ABORT_UNLESS(!group.GType || group.GType->GetErasure() == erasure);
-            group.GType.emplace(erasure);
+            if (newGroup->HasErasureSpecies()) {
+                const auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(newGroup->GetErasureSpecies());
+                Y_DEBUG_ABORT_UNLESS(!group.GType || group.GType->GetErasure() == erasure);
+                group.GType.emplace(erasure);
+            } else {
+                Y_ABORT_UNLESS(newGroup->RingsSize() == 0); // ensure no VDisks in group
+                group.GType.emplace(TBlobStorageGroupType::ErasureNone);
+            }
         }
 
         // forget pending queries
@@ -351,6 +356,13 @@ namespace NKikimr::NStorage {
 
         for (const TWorkingSyncer& syncer : toStop) {
             if (syncer.ActorId) {
+                STLOG(PRI_DEBUG, BS_NODE, NW65, "ApplyWorkingSyncers: stopping",
+                    (BridgeProxyGroupId, syncer.BridgeProxyGroupId),
+                    (BridgeProxyGroupGeneration, syncer.BridgeProxyGroupGeneration),
+                    (SourceGroupId, syncer.SourceGroupId),
+                    (TargetGroupId, syncer.TargetGroupId),
+                    (PendingBridgeProxyGroupGeneration, syncer.PendingBridgeProxyGroupGeneration),
+                    (ActorId, syncer.ActorId));
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
             }
             WorkingSyncers.erase(syncer);
@@ -358,14 +370,24 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartSyncerIfNeeded(TWorkingSyncer& syncer) {
-        if (syncer.BridgeProxyGroupGeneration < syncer.PendingBridgeProxyGroupGeneration && syncer.ActorId) {
+        auto& group = Groups[syncer.BridgeProxyGroupId.GetRawId()];
+
+        const bool stopCurrent = syncer.BridgeProxyGroupGeneration < syncer.PendingBridgeProxyGroupGeneration
+            && syncer.ActorId;
+        const bool startNew = (stopCurrent || !syncer.ActorId)
+            && group.Info
+            && group.Info->GroupGeneration == syncer.PendingBridgeProxyGroupGeneration;
+
+        const ui32 prevBridgeProxyGroupGeneration = syncer.BridgeProxyGroupGeneration;
+        const TActorId prevActorId = syncer.ActorId;
+
+        if (stopCurrent) {
             // we've got already running syncer, but group generation gets changed, we need to restart it
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
             syncer.ActorId = {};
             ++syncer.NumStop;
         }
-        auto& group = Groups[syncer.BridgeProxyGroupId.GetRawId()];
-        if (!syncer.ActorId && group.Info && group.Info->GroupGeneration == syncer.PendingBridgeProxyGroupGeneration) {
+        if (startNew) {
             syncer.BridgeProxyGroupGeneration = syncer.PendingBridgeProxyGroupGeneration;
             syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
 
@@ -381,6 +403,21 @@ namespace NKikimr::NStorage {
             syncer.Finished = false;
             syncer.ErrorReason.reset();
             ++syncer.NumStart;
+        }
+        if (stopCurrent || startNew) {
+            STLOG(PRI_DEBUG, BS_NODE, NW64, "StartSyncerIfNeeded",
+                (BridgeProxyGroupId, syncer.BridgeProxyGroupId),
+                (PrevBridgeProxyGroupGeneration, prevBridgeProxyGroupGeneration),
+                (BridgeProxyGroupGeneration, syncer.BridgeProxyGroupGeneration),
+                (SourceGroupId, syncer.SourceGroupId),
+                (TargetGroupId, syncer.TargetGroupId),
+                (PendingBridgeProxyGroupGeneration, syncer.PendingBridgeProxyGroupGeneration),
+                (PrevActorId, prevActorId),
+                (ActorId, syncer.ActorId),
+                (HasGroupInfo, static_cast<bool>(group.Info)),
+                (GroupInfoGeneration, group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt),
+                (StopCurrent, stopCurrent),
+                (StartNew, startNew));
         }
     }
 
@@ -412,11 +449,9 @@ namespace NKikimr::NStorage {
 
     bool TNodeWarden::FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update,
             TWorkingSyncer& syncer, bool forceProgress) {
-        auto res = false;
-
         auto *item = update->AddSyncers();
         syncer.BridgeProxyGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetBridgeProxyGroupId);
-        item->SetBridgeProxyGroupGeneration(syncer.BridgeProxyGroupGeneration);
+        item->SetBridgeProxyGroupGeneration(syncer.PendingBridgeProxyGroupGeneration);
         syncer.SourceGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetSourceGroupId);
         syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
         if (syncer.Finished) {
@@ -426,8 +461,13 @@ namespace NKikimr::NStorage {
             item->SetErrorReason(*syncer.ErrorReason);
         }
 
+        if (!syncer.SyncerDataStats) {
+            return false; // hasn't started yet (maybe waiting for correct group infos)
+        }
+
         // report syncer progress
         auto& stats = *syncer.SyncerDataStats;
+        auto res = false;
 
 #define ISSUE_METRIC(NAME) \
         const ui64 current##NAME = stats.NAME; \

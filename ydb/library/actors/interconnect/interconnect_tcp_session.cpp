@@ -134,6 +134,8 @@ namespace NActors {
 
         guard->Terminate(std::move(Pool), XdcSocket, TlsActivationContext->AsActorContext());
 
+        SetOutputStuckFlag(false);
+
         TActor::PassAway();
     }
 
@@ -151,7 +153,9 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev, *Pool);
+        TInstant now = TlsActivationContext->Now();
+
+        const auto [dataSize, event] = oChannel.Push(*ev, *Pool, now);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -254,9 +258,9 @@ namespace NActors {
             return;
         }
 
-        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64,
+        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket));
+            i64(*ev->Get()->Socket), (ev->Get()->RdmaQp ? (int)ev->Get()->RdmaQp->GetQpNum() : -1));
 
         NewConnectionSet = TActivationContext::Now();
         BytesWrittenToSocket = 0;
@@ -264,6 +268,9 @@ namespace NActors {
         SendBufferSize = ev->Get()->Socket->GetSendBufferSize();
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
+
+        auto cq = std::move(ev->Get()->RdmaCq);
+        RdmaQp = std::move(ev->Get()->RdmaQp);
 
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
@@ -290,7 +297,7 @@ namespace NActors {
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, RdmaQp, std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor
@@ -335,6 +342,7 @@ namespace NActors {
         LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
 
+        SetOutputStuckFlag(NumEventsInQueue != 0);
         SwitchStuckPeriod();
 
         LastHandshakeDone = TActivationContext::Now();
@@ -550,6 +558,7 @@ namespace NActors {
             LostConnectionWatchdog.Rearm(SelfId());
             Proxy->Metrics->SetConnected(0);
             Proxy->RegisterDisconnect();
+            SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
         }
         if (XdcSocket) {
@@ -1124,17 +1133,9 @@ namespace NActors {
         OutputStuckFlag = state;
 
         if (state) {
-            if (++Proxy->Common->NumSessionsWithDataInQueue == 1) {
-                const ui64 ts = GetCycleCountFast();
-                const ui64 prevts = Proxy->Common->CyclesOnLastSwitch.exchange(ts);
-                Proxy->Common->CyclesWithZeroSessions += ts - prevts;
-            }
+            Proxy->Common->AddSessionWithDataInQueue();
         } else {
-            if (!--Proxy->Common->NumSessionsWithDataInQueue) {
-                const ui64 ts = GetCycleCountFast();
-                const ui64 prevts = Proxy->Common->CyclesOnLastSwitch.exchange(ts);
-                Proxy->Common->CyclesWithNonzeroSessions += ts - prevts;
-            }
+            Proxy->Common->RemoveSessionWithDataInQueue();
         }
     }
 
@@ -1306,6 +1307,10 @@ namespace NActors {
                             TABLER() {
                                 TABLED() { str << "Frame version/Checksum"; }
                                 TABLED() { str << (Params.Encryption ? "v2/none" : Params.UseXxhash ? "v2/xxhash" : "v2/crc32c"); }
+                            }
+                            TABLER() {
+                                TABLED() { str << "RdmaMode" ; }
+                                TABLED() { str << (Params.UseRdma ? Params.ChecksumRdmaEvent ? "On | SoftwareChecksum" : "On" : "Off"); }
                             }
 #define MON_VAR(NAME)     \
     TABLER() {            \

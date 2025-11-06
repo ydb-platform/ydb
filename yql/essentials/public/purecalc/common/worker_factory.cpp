@@ -58,6 +58,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
 {
+    HandleInternalSettings(options.InternalSettings);
+
     // Prepare input struct types and extract all column names from inputs
     auto typeCtx = PrepareTypeContext(options.ModuleResolver);
 
@@ -113,8 +115,8 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
         SerializedProgram_ = TString{options.Query};
     } else {
         ExprRoot_ = Compile(options.Query, options.TranslationMode,
-            options.SyntaxVersion, options.Modules,
-            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode, typeCtx.Get());
+                            options.SyntaxVersion, options.Modules,
+                            options.InputSpec, options.OutputSpec, options.UseAntlr4, processorMode, typeCtx.Get());
 
         RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
 
@@ -137,9 +139,23 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 }
 
 template <typename TBase>
+void TWorkerFactory<TBase>::HandleInternalSettings(const TInternalProgramSettings& settings) {
+    if (settings.NodesAllocationLimit) {
+        ExprContext_.NodesAllocationLimit = *settings.NodesAllocationLimit;
+    }
+
+    if (settings.StringsAllocationLimit) {
+        ExprContext_.StringsAllocationLimit = *settings.StringsAllocationLimit;
+    }
+
+    if (settings.RepeatTransformLimit) {
+        ExprContext_.RepeatTransformLimit = *settings.RepeatTransformLimit;
+    }
+}
+
+template <typename TBase>
 TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
-    IModuleResolver::TPtr factoryModuleResolver
-) {
+    IModuleResolver::TPtr factoryModuleResolver) {
     // Prepare type annotation context
 
     IModuleResolver::TPtr moduleResolver = factoryModuleResolver ? factoryModuleResolver->CreateMutableChild() : nullptr;
@@ -147,9 +163,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     typeContext->LangVer = LangVer_;
     typeContext->UseTypeDiffForConvertToError = true;
     typeContext->RandomProvider = CreateDefaultRandomProvider();
-    typeContext->TimeProvider = DeterministicTimeProviderSeed_ ?
-        CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) :
-        CreateDefaultTimeProvider();
+    typeContext->TimeProvider = DeterministicTimeProviderSeed_ ? CreateDeterministicTimeProvider(*DeterministicTimeProviderSeed_) : CreateDefaultTimeProvider();
     typeContext->UdfResolver = NCommon::CreateSimpleUdfResolver(FuncRegistry_.Get());
     typeContext->ArrowResolver = MakeSimpleArrowResolver(*FuncRegistry_.Get());
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
@@ -176,8 +190,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     const TOutputSpecBase& outputSpec,
     bool useAntlr4,
     EProcessorMode processorMode,
-    TTypeAnnotationContext* typeContext
-) {
+    TTypeAnnotationContext* typeContext) {
     Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
         ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
@@ -219,8 +232,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             "DisableAnsiOptionalAs",
             "DisableCoalesceJoinKeysOnQualifiedAll",
             "DisableUnorderedSubqueries",
-            "FlexibleTypes"
-        };
+            "FlexibleTypes"};
         if (BlockEngineMode_ != EBlockEngineMode::Disable) {
             settings.Flags.insert("EmitAggApply");
         }
@@ -242,8 +254,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         NSQLTranslation::TTranslators translators(
             nullptr,
             NSQLTranslationV1::MakeTranslator(lexers, parsers),
-            NSQLTranslationPG::MakeTranslator()
-        );
+            NSQLTranslationPG::MakeTranslator());
 
         astRes = SqlToYql(translators, TString(query), settings);
     } else {
@@ -273,11 +284,9 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         ythrow TCompileError(astStr.Str(), GetIssues().ToString()) << "failed to compile";
     }
 
-
     // Prepare transformation pipeline
     THolder<IGraphTransformer> calcTransformer = CreateFunctorTransformer([&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx)
-        -> IGraphTransformer::TStatus
-    {
+                                                                              -> IGraphTransformer::TStatus {
         output = input;
         auto valueNode = input->HeadPtr();
 
@@ -309,8 +318,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
             LangVer_,
-            true
-        );
+            true);
 
         with_lock (graph.ScopedAlloc) {
             const auto value = graph.ComputationGraph->GetValue();
@@ -324,8 +332,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     });
 
     const TString& selfName = TString(inputSpec.ProvidesBlocks()
-                            ? PurecalcBlockInputCallableName
-                            : PurecalcInputCallableName);
+                                          ? PurecalcBlockInputCallableName
+                                          : PurecalcInputCallableName);
 
     TTypeAnnCallableFactory typeAnnCallableFactory = [&]() {
         return MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName);
@@ -343,28 +351,26 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.AddTypeAnnotationTransformer();
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-                if (node->IsCallable("Unordered") && node->Child(0)->IsCallable({
-                    PurecalcInputCallableName, PurecalcBlockInputCallableName
-                })) {
-                    return node->ChildPtr(0);
-                }
-                return node;
-            }, ctx, TOptimizeExprSettings(nullptr));
-        }), "Unordered", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
-        "Unordered optimizations");
+                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                         return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                             if (node->IsCallable("Unordered") && node->Child(0)->IsCallable({PurecalcInputCallableName, PurecalcBlockInputCallableName})) {
+                                 return node->ChildPtr(0);
+                             }
+                             return node;
+                         }, ctx, TOptimizeExprSettings(nullptr));
+                     }), "Unordered", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                 "Unordered optimizations");
     pipeline.Add(CreateFunctorTransformer(
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-                if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
-                    return node->Head().ChildPtr(1);
-                }
+                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                         return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+                             if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
+                                 return node->Head().ChildPtr(1);
+                             }
 
-                return node;
-            }, ctx, TOptimizeExprSettings(nullptr));
-        }), "Cons", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
-        "Cons optimizations");
+                             return node;
+                         }, ctx, TOptimizeExprSettings(nullptr));
+                     }), "Cons", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                 "Cons optimizations");
     pipeline.Add(MakeOutputColumnsFilter(outputSpec.GetOutputColumnsFilter()),
                  "Filter", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Filter output columns");
@@ -406,10 +412,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     if (exprOut) {
         *exprOut << "After optimization:" << Endl;
-        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root
-            ->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine
-                                    | TAstPrintFlags::ShortQuote
-                                    | TAstPrintFlags::AdaptArbitraryContent);
+        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
     }
     return exprRoot;
 }
@@ -523,7 +526,7 @@ template <typename TBase>
 TString TWorkerFactory<TBase>::GetCompiledProgram() {
     if (ExprRoot_) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-            FuncRegistry_->SupportsSizedAllocators());
+                                              FuncRegistry_->SupportsSizedAllocators());
         NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
 
         auto rootNode = CompileMkql(ExprRoot_, ExprContext_, *FuncRegistry_, env, UserData_);
@@ -541,32 +544,30 @@ void TWorkerFactory<TBase>::ReturnWorker(IWorker* worker) {
     }
 }
 
-
-#define DEFINE_WORKER_MAKER(MODE)                                                       \
-    TWorkerHolder<I##MODE##Worker> T##MODE##WorkerFactory::MakeWorker() {               \
-        if (!WorkerPool_.empty()) {                                                     \
-            auto res = std::move(WorkerPool_.back());                                   \
-            WorkerPool_.pop_back();                                                     \
-            return TWorkerHolder<I##MODE##Worker>((I##MODE##Worker *)res.Release());    \
-        }                                                                               \
-        return TWorkerHolder<I##MODE##Worker>(new T##MODE##Worker(                      \
-            weak_from_this(),                                                           \
-            ExprRoot_,                                                                  \
-            ExprContext_,                                                               \
-            SerializedProgram_,                                                         \
-            *FuncRegistry_,                                                             \
-            UserData_,                                                                  \
-            InputTypes_,                                                                \
-            OriginalInputTypes_,                                                        \
-            RawInputTypes_,                                                             \
-            OutputType_,                                                                \
-            RawOutputType_,                                                             \
-            LLVMSettings_,                                                              \
-            CountersProvider_,                                                          \
-            NativeYtTypeFlags_,                                                         \
-            DeterministicTimeProviderSeed_,                                             \
-            LangVer_                                                                    \
-        ));                                                                             \
+#define DEFINE_WORKER_MAKER(MODE)                                                   \
+    TWorkerHolder<I##MODE##Worker> T##MODE##WorkerFactory::MakeWorker() {           \
+        if (!WorkerPool_.empty()) {                                                 \
+            auto res = std::move(WorkerPool_.back());                               \
+            WorkerPool_.pop_back();                                                 \
+            return TWorkerHolder<I##MODE##Worker>((I##MODE##Worker*)res.Release()); \
+        }                                                                           \
+        return TWorkerHolder<I##MODE##Worker>(new T##MODE##Worker(                  \
+            weak_from_this(),                                                       \
+            ExprRoot_,                                                              \
+            ExprContext_,                                                           \
+            SerializedProgram_,                                                     \
+            *FuncRegistry_,                                                         \
+            UserData_,                                                              \
+            InputTypes_,                                                            \
+            OriginalInputTypes_,                                                    \
+            RawInputTypes_,                                                         \
+            OutputType_,                                                            \
+            RawOutputType_,                                                         \
+            LLVMSettings_,                                                          \
+            CountersProvider_,                                                      \
+            NativeYtTypeFlags_,                                                     \
+            DeterministicTimeProviderSeed_,                                         \
+            LangVer_));                                                             \
     }
 
 DEFINE_WORKER_MAKER(PullStream)
@@ -574,14 +575,11 @@ DEFINE_WORKER_MAKER(PullList)
 DEFINE_WORKER_MAKER(PushStream)
 
 namespace NYql {
-    namespace NPureCalc {
-        template
-        class TWorkerFactory<IPullStreamWorkerFactory>;
+namespace NPureCalc {
+template class TWorkerFactory<IPullStreamWorkerFactory>;
 
-        template
-        class TWorkerFactory<IPullListWorkerFactory>;
+template class TWorkerFactory<IPullListWorkerFactory>;
 
-        template
-        class TWorkerFactory<IPushStreamWorkerFactory>;
-    }
-}
+template class TWorkerFactory<IPushStreamWorkerFactory>;
+} // namespace NPureCalc
+} // namespace NYql

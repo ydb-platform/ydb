@@ -6,9 +6,15 @@ except ImportError:
     yatest_common = None
 
 import functools
+import hashlib
 import logging
 import os
 import re
+import time
+
+LOG_ONCE_BUFF = {}
+MAX_BUFF_LEN = 1000
+BUFF_CLEANING_LEN = 10
 
 
 def set_log_level_from_config(logger):
@@ -126,3 +132,15 @@ else:
 
 def log(level, msg, *args, **kwargs):
     LOGGER.log(level, msg, *args, **kwargs)
+
+
+def log_once(level, msg, *args, **kwargs):
+    msg_hash = hashlib.sha256(msg.encode('utf-8')).hexdigest()
+    if msg_hash not in LOG_ONCE_BUFF:
+        LOGGER.log(level, msg, *args, **kwargs)
+    LOG_ONCE_BUFF[msg_hash] = time.time()
+
+    if len(LOG_ONCE_BUFF) >= MAX_BUFF_LEN:
+        cleaning_items = sorted(LOG_ONCE_BUFF.items(), key=lambda i: i[1])[:BUFF_CLEANING_LEN]
+        for msg, msg_time in cleaning_items:
+            del LOG_ONCE_BUFF[msg]

@@ -63,6 +63,7 @@ struct Schema : NIceDb::Schema {
         struct LocksAcquired            : Column<28, NScheme::NTypeIds::Uint64> {};
         struct LocksWholeShard          : Column<29, NScheme::NTypeIds::Uint64> {};
         struct LocksBroken              : Column<30, NScheme::NTypeIds::Uint64> {};
+        struct TxCompleteLag            : Column<31, NScheme::NTypeIds::Interval> {};
 
         using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
@@ -95,7 +96,8 @@ struct Schema : NIceDb::Schema {
             FollowerId,
             LocksAcquired,
             LocksWholeShard,
-            LocksBroken
+            LocksBroken,
+            TxCompleteLag
             >;
     };
 
@@ -816,6 +818,38 @@ struct Schema : NIceDb::Schema {
             Warnings,
             Metadata>;
     };
+
+    struct StreamingQueries : Table<28> {
+        struct Path                 : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Status               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Issues               : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Plan                 : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Ast                  : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct Text                 : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Run                  : Column<7, NScheme::NTypeIds::Bool> {};
+        struct ResourcePool         : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct RetryCount           : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct LastFailAt           : Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct SuspendedUntil       : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct LastExecutionId      : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct PreviousExecutionIds : Column<13, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path>;
+        using TColumns = TableColumns<
+            Path,
+            Status,
+            Issues,
+            Plan,
+            Ast,
+            Text,
+            Run,
+            ResourcePool,
+            RetryCount,
+            LastFailAt,
+            SuspendedUntil,
+            LastExecutionId,
+            PreviousExecutionIds>;
+    };
 };
 
 
@@ -885,6 +919,8 @@ const TVector<SysViewsRegistryRecord> SysViews = {
     {"primary_index_portion_stats", ESysViewType::ETablePrimaryIndexPortionStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexPortionStats>},
     {"primary_index_granule_stats", ESysViewType::ETablePrimaryIndexGranuleStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexGranuleStats>},
     {"primary_index_optimizer_stats", ESysViewType::ETablePrimaryIndexOptimizerStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
+
+    {"streaming_queries", ESysViewType::EStreamingQueries, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::StreamingQueries>},
 };
 
 const TVector<SysViewsRegistryRecord> RewrittenSysViews = {

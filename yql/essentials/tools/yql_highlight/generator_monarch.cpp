@@ -10,206 +10,305 @@
 
 namespace NSQLHighlight {
 
-    TString ToMonarchRegex(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
-        TStringBuilder regex;
-
-        if (unit.IsPlain && pattern.Before.empty()) {
-            regex << R"re(\b)re";
-        }
-
-        regex << "(" << pattern.Body << ")";
-
-        if (!pattern.After.empty()) {
-            regex << "(?=" << pattern.After << ")";
-        }
-
-        if (unit.IsPlain && pattern.Before.empty()) {
-            regex << R"re(\b)re";
-        }
-
-        return regex;
-    }
-
-    TString ToMonarchSelector(EUnitKind kind) {
-        switch (kind) {
-            case EUnitKind::Keyword:
-                return "keyword";
-            case EUnitKind::Punctuation:
-                return "operator.sql";
-            case EUnitKind::QuotedIdentifier:
-                return "string.tablepath";
-            case EUnitKind::BindParameterIdentifier:
-                return "variable";
-            case EUnitKind::TypeIdentifier:
-                return "keyword.type";
-            case EUnitKind::FunctionIdentifier:
-                return "support.function";
-            case EUnitKind::Identifier:
-                return "identifier";
-            case EUnitKind::Literal:
-                return "number";
-            case EUnitKind::StringLiteral:
-                return "string";
-            case EUnitKind::Comment:
-                return "comment";
-            case EUnitKind::Whitespace:
-                return "white";
-            case EUnitKind::Error:
-                return "";
+template <std::invocable<const TUnit&, const NSQLTranslationV1::TRegexPattern&, size_t> Action>
+void ForEachBeforablePattern(const THighlighting& highlighting, Action action) {
+    for (const TUnit& unit : highlighting.Units) {
+        size_t i = 0;
+        for (const NSQLTranslationV1::TRegexPattern& regex : unit.Patterns) {
+            if (!regex.Before.empty()) {
+                i += 1;
+                action(unit, regex, i);
+            }
         }
     }
+}
 
-    TString ToMonarchStateName(EUnitKind kind) {
-        switch (kind) {
-            case EUnitKind::Keyword:
-                return "keyword";
-            case EUnitKind::Punctuation:
-                return "punctuation";
-            case EUnitKind::QuotedIdentifier:
-                return "quotedIdentifier";
-            case EUnitKind::BindParameterIdentifier:
-                return "bindParameterIdentifier";
-            case EUnitKind::TypeIdentifier:
-                return "typeIdentifier";
-            case EUnitKind::FunctionIdentifier:
-                return "functionIdentifier";
-            case EUnitKind::Identifier:
-                return "identifier";
-            case EUnitKind::Literal:
-                return "literal";
-            case EUnitKind::StringLiteral:
-                return "stringLiteral";
-            case EUnitKind::Comment:
-                return "comment";
-            case EUnitKind::Whitespace:
-                return "whitespace";
-            case EUnitKind::Error:
-                return "error";
-        }
+TString ToMonarchRegex(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
+    TStringBuilder regex;
+
+    if (unit.IsPlain && pattern.Before.empty()) {
+        regex << R"re(\b)re";
     }
 
-    NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, bool ansi) {
-        Y_ENSURE(unit.RangePattern);
+    regex << "(" << pattern.Body << ")";
+
+    if (!pattern.After.empty()) {
+        regex << "(?=" << pattern.After << ")";
+    }
+
+    if (unit.IsPlain && pattern.Before.empty()) {
+        regex << R"re(\b)re";
+    }
+
+    return regex;
+}
+
+TString ToMonarchSelector(EUnitKind kind) {
+    switch (kind) {
+        case EUnitKind::Keyword:
+            return "keyword";
+        case EUnitKind::Punctuation:
+            return "operator.sql";
+        case EUnitKind::QuotedIdentifier:
+            return "string.tablepath";
+        case EUnitKind::BindParameterIdentifier:
+            return "variable";
+        case EUnitKind::OptionIdentifier:
+            return "identifier";
+        case EUnitKind::TypeIdentifier:
+            return "keyword.type";
+        case EUnitKind::FunctionIdentifier:
+            return "support.function";
+        case EUnitKind::Identifier:
+            return "identifier";
+        case EUnitKind::Literal:
+            return "number";
+        case EUnitKind::StringLiteral:
+            return "string";
+        case EUnitKind::Comment:
+            return "comment";
+        case EUnitKind::Whitespace:
+            return "white";
+        case EUnitKind::Error:
+            return "";
+    }
+}
+
+TString ToMonarchStateName(EUnitKind kind) {
+    switch (kind) {
+        case EUnitKind::Keyword:
+            return "keyword";
+        case EUnitKind::Punctuation:
+            return "punctuation";
+        case EUnitKind::QuotedIdentifier:
+            return "quotedIdentifier";
+        case EUnitKind::BindParameterIdentifier:
+            return "bindParameterIdentifier";
+        case EUnitKind::OptionIdentifier:
+            return "optionIdentifier";
+        case EUnitKind::TypeIdentifier:
+            return "typeIdentifier";
+        case EUnitKind::FunctionIdentifier:
+            return "functionIdentifier";
+        case EUnitKind::Identifier:
+            return "identifier";
+        case EUnitKind::Literal:
+            return "literal";
+        case EUnitKind::StringLiteral:
+            return "stringLiteral";
+        case EUnitKind::Comment:
+            return "comment";
+        case EUnitKind::Whitespace:
+            return "whitespace";
+        case EUnitKind::Error:
+            return "error";
+    }
+}
+
+TMaybe<NJson::TJsonMap> EmbeddedLanguage(const TRangePattern& range) {
+    if (range.BeginPlain.StartsWith(TRangePattern::EmbeddedPythonBegin)) {
+        return NJson::TJsonMap{
+            {"token", "string.python"},
+            {"nextEmbedded", "python"},
+            {"next", "@embedded"},
+            {"goBack", 3},
+        };
+    }
+
+    if (range.BeginPlain.StartsWith(TRangePattern::EmbeddedJavaScriptBegin)) {
+        return NJson::TJsonMap{
+            {"token", "string.js"},
+            {"nextEmbedded", "javascript"},
+            {"next", "@embedded"},
+            {"goBack", 4},
+        };
+    }
+
+    return Nothing();
+}
+
+NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, const TRangePattern& pattern, bool ansi) {
+    TString group = ToMonarchSelector(unit.Kind);
+    TString begin = RE2::QuoteMeta(pattern.BeginPlain);
+    TString end = RE2::QuoteMeta(pattern.EndPlain);
+
+    TMaybe<TString> escape;
+    if (pattern.EscapeRegex) {
+        escape = *pattern.EscapeRegex;
+    }
+
+    NJson::TJsonValue json;
+    if (unit.Kind == EUnitKind::StringLiteral) {
+        json.AppendValue(NJson::TJsonArray{
+            "#py",
+            NJson::TJsonMap{
+                {"token", "string.python"},
+                {"nextEmbedded", "python"},
+                {"next", "@embedded"},
+                {"goBack", 3},
+            },
+        });
+        json.AppendValue(NJson::TJsonArray{
+            "\\/\\/js",
+            NJson::TJsonMap{
+                {"token", "string.js"},
+                {"nextEmbedded", "javascript"},
+                {"next", "@embedded"},
+                {"goBack", 4},
+            },
+        });
+        json.AppendValue(NJson::TJsonArray{
+            "{",
+            NJson::TJsonMap{
+                {"token", "string.js"},
+                {"nextEmbedded", "javascript"},
+                {"next", "@embedded"},
+                {"goBack", 1},
+            },
+        });
+        if (auto embedded = EmbeddedLanguage(pattern)) {
+            json.AppendValue(NJson::TJsonArray{
+                "[^" + begin + "]",
+                *embedded});
+        }
+        if (escape) {
+            json.AppendValue(NJson::TJsonArray{*escape, group + ".escape"});
+        }
+    } else if (unit.Kind == EUnitKind::Comment && ansi) {
+        json.AppendValue(NJson::TJsonArray{begin, group, "@" + group});
+    }
+    json.AppendValue(NJson::TJsonArray{"[^" + begin + "]", group});
+    json.AppendValue(NJson::TJsonArray{end, group, "@pop"});
+    json.AppendValue(NJson::TJsonArray{begin, group});
+
+    return json;
+}
+
+NJson::TJsonValue ToMonarchBeforableState(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
+    NJson::TJsonValue json;
+    json.AppendValue(ToMonarchRegex(unit, pattern));
+    json.AppendValue(ToMonarchSelector(unit.Kind));
+    json.AppendValue("@pop");
+    return NJson::TJsonArray({json});
+}
+
+NJson::TJsonValue MonarchEmbeddedState() {
+    return NJson::TJsonArray{{NJson::TJsonArray{
+        "([^@]|^)([@]{4})*[@]{2}([@]([^@]|$)|[^@]|$)",
+        NJson::TJsonMap{
+            {"token", "@rematch"},
+            {"next", "@pop"},
+            {"nextEmbedded", "@pop"},
+        },
+    }}};
+}
+
+NJson::TJsonValue ToMonarchBeforableState(const THighlighting& highlighting) {
+    NJson::TJsonArray json;
+
+    ForEachBeforablePattern(highlighting, [&](const auto& unit, const auto& pattern, auto i) {
+        // Note: Assume that before is always a keyword with trailing spaces.
+        json.AppendValue(NJson::TJsonArray{
+            pattern.Before,
+            ToMonarchSelector(EUnitKind::Keyword),
+            "@" + ToMonarchStateName(unit.Kind) + ToString(i),
+        });
+    });
+
+    return json;
+}
+
+NJson::TJsonValue ToMonarchWhitespaceState(const THighlighting& highlighting) {
+    NJson::TJsonValue json;
+
+    const TUnit& ws = *FindIfPtr(highlighting.Units, [](const TUnit& unit) {
+        return unit.Kind == EUnitKind::Whitespace;
+    });
+
+    Y_ENSURE(ws.Patterns.size() == 1);
+    json.AppendValue(NJson::TJsonArray{ToMonarchRegex(ws, ws.Patterns.at(0)), "white"});
+
+    ForEachMultiLineExceptEmbedded(highlighting, [&](const TUnit& unit, const TRangePattern& pattern) {
+        json.AppendValue(NJson::TJsonArray{
+            RE2::QuoteMeta(pattern.BeginPlain),
+            ToMonarchSelector(unit.Kind),
+            "@" + ToMonarchStateName(unit.Kind) + pattern.BeginPlain,
+        });
+    });
+
+    return json;
+}
+
+NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting, bool ansi) {
+    NJson::TJsonValue json;
+
+    json.AppendValue(NJson::TJsonMap{{"include", "@beforable"}});
+
+    for (const TUnit& unit : highlighting.Units) {
+        if (unit.IsCodeGenExcluded) {
+            continue;
+        }
 
         TString group = ToMonarchSelector(unit.Kind);
-        TString begin = RE2::QuoteMeta(unit.RangePattern->Begin);
-        TString end = RE2::QuoteMeta(unit.RangePattern->End);
 
-        NJson::TJsonValue json;
-
-        if (unit.Kind == EUnitKind::StringLiteral) {
-            json.AppendValue(NJson::TJsonArray{
-                "#py",
-                NJson::TJsonMap{
-                    {"token", "string.python"},
-                    {"nextEmbedded", "python"},
-                    {"next", "@embedded"},
-                    {"goBack", 3},
-                },
-            });
-            json.AppendValue(NJson::TJsonArray{
-                "\\/\\/js",
-                NJson::TJsonMap{
-                    {"token", "string.js"},
-                    {"nextEmbedded", "javascript"},
-                    {"next", "@embedded"},
-                    {"goBack", 4},
-                },
-            });
-        } else if (unit.Kind == EUnitKind::Comment && ansi) {
-            json.AppendValue(NJson::TJsonArray{begin, group, "@" + group});
+        const auto* patterns = &unit.Patterns;
+        if (!unit.PatternsANSI.Empty() && ansi) {
+            patterns = unit.PatternsANSI.Get();
         }
 
-        json.AppendValue(NJson::TJsonArray{"[^" + begin + "]", group});
-        json.AppendValue(NJson::TJsonArray{end, group, "@pop"});
-        json.AppendValue(NJson::TJsonArray{begin, group});
-
-        return json;
-    }
-
-    NJson::TJsonValue MonarchEmbeddedState() {
-        return NJson::TJsonArray{{NJson::TJsonArray{
-            "([^@]|^)([@]{4})*[@]{2}([@]([^@]|$)|[^@]|$)",
-            NJson::TJsonMap{
-                {"token", "@rematch"},
-                {"next", "@pop"},
-                {"nextEmbedded", "@pop"},
-            },
-        }}};
-    }
-
-    NJson::TJsonValue ToMonarchWhitespaceState(const THighlighting& highlighting) {
-        NJson::TJsonValue json;
-
-        const TUnit& ws = *FindIfPtr(highlighting.Units, [](const TUnit& unit) {
-            return unit.Kind == EUnitKind::Whitespace;
-        });
-        Y_ENSURE(ws.Patterns.size() == 1);
-        json.AppendValue(NJson::TJsonArray{ToMonarchRegex(ws, ws.Patterns.at(0)), "white"});
-
-        ForEachMultiLine(highlighting, [&](const TUnit& unit) {
-            json.AppendValue(NJson::TJsonArray{
-                RE2::QuoteMeta(unit.RangePattern->Begin),
-                ToMonarchSelector(unit.Kind),
-                "@" + ToMonarchStateName(unit.Kind),
-            });
-        });
-
-        return json;
-    }
-
-    NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting, bool ansi) {
-        NJson::TJsonValue json;
-        json.AppendValue(NJson::TJsonMap{{"include", "@whitespace"}});
-        for (const TUnit& unit : highlighting.Units) {
-            if (unit.IsCodeGenExcluded) {
+        for (const NSQLTranslationV1::TRegexPattern& pattern : *patterns) {
+            if (!pattern.Before.empty()) {
                 continue;
             }
 
-            TString group = ToMonarchSelector(unit.Kind);
-
-            const auto* patterns = &unit.Patterns;
-            if (!unit.PatternsANSI.Empty() && ansi) {
-                patterns = unit.PatternsANSI.Get();
-            }
-
-            for (const NSQLTranslationV1::TRegexPattern& pattern : *patterns) {
-                TString regex = ToMonarchRegex(unit, pattern);
-                json.AppendValue(NJson::TJsonArray{regex, group});
-            }
+            TString regex = ToMonarchRegex(unit, pattern);
+            json.AppendValue(NJson::TJsonArray{regex, group});
         }
-        return json;
     }
 
-    void GenerateMonarch(IOutputStream& out, const THighlighting& highlighting, bool ansi) {
-        NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);
-        buf.SetIndentSpaces(4);
+    json.AppendValue(NJson::TJsonMap{{"include", "@whitespace"}});
 
-        const auto write_json = [&](TStringBuf key, const NJson::TJsonValue& json) {
-            buf.WriteKey(key);
-            buf.WriteJsonValue(&json);
-        };
+    return json;
+}
 
-        buf.BeginObject();
+void GenerateMonarch(IOutputStream& out, const THighlighting& highlighting, bool ansi) {
+    NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);
+    buf.SetIndentSpaces(4);
 
-        buf.WriteKey("ignoreCase");
-        buf.WriteBool(IsCaseInsensitive(highlighting));
+    const auto write_json = [&](TStringBuf key, const NJson::TJsonValue& json) {
+        buf.WriteKey(key);
+        buf.WriteJsonValue(&json);
+    };
 
-        buf.WriteKey("tokenizer");
-        buf.BeginObject();
-        write_json("root", ToMonarchRootState(highlighting, ansi));
-        write_json("whitespace", ToMonarchWhitespaceState(highlighting));
-        ForEachMultiLine(highlighting, [&](const TUnit& unit) {
-            write_json(ToMonarchStateName(unit.Kind), ToMonarchMultiLineState(unit, ansi));
-        });
-        write_json("embedded", MonarchEmbeddedState());
-        buf.EndObject();
+    buf.BeginObject();
 
-        buf.EndObject();
-    }
+    buf.WriteKey("ignoreCase");
+    buf.WriteBool(IsCaseInsensitive(highlighting));
 
-    IGenerator::TPtr MakeMonarchGenerator() {
-        return MakeOnlyFileGenerator(GenerateMonarch);
-    }
+    buf.WriteKey("tokenizer");
+    buf.BeginObject();
+    write_json("root", ToMonarchRootState(highlighting, ansi));
+    write_json("whitespace", ToMonarchWhitespaceState(highlighting));
+    write_json("beforable", ToMonarchBeforableState(highlighting));
+    ForEachMultiLineExceptEmbedded(highlighting, [&](const TUnit& unit, const TRangePattern& pattern) {
+        write_json(
+            ToMonarchStateName(unit.Kind) + pattern.BeginPlain,
+            ToMonarchMultiLineState(unit, pattern, ansi));
+    });
+    write_json("embedded", MonarchEmbeddedState());
+    ForEachBeforablePattern(highlighting, [&](const auto& unit, const auto& pattern, auto i) {
+        write_json(
+            ToMonarchStateName(unit.Kind) + ToString(i),
+            ToMonarchBeforableState(unit, pattern));
+    });
+
+    buf.EndObject();
+
+    buf.EndObject();
+}
+
+IGenerator::TPtr MakeMonarchGenerator() {
+    return MakeOnlyFileGenerator(GenerateMonarch);
+}
 
 } // namespace NSQLHighlight

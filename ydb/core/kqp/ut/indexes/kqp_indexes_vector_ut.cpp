@@ -98,9 +98,12 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         std::string_view direction,
         std::string_view left,
         std::string_view right,
-        bool covered = false
+        bool covered = false,
+        bool bitVector = false
     ) {
-        constexpr std::string_view target = "$target = \"\x67\x71\x03\";";
+        constexpr std::string_view uint8Target = "$target = \"\x67\x71\x02\";";
+        constexpr std::string_view bitTarget = "$target = \"\x3F\x02\x0A\";";
+        const std::string_view target = bitVector ? bitTarget : uint8Target;
         std::string metric = std::format("Knn::{}({}, {})", function, left, right);
         // no metric in result
         {
@@ -156,23 +159,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         TTxSettings txSettings,
         std::string_view function,
         std::string_view direction,
-        bool covered = false) {
+        bool covered = false,
+        bool bitVector = false) {
         // target is left, member is right
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "$target", "emb", covered, bitVector);
         // target is right, member is left
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, function, direction, "emb", "$target", covered, bitVector);
     }
 
     void DoPositiveQueriesVectorIndexOrderByCosine(
         TSession& session,
         TTxSettings txSettings = TTxSettings::SerializableRW(),
-        bool covered = false) {
+        bool covered = false,
+        bool bitVector = false) {
         // distance, default direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "", covered, bitVector);
         // distance, asc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineDistance", "ASC", covered, bitVector);
         // similarity, desc direction
-        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered);
+        DoPositiveQueriesVectorIndexOrderBy(session, txSettings, "CosineSimilarity", "DESC", covered, bitVector);
     }
 
     TSession DoOnlyCreateTableForVectorIndex(TTableClient& db, bool nullable, const TString& dataCol = "data", bool partitioned = true) {
@@ -214,16 +219,16 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString query1 = TStringBuilder()
                 << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
-                << "(0, \"\x03\x30\x03\", \"0\"),"
-                    "(1, \"\x13\x31\x03\", \"1\"),"
-                    "(2, \"\x23\x32\x03\", \"2\"),"
-                    "(3, \"\x53\x33\x03\", \"3\"),"
-                    "(4, \"\x43\x34\x03\", \"4\"),"
-                    "(5, \"\x50\x60\x03\", \"5\"),"
-                    "(6, \"\x61\x11\x03\", \"6\"),"
-                    "(7, \"\x12\x62\x03\", \"7\"),"
-                    "(8, \"\x75\x76\x03\", \"8\"),"
-                    "(9, \"\x76\x76\x03\", \"9\");";
+                << "(0, \"\x03\x30\x02\", \"0\"),"
+                    "(1, \"\x13\x31\x02\", \"1\"),"
+                    "(2, \"\x23\x32\x02\", \"2\"),"
+                    "(3, \"\x53\x33\x02\", \"3\"),"
+                    "(4, \"\x43\x34\x02\", \"4\"),"
+                    "(5, \"\x50\x60\x02\", \"5\"),"
+                    "(6, \"\x61\x11\x02\", \"6\"),"
+                    "(7, \"\x12\x62\x02\", \"7\"),"
+                    "(8, \"\x75\x76\x02\", \"8\"),"
+                    "(9, \"\x76\x76\x02\", \"9\");";
 
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
@@ -249,6 +254,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     TSession DoCreateTableAndVectorIndex(TTableClient& db, bool nullable, bool covered = false, bool ___data = false) {
         auto session = DoCreateTableForVectorIndex(db, nullable, ___data ? "___data" : "data");
         DoCreateVectorIndex(session, covered, ___data);
+        return session;
+    }
+
+    TSession DoCreateTableForVectorIndexWithBitQuantization(TTableClient& db, bool nullable, const TString& dataCol = "data") {
+        auto session = DoOnlyCreateTableForVectorIndex(db, nullable, dataCol);
+        {
+            const TString query1 = TStringBuilder()
+                << "UPSERT INTO `/Root/TestTable` (pk, emb, " << dataCol << ") VALUES "
+                << "(1, Untag(Knn::ToBinaryStringBit([1.f, 0.f, 0.f, 0.f, 0.f, 0.f]), \"BitVector\"), \"1\"),"
+                    "(2, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 0.f, 0.f, 0.f, 0.f]), \"BitVector\"), \"2\"),"
+                    "(3, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 0.f, 0.f, 0.f]), \"BitVector\"), \"3\"),"
+                    "(4, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 0.f, 0.f]), \"BitVector\"), \"4\"),"
+                    "(5, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 0.f]), \"BitVector\"), \"5\"),"
+                    "(6, Untag(Knn::ToBinaryStringBit([1.f, 1.f, 1.f, 1.f, 1.f, 1.f]), \"BitVector\"), \"6\");";
+
+            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
         return session;
     }
 
@@ -297,6 +321,59 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesVectorIndexOrderByCosine(session);
+
+        {
+            const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
+            auto result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel1WithBitQuantization, Nullable, UseSimilarity) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndexWithBitQuantization(db, Nullable);
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (%s=cosine, vector_type="bit", vector_dimension=6, levels=1, clusters=2);
+            )", UseSimilarity ? "similarity" : "distance")));
+
+            auto result = session.ExecuteSchemeQuery(createIndex)
+                          .ExtractValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, UseSimilarity
+                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
+                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Bit);
+            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 6);
+            UNIT_ASSERT_EQUAL(settings.Levels, 1);
+            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
+        }
+        DoPositiveQueriesVectorIndexOrderByCosine(session, TTxSettings::SerializableRW(), false, true);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
@@ -364,7 +441,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString query1(Q1_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "1";
-                $TargetEmbedding = String::HexDecode("677103");
+                $TargetEmbedding = String::HexDecode("677102");
                 SELECT * FROM `/Root/TestTable` VIEW index1
                 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
                 LIMIT 3;
@@ -505,7 +582,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             rows.AddListItem()
                 .BeginStruct()
                 .AddMember("pk").Int64(11)
-                .AddMember("emb").String("\x77\x77\x03")
+                .AddMember("emb").String("\x77\x77\x02")
                 .AddMember("data").String("43")
                 .EndStruct();
             rows.EndList();
@@ -538,7 +615,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\3\"];[9]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"vv\\2\"];[9]]]");
             }
         }
 
@@ -605,8 +682,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x11\x62\x03", "10"),
-                (11, "\x77\x75\x03", "11")
+                (10, "\x11\x62\x02", "10"),
+                (11, "\x77\x75\x02", "11")
             )"));
             query1 += (returning ? " RETURNING data, emb, pk;" : ";");
 
@@ -614,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\3\"];[10]];[[\"11\"];[\"wu\\3\"];[11]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"10\"];[\"\\021b\\2\"];[10]];[[\"11\"];[\"wu\\2\"];[11]]]");
             }
         }
 
@@ -711,7 +788,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         // Update to the table with index should succeed (embedding changes, but the cluster does not)
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x03" WHERE `pk`=9;
+                UPDATE `/Root/TestTable` SET `emb`="\x76\x75\x02" WHERE `pk`=9;
             )"));
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
@@ -721,7 +798,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
         const TString updated = ReadTablePartToYson(session, "/Root/TestTable/index1/indexImplPostingTable");
         if (Covered) {
-            SubstGlobal(orig, "\"\x76\x76\\3\"", "\"\x76\x75\\3\"");
+            SubstGlobal(orig, "\"\x76\x76\\2\"", "\"\x76\x75\\2\"");
         }
         UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
     }
@@ -748,7 +825,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             if (returning) {
-                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\3\"];[9]]]");
+                UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"9\"];[\"\\0031\\2\"];[9]]]");
             }
         }
 
@@ -769,27 +846,27 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdatePkClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9;)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=9;)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9";)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9";)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChange, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9");)"), false, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9");)"), false, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdatePkClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `pk`=9 RETURNING `data`, `emb`, `pk`;)"), true, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpdateFilterClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x03" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPDATE `/Root/TestTable` SET `emb`="\x03\x31\x02" WHERE `data`="9" RETURNING `data`, `emb`, `pk`;)"), true, Covered);
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexUpsertClusterChangeReturning, Covered) {
-        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x03", "9") RETURNING `data`, `emb`, `pk`;)"), true, Covered);
+        DoTestVectorIndexUpdateClusterChange(Q_(R"(UPSERT INTO `/Root/TestTable` (`pk`, `emb`, `data`) VALUES (9, "\x03\x31\x02", "9") RETURNING `data`, `emb`, `pk`;)"), true, Covered);
     }
 
     // First index level build is processed differently when table has 1 and >1 partitions so we check both cases
@@ -819,7 +896,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             TString query1(Q_(R"(
                 INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
-                (10, "\x11\x62\x03", "10");
+                (10, "\x11\x62\x02", "10");
             )"));
 
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
@@ -843,7 +920,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString query1(Q_(R"(
                 SELECT pk FROM `/Root/TestTable`
                 VIEW index1
-                ORDER BY Knn::CosineDistance(emb, "AA\x03")
+                ORDER BY Knn::CosineDistance(emb, "AA\x02")
             )"));
             auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
@@ -1040,6 +1117,55 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
             result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(VectorResolveDuplicateEvent) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, true, false); });
+
+        int capturedCount = 0;
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType &&
+                runtime->FindActorName(ev->GetRecipientRewrite()) == "NKikimr::NKqp::TKqpVectorResolveActor") {
+                capturedCount++;
+                if (capturedCount == 3) {
+                    // Add a duplicate event (checking issue #27095)
+                    auto dup = new NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(
+                        ev->Get<NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived>()->InputIndex);
+                    runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, dup));
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        // Insert to the table with index should succeed
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x02", "10"),
+                (11, "\x77\x75\x02", "11")
+            )"));
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
         }
     }
 

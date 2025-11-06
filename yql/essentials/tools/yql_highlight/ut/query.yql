@@ -1,3 +1,10 @@
+USE plato;
+
+PRAGMA AutoCommit;
+PRAGMA TablePathPrefix = 'home/yql';
+PRAGMA Warning('disable', '1101');
+PRAGMA yson.Strict;
+
 SELECT 1; -- A single-line comment SELECT 1
 select 1; /*
    Some SELECT 1
@@ -17,6 +24,20 @@ SELECT @@some
 multiline with double at: @@@@
 text@@;
 SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
+
+SELECT @@xX{"json":"json"}Xx@@
+
+SELECT 'singleline
+but \'
+multiline';
+
+INSERT INTO @tmp WITH TRUNCATE;
+
+CREATE TABLE t (id Uint64 PRIMARY KEY (id)) WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+);
 
 SELECT
     CAST(123l AS Int64) AS `Int64`,
@@ -46,6 +67,8 @@ SELECT
     CAST(255 AS Uint8),
     CAST(256 AS Uint8) IS NULL;
 
+SELECT Uint64("1");
+
 DEFINE SUBQUERY $dict() AS
     SELECT name, age FROM people;
 END DEFINE;
@@ -60,10 +83,6 @@ SELECT
   t.dict["key"],
   t.list[7]
 FROM my_table AS t;
-
-PRAGMA AutoCommit;
-PRAGMA TablePathPrefix = "home/yql";
-PRAGMA Warning("disable", "1101");
 
 SELECT ListCreate(OptionalType(DataType("String")));
 $match = Re2::Match("[ax]+\\d");
@@ -81,3 +100,5 @@ def foo(
     """
     return x + y.a + z
 @@);
+
+SELECT 1;

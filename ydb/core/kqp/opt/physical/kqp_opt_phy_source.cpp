@@ -41,8 +41,18 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     };
     TMaybe<TMatchedRead> matched;
 
+    bool stageContainsSimpleProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms;
+
     VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
             TExprBase expr(node);
+            if (expr.Maybe<TCoFlatMapBase>() && NYql::IsFilterFlatMap(expr.Cast<TCoFlatMapBase>().Lambda())) {
+                stageContainsSimpleProgram = false;
+            }
+
+            if (expr.Maybe<TCoCombineByKey>()) {
+                stageContainsSimpleProgram = false;
+            }
+
             if (auto cast = expr.Maybe<TKqpReadTable>()) {
                 Y_ENSURE(!matched || matched->Expr.Raw() == node.Get());
                 auto read = cast.Cast();
@@ -75,7 +85,6 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     }
 
     bool stageContainsEmptyProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
-    bool consolidatePoints = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
     if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
         stageContainsEmptyProgram = false;
     }
@@ -86,6 +95,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     }
 
     auto settings = TKqpReadTableSettings::Parse(matched->Settings);
+
     auto selectColumns = matched->Columns;
     TVector<TCoAtom> skipNullColumns;
     TExprNode::TPtr limit;
@@ -188,15 +198,13 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         .Done();
     inputs.insert(inputs.begin(), TExprBase(ctx.ReplaceNodes(source.Ptr(), sourceReplaces)));
 
-    consolidatePoints &= (settings.PointPrefixLen == tableDesc.Metadata->KeyColumnNames.size());
-
     if (settings.IsSorted()) {
         stageContainsEmptyProgram = false;
-        consolidatePoints = false;
+        stageContainsSimpleProgram = false;
     }
 
     TDqStageSettings newSettings = TDqStageSettings::Parse(stage);
-    if (stageContainsEmptyProgram || consolidatePoints) {
+    if (stageContainsEmptyProgram || stageContainsSimpleProgram) {
         newSettings.SetPartitionMode(TDqStageSettings::EPartitionMode::Single);
     }
 

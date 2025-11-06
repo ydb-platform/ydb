@@ -16,10 +16,10 @@ from clickhouse_connect.datatypes import dynamic as dynamic_module
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy, StreamContext, coerce_int, coerce_bool
 from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
-from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
+from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError, DataError
 from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.options import check_arrow, check_pandas, check_numpy
+from clickhouse_connect.driver.options import check_arrow, check_pandas, check_numpy, check_polars, pd, arrow, pl, IS_PANDAS_2
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, SettingStatus
 from clickhouse_connect.driver.query import QueryResult, to_arrow, to_arrow_batches, QueryContext, arrow_buffer
@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 arrow_str_setting = 'output_format_arrow_string_as_string'
 
 
+# pylint: disable=too-many-lines
 # pylint: disable=too-many-public-methods,too-many-arguments,too-many-positional-arguments,too-many-instance-attributes
 class Client(ABC):
     """
@@ -357,6 +358,7 @@ class Client(ABC):
         :return: Numpy array representing the result set
         """
         check_numpy()
+        self._add_integration_tag("numpy")
         return self._context_query(locals(), use_numpy=True).np_result
 
     # pylint: disable=duplicate-code,too-many-arguments,unused-argument
@@ -378,6 +380,7 @@ class Client(ABC):
         :return: Generator that yield a numpy array per block representing the result set
         """
         check_numpy()
+        self._add_integration_tag("numpy")
         return self._context_query(locals(), use_numpy=True, streaming=True).np_stream
 
     # pylint: disable=duplicate-code,unused-argument
@@ -403,6 +406,7 @@ class Client(ABC):
         :return: Pandas dataframe representing the result set
         """
         check_pandas()
+        self._add_integration_tag("pandas")
         return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
 
     # pylint: disable=duplicate-code,unused-argument
@@ -428,6 +432,7 @@ class Client(ABC):
         :return: Generator that yields a Pandas dataframe per block representing the result set
         """
         check_pandas()
+        self._add_integration_tag("pandas")
         return self._context_query(locals(), use_numpy=True,
                                    as_pandas=True,
                                    streaming=True).df_stream
@@ -547,6 +552,7 @@ class Client(ABC):
         :return: PyArrow.Table
         """
         check_arrow()
+        self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
         return to_arrow(self.raw_query(query,
                                        parameters,
@@ -573,6 +579,7 @@ class Client(ABC):
         :return: Generator that yields a PyArrow.Table for per block representing the result set
         """
         check_arrow()
+        self._add_integration_tag("arrow")
         settings = self._update_arrow_settings(settings, use_strings)
         return to_arrow_batches(self.raw_stream(query,
                                                 parameters,
@@ -580,6 +587,111 @@ class Client(ABC):
                                                 fmt='ArrowStream',
                                                 external_data=external_data,
                                                 transport_settings=transport_settings))
+
+    def query_df_arrow(self,
+                       query: str,
+                       parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                       settings: Optional[Dict[str, Any]] = None,
+                       use_strings: Optional[bool] = None,
+                       external_data: Optional[ExternalData] = None,
+                       transport_settings: Optional[Dict[str, str]] = None,
+                       dataframe_library: str = "pandas"
+                       ) -> Union["pd.DataFrame", "pl.DataFrame"]:
+        """
+        Query method using the ClickHouse Arrow format to return a DataFrame
+        with PyArrow dtype backend. This provides better performance and memory efficiency
+        compared to the standard query_df method, though fewer output formatting options.
+
+        :param query: Query statement/format string
+        :param parameters: Optional dictionary used to format the query
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param use_strings: Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data: ClickHouse "external data" to send with query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :param dataframe_library: Library to use for DataFrame creation ("pandas" or "polars")
+        :return: DataFrame (pandas or polars based on dataframe_library parameter)
+        """
+        check_arrow()
+
+        if dataframe_library == "pandas":
+            check_pandas()
+            self._add_integration_tag("pandas")
+            if not IS_PANDAS_2:
+                raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
+
+            def converter(table: arrow.Table) -> pd.DataFrame:
+                return table.to_pandas(types_mapper=pd.ArrowDtype, safe=False)
+
+        elif dataframe_library == "polars":
+            check_polars()
+            self._add_integration_tag("polars")
+
+            def converter(table: arrow.Table) -> pl.DataFrame:
+                return pl.from_arrow(table)
+
+        else:
+            raise ValueError(f"dataframe_library must be 'pandas' or 'polars', got '{dataframe_library}'")
+
+        arrow_table = self.query_arrow(
+            query=query,
+            parameters=parameters,
+            settings=settings,
+            use_strings=use_strings,
+            external_data=external_data,
+            transport_settings=transport_settings,
+        )
+
+        return converter(arrow_table)
+
+    def query_df_arrow_stream(self,
+                             query: str,
+                             parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
+                             settings: Optional[Dict[str, Any]] = None,
+                             use_strings: Optional[bool] = None,
+                             external_data: Optional[ExternalData] = None,
+                             transport_settings: Optional[Dict[str, str]] = None,
+                             dataframe_library: str = "pandas") -> StreamContext:
+        """
+        Query method that returns the results as a stream of DataFrames with PyArrow dtype backend.
+        Each DataFrame represents a block from the ClickHouse response.
+
+        :param query: Query statement/format string
+        :param parameters: Optional dictionary used to format the query
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param use_strings: Convert ClickHouse String type to Arrow string type (instead of binary)
+        :param external_data: ClickHouse "external data" to send with query
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :param dataframe_library: Library to use for DataFrame creation ("pandas" or "polars")
+        :return: StreamContext that yields DataFrames (pandas or polars based on dataframe_library parameter)
+        """
+        check_arrow()
+        if dataframe_library == "pandas":
+            check_pandas()
+            self._add_integration_tag("pandas")
+            if not IS_PANDAS_2:
+                raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
+
+            def converter(table: "arrow.Table") -> "pd.DataFrame":
+                return table.to_pandas(types_mapper=pd.ArrowDtype, safe=False)
+        elif dataframe_library == "polars":
+            check_polars()
+            self._add_integration_tag("polars")
+
+            def converter(table: arrow.Table) -> pl.DataFrame:
+                return pl.from_arrow(table)
+        else:
+            raise ValueError(f"dataframe_library must be 'pandas' or 'polars', got '{dataframe_library}'")
+        settings = self._update_arrow_settings(settings, use_strings)
+        raw_stream = self.raw_stream(
+            query, parameters, settings, fmt="ArrowStream", external_data=external_data, transport_settings=transport_settings
+        )
+        reader = arrow.ipc.open_stream(raw_stream)
+
+        def df_generator():
+            for batch in reader:
+                yield converter(batch)
+
+        return StreamContext(raw_stream, df_generator())
 
     def _update_arrow_settings(self,
                                settings: Optional[Dict[str, Any]],
@@ -702,6 +814,7 @@ class Client(ABC):
         :return: QuerySummary with summary information, throws exception if insert fails
         """
         check_pandas()
+        self._add_integration_tag("pandas")
         if context is None:
             if column_names is None:
                 column_names = df.columns
@@ -731,10 +844,71 @@ class Client(ABC):
         :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
         """
         check_arrow()
+        self._add_integration_tag("arrow")
         full_table = table if '.' in table or not database else f'{database}.{table}'
         compression = self.write_compression if self.write_compression in ('zstd', 'lz4') else None
         column_names, insert_block = arrow_buffer(arrow_table, compression)
         return self.raw_insert(full_table, column_names, insert_block, settings, 'Arrow', transport_settings)
+
+    def insert_df_arrow(self,
+                        table: str,
+                        df: Union["pd.DataFrame", "pl.DataFrame"],
+                        database: Optional[str] = None,
+                        settings: Optional[Dict] = None,
+                        transport_settings: Optional[Dict[str, str]] = None) -> QuerySummary:
+        """
+        Insert a pandas DataFrame with PyArrow backend or a polars DataFrame into ClickHouse using Arrow format.
+        This method is optimized for DataFrames that already use Arrow format, providing
+        better performance than the standard insert_df method.
+        
+        Validation is performed and an exception will be raised if this requirement is not met.
+        Polars DataFrames are natively Arrow-based and don't require additional validation.
+        
+        :param table: ClickHouse table name
+        :param df: Pandas DataFrame with PyArrow dtype backend or Polars DataFrame
+        :param database: Optional ClickHouse database name
+        :param settings: Optional dictionary of ClickHouse settings (key/string values)
+        :param transport_settings: Optional dictionary of transport level settings (HTTP headers, etc.)
+        :return: QuerySummary with summary information, throws exception if insert fails
+        """
+        check_arrow()
+
+        if pd is not None and isinstance(df, pd.DataFrame):
+            df_lib = "pandas"
+        elif pl is not None and isinstance(df, pl.DataFrame):
+            df_lib = "polars"
+        else:
+            if pd is None and pl is None:
+                raise ImportError("A DataFrame library (pandas or polars) must be installed to use insert_df_arrow.")
+            raise TypeError(f"df must be either a pandas DataFrame or polars DataFrame, got {type(df).__name__}")
+
+        if df_lib == "pandas":
+            if not IS_PANDAS_2:
+                raise ProgrammingError("PyArrow-backed dtypes are only supported when using pandas 2.x.")
+
+            non_arrow_cols = [col for col, dtype in df.dtypes.items() if not isinstance(dtype, pd.ArrowDtype)]
+            if non_arrow_cols:
+                raise ProgrammingError(
+                    f"insert_df_arrow requires all columns to use PyArrow dtypes. Non-Arrow columns found: [{', '.join(non_arrow_cols)}]. "
+                )
+            try:
+                arrow_table = arrow.Table.from_pandas(df, preserve_index=False)
+            except Exception as e:
+                raise DataError(f"Failed to convert pandas DataFrame to Arrow table: {e}") from e
+        else:
+            try:
+                arrow_table = df.to_arrow()
+            except Exception as e:
+                raise DataError(f"Failed to convert polars DataFrame to Arrow table: {e}") from e
+
+        self._add_integration_tag(df_lib)
+        return self.insert_arrow(
+            table=table,
+            arrow_table=arrow_table,
+            database=database,
+            settings=settings,
+            transport_settings=transport_settings,
+        )
 
     def create_insert_context(self,
                               table: str,
@@ -822,6 +996,11 @@ class Client(ABC):
             if x < y:
                 return False
         return True
+
+    # pylint: disable=no-self-use
+    def _add_integration_tag(self, name: str) -> None:
+        """Transport hook to surface 3rd party lib integration info (default: no-op)."""
+        return
 
     @abstractmethod
     def data_insert(self, context: InsertContext) -> QuerySummary:

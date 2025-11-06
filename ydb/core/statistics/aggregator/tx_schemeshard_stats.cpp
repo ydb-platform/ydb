@@ -17,16 +17,18 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         ui64 schemeShardId = Record.GetSchemeShardId();
         const auto& stats = Record.GetStats();
 
+        NKikimrStat::TSchemeShardStats statRecord;
+        Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
+
         SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Execute: "
-            << "schemeshard id# " << schemeShardId
-            << ", stats size# " << stats.size());
+            << "schemeshard id: " << schemeShardId
+            << ", stats byte size: " << stats.size()
+            << ", entries count: " << statRecord.GetEntries().size()
+            << ", are all stats full: " << statRecord.GetAreAllStatsFull());
 
         NIceDb::TNiceDb db(txc.DB);
 
         TSerializedBaseStats& existingStats = Self->BaseStatistics[schemeShardId];
-
-        NKikimrStat::TSchemeShardStats statRecord;
-        Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
         // if statistics is sent from schemeshard for the first time or
         // AreAllStatsFull field is not set (schemeshard is working on previous code version) or

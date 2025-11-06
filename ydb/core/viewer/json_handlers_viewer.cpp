@@ -13,6 +13,7 @@
 #include "viewer_describe_replication.h"
 #include "viewer_describe_topic.h"
 #include "viewer_describe_transfer.h"
+#include "viewer_commit_offset.h"
 #include "viewer_feature_flags.h"
 #include "viewer_topic_data.h"
 #include "viewer_graph.h"
@@ -26,6 +27,7 @@
 #include "viewer_nodes.h"
 #include "viewer_plan2svg.h"
 #include "viewer_pqconsumerinfo.h"
+#include "viewer_put_record.h"
 #include "viewer_query.h"
 #include "viewer_render.h"
 #include "viewer_storage.h"
@@ -181,6 +183,10 @@ void InitViewerDescribeConsumerJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe_consumer", new TJsonHandler<TJsonDescribeConsumer>(TJsonDescribeConsumer::GetSwagger()));
 }
 
+void InitViewerCommitOffsetJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/commit_offset", new TJsonHandler<TJsonCommitOffset>(TJsonCommitOffset::GetSwagger()));
+}
+
 void InitViewerHotkeysJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/hotkeys", new TJsonHandler<TJsonHotkeys>(TJsonHotkeys::GetSwagger()));
 }
@@ -215,6 +221,10 @@ void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/pqconsumerinfo", new TJsonHandler<TJsonPQConsumerInfo>(TJsonPQConsumerInfo::GetSwagger()));
 }
 
+void InitViewerPutRecordsJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/put_record", new TJsonHandler<TPutRecord>(TPutRecord::GetSwagger()));
+}
+
 void InitViewerTabletCountersJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/tabletcounters", new TJsonHandler<TJsonTabletCounters>(TJsonTabletCounters::GetSwagger()));
 }
@@ -228,7 +238,7 @@ void InitViewerStorageUsageJsonHandler(TJsonHandlers &handlers) {
 }
 
 void InitViewerClusterJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 7);
+    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 8);
 }
 
 void InitViewerLabeledCountersJsonHandler(TJsonHandlers &handlers) {
@@ -329,6 +339,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerDescribeTopicJsonHandler(jsonHandlers);
     InitViewerDescribeTransferJsonHandler(jsonHandlers);
     InitViewerDescribeConsumerJsonHandler(jsonHandlers);
+    InitViewerCommitOffsetJsonHandler(jsonHandlers);
     InitViewerHotkeysJsonHandler(jsonHandlers);
     InitViewerHiveInfoJsonHandler(jsonHandlers);
     InitViewerBSGroupInfoJsonHandler(jsonHandlers);
@@ -338,6 +349,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerTopicInfoJsonHandler(jsonHandlers);
     InitViewerTopicDataJsonHandler(jsonHandlers);
     InitViewerPQConsumerInfoJsonHandler(jsonHandlers);
+    InitViewerPutRecordsJsonHandler(jsonHandlers);
     InitViewerTabletCountersJsonHandler(jsonHandlers);
     InitViewerStorageJsonHandler(jsonHandlers);
     InitViewerStorageUsageJsonHandler(jsonHandlers);

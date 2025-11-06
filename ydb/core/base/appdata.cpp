@@ -34,7 +34,7 @@
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -65,6 +65,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
+    NKikimrConfig::TAwsClientConfig AwsClientConfig;
     NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
     NKikimrConfig::TBackgroundCleaningConfig BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig GraphConfig;
@@ -131,6 +132,7 @@ TAppData::TAppData(
     , DomainsConfig(Impl->DomainsConfig)
     , BootstrapConfig(Impl->BootstrapConfig)
     , AwsCompatibilityConfig(Impl->AwsCompatibilityConfig)
+    , AwsClientConfig(Impl->AwsClientConfig)
     , S3ProxyResolverConfig(Impl->S3ProxyResolverConfig)
     , BackgroundCleaningConfig(Impl->BackgroundCleaningConfig)
     , GraphConfig(Impl->GraphConfig)

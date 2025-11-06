@@ -1,5 +1,5 @@
 #include "mkql_element.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -49,12 +49,15 @@ constexpr bool IsTupleOptional(EOptionalityHandlerStrategy strategy) {
 }
 
 template <bool IsOptional>
-class TElementsWrapper : public TMutableCodegeneratorNode<TElementsWrapper<IsOptional>> {
+class TElementsWrapper: public TMutableCodegeneratorNode<TElementsWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TElementsWrapper<IsOptional>> TBaseComputation;
+
 public:
     TElementsWrapper(TComputationMutables& mutables, IComputationNode* array)
-        : TBaseComputation(mutables, EValueRepresentation::Embedded), Array(array)
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Embedded)
+        , Array(array)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         const auto& array = Array->GetValue(compCtx);
@@ -105,15 +108,20 @@ private:
 };
 
 template <EOptionalityHandlerStrategy Strategy>
-class TElementWrapper : public TMutableCodegeneratorPtrNode<TElementWrapper<Strategy>> {
+class TElementWrapper: public TMutableCodegeneratorPtrNode<TElementWrapper<Strategy>> {
     typedef TMutableCodegeneratorPtrNode<TElementWrapper<Strategy>> TBaseComputation;
+
 public:
     TElementWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* cache, IComputationNode* array, ui32 index)
-        : TBaseComputation(mutables, kind), Cache(cache), Array(array), Index(index)
-    {}
+        : TBaseComputation(mutables, kind)
+        , Cache(cache)
+        , Array(array)
+        , Index(index)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        if (Cache->GetDependencesCount() > 1U) {
+        if (Cache->GetDependentsCount() > 1U) {
             const auto cache = Cache->GetValue(ctx);
             if (IsTupleOptional(Strategy) && !cache) {
                 return NUdf::TUnboxedValue();
@@ -169,22 +177,24 @@ public:
                 const auto load = new LoadInst(valueType, pointer, "load", block);
                 new StoreInst(MakeOptional(context, load, block), pointer, block);
             }
-            if (Array->IsTemporaryValue())
+            if (Array->IsTemporaryValue()) {
                 CleanupBoxed(array, ctx, block);
+            }
             BranchInst::Create(exit, block);
 
             block = exit;
-        } else if constexpr (Strategy == EOptionalityHandlerStrategy::ReturnChildAsIs){
+        } else if constexpr (Strategy == EOptionalityHandlerStrategy::ReturnChildAsIs) {
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(pointer, array, ctx.Codegen, block, index);
-            if (Array->IsTemporaryValue())
+            if (Array->IsTemporaryValue()) {
                 CleanupBoxed(array, ctx, block);
+            }
         } else {
             static_assert(false, "Unhandled case.");
         }
     }
 
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        if (Cache->GetDependencesCount() <= 1U) {
+        if (Cache->GetDependentsCount() <= 1U) {
             return DoGenerateGetElement(ctx, pointer, block);
         }
 
@@ -244,8 +254,8 @@ private:
         this->DependsOn(Cache);
     }
 
-    IComputationNode *const Cache;
-    IComputationNode *const Array;
+    IComputationNode* const Cache;
+    IComputationNode* const Array;
     const ui32 Index;
 };
 
@@ -257,7 +267,7 @@ IComputationNode* WrapElements(IComputationNode* array, const TComputationNodeFa
     }
 }
 
-}
+} // namespace
 
 IComputationNode* WrapNth(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2U, "Expected two args.");
@@ -318,5 +328,5 @@ IComputationNode* WrapMember(TCallable& callable, const TComputationNodeFactoryC
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

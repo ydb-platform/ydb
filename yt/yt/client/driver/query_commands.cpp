@@ -318,6 +318,7 @@ void TListQueriesCommand::Register(TRegistrar registrar)
             return command->Options.SearchByTokenPrefix;
         })
         .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<bool>(
         "use_full_text_search",
         [] (TThis* command) -> auto& {
@@ -328,6 +329,12 @@ void TListQueriesCommand::Register(TRegistrar registrar)
         "tutorial_filter",
         [] (TThis* command) -> auto& {
             return command->Options.TutorialFilter;
+        })
+        .Optional(/*init*/ false);
+    registrar.ParameterWithUniversalAccessor<EListQueriesSortOrder>(
+        "sort_order",
+        [] (TThis* command) -> auto& {
+            return command->Options.SortOrder;
         })
         .Optional(/*init*/ false);
 }
@@ -425,18 +432,16 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
             .Item("clusters").Value(result.Clusters)
-            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))));
+            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))))
+            .OptionalItem("expected_tables_version", result.ExpectedTablesVersion)
+        .EndMap();
 
-    if (result.ExpectedTablesVersion) {
-        serialized.Item("expected_tables_version").Value(result.ExpectedTablesVersion);
-    }
-
-    context->ProduceOutputValue(serialized.EndMap());
+    context->ProduceOutputValue(serialized);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGetDeclaredParametersInfoCommand::Register(TRegistrar registrar)
+void TGetQueryDeclaredParametersInfoCommand::Register(TRegistrar registrar)
 {
     registrar.ParameterWithUniversalAccessor<std::string>(
         "stage",
@@ -467,9 +472,9 @@ void TGetDeclaredParametersInfoCommand::Register(TRegistrar registrar)
         .Optional(/*init*/ false);
 }
 
-void TGetDeclaredParametersInfoCommand::DoExecute(ICommandContextPtr context)
+void TGetQueryDeclaredParametersInfoCommand::DoExecute(ICommandContextPtr context)
 {
-    auto result = WaitFor(context->GetClient()->GetDeclaredParametersInfo(Options))
+    auto result = WaitFor(context->GetClient()->GetQueryDeclaredParametersInfo(Options))
         .ValueOrThrow();
 
     context->ProduceOutputValue(BuildYsonStringFluently()

@@ -525,20 +525,14 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
             TKqlExternalEffect externalEffect = maybeExt.Cast();
             TExprBase input = externalEffect.Input();
             auto maybeStage = input.Maybe<TDqStageBase>();
-            if (!maybeStage) {
-                return false;
-            }
+            YQL_ENSURE(maybeStage, "External effect should be a DQ stage");
             auto stage = maybeStage.Cast();
             const auto outputsList = stage.Outputs();
-            if (!outputsList) {
-                return false;
-            }
+            YQL_ENSURE(outputsList, "External effect DQ stage should have at least one output");
             TDqStageOutputsList outputs = outputsList.Cast();
             YQL_ENSURE(outputs.Size() == 1, "Multiple sinks are not supported yet");
             TDqOutputAnnotationBase output = outputs.Item(0);
-            if (!output.Maybe<TDqSink>()) {
-                return false;
-            }
+            YQL_ENSURE(TDqSink::Match(output.Raw()), "External effect DQ stage should have DQ sink as first output");
             newEffect = Build<TKqpSinkEffect>(ctx, effect.Pos())
                 .Stage(maybeStage.Cast().Ptr())
                 .SinkIndex().Build("0")

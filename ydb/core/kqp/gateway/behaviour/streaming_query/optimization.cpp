@@ -44,6 +44,10 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
             return true;
         }
 
+        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName}, dataSourceCategory)) {
+            return true;
+        }
+
         if (dataSourceCategory == NYql::KikimrProviderName) {
             res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Reading from YDB tables is not supported now for streaming queries"));
         } else {
@@ -57,6 +61,10 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
         if (dataSinkCategory == NYql::PqProviderName) {
             ++res.StreamingWrites;
+            return true;
+        }
+
+        if (dataSinkCategory == NYql::SolomonProviderName) {
             return true;
         }
 

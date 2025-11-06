@@ -183,7 +183,7 @@ TString SafeGetUsernameByUid(int uid);
 
 void SetUid(int uid);
 
-void CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
+std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
 
 int GetFileDescriptorCount();
 

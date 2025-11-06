@@ -219,7 +219,6 @@ public:
     void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
 
 protected:
-    void Die(const NActors::TActorContext& ctx) override;
     void PassAway() override;
 
 private:

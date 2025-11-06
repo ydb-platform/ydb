@@ -826,10 +826,10 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
             std::vector<TSignedWriteFragmentCookiePtr> cookies;
             cookies.reserve(result->signed_cookies().size());
             for (const auto& cookie : result->signed_cookies()) {
-                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
+                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonStringBuf(cookie)));
             }
             TDistributedWriteSessionWithCookies sessionWithCookies;
-            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonStringBuf(result->signed_session())),
             sessionWithCookies.Cookies = std::move(cookies);
             return sessionWithCookies;
         }));
@@ -856,6 +856,57 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
     auto req = proxy.FinishDistributedWriteSession();
 
     FillRequest(req.Get(), sessionWithResults, options);
+    return req->Invoke().AsVoid();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWriteFileSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options)
+{
+    using TRsp = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspStartDistributedWriteFileSession>>;
+
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartDistributedWriteFileSession();
+    FillRequest(req.Get(), path, options);
+
+    return req->Invoke()
+        .ApplyUnique(BIND([] (TRsp&& result) {
+            std::vector<TSignedWriteFileFragmentCookiePtr> cookies;
+            cookies.reserve(result->signed_cookies().size());
+            for (const auto& cookie : result->signed_cookies()) {
+                cookies.push_back(ConvertTo<TSignedWriteFileFragmentCookiePtr>(TYsonStringBuf(cookie)));
+            }
+            TDistributedWriteFileSessionWithCookies sessionWithCookies;
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteFileSessionPtr>(TYsonStringBuf(result->signed_session())),
+            sessionWithCookies.Cookies = std::move(cookies);
+            return sessionWithCookies;
+        }));
+}
+
+TFuture<void> TClientBase::PingDistributedWriteFileSession(
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingDistributedWriteFileSession();
+
+    FillRequest(req.Get(), session, options);
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClientBase::FinishDistributedWriteFileSession(
+    const TDistributedWriteFileSessionWithResults& session,
+    const TDistributedWriteFileSessionFinishOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishDistributedWriteFileSession();
+
+    FillRequest(req.Get(), session, options);
     return req->Invoke().AsVoid();
 }
 
@@ -1111,6 +1162,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
     YT_OPTIONAL_SET_PROTO(req, execution_backend, options.ExecutionBackend);
+    YT_OPTIONAL_SET_PROTO(req, optimization_level, options.OptimizationLevel);
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -1120,7 +1172,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
-    req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
     YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
     req->set_read_from(ToProto(options.ReadFrom));
 

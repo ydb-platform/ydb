@@ -4,8 +4,8 @@
 
 namespace NSQLHighlight {
 
-    IGenerator::TPtr MakeTextMateJsonGenerator();
+IGenerator::TPtr MakeTextMateJsonGenerator();
 
-    IGenerator::TPtr MakeTextMateBundleGenerator();
+IGenerator::TPtr MakeTextMateBundleGenerator();
 
 } // namespace NSQLHighlight

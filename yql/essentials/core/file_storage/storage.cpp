@@ -25,11 +25,10 @@
 #include <atomic>
 
 #if defined(_unix_)
-#include <pthread.h>
+    #include <pthread.h>
 #endif
 
 #include <errno.h>
-
 
 namespace NYql {
 
@@ -47,8 +46,9 @@ TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
         char tempDir[MAX_PATH];
-        if (MakeTempDir(tempDir, nullptr) != 0)
+        if (MakeTempDir(tempDir, nullptr) != 0) {
             ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir;
+        }
         return tempDir;
     }
     return path;
@@ -119,7 +119,7 @@ public:
     public:
         inline TAtforkReinit() {
 #if defined(_bionic_)
-//no pthread_atfork on android libc
+// no pthread_atfork on android libc
 #elif defined(_unix_)
             pthread_atfork(nullptr, nullptr, ProcessReinit);
 #endif
@@ -187,10 +187,10 @@ public:
         }
         TAtforkReinit::Get().Register(this);
         YQL_LOG(INFO) << "FileStorage initialized in " << StorageDir_.GetPath().Quote()
-            << ", temporary dir: " << ProcessTempDir_.GetPath().Quote()
-            << ", locks dir:" << FileLocksDir_.GetPath().Quote()
-            << ", files: " << CurrentFiles_.load()
-            << ", total size: " << CurrentSize_.load();
+                      << ", temporary dir: " << ProcessTempDir_.GetPath().Quote()
+                      << ", locks dir:" << FileLocksDir_.GetPath().Quote()
+                      << ", files: " << CurrentFiles_.load()
+                      << ", total size: " << CurrentSize_.load();
     }
 
     ~TImpl() {
@@ -255,8 +255,8 @@ public:
         }
 
         YQL_LOG(INFO) << "Using " << (newFileAdded ? "new" : "existing") << " storage file " << result->GetStorageFileName().Quote()
-            << ", temp path: " << result->GetPath().GetPath().Quote()
-            << ", size: " << result->GetSize();
+                      << ", temp path: " << result->GetPath().GetPath().Quote()
+                      << ", size: " << result->GetSize();
 
         if (newFileAdded) {
             Cleanup();
@@ -338,7 +338,7 @@ public:
     }
 
     TString GetTempName() {
-        with_lock(RndLock_) {
+        with_lock (RndLock_) {
             return Rnd_.GenGuid();
         }
     }
@@ -353,7 +353,7 @@ private:
 
         ui32 oldPid;
 
-        for (const TString& name: names) {
+        for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
@@ -373,11 +373,11 @@ private:
                             childPath.ForceDelete();
                         } else {
                             YQL_LOG(WARN) << "Not cleaning dead process dir " << childPath
-                                << ": " << "directory is still locked, skipping";
+                                          << ": " << "directory is still locked, skipping";
                         }
                     } catch (...) {
                         YQL_LOG(WARN) << "Error cleaning dead process dir " << childPath
-                             << ": " << CurrentExceptionMessage();
+                                      << ": " << CurrentExceptionMessage();
                     }
                 }
             }
@@ -388,9 +388,7 @@ private:
     }
 
     bool NeedToCleanup() const {
-        return Dirty_.load()
-            || static_cast<ui64>(CurrentFiles_.load()) > MaxFiles_
-            || static_cast<ui64>(CurrentSize_.load()) > MaxSize_;
+        return Dirty_.load() || static_cast<ui64>(CurrentFiles_.load()) > MaxFiles_ || static_cast<ui64>(CurrentSize_.load()) > MaxSize_;
     }
 
     void Cleanup() {
@@ -416,7 +414,7 @@ private:
         ui64 actualFiles = 0;
         ui64 actualSize = 0;
 
-        for (const TString& name: names) {
+        for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
@@ -437,14 +435,14 @@ private:
         ui64 filesThreshold = MaxFiles_ / 2;
         ui64 sizeThreshold = MaxSize_ / 2;
 
-        for (const TFileObject& f: files) {
+        for (const TFileObject& f : files) {
             if (actualFiles <= filesThreshold && actualSize <= sizeThreshold) {
                 break;
             }
 
             YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
-                    << ", size: " << f.Size
-                    << ", mtime: " << f.MTime << ")";
+                          << ", size: " << f.Size
+                          << ", mtime: " << f.MTime << ")";
             if (!NFs::Remove(StorageDir_ / f.Name)) {
                 YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
             } else {
@@ -459,7 +457,7 @@ private:
 
     void ResetAtFork() {
         RndLock_.Release();
-        with_lock(RndLock_) {
+        with_lock (RndLock_) {
             Rnd_.ResetSeed();
         }
         // Force cleanup on next file add, because other processes may change the state
@@ -492,13 +490,11 @@ TStorage::~TStorage()
 {
 }
 
-TFsPath TStorage::GetRoot() const
-{
+TFsPath TStorage::GetRoot() const {
     return Impl_->GetRoot();
 }
 
-TFsPath TStorage::GetTemp() const
-{
+TFsPath TStorage::GetTemp() const {
     return Impl_->GetTemp();
 }
 
@@ -526,13 +522,11 @@ bool TStorage::RemoveFromStorage(const TString& existingStorageFileName)
     return Impl_->RemoveFromStorage(existingStorageFileName);
 }
 
-ui64 TStorage::GetOccupiedSize() const
-{
+ui64 TStorage::GetOccupiedSize() const {
     return Impl_->GetOccupiedSize();
 }
 
-size_t TStorage::GetCount() const
-{
+size_t TStorage::GetCount() const {
     return Impl_->GetCount();
 }
 
@@ -540,4 +534,4 @@ TString TStorage::GetTempName()
 {
     return Impl_->GetTempName();
 }
-} // NYql
+} // namespace NYql

@@ -1,0 +1,36 @@
+--- contrib/libs/opentelemetry-cpp/exporters/otlp/src/otlp_grpc_client.cc	(index)
++++ contrib/libs/opentelemetry-cpp/exporters/otlp/src/otlp_grpc_client.cc	(working tree)
+@@ -346,1 +346,1 @@ std::shared_ptr<grpc::Channel> OtlpGrpcClient::MakeChannel(const OtlpGrpcClientO
+-  std::string grpc_target = GetGrpcTarget(options.endpoint);
++  TString grpc_target = GetGrpcTarget(options.endpoint);
+@@ -355,1 +355,1 @@ std::shared_ptr<grpc::Channel> OtlpGrpcClient::MakeChannel(const OtlpGrpcClientO
+-  grpc_arguments.SetUserAgentPrefix(options.user_agent);
++  grpc_arguments.SetUserAgentPrefix(TString{options.user_agent});
+@@ -453,5 +453,5 @@ std::unique_ptr<grpc::ClientContext> OtlpGrpcClient::MakeClientContext(
+   for (auto &header : options.metadata)
+   {
+-    context->AddMetadata(header.first,
+-                         opentelemetry::ext::http::common::UrlDecoder::Decode(header.second));
++    context->AddMetadata(TString(header.first),
++                         TString(opentelemetry::ext::http::common::UrlDecoder::Decode(header.second)));
+   }
+--- contrib/libs/opentelemetry-cpp/exporters/otlp/src/otlp_http_client.cc	(index)
++++ contrib/libs/opentelemetry-cpp/exporters/otlp/src/otlp_http_client.cc	(working tree)
+@@ -503,7 +503,7 @@ void ConvertGenericFieldToJson(nlohmann::json &value,
+       break;
+     }
+     case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
+-      std::string empty;
++      TString empty;
+       if (field_descriptor->type() == google::protobuf::FieldDescriptor::TYPE_BYTES)
+       {
+         value = BytesMapping(
+@@ -591,7 +591,7 @@ void ConvertListFieldToJson(nlohmann::json &value,
+       break;
+     }
+     case google::protobuf::FieldDescriptor::CPPTYPE_STRING: {
+-      std::string empty;
++      TString empty;
+       if (field_descriptor->type() == google::protobuf::FieldDescriptor::TYPE_BYTES)
+       {
+         for (int i = 0; i < field_size; ++i)

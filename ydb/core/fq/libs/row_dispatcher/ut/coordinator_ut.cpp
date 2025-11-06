@@ -36,7 +36,7 @@ public:
         ReadActor2 = Runtime.AllocateEdgeActor(0);
         Nameservice = Runtime.AllocateEdgeActor(0);
 
-        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
+        NConfig::TRowDispatcherCoordinatorConfig config;
         config.SetCoordinationNodePath("RowDispatcher");
         auto& database = *config.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");
@@ -46,7 +46,8 @@ public:
             LocalRowDispatcherId,
             config,
             "Tenant",
-            MakeIntrusive<NMonitoring::TDynamicCounters>()
+            MakeIntrusive<NMonitoring::TDynamicCounters>(),
+            {}
             ).release());
 
         Runtime.EnableScheduleForActor(Coordinator);

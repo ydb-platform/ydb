@@ -29,9 +29,9 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         if (CurrentStateFunc() == &TThis::StateInit) {
             return "Init";
         } else if (CurrentStateFunc() == &TThis::StateIdle) {
-            return "Idle";
+            return KVWriteInProgress ? "Write" : "Idle";
         } else {
-            Y_ABORT("");
+            return "Unknown";
         }
     };
     static constexpr std::pair<TStringBuf, const TPartitionBlobEncoder TPartition::*> encoders[2]{
@@ -296,7 +296,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             }
                         }
                         TABLEBODY() {
-                            for (auto& [user, userInfo]: UsersInfoStorage->GetAll()) {
+                            for (auto&& [user, userInfo]: UsersInfoStorage->GetAll()) {
                                 auto snapshot = CreateSnapshot(userInfo);
                                 TABLER() {
                                     TABLED() {out << EncodeHtmlPcdata(user);}

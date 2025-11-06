@@ -35,6 +35,7 @@ in rec {
     "--disable-ldap"
     "--disable-ldaps"
     "--enable-ares"
+    "--enable-websockets"
     "--with-openssl"
     "--with-ca-fallback"
     "--with-zstd=${zstd.dev}"

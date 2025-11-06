@@ -11,13 +11,13 @@ namespace {
 
 TEST(TSensorsOwnerTest, Example)
 {
-    TProfiler profiler("", "bigrt.test");
+    TProfiler profiler("", "flow/test");
     auto owner = TSensorsOwner(profiler);
 
     struct TSensors
     {
         TProfiler Profiler;
-        TCounter Counter = Profiler.Counter(".my_counter");
+        TCounter Counter = Profiler.Counter("/my_counter");
         TSensorsOwner OtherSensors{Profiler};
     };
 
@@ -25,8 +25,8 @@ TEST(TSensorsOwnerTest, Example)
     {
         TCounter Counter;
 
-        TChildSensors(const TProfiler& p)
-            : Counter(p.Counter(".my_counter_2"))
+        explicit TChildSensors(const TProfiler& p)
+            : Counter(p.Counter("/my_counter_2"))
         { }
     };
 
@@ -34,28 +34,28 @@ TEST(TSensorsOwnerTest, Example)
     {
         TProfiler Profiler;
         int Key;
-        TCounter Counter = Profiler.WithTag("counter", ToString(Key)).Counter(".another_counter");
+        TCounter Counter = Profiler.WithTag("counter", ToString(Key)).Counter("/another_counter");
     };
 
     struct TWithTagsSensors
     {
         TProfiler Profiler;
-        TCounter Counter = Profiler.Counter(".by_tags_counter");
+        TCounter Counter = Profiler.Counter("/by_tags_counter");
     };
 
     struct TSharedSensors final
     {
         TProfiler Profiler;
-        TCounter Counter = Profiler.Counter(".under_ptr_counter");
+        TCounter Counter = Profiler.Counter("/under_ptr_counter");
     };
 
     using TSharedSensorsPtr = NYT::TIntrusivePtr<TSharedSensors>;
 
-    owner.Increment(".my_simple_counter", 1);
+    owner.Increment("/my_simple_counter", 1);
     owner.Get<TSensors>().OtherSensors.Get<TChildSensors>().Counter.Increment(1);
     owner.Get<TSharedSensorsPtr>()->Counter.Increment(1);
     owner.Get<TAnotherSensors>(42).Counter.Increment(1);
-    owner.WithPrefix(".prefix").Get<TAnotherSensors>(42).Counter.Increment(1);
+    owner.WithPrefix("/prefix").Get<TAnotherSensors>(42).Counter.Increment(1);
     owner.GetWithTags<TWithTagsSensors>(TTagSet().WithTag({"key", "value"})).Counter.Increment(1);
     owner.WithTags(TTagSet().WithTag({"key", "value2"})).Get<TWithTagsSensors>().Counter.Increment(1);
 
@@ -64,7 +64,7 @@ TEST(TSensorsOwnerTest, Example)
         TProfiler Profiler;
         int Key;
         std::vector<TDuration> Buckets;
-        TEventTimer Histogram = Profiler.WithTag("tag", ToString(Key)).TimeHistogram(".another_counter", Buckets);
+        TEventTimer Histogram = Profiler.WithTag("tag", ToString(Key)).TimeHistogram("/another_counter", Buckets);
     };
 
     owner.Get<THistogramSensors>(/*Key*/ 132, /*Buckets*/ std::vector<TDuration>{5s, 10min}).Histogram.Record(6s);
@@ -76,8 +76,8 @@ void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
     struct TSensors
     {
         TProfiler Profiler;
-        TCounter TotalCount = Profiler.Counter(".count");
-        TCounter FailedCount = Profiler.Counter(".failed_count");
+        TCounter TotalCount = Profiler.Counter("/count");
+        TCounter FailedCount = Profiler.Counter("/failed_count");
     };
 
     // Here, it is the same reference to the metric object, assuming that the same sensorsOwner is passed into the function.
@@ -96,7 +96,7 @@ void DoSmth(/*... , */ const TSensorsOwner& sensorsOwner)
 
 TEST(TSensorsOwnerTest, Simple)
 {
-    TProfiler profiler("", "bigrt.test");
+    TProfiler profiler("", "flow/test");
     auto registryPtr = profiler.GetRegistry();
     auto owner = TSensorsOwner(profiler);
 
@@ -120,7 +120,7 @@ TEST(TSensorsOwnerTest, Simple)
         TProfiler Profiler;
         int B = 2;
 
-        TChild2(const TProfiler& p)
+        explicit TChild2(const TProfiler& p)
             : Profiler(p)
         {
         }
@@ -134,7 +134,7 @@ TEST(TSensorsOwnerTest, Simple)
     {
         TProfiler Profiler;
         int Key;
-        TCounter Counter = Profiler.WithTag("key", ToString(Key)).Counter(".by_key_counter");
+        TCounter Counter = Profiler.WithTag("key", ToString(Key)).Counter("/by_key_counter");
     };
 
     ASSERT_EQ(42, (owner.Get<TSensorsByKey>(42).Key));
@@ -143,7 +143,7 @@ TEST(TSensorsOwnerTest, Simple)
     struct TWithTagsSensors
     {
         TProfiler Profiler;
-        TCounter Counter = Profiler.Counter(".by_tags_counter");
+        TCounter Counter = Profiler.Counter("/by_tags_counter");
     };
 
     ASSERT_EQ(
@@ -155,13 +155,13 @@ TEST(TSensorsOwnerTest, Simple)
         &owner.WithTags(TTagSet().WithTag({"key", "value2"})).Get<TWithTagsSensors>());
 
     ASSERT_EQ(
-        &owner.WithPrefix(".prefix").Get<TChild1>(),
-        &owner.WithPrefix(".prefix").Get<TChild1>());
+        &owner.WithPrefix("/prefix").Get<TChild1>(),
+        &owner.WithPrefix("/prefix").Get<TChild1>());
 }
 
 TEST(TSensorsOwnerTest, Copy)
 {
-    auto owner = TSensorsOwner(TProfiler("", "bigrt.test"));
+    auto owner = TSensorsOwner(TProfiler("", "flow/test"));
     auto owner2 = owner;
 
     struct TChild
@@ -174,7 +174,7 @@ TEST(TSensorsOwnerTest, Copy)
 
 TEST(TSensorsOwnerTest, WithGlobal)
 {
-    auto owner = TSensorsOwner(TProfiler("", "bigrt.test"));
+    auto owner = TSensorsOwner(TProfiler("", "flow/test"));
     owner.WithGlobal().GetCounter("counter").Increment(1); // Expect no fail here.
 }
 

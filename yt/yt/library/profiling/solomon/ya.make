@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     config.cpp
     cube.cpp
+    encoder.cpp
     exporter.cpp
     helpers.cpp
     producer.cpp

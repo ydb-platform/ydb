@@ -23,14 +23,17 @@ public:
         TypeData = 'd',
         TypeTmpData = 'x',
         TypeMeta = 'i',
-        TypeTxMeta = 'I'
+        TypeTxMeta = 'I',
+        TypeMLPConsumerData = 'c',
     };
 
     enum EMark : char {
         MarkUser = 'c',
         MarkProtoSourceId = 'p',
         MarkSourceId = 's',
-        MarkUserDeprecated = 'u'
+        MarkUserDeprecated = 'u',
+        MarkMLPSnapshot = 'S',
+        MarkMLPWAL = 'w',
     };
 
     enum EServiceType : char {

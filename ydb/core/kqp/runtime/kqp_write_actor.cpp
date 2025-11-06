@@ -146,6 +146,59 @@ namespace {
             return std::nullopt;
         }
     }
+
+    std::optional<bool> HandleAttachResult(NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, NKikimr::TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+
+        const auto& reattachState = txManager->GetReattachState(shardId);
+        if (reattachState.Cookie != ev->Cookie) {
+            return std::nullopt;
+        }
+
+        const auto shardState = txManager->GetState(shardId);
+        switch (shardState) {
+            case NKikimr::NKqp::IKqpTransactionManager::EXECUTING:
+            case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
+                break;
+            case NKikimr::NKqp::IKqpTransactionManager::FINISHED:
+            case NKikimr::NKqp::IKqpTransactionManager::ERROR:
+                return std::nullopt;
+            case NKikimr::NKqp::IKqpTransactionManager::PREPARING:
+            case NKikimr::NKqp::IKqpTransactionManager::PROCESSING:
+                YQL_ENSURE(false);
+        }
+
+        if (record.GetStatus() == NKikimrProto::OK) {
+            // Transaction still exists at this shard
+            txManager->Reattached(shardId);
+        }
+        return record.GetStatus() == NKikimrProto::OK;
+    }
+
+    bool HandleTransactionRestart(NKikimr::NKqp::IKqpTransactionManagerPtr& txManager, NKikimr::TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        const ui64 shardId = record.GetTabletId();
+
+        switch (txManager->GetState(shardId)) {
+            case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
+            case NKikimr::NKqp::IKqpTransactionManager::EXECUTING: {
+                txManager->SetRestarting(shardId);
+                return true;
+            }
+            case NKikimr::NKqp::IKqpTransactionManager::PREPARING: {
+                return false;
+            }
+            case NKikimr::NKqp::IKqpTransactionManager::FINISHED:
+            case NKikimr::NKqp::IKqpTransactionManager::ERROR: {
+                return true;
+            }
+            case NKikimr::NKqp::IKqpTransactionManager::PROCESSING: {
+                YQL_ENSURE(false);
+            }
+        }
+        return true;
+    }
 }
 
 
@@ -219,7 +272,7 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-    
+
         ReadRows = 0;
         ReadBytes = 0;
         WriteRows = 0;
@@ -272,6 +325,7 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
 public:
     TKqpTableWriteActor(
         IKqpTableWriterCallbacks* callbacks,
+        const TString& database,
         const TTableId& tableId,
         const TStringBuf tablePath,
         const ui64 lockTxId,
@@ -289,6 +343,7 @@ public:
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)
+        , Database(database)
         , TableId(tableId)
         , TablePath(tablePath)
         , LockTxId(lockTxId)
@@ -527,6 +582,7 @@ public:
 
         CA_LOG_D("Resolve TableId=" << TableId);
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        request->DatabaseName = Database;
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.TableId = TableId;
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
@@ -613,6 +669,7 @@ public:
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             CA_LOG_D("Retry Overloaded ShardID=" << shardId);
+            ResetShardRetries(shardId, metadata->Cookie);
             SendDataToShard(shardId);
         }
     }
@@ -719,7 +776,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            
+
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
@@ -779,7 +836,7 @@ public:
                     getIssues());
             }
             return;
-        }        
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << TablePath << "`."
@@ -1022,6 +1079,7 @@ public:
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
+        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
             CA_LOG_W("ShardId=" << shardId
                     << " for table '" << TablePath
@@ -1225,33 +1283,12 @@ public:
     }
 
     void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        const ui64 shardId = record.GetTabletId();
-
-        const auto& reattachState = TxManager->GetReattachState(shardId);
-        if (reattachState.Cookie != ev->Cookie) {
+        const auto result = HandleAttachResult(TxManager, ev);
+        if (!result) {
             return;
         }
-
-        const auto shardState = TxManager->GetState(shardId);
-        switch (shardState) {
-            case IKqpTransactionManager::EXECUTING:
-                YQL_ENSURE(Mode == EMode::COMMIT || Mode == EMode::IMMEDIATE_COMMIT);
-                break;
-            case IKqpTransactionManager::PREPARED:
-                YQL_ENSURE(Mode == EMode::PREPARE);
-                break;
-            case IKqpTransactionManager::PREPARING:
-            case IKqpTransactionManager::FINISHED:
-            case IKqpTransactionManager::ERROR:
-            case IKqpTransactionManager::PROCESSING:
-                YQL_ENSURE(false);
-        }
-
-        if (record.GetStatus() == NKikimrProto::OK) {
-            // Transaction still exists at this shard
-            CA_LOG_D("Reattached to shard " << shardId);
-            TxManager->Reattached(shardId);
+        if (*result) {
+            CA_LOG_D("Reattached to shard " << ev->Get()->Record.GetTabletId());
             return;
         }
 
@@ -1260,42 +1297,29 @@ public:
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder()
-                    << "ShardId=" << shardId
-                    << " for table '" << TablePath
-                    << "': attach transaction failed.");
+                    << "Disconnected from shard " << ev->Get()->Record.GetTabletId() << "."
+                    << "Table: `" << TablePath << "`.");
             return;
         } else {
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNDETERMINED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                 TStringBuilder()
-                    << "ShardId=" << shardId
-                    << " for table '" << TablePath
-                    << "': attach transaction failed.");
+                    << "Disconnected from shard " << ev->Get()->Record.GetTabletId() << "."
+                    << "Table: `" << TablePath << "`.");
             return;
         }
     }
 
     void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        const ui64 shardId = record.GetTabletId();
-
-        CA_LOG_D("Got transaction restart event from tabletId: " << shardId);
-
-        switch (TxManager->GetState(shardId)) {
-            case IKqpTransactionManager::EXECUTING: {
-                TxManager->SetRestarting(shardId);
-                return;
-            }
-            case IKqpTransactionManager::FINISHED:
-            case IKqpTransactionManager::ERROR: {
-                return;
-            }
-            case IKqpTransactionManager::PREPARING:
-            case IKqpTransactionManager::PREPARED:
-            case IKqpTransactionManager::PROCESSING: {
-                YQL_ENSURE(false);
-            }
+        CA_LOG_D("Got transaction restart event from tabletId: " << ev->Get()->Record.GetTabletId());
+        if (!HandleTransactionRestart(TxManager, ev)) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Disconnected from shard " << ev->Get()->Record.GetTabletId() << "."
+                    << "Table: `" << TablePath << "`.");
         }
     }
 
@@ -1397,6 +1421,7 @@ private:
     const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     const NKikimrDataEvents::ELockMode LockMode;
 
+    const TString Database;
     const TTableId TableId;
     const TString TablePath;
 
@@ -1978,6 +2003,7 @@ public:
 
             WriteTableActor = new TKqpTableWriteActor(
                 this,
+                Settings.GetDatabase(),
                 TableId,
                 Settings.GetTable().GetPath(),
                 Settings.GetLockTxId(),
@@ -2275,6 +2301,7 @@ struct TTransactionSettings {
 };
 
 struct TWriteSettings {
+    TString Database;
     TTableId TableId;
     TString TablePath; // for error messages
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
@@ -2326,6 +2353,19 @@ struct TEvBufferWriteResult : public TEventLocal<TEvBufferWriteResult, TKqpEvent
 class TKqpBufferWriteActor : public TActorBootstrapped<TKqpBufferWriteActor>, public IKqpTableWriterCallbacks, public IKqpBufferTableLookupCallbacks {
     using TBase = TActorBootstrapped<TKqpBufferWriteActor>;
     using TTopicTabletTxs = NTopic::TTopicOperationTransactions;
+
+    struct TEvPrivate {
+        enum EEv {
+            EvReattachToShard = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        };
+
+        struct TEvReattachToShard : public TEventLocal<TEvReattachToShard, EvReattachToShard> {
+            const ui64 TabletId;
+
+            explicit TEvReattachToShard(ui64 tabletId)
+                : TabletId(tabletId) {}
+        };
+    };
 
 public:
     TKqpBufferWriteActor(
@@ -2405,9 +2445,13 @@ public:
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandlePrepare);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandlePrepare);
-                hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, HandlePrepare);
                 hFunc(TEvDataShard::TEvOverloadReady, HandlePrepare);
                 hFunc(TEvColumnShard::TEvOverloadReady, HandlePrepare);
+
+                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandlePrepare);
+                hFunc(TEvPrivate::TEvReattachToShard, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
@@ -2426,6 +2470,10 @@ public:
                 hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleCommit);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleCommit);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleCommit);
+
+                hFunc(TEvDataShard::TEvProposeTransactionAttachResult, HandleCommit);
+                hFunc(TEvPrivate::TEvReattachToShard, Handle);
+                hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
@@ -2479,6 +2527,7 @@ public:
                 }
                 TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
                     this,
+                    settings.Database,
                     tableId,
                     tablePath,
                     LockTxId,
@@ -2787,7 +2836,7 @@ public:
         message.From = ev->Sender;
         message.Close = ev->Get()->Close;
         message.Data = ev->Get()->Data;
-        
+
         Process();
     }
 
@@ -2829,7 +2878,7 @@ public:
             if (isEmpty) {
                 OnFlushed();
             }
-        } 
+        }
         return true;
     }
 
@@ -3140,7 +3189,7 @@ public:
 
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
-            
+
             if (!isImmediateCommit) {
                 FillTopicsCommit(transaction, TxManager);
             }
@@ -3331,7 +3380,7 @@ public:
     void HandlePrepare(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
-        
+
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << tabletId <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
@@ -3348,7 +3397,7 @@ public:
     void HandleCommit(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
         auto& event = ev->Get()->Record;
         const ui64 tabletId = event.GetOrigin();
-        
+
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << tabletId <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
@@ -3429,6 +3478,66 @@ public:
         }
     }
 
+    void HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+        const auto result = HandleAttachResult(TxManager, ev);
+        if (!result) {
+            return;
+        }
+        if (*result) {
+            CA_LOG_D("Reattached to shard " << ev->Get()->Record.GetTabletId());
+            return;
+        }
+
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::UNAVAILABLE,
+            NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+            TStringBuilder()
+                << "Disconnected from shard " << ev->Get()->Record.GetTabletId() << "."
+                << GetPathes(ev->Get()->Record.GetTabletId()) << ".");
+    }
+
+    void HandleCommit(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev) {
+        const auto result = HandleAttachResult(TxManager, ev);
+        if (!result) {
+            return;
+        }
+        if (*result) {
+            CA_LOG_D("Reattached to shard " << ev->Get()->Record.GetTabletId());
+            return;
+        }
+
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::UNDETERMINED,
+            NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+            TStringBuilder()
+                << "Disconnected from shard " << ev->Get()->Record.GetTabletId() << "."
+                << GetPathes(ev->Get()->Record.GetTabletId()) << ".");
+    }
+
+    void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
+        CA_LOG_D("Got transaction restart event from tabletId: " << ev->Get()->Record.GetTabletId());
+        if (!HandleTransactionRestart(TxManager, ev)) {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Disconnected from shard " << ev->Get()->Record.GetTabletId() << "."
+                    << GetPathes(ev->Get()->Record.GetTabletId()) << ".");
+        }
+    }
+
+    void Handle(TEvPrivate::TEvReattachToShard::TPtr& ev) {
+        const ui64 tabletId = ev->Get()->TabletId;
+        auto& state = TxManager->GetReattachState(tabletId);
+
+        CA_LOG_D("Reattach to shard " << tabletId);
+
+        YQL_ENSURE(TxId);
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
+            new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
+            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+    }
+
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ReplyErrorAndDie(
@@ -3436,7 +3545,26 @@ public:
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
             {});
-        return;
+    }
+
+    void HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
+        if (state == IKqpTransactionManager::PREPARED && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
+            const auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
+            CA_LOG_N("Shard " << ev->Get()->TabletId << " delivery problem (reattaching in "
+                        << reattachState.ReattachInfo.Delay << ")");
+
+            Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
+            return;
+        }
+
+        ReplyErrorAndDie(
+            NYql::NDqProto::StatusIds::UNAVAILABLE,
+            NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+            TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+            {});
     }
 
     void HandleCommit(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -3465,12 +3593,21 @@ public:
             return;
         }
 
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
+        if (state == IKqpTransactionManager::EXECUTING && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
+            const auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
+            CA_LOG_N("Shard " << ev->Get()->TabletId << " delivery problem (reattaching in "
+                        << reattachState.ReattachInfo.Delay << ")");
+
+            Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
+            return;
+        }
+
         ReplyErrorAndDie(
             NYql::NDqProto::StatusIds::UNDETERMINED,
             NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
             TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
             {});
-        return;
     }
 
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
@@ -3532,7 +3669,9 @@ public:
 
     void RollbackAndDie(NWilson::TTraceId traceId) {
         Rollback(std::move(traceId));
-        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+            BuildStats()
+        });
         PassAway();
     }
 
@@ -3623,18 +3762,6 @@ public:
             return issues;
         };
 
-        auto getPathes = [&]() -> TString {
-            const auto tableInfo = TxManager->GetShardTableInfo(ev->Get()->Record.GetOrigin());
-            TStringBuilder builder;
-            for (const auto& path : tableInfo.Pathes) {
-                if (!builder.empty()) {
-                    builder << ", ";
-                }
-                builder << "`" << path << "`";
-            }
-            return (tableInfo.Pathes.size() == 1 ? "Table: " : "Tables: ")  + builder;
-        };
-
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
             CA_LOG_E("Got UNSPECIFIED for tables."
@@ -3645,7 +3772,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
                 NYql::TIssuesIds::DEFAULT_ERROR,
-                TStringBuilder() << "Unspecified error. " << getPathes() << ". "
+                TStringBuilder() << "Unspecified error. " << GetPathes(ev->Get()->Record.GetOrigin()) << ". "
                     << getIssues().ToOneLineString(),
                 getIssues());
             return;
@@ -3675,7 +3802,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder() << "Wrong shard state. " << getPathes() << ".",
+                TStringBuilder() << "Wrong shard state. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3701,7 +3828,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
-                TStringBuilder() << "Disk space exhausted. " << getPathes() << ".",
+                TStringBuilder() << "Disk space exhausted. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3715,7 +3842,8 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. " << getPathes() << ".",
+                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. "
+                    << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3731,7 +3859,7 @@ public:
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
                 TStringBuilder() << "Kikimr cluster or one of its subsystems is overloaded."
                     << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded."
-                    << " " << getPathes() << ".",
+                    << " " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3757,7 +3885,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
-                TStringBuilder() << "Bad request. " << getPathes() << ".",
+                TStringBuilder() << "Bad request. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3770,7 +3898,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::SCHEME_ERROR,
                 NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
-                TStringBuilder() << "Scheme changed. " << getPathes() << ".",
+                TStringBuilder() << "Scheme changed. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3787,7 +3915,7 @@ public:
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 TStringBuilder()
                     << "Transaction locks invalidated. "
-                    << getPathes() << ".",
+                    << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -3800,7 +3928,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION,
-                TStringBuilder() << "Constraint violated. " << getPathes() << ".",
+                TStringBuilder() << "Constraint violated. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
                 getIssues());
             return;
         }
@@ -4032,9 +4160,22 @@ public:
         Rollback(BufferWriteActorSpan.GetTraceId());
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,
-            std::move(issues)
+            std::move(issues),
+            BuildStats()
         });
         PassAway();
+    }
+
+    TString GetPathes(ui64 shardId) const {
+        const auto tableInfo = TxManager->GetShardTableInfo(shardId);
+        TStringBuilder builder;
+        for (const auto& path : tableInfo.Pathes) {
+            if (!builder.empty()) {
+                builder << ", ";
+            }
+            builder << "`" << path << "`";
+        }
+        return (tableInfo.Pathes.size() == 1 ? "Table: " : "Tables: ")  + builder;
     }
 
     NYql::NDqProto::TDqTaskStats BuildStats() {
@@ -4290,6 +4431,7 @@ private:
                 Settings.GetLookupColumns().end());
 
             ev->Settings = TWriteSettings{
+                .Database = Settings.GetDatabase(),
                 .TableId = TableId,
                 .TablePath = Settings.GetTable().GetPath(),
                 .OperationType = GetOperation(Settings.GetType()),

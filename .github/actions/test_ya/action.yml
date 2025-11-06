@@ -59,6 +59,18 @@ inputs:
     type: boolean
     default: false
     description: "add ya make vars with git info"
+  telegram_ydbot_token:
+    type: string
+    required: false
+    description: "Telegram bot token"
+  telegram_alert_logins:
+    type: string
+    required: false
+    description: "Telegram alert logins"
+  telegram_alert_chat:
+    type: string
+    required: false
+    description: "Telegram alert chat"
 
 outputs:
   success:
@@ -120,7 +132,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
+        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser plotly
 
     - name: Setup cache
       shell: bash
@@ -132,39 +144,17 @@ runs:
     - name: ya build and test
       id: build
       shell: bash
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
+        GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
+        GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
+        # Save original HEAD before any git operations (checkout scripts, graph_compare, etc.)
         ORIGINAL_HEAD=$(git rev-parse HEAD)
-
-        if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
-
-          set +e
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
-          RC=${PIPESTATUS[0]}
-          set -e
-
-          if [ $RC -ne 0 ]; then
-            echo "graph_compare.sh returned $RC, build failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
-            exit $RC
-          fi
-
-          git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
-        else
-          YA_MAKE_TARGET=""
-          for TARGET in ${{ inputs.build_target }}; do
-             if [ -e $TARGET ]; then
-                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
-             fi
-          done
-        fi
+        echo "ORIGINAL_HEAD=$ORIGINAL_HEAD" >> $GITHUB_ENV
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
@@ -236,22 +226,6 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-        fi
-
-        if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
-          params+=(--retest)
-        fi
-
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
@@ -280,6 +254,83 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        if [ "${{ inputs.increment }}" = "true" ]; then
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
+
+          set +e
+          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          if [ $RC -ne 0 ]; then
+            echo "graph_compare.py returned $RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            exit $RC
+          fi
+
+          git checkout $ORIGINAL_HEAD
+          YA_MAKE_TARGET=.
+        else
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+             if [ -e $TARGET ]; then
+                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+             fi
+          done
+        fi
+
+        # Scripts to checkout from main
+        MAIN_SCRIPTS=(
+          ".github/scripts/config/ydb_qa_config.json"
+          ".github/scripts/analytics/upload_tests_results.py"
+          ".github/scripts/analytics/ydb_wrapper.py"
+          ".github/scripts/send_build_stats.py"
+          ".github/scripts/get_build_diff.py"
+          ".github/scripts/get_current_build_size.py"
+          ".github/scripts/get_main_build_size.py"
+          ".github/scripts/check_ydb_qa_config.py"
+        )
+        
+        # Ensure main is available (may be missing in shallow clone)
+        if ! git rev-parse --verify main >/dev/null 2>&1; then
+          git fetch origin main:main --depth=1 2>/dev/null || true
+        fi
+        
+        # For each script: if unchanged in PR - use from main
+        # git checkout main -- "$script" doesn't change HEAD, only files in working directory
+        for script in "${MAIN_SCRIPTS[@]}"; do
+          if git diff --quiet main HEAD -- "$script" 2>/dev/null; then
+            git checkout main -- "$script" 2>/dev/null && echo "✅ $script"
+          else
+            echo "✅ $script (PR version)"
+          fi
+        done
+        
+        # Check YDB configuration (after checkout from main)
+        python3 .github/scripts/check_ydb_qa_config.py || true
+
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
+        if [ true = ${{ inputs.run_tests }} ]; then
+          params+=(-A)
+          params+=(--retest)
+        fi
+
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
@@ -290,26 +341,8 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
-          case $GITHUB_EVENT_NAME in
-            workflow_dispatch)
-              TESTMO_RUN_NAME="${{ github.run_id }} manual"
-              ;;
-            pull_request | pull_request_target)
-              TESTMO_RUN_NAME="${{ github.run_id }} PR #${TESTMO_PR_NUMBER}"
-              ;;
-            schedule)
-              TESTMO_RUN_NAME="${{ github.run_id }} schedule"
-              ;;
-            push)
-              TESTMO_RUN_NAME="${{ github.run_id }} POST"
-              ;;
-            *)
-              TESTMO_RUN_NAME="${{ github.run_id }}"
-              ;;
-          esac
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
-            TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
           else
             IS_RETRY=0
           fi
@@ -335,15 +368,39 @@ runs:
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+
+          monitor_memory() {
+              set +x
+              while true; do
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
+                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                  echo "$(date +%s) $used_kb" >> ram_usage.txt
+                  sleep 3
+              done
+          }
+
+          monitor_memory &
+          MONITOR_PID=$!
+
           set +e
-          (./ya make $YA_MAKE_TARGET "${params[@]}" \
+          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
 
+          kill $MONITOR_PID
+
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
+
+          .github/scripts/report_ram_analyzer.py \
+            --report-file "$CURRENT_REPORT" \
+            --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
+            --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
+            --ram-usage-file ram_usage.txt \
+            --chat-id "$GH_ALERTS_TG_CHAT" \
+            --memory-threshold 90 || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -439,9 +496,31 @@ runs:
           fi
 
           # upload tests results to YDB
-          # TODO: remove/rename TESTMO_RUN_NAME variable
-          ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          # Create run name based on event type and retry number
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              run_name="${{ github.run_id }}_manual"
+              ;;
+            pull_request | pull_request_target)
+              pr_number="${{ github.event.number }}"
+              if [ -n "$pr_number" ]; then
+                run_name="${{ github.run_id }}_PR_${pr_number}"
+              else
+                run_name="${{ github.run_id }}_PR"
+              fi
+              ;;
+            schedule)
+              run_name="${{ github.run_id }}_schedule"
+              ;;
+            push)
+              run_name="${{ github.run_id }}_POST"
+              ;;
+            *)
+              run_name="${{ github.run_id }}"
+              ;;
+          esac
+          run_name="${run_name}_attempt_${RETRY}"
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -508,7 +587,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
-        ORIGINAL_HEAD=$(git rev-parse HEAD)
+        # Use ORIGINAL_HEAD from build step (saved before any git operations)
         get_file_diff_script=.github/scripts/tests/get_diff_lines_of_file.py
         file_to_check=.github/config/muted_ya.txt
         check_result=`$get_file_diff_script --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --file_path $file_to_check`
@@ -563,7 +642,7 @@ runs:
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}"
-        export commit_git_sha="$(git rev-parse HEAD)"
+        export commit_git_sha="$ORIGINAL_HEAD"
 
         python3 .github/scripts/send_build_stats.py
 
@@ -579,7 +658,7 @@ runs:
         export branch_to_compare="$BRANCH_NAME"
         export yellow_treshold=102400
         export red_treshold=2097152
-        export commit_git_sha="$(git rev-parse HEAD)"
+        export commit_git_sha="$ORIGINAL_HEAD"
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`

@@ -20,7 +20,6 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-
 TTableRef::TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys)
     : RefName(refName)
     , Service(to_lower(service))
@@ -49,7 +48,7 @@ ISource::~ISource()
 TSourcePtr ISource::CloneSource() const {
     Y_DEBUG_ABORT_UNLESS(dynamic_cast<ISource*>(Clone().Get()), "Cloned node is no source");
     TSourcePtr result = static_cast<ISource*>(Clone().Get());
-    for (auto curFilter: Filters_) {
+    for (auto curFilter : Filters_) {
         result->Filters_.emplace_back(curFilter->Clone());
     }
     for (int i = 0; i < static_cast<int>(EExprSeat::Max); ++i) {
@@ -73,7 +72,7 @@ const TColumns* ISource::GetColumns() const {
 }
 
 void ISource::GetInputTables(TTableList& tableList) const {
-    for (auto srcPtr: UsedSources_) {
+    for (auto srcPtr : UsedSources_) {
         srcPtr->GetInputTables(tableList);
     }
     return;
@@ -82,15 +81,13 @@ void ISource::GetInputTables(TTableList& tableList) const {
 TMaybe<bool> ISource::AddColumn(TContext& ctx, TColumnNode& column) {
     if (column.IsReliable()) {
         ctx.Error(Pos_) << "Source does not allow column references";
-        ctx.Error(column.GetPos()) << "Column reference " <<
-            (column.GetColumnName() ? "'" + *column.GetColumnName() + "'" : "(expr)");
+        ctx.Error(column.GetPos()) << "Column reference " << (column.GetColumnName() ? "'" + *column.GetColumnName() + "'" : "(expr)");
     }
     return {};
 }
 
 void ISource::FinishColumns() {
 }
-
 
 bool ISource::AddFilter(TContext& ctx, TNodePtr filter) {
     Y_UNUSED(ctx);
@@ -126,7 +123,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
     // TODO: merge FlattenBy with FlattenByExpr
     const bool isFlatten = (exprSeat == EExprSeat::FlattenBy || exprSeat == EExprSeat::FlattenByExpr);
     THashSet<TString>& aliases = isFlatten ? FlattenByAliases_ : aliasSet;
-    for (const auto& expr: expressions) {
+    for (const auto& expr : expressions) {
         const auto& alias = expr->GetLabel();
         const auto& columnNamePtr = expr->GetColumnName();
         if (alias) {
@@ -158,8 +155,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
                 auto columnAlias = GroupByColumnAliases_.emplace(columnName, alias);
                 auto oldAlias = columnAlias.first->second;
                 if (columnAlias.second && oldAlias != alias) {
-                    ctx.Error(expr->GetPos()) << "Alias for column not same, column: " << columnName <<
-                        ", exist alias: " << oldAlias << ", another alias: " << alias;
+                    ctx.Error(expr->GetPos()) << "Alias for column not same, column: " << columnName << ", exist alias: " << oldAlias << ", another alias: " << alias;
                     return false;
                 }
             }
@@ -337,7 +333,7 @@ bool ISource::IsFlattenByExprs() const {
 }
 
 bool ISource::IsAlias(EExprSeat exprSeat, const TString& column) const {
-    for (const auto& exprNode: Expressions(exprSeat)) {
+    for (const auto& exprNode : Expressions(exprSeat)) {
         const auto& labelName = exprNode->GetLabel();
         if (labelName && labelName == column) {
             return true;
@@ -349,7 +345,7 @@ bool ISource::IsAlias(EExprSeat exprSeat, const TString& column) const {
 bool ISource::IsExprAlias(const TString& column) const {
     std::array<EExprSeat, 5> exprSeats = {{EExprSeat::FlattenBy, EExprSeat::FlattenByExpr, EExprSeat::GroupBy,
                                            EExprSeat::WindowPartitionBy, EExprSeat::DistinctAggr}};
-    for (auto seat: exprSeats) {
+    for (auto seat : exprSeats) {
         if (IsAlias(seat, column)) {
             return true;
         }
@@ -362,7 +358,7 @@ bool ISource::IsExprSeat(EExprSeat exprSeat, EExprType type) const {
     if (!expressions) {
         return false;
     }
-    for (const auto& exprNode: expressions) {
+    for (const auto& exprNode : expressions) {
         if (exprNode->GetLabel()) {
             return type == EExprType::WithExpression;
         }
@@ -384,7 +380,7 @@ const TString* ISource::GetWindowName() const {
 
 bool ISource::IsCalcOverWindow() const {
     return !AggregationOverWindow_.empty() || !FuncOverWindow_.empty() ||
-        AnyOf(WinSpecs_, [](const auto& item) { return item.second->Session; });
+           AnyOf(WinSpecs_, [](const auto& item) { return item.second->Session; });
 }
 
 bool ISource::IsOverWindowSource() const {
@@ -407,7 +403,7 @@ TNodePtr ISource::PrepareSamplingRate(TPosition pos, ESampleClause clause, TNode
     if (ESampleClause::Sample == clause) {
         samplingRate = Y("*", samplingRate, Y("Double", Q("100")));
     }
-    auto ensureLow  = Y("Ensure", "samplingRate", Y(">=", "samplingRate", Y("Double", Q("0"))), Y("String", BuildQuotedAtom(pos, "Expected sampling rate to be nonnegative")));
+    auto ensureLow = Y("Ensure", "samplingRate", Y(">=", "samplingRate", Y("Double", Q("0"))), Y("String", BuildQuotedAtom(pos, "Expected sampling rate to be nonnegative")));
     auto ensureHigh = Y("Ensure", "samplingRate", Y("<=", "samplingRate", Y("Double", Q("100"))), Y("String", BuildQuotedAtom(pos, "Sampling rate is over 100%")));
 
     auto block(Y(Y("let", "samplingRate", samplingRate)));
@@ -416,7 +412,6 @@ TNodePtr ISource::PrepareSamplingRate(TPosition pos, ESampleClause clause, TNode
     samplingRate = Y("block", Q(L(block, Y("return", "samplingRate"))));
     return samplingRate;
 }
-
 
 bool ISource::SetSamplingOptions(TContext& ctx,
                                  TPosition pos,
@@ -474,7 +469,7 @@ TNodePtr ISource::BuildFilterLambda() {
 
 TNodePtr ISource::BuildFlattenByColumns(const TString& label) {
     auto columnsList = Y("FlattenByColumns", Q(FlattenMode_), label);
-    for (const auto& column: Expressions(EExprSeat::FlattenBy)) {
+    for (const auto& column : Expressions(EExprSeat::FlattenBy)) {
         const auto columnNamePtr = column->GetColumnName();
         YQL_ENSURE(columnNamePtr);
         if (column->GetLabel().empty()) {
@@ -494,7 +489,7 @@ namespace {
 
 TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& exprs, bool override, bool persistable) {
     auto structObj = BuildAtom(pos, "row", TNodeFlags::Default);
-    for (const auto& exprNode: exprs) {
+    for (const auto& exprNode : exprs) {
         const auto name = exprNode->GetLabel();
         YQL_ENSURE(name);
         if (override) {
@@ -512,7 +507,7 @@ TNodePtr BuildLambdaBodyForExprAliases(TPosition pos, const TVector<TNodePtr>& e
     return structObj->Y("AsList", structObj);
 }
 
-}
+} // namespace
 
 TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
     Y_UNUSED(ctx);
@@ -537,7 +532,7 @@ TNodePtr ISource::BuildPreaggregatedMap(TContext& ctx) {
             ctx.GroupByExprAfterWhere || !ctx.FailOnGroupByExprOverride,
             ctx.PersistableFlattenAndAggrExprs);
         auto lambda = BuildLambda(Pos_, Y("row"), body);
-        res = res ? Y("FlatMap", res,  lambda) : Y("FlatMap", "core", lambda);
+        res = res ? Y("FlatMap", res, lambda) : Y("FlatMap", "core", lambda);
     }
     return res;
 }
@@ -550,7 +545,7 @@ TNodePtr ISource::BuildPreFlattenMap(TContext& ctx) {
 
 TNodePtr ISource::BuildPrewindowMap(TContext& ctx) {
     auto feed = BuildAtom(Pos_, "row", TNodeFlags::Default);
-    for (const auto& exprNode: Expressions(EExprSeat::WindowPartitionBy)) {
+    for (const auto& exprNode : Expressions(EExprSeat::WindowPartitionBy)) {
         const auto name = exprNode->GetLabel();
         if (name && !dynamic_cast<const TSessionWindow*>(exprNode.Get())) {
             feed = Y("AddMember", feed, Q(name), exprNode);
@@ -582,18 +577,18 @@ bool ISource::SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samp
 
 std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TContext& ctx) {
     if (GroupKeys_.empty() && Aggregations_.empty() && !IsCompositeSource() && !LegacyHoppingWindowSpec_) {
-        return { nullptr, true };
+        return {nullptr, true};
     }
 
     auto keysTuple = Y();
     YQL_ENSURE(GroupKeys_.size() == OrderedGroupKeys_.size());
-    for (const auto& key: OrderedGroupKeys_) {
+    for (const auto& key : OrderedGroupKeys_) {
         YQL_ENSURE(GroupKeys_.contains(key));
         keysTuple = L(keysTuple, BuildQuotedAtom(Pos_, key));
     }
 
     std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
-    for (const auto& aggr: Aggregations_) {
+    for (const auto& aggr : Aggregations_) {
         if (auto key = aggr->GetGenericKey()) {
             genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
         }
@@ -608,12 +603,12 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
     const auto listType = Y("TypeOf", label);
     auto aggrArgs = Y();
     const bool overState = GroupBySuffix_ == "CombineState" || GroupBySuffix_ == "MergeState" ||
-        GroupBySuffix_ == "MergeFinalize" || GroupBySuffix_ == "MergeManyFinalize";
+                           GroupBySuffix_ == "MergeFinalize" || GroupBySuffix_ == "MergeManyFinalize";
     const bool allowAggApply = !LegacyHoppingWindowSpec_ && !SessionWindow_ && !HoppingWindow_;
-    for (const auto& aggr: Aggregations_) {
+    for (const auto& aggr : Aggregations_) {
         auto res = aggr->AggregationTraits(listType, overState, GroupBySuffix_ == "MergeManyFinalize", allowAggApply, ctx);
         if (!res.second) {
-           return { nullptr, false };
+            return {nullptr, false};
         }
 
         if (res.first) {
@@ -645,7 +640,7 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
         auto sessionWindow = dynamic_cast<TSessionWindow*>(SessionWindow_.Get());
         YQL_ENSURE(sessionWindow);
         options = L(options, Q(Y(Q("session"),
-            Q(Y(BuildQuotedAtom(Pos_, SessionWindow_->GetLabel()), sessionWindow->BuildTraits(label))))));
+                                 Q(Y(BuildQuotedAtom(Pos_, SessionWindow_->GetLabel()), sessionWindow->BuildTraits(label))))));
     }
 
     if (HoppingWindow_) {
@@ -653,10 +648,10 @@ std::pair<TNodePtr, bool> ISource::BuildAggregation(const TString& label, TConte
         auto hoppingWindow = dynamic_cast<THoppingWindow*>(HoppingWindow_.Get());
         YQL_ENSURE(hoppingWindow);
         options = L(options, Q(Y(Q("hopping"),
-            Q(Y(BuildQuotedAtom(Pos_, HoppingWindow_->GetLabel()), hoppingWindow->BuildTraits(label))))));
+                                 Q(Y(BuildQuotedAtom(Pos_, HoppingWindow_->GetLabel()), hoppingWindow->BuildTraits(label))))));
     }
 
-    return { Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix_, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple)), true };
+    return {Y("AssumeColumnOrderPartial", Y("Aggregate" + GroupBySuffix_, label, Q(keysTuple), Q(aggrArgs), Q(options)), Q(keysTuple)), true};
 }
 
 TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {
@@ -671,7 +666,7 @@ void ISource::AddDependentSource(TSourcePtr usedSource) {
 class TYqlFrameBound final: public TCallNode {
 public:
     TYqlFrameBound(TPosition pos, TNodePtr bound)
-        : TCallNode(pos, "EvaluateExpr", 1, 1, { bound })
+        : TCallNode(pos, "EvaluateExpr", 1, 1, {bound})
         , FakeSource_(BuildFakeSource(pos))
     {
     }
@@ -691,6 +686,7 @@ public:
     TNodePtr DoClone() const final {
         return new TYqlFrameBound(Pos_, Args_[0]->Clone());
     }
+
 private:
     TSourcePtr FakeSource_;
 };
@@ -698,10 +694,18 @@ private:
 TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
     TString settingStr;
     switch (frame.Settings) {
-        case FramePreceding: settingStr = "preceding"; break;
-        case FrameCurrentRow: settingStr = "currentRow"; break;
-        case FrameFollowing: settingStr = "following"; break;
-        default: YQL_ENSURE(false, "Unexpected frame setting");
+        case FramePreceding:
+            settingStr = "preceding";
+            break;
+        case FrameCurrentRow:
+            settingStr = "currentRow";
+            break;
+        case FrameFollowing:
+            settingStr = "following";
+            break;
+        case FrameUndefined:
+            YQL_ENSURE(false, "Unexpected frame setting");
+            break;
     }
 
     TNodePtr node = frame.Bound;
@@ -731,10 +735,10 @@ TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
         if (frame.Settings == FramePreceding) {
             value = -value;
         }
-        node = new TCallNodeImpl(pos, "Int32", { BuildQuotedAtom(pos, ToString(value), TNodeFlags::Default) });
+        node = new TCallNodeImpl(pos, "Int32", {BuildQuotedAtom(pos, ToString(value), TNodeFlags::Default)});
     } else {
         if (frame.Settings == FramePreceding) {
-            node = new TCallNodeImpl(pos, "Minus", { node->Clone() });
+            node = new TCallNodeImpl(pos, "Minus", {node->Clone()});
         }
         node = new TYqlFrameBound(pos, node);
     }
@@ -779,6 +783,7 @@ public:
     TNodePtr DoClone() const final {
         return new TSessionWindowTraits(Pos_, CloneContainer(Args_));
     }
+
 private:
     TSourcePtr FakeSource_;
 };
@@ -820,9 +825,15 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
         auto frames = Y();
         TString frameType;
         switch (spec->Frame->FrameType) {
-            case EFrameType::FrameByRows: frameType = "WinOnRows"; break;
-            case EFrameType::FrameByRange: frameType = "WinOnRange"; break;
-            case EFrameType::FrameByGroups: frameType = "WinOnGroups"; break;
+            case EFrameType::FrameByRows:
+                frameType = "WinOnRows";
+                break;
+            case EFrameType::FrameByRange:
+                frameType = "WinOnRange";
+                break;
+            case EFrameType::FrameByGroups:
+                frameType = "WinOnGroups";
+                break;
         }
         YQL_ENSURE(frameType);
         auto callOnFrame = Y(frameType, BuildWindowFrame(*spec->Frame, spec->IsCompact));
@@ -837,7 +848,7 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label) {
         frames = L(frames, callOnFrame);
 
         auto keysTuple = Y();
-        for (const auto& key: spec->Partitions) {
+        for (const auto& key : spec->Partitions) {
             if (!dynamic_cast<TSessionWindow*>(key.Get())) {
                 keysTuple = L(keysTuple, AliasOrColumn(key, GetJoin()));
             }
@@ -912,7 +923,7 @@ bool ISource::IsJoinKeysInitializing() const {
 }
 
 bool ISource::DoInit(TContext& ctx, ISource* src) {
-    for (auto& column: Expressions(EExprSeat::FlattenBy)) {
+    for (auto& column : Expressions(EExprSeat::FlattenBy)) {
         if (!column->Init(ctx, this)) {
             return false;
         }
@@ -926,7 +937,7 @@ bool ISource::DoInit(TContext& ctx, ISource* src) {
 }
 
 bool ISource::InitFilters(TContext& ctx) {
-    for (auto& filter: Filters_) {
+    for (auto& filter : Filters_) {
         if (!filter->Init(ctx, this)) {
             return false;
         }
@@ -939,7 +950,7 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    Y_DEBUG_ABORT_UNLESS(false);
+    Y_DEBUG_ABORT_UNLESS(false, "Can't tranlsate ISource, maybe it is used in a scalar context");
     Y_UNUSED(ctx);
     return nullptr;
 }
@@ -957,7 +968,7 @@ void ISource::FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNode
     } else {
         auto exprList = Y();
         sortDirection = Y();
-        for (const auto& sortSpec: orderBy) {
+        for (const auto& sortSpec : orderBy) {
             const auto asc = sortSpec->Ascending;
             sortDirection = L(sortDirection, Y("Bool", Q(asc ? "true" : "false")));
             exprList = L(exprList, Y("PersistableRepr", sortSpec->OrderExpr));
@@ -986,10 +997,20 @@ bool ISource::HasMatchRecognize() const {
     return static_cast<bool>(MatchRecognizeBuilder_);
 }
 
-TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable){
+TNodePtr ISource::BuildMatchRecognize(TContext& ctx, TString&& inputTable) {
     YQL_ENSURE(HasMatchRecognize());
     return MatchRecognizeBuilder_->Build(ctx, std::move(inputTable), this);
 };
+
+TSourcePtr MoveOutIfSource(TNodePtr& node) {
+    ISource* source = dynamic_cast<ISource*>(node.Get());
+    if (!source) {
+        return nullptr;
+    }
+
+    YQL_ENSURE(source == node.Release());
+    return source;
+}
 
 IJoin::IJoin(TPosition pos)
     : ISource(pos)

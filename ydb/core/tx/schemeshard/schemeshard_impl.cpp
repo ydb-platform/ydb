@@ -4096,7 +4096,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
-    
+
     UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
@@ -4662,6 +4662,11 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                     result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                     generalVersion += result.GetSubDomainVersion();
                     generalVersion += result.GetSecurityStateVersion();
+
+                    if (ui64 version = subDomain->GetDomainStateVersion()) {
+                        result.SetSubDomainStateVersion(version);
+                        generalVersion += version;
+                    }
                 }
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
@@ -7623,6 +7628,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        TInstant now = AppData()->TimeProvider->Now();
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
@@ -7631,7 +7637,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
-                UpdateShardMetrics(p.ShardIdx, it->second);
+                UpdateShardMetrics(p.ShardIdx, it->second, now);
             }
         }
 
@@ -8276,10 +8282,10 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     ResolveSA();
-    // since columnshard statistics is now sent once in a minute,
-    // we expect that in most cases we will gather full stats
-    // before sending them to StatisticsAggregator
-    ctx.Schedule(TDuration::Seconds(120), new TEvPrivate::TEvSendBaseStatsToSA());
+    // Give table shards some time to report statistics. This is not required for correctness,
+    // but if we tried to send the statistics right away, info for all paths would probably
+    // be incomplete.
+    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {
@@ -8289,6 +8295,7 @@ void TSchemeShard::ResolveSA() {
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(resourcesDomainId.OwnerId, resourcesDomainId.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;
@@ -8353,7 +8360,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     }
 
     int count = 0;
-    bool areAllStatsFull = true;
+    int incompleteCount = 0;
 
     NKikimrStat::TSchemeShardStats record;
     for (const auto& [pathId, tableInfo] : Tables) {
@@ -8369,9 +8376,11 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
         entry->SetAreStatsFull(areStatsFull);
-        areAllStatsFull = areAllStatsFull && areStatsFull;
 
         ++count;
+        if (!areStatsFull) {
+            ++incompleteCount;
+        }
     }
 
     auto columnTablesPathIds = ColumnTables.GetAllPathIds();
@@ -8401,9 +8410,11 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
         entry->SetAreStatsFull(areStatsFull);
-        areAllStatsFull = areAllStatsFull && areStatsFull;
 
         ++count;
+        if (!areStatsFull) {
+            ++incompleteCount;
+        }
     }
 
     if (!count) {
@@ -8413,7 +8424,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         return TDuration::Seconds(30);
     }
 
-    record.SetAreAllStatsFull(areAllStatsFull);
+    record.SetAreAllStatsFull(incompleteCount == 0);
 
     TString stats;
     Y_PROTOBUF_SUPPRESS_NODISCARD record.SerializeToString(&stats);
@@ -8427,6 +8438,7 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "SendBaseStatsToSA()"
         << ", path count: " << count
+        << ", paths with incomplete stats: " << incompleteCount
         << ", at schemeshard: " << TabletID());
 
     if (IsServerlessDomain(SubDomains.at(RootPathId()))) {

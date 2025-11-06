@@ -262,8 +262,8 @@ public:
         }
 
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = TString(),
             .Ticket = TString("Login ") + ydbSessionId,
+            .Database = TString(),
             .PeerName = Request->Address->ToString(),
         }));
 

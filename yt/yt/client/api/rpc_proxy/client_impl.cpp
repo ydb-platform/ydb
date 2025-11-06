@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "chaos_lease.h"
+#include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
 #include "row_batch_reader.h"
@@ -31,6 +32,7 @@
 #include <yt/yt/client/object_client/helpers.h>
 
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/distributed_file_session.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
@@ -97,6 +99,11 @@ const IReplicationCardCachePtr& TClient::GetReplicationCardCache()
 const ITimestampProviderPtr& TClient::GetTimestampProvider()
 {
     return TimestampProvider_.Value();
+}
+
+const TClientOptions& TClient::GetOptions()
+{
+    return ClientOptions_;
 }
 
 void TClient::Terminate()
@@ -527,6 +534,9 @@ TFuture<void> TClient::AlterTable(
     if (options.ReplicationProgress) {
         ToProto(req->mutable_replication_progress(), *options.ReplicationProgress);
     }
+    if (options.ClipTimestamp) {
+        req->set_clip_timestamp(*options.ClipTimestamp);
+    }
 
     ToProto(req->mutable_mutating_options(), options);
     ToProto(req->mutable_transactional_options(), options);
@@ -851,6 +861,21 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
         .ApplyUnique(BIND([=, future = promise.ToFuture()] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableFragmentWriter(std::move(outputStream), std::move(schema), std::move(future));
         }));
+}
+
+IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
+    const TSignedWriteFileFragmentCookiePtr& cookie,
+    const TFileFragmentWriterOptions& options)
+{
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.WriteFileFragment();
+    InitStreamingRequest(*req);
+
+    FillRequest(req.Get(), cookie, options);
+
+    return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
 
 TFuture<IQueueRowsetPtr> TClient::PullQueue(
@@ -1426,26 +1451,28 @@ TFuture<TGetJobStderrResponse> TClient::GetJobStderr(
     }));
 }
 
-TFuture<std::vector<TJobTraceEvent>> TClient::GetJobTrace(
+TFuture<IAsyncZeroCopyInputStreamPtr> TClient::GetJobTrace(
     const TOperationIdOrAlias& operationIdOrAlias,
+    NJobTrackerClient::TJobId jobId,
     const TGetJobTraceOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
     auto req = proxy.GetJobTrace();
-    SetTimeoutOptions(*req, options);
+
+    if (options.Timeout) {
+        SetTimeoutOptions(*req, options);
+    } else {
+        InitStreamingRequest(*req);
+    }
 
     NScheduler::ToProto(req, operationIdOrAlias);
-    YT_OPTIONAL_TO_PROTO(req, job_id, options.JobId);
+    ToProto(req->mutable_job_id(), jobId);
     YT_OPTIONAL_TO_PROTO(req, trace_id, options.TraceId);
     YT_OPTIONAL_SET_PROTO(req, from_time, options.FromTime);
     YT_OPTIONAL_SET_PROTO(req, to_time, options.ToTime);
-    YT_OPTIONAL_SET_PROTO(req, from_event_index, options.FromEventIndex);
-    YT_OPTIONAL_SET_PROTO(req, to_event_index, options.ToEventIndex);
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetJobTracePtr& rsp) {
-        return FromProto<std::vector<TJobTraceEvent>>(rsp->events());
-    }));
+    return CreateRpcClientInputStream(std::move(req));
 }
 
 TFuture<std::vector<TOperationEvent>> TClient::ListOperationEvents(
@@ -1589,6 +1616,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     }
     if (options.OperationIncarnation) {
         req->set_operation_incarnation(*options.OperationIncarnation);
+    }
+    if (options.MonitoringDescriptor) {
+        req->set_monitoring_descriptor(*options.MonitoringDescriptor);
     }
     if (options.FromTime) {
         req->set_from_time(NYT::ToProto(*options.FromTime));
@@ -1872,6 +1902,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
 
+    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
+
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
@@ -1935,6 +1967,7 @@ TFuture<int> TClient::BuildSnapshot(const TBuildSnapshotOptions& options)
     }
     req->set_set_read_only(options.SetReadOnly);
     req->set_wait_for_snapshot_completion(options.WaitForSnapshotCompletion);
+    req->set_enable_automaton_read_only_barrier(options.EnableAutomatonReadOnlyBarrier);
 
     return req->Invoke().Apply(BIND([] (const TErrorOr<TApiServiceProxy::TRspBuildSnapshotPtr>& rspOrError) -> int {
         const auto& rsp = rspOrError.ValueOrThrow();
@@ -2572,6 +2605,7 @@ TFuture<TListQueriesResult> TClient::ListQueries(
     req->set_search_by_token_prefix(options.SearchByTokenPrefix);
     req->set_use_full_text_search(options.UseFullTextSearch);
     req->set_tutorial_filter(options.TutorialFilter);
+    req->set_sort_order(static_cast<NProto::EListQueriesSortOrder>(options.SortOrder));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspListQueriesPtr& rsp) {
         return TListQueriesResult{
@@ -2640,12 +2674,12 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
     }));
 }
 
-TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
-    const TGetDeclaredParametersInfoOptions& options)
+TFuture<TGetQueryDeclaredParametersInfoResult> TClient::GetQueryDeclaredParametersInfo(
+    const TGetQueryDeclaredParametersInfoOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
-    auto req = proxy.GetDeclaredParametersInfo();
+    auto req = proxy.GetQueryDeclaredParametersInfo();
     SetTimeoutOptions(*req, options);
 
     req->set_query_tracker_stage(options.QueryTrackerStage);
@@ -2657,8 +2691,8 @@ TFuture<TGetDeclaredParametersInfoResult> TClient::GetDeclaredParametersInfo(
     req->set_query(options.Query);
     req->set_engine(NProto::ConvertQueryEngineToProto(options.Engine));
 
-    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetDeclaredParametersInfoPtr& rsp) {
-        return TGetDeclaredParametersInfoResult{
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryDeclaredParametersInfoPtr& rsp) {
+        return TGetQueryDeclaredParametersInfoResult{
             .Parameters = TYsonString(rsp->declared_parameters_info()),
         };
     }));

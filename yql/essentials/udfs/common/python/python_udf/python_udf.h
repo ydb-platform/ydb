@@ -6,7 +6,7 @@ namespace NYql {
 namespace NUdf {
 
 inline constexpr char STANDART_STREAM_PROXY_INJECTION_SCRIPT[] =
-R"(
+    R"(
 # numpy on import may find installed openblas library and load it,
 # which in turn causes it to start CPUCOUNT threads
 # with approx. 40Mb memory reserved for each thread;
@@ -66,11 +66,11 @@ enum class EPythonFlavor {
 };
 
 void RegisterYqlPythonUdf(
-        IRegistrator& registrator,
-        ui32 flags,
-        TStringBuf moduleName,
-        TStringBuf resourceName,
-        EPythonFlavor pythonFlavor);
+    IRegistrator& registrator,
+    ui32 flags,
+    TStringBuf moduleName,
+    TStringBuf resourceName,
+    EPythonFlavor pythonFlavor);
 
 TUniquePtr<IUdfModule> GetYqlPythonUdfModule(
     TStringBuf resourceName,

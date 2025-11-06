@@ -1,4 +1,15 @@
 
+## 2.27.0 ##
+
+* Added a new `--exclude` option to the `ydb import s3` command, allowing objects to be excluded from the operation if their names match a pattern.
+* Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
+* Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
+* Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.
+* Fixed a bug where the `ydb debug ping` command crashed in case of any error.
+* Added a new `--retention-period` option to the `ydb topic` subcommands. The new option supports various time units, such as seconds, minutes, or days. Usage of the legacy `--retention-period-hours` option is discouraged.
+* The `ydb topic consumer add` subcommand now has a new `--availability-period` option, which overrides the consumer's retention guarantee.
+* The `ydb workload vector` now supports `build-index` and `drop-index` subcommands.
+
 ## 2.26.0 ##
 
 * Added the `--no-merge` and `--no-cache` options to the `ydb monitoring healthcheck` command.

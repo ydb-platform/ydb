@@ -120,7 +120,7 @@ std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForDsv(
 
         default:
             YT_ABORT();
-    };
+    }
 }
 
 std::unique_ptr<IFlushableYsonConsumer> CreateConsumerForYaml(
@@ -515,7 +515,7 @@ struct TParserAdapter
 {
 public:
     template<class... TArgs>
-    TParserAdapter(TArgs&&... args)
+    explicit TParserAdapter(TArgs&&... args)
         : TBase(std::forward<TArgs>(args)...)
     { }
 

@@ -52,7 +52,7 @@ public:
 
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt, i32 runtimeParameterSizeLimit)
         : QueryId(queryId)
         , Database(database)
         , ApplicationName(applicationName)
@@ -71,14 +71,23 @@ public:
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
+        , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
             AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
+
         if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
+
+                if ((typedValue.type().has_list_type() || typedValue.type().has_tuple_type()) &&
+                    typedValue.value().items().size() > static_cast<i32>(runtimeParameterSizeLimit))
+                {
+                    RuntimeParameterSizeLimitSatisfied = false;
+                }
             }
         }
 
@@ -190,6 +199,10 @@ public:
     THashSet<ui32> ParticipantNodes;
 
     NFormats::TFormatsSettings FormatsSettings;
+
+    i32 RuntimeParameterSizeLimit = 0;
+    bool RuntimeParameterSizeLimitSatisfied = true;
+
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {

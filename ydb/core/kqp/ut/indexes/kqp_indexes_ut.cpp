@@ -1273,7 +1273,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), UseSink ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
 
 
             // One update of index table
@@ -5062,7 +5062,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = 0,
+            .ExpectedReads = 1,
             .ExpectedUpdates = 1
         });
 
@@ -5966,6 +5966,120 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                 "Writing to index implementation tables is not allowed",
                 result.GetIssues().ToString()
             );
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(IndexUpsert, Uniq) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query(Q_(std::format(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    a Int32,
+                    b Int32,
+                    PRIMARY KEY(a,b),
+                    INDEX ix_b GLOBAL {} SYNC ON (b)
+                );
+            )", Uniq ? "UNIQUE" : "")));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:20|>,<|a:30,b:20|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            if (Uniq) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    result.GetIssues().ToString(),
+                    "Duplicated keys found.",
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:20|>,<|a:10,b:20|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            if (Uniq) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    result.GetIssues().ToString(),
+                    "Duplicated keys found.",
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:10,b:10|>,<|a:30,b:30|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:20,b:10|>,<|a:20,b:30|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            if (Uniq) {
+                UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS_C(
+                    result.GetIssues().ToString(),
+                    "Conflict with existing key.",
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        {
+            const TString query(Q_(R"(
+                $v=[<|a:20,b:40|>,<|a:20,b:50|>];
+                UPSERT INTO `/Root/TestTable` SELECT * FROM AS_TABLE($v);
+            )"));
+
+            auto result = client.ExecuteQuery(
+                    query,
+                    NQuery::TTxControl::NoTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 }

@@ -22,7 +22,7 @@ public:
     }
 
     void Bootstrap();
-   
+
     enum class ERequestType {
         ANALYZE,
         STATUS,
@@ -31,7 +31,6 @@ public:
     };
 
     enum class EParamType {
-        DATABASE,
         PATH,
         OPERATION_ID,
         COLUMN_NAME,

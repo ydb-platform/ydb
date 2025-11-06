@@ -48,7 +48,7 @@ public:
 
     void Handle(TEvAddDatabase::TPtr& ev) {
         NHdrf::TStaticAttributes const attrs {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->Id, attrs);
     }
@@ -62,7 +62,7 @@ public:
         const auto& poolId = ev->Get()->PoolId;
         const auto resourceWeight = std::max(ev->Get()->Params.ResourceWeight, 0.0); // TODO: resource weight shouldn't be negative!
         NHdrf::TStaticAttributes attrs = {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
         if (ev->Get()->Params.TotalCpuLimitPercentPerNode >= 0) {
@@ -118,6 +118,7 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown pool: " << databaseId << "/" << poolId);
             // TODO: the removing message for unknown pool - should we check?
         }
     }
@@ -127,7 +128,7 @@ public:
         const auto& poolId = ev->Get()->PoolId;
         const auto& queryId = ev->Get()->QueryId;
         NHdrf::TStaticAttributes const attrs {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
         auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
@@ -137,7 +138,9 @@ public:
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
-        Scheduler->RemoveQuery(ev->Get()->Query);
+        if (!Scheduler->RemoveQuery(ev->Get()->QueryId)) {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown query: " << ev->Get()->QueryId);
+        }
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
@@ -205,6 +208,8 @@ ui64 TComputeScheduler::GetTotalCpuLimit() const {
 void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHdrf::TStaticAttributes& attrs) {
     TWriteGuard lock(Mutex);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
+
     if (auto database = Root->GetDatabase(databaseId)) {
         database->Update(attrs);
     } else {
@@ -219,6 +224,8 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     auto database = Root->GetDatabase(databaseId);
     Y_ENSURE(database, "Database not found: " << databaseId);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
+
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
     } else {
@@ -226,7 +233,7 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     }
 }
 
-TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs) {
+TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs) {
     Y_ENSURE(!poolId.empty());
 
     TWriteGuard lock(Mutex);
@@ -235,6 +242,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     auto pool = database->GetPool(poolId);
     Y_ENSURE(pool, "Pool not found: " << poolId);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
     TQueryPtr query;
 
     if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
@@ -248,17 +256,19 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     return query;
 }
 
-void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
-    Y_ENSURE(query);
-
+bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     TWriteGuard lock(Mutex);
-    const auto& queryId = std::get<NHdrf::TQueryId>(query->GetId());
 
-    Y_ENSURE(Queries.erase(queryId));
-    query->GetParent()->RemoveQuery(queryId);
+    if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
+        queryIt->second->GetParent()->RemoveQuery(queryId);
+        Queries.erase(queryIt);
+        return true;
+    }
+
+    return false;
 }
 
-void TComputeScheduler::UpdateFairShare() {
+void TComputeScheduler::UpdateFairShare(bool allowFairShareOverlimit) {
     auto startTime = TMonotonic::Now();
 
     NHdrf::NSnapshot::TRootPtr snapshot;
@@ -268,7 +278,7 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    snapshot->UpdateTopDown();
+    snapshot->UpdateTopDown(allowFairShareOverlimit);
 
     {
         TWriteGuard lock(Mutex);

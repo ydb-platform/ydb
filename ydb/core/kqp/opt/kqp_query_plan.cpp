@@ -3179,6 +3179,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto input : (*stat)->GetInput()) {
                         auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
                         auto stageGuid = stageIdToGuid.at(input.first);
+                        AFL_ENSURE(guidToPlaneId.contains(stageGuid));
                         auto planNodeId = guidToPlaneId.at(stageGuid);
                         inputInfo["Name"] = ToString(planNodeId);
                         if (input.second.HasPush()) {
@@ -3197,6 +3198,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             outputInfo["Name"] = "RESULT";
                         } else {
                             auto stageGuid = stageIdToGuid.at(output.first);
+                            AFL_ENSURE(guidToPlaneId.contains(stageGuid));
                             auto planNodeId = guidToPlaneId.at(stageGuid);
                             outputInfo["Name"] = ToString(planNodeId);
                         }

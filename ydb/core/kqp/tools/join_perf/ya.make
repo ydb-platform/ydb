@@ -1,4 +1,4 @@
-PROGRAM(join_perf)
+LIBRARY()
 
 YQL_LAST_ABI_VERSION()
 
@@ -19,7 +19,6 @@ PEERDIR(
 )
 
 SRCS(
-    main.cpp
     construct_join_graph.cpp
     joins.cpp
     benchmark_settings.cpp

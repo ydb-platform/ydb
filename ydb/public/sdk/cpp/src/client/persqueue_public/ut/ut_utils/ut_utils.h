@@ -97,6 +97,19 @@ public:
                 .ClusterDiscoveryMode(EClusterDiscoveryMode::On);
         return settings;
     }
+
+    void Write(const TString& topic, ui32 partitionId, const TString& data) {
+        auto settings = TWriteSessionSettings()
+            .Path(topic)
+            .MessageGroupId("src-id")
+            .PartitionGroupId(partitionId)
+            .Codec(ECodec::RAW);
+        auto writeSession = GetPersQueueClient().CreateSimpleBlockingWriteSession(settings);
+        
+        writeSession->Write(data);
+
+        writeSession->Close();
+    }
 };
 
 struct TYDBClientEventLoop : public ::NPersQueue::IClientEventLoop {

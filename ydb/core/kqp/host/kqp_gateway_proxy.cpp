@@ -662,7 +662,12 @@ public:
     TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
         try {
             auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
-            if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+            if (tableName.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
+            }
+
+            if (!IsStartWithSlash(tablePath)) {
                 dirname = JoinPath({GetDatabase(), dirname});
             }
 
@@ -695,6 +700,14 @@ public:
         }
 
         const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+        if (basename.empty()) {
+            TGenericResult result;
+            result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+            result.AddIssue(TIssue("Empty basename for ALTER DATABASE").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+            return result;
+        }
+
         modifyScheme.SetWorkingDir(dirname);
 
         if (settings.Owner) {
@@ -1298,7 +1311,12 @@ public:
 
             for (const auto& currentPath : settings.Paths) {
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+                if (basename.empty()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));
+                }
+
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 
@@ -2507,15 +2525,20 @@ public:
         }
     }
 
-    static TString AdjustPath(const TString& path, const TString& database) {
+    TString AdjustPath(const TString& path, const TString& database) const {
         if (path.StartsWith('/')) {
+            if (database.empty() && !path.StartsWith(GetDatabase())) {
+                throw yexception() << "Path '" << path << "' not in database '" << GetDatabase() << "'";
+            }
             if (!path.StartsWith(database)) {
                 throw yexception() << "Path '" << path << "' not in database '" << database << "'";
             }
             return path;
-        } else {
-            return database + '/' + path;
         }
+        if (database.empty()) {
+            return path;
+        }
+        return database + '/' + path;
     }
 
     TFuture<TGenericResult> CreateReplication(const TString& cluster, const NYql::TCreateReplicationSettings& settings) override {
@@ -2570,6 +2593,10 @@ public:
             }
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
+            }
+
+            if (params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
             }
 
             auto& targets = *config.MutableSpecific();
@@ -2647,6 +2674,10 @@ public:
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2779,6 +2810,10 @@ public:
                 params.SetCaCert(*caCert);
             }
 
+            if (!params.GetEndpoint().empty() && params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+            }
+
             {
                 const auto& [src, dst, lambda] = settings.Target;
                 auto& target = *config.MutableTransferSpecific()->MutableTarget();
@@ -2882,6 +2917,10 @@ public:
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
                     params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);

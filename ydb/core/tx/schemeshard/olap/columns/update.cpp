@@ -292,7 +292,6 @@ bool TOlapColumnBase::IsAllowedType(ui32 typeId) {
     }
 
     switch (typeId) {
-        case NYql::NProto::Bool:
         case NYql::NProto::Interval:
         case NYql::NProto::DyNumber:
         case NYql::NProto::Uuid:
@@ -319,6 +318,7 @@ bool TOlapColumnBase::IsAllowedPgType(ui32 pgTypeId) {
 
 bool TOlapColumnBase::IsAllowedPkType(ui32 typeId) {
     switch (typeId) {
+        case NYql::NProto::Bool:
         case NYql::NProto::Int8:
         case NYql::NProto::Uint8:  // Byte
         case NYql::NProto::Int16:
@@ -405,6 +405,7 @@ void TOlapColumnAdd::ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescript
                 errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Duplicate key column '" << pkKey << "'");
                 return false;
             }
+            PrimaryKeyColumnNames.emplace_back(pkKey);
         }
 
         TSet<TString> columnNames;

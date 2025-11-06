@@ -289,4 +289,23 @@ Y_UNIT_TEST_SUITE(ACLib) {
         ui32 access = EAccessRights::DescribeSchema;
         UNIT_ASSERT(securityObject.CheckAccess(access, user));
     }
+
+    Y_UNIT_TEST(TestGranularDeny) {
+        TSecurityObject secObj("James", /* isContainer */ true);
+        static const TUserToken catToken("Cat", {});
+        UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::DescribeSchema, catToken));
+        UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
+
+        secObj.AddAccess(EAccessType::Allow, EAccessRights::DescribeSchema, "Cat");
+        UNIT_ASSERT(secObj.CheckAccess(EAccessRights::DescribeSchema, catToken));
+        UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
+
+        secObj.AddAccess(EAccessType::Allow, EAccessRights::AlterSchema, "Cat");
+        UNIT_ASSERT(secObj.CheckAccess(EAccessRights::DescribeSchema, catToken));
+        UNIT_ASSERT(secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
+
+        secObj.AddAccess(EAccessType::Deny, EAccessRights::AlterSchema, "Cat");
+        UNIT_ASSERT(secObj.CheckAccess(EAccessRights::DescribeSchema, catToken));
+        UNIT_ASSERT(!secObj.CheckAccess(EAccessRights::AlterSchema, catToken));
+    }
 }

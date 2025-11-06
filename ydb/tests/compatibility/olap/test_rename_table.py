@@ -1,10 +1,22 @@
 # -*- coding: utf-8 -*-
 import pytest
 import logging
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
+
+
+def wait_for_undetermined_ok(action, timeout_seconds=60, step_seconds=1):
+    def predicate():
+        try:
+            action()
+            return True
+        except ydb.issues.Undetermined:
+            return False
+
+    return wait_for(predicate, timeout_seconds=timeout_seconds, step_seconds=step_seconds)
 
 
 class TestRenameTableRestart(RestartToAnotherVersionFixture):
@@ -136,7 +148,7 @@ class TestRenameTableRollingUpdate(RollingUpgradeAndDowngradeFixture):
             data_struct_type.add_member("k", ydb.PrimitiveType.Uint64)
             data_struct_type.add_member("v", ydb.PrimitiveType.String)
 
-            session_pool.execute_with_retries(
+            wait_for_undetermined_ok(lambda: session_pool.execute_with_retries(
                 f"""
                     DECLARE $data AS List<Struct<k: Uint64, v: String>>;
                     UPSERT INTO `{self.get_table_name(iteration)}`
@@ -144,13 +156,18 @@ class TestRenameTableRollingUpdate(RollingUpgradeAndDowngradeFixture):
                     FROM AS_TABLE($data);
                 """,
                 {"$data": (rows, ydb.ListType(data_struct_type))}
-            )
+            ))
             logger.info(f"Iteration {iteration} about to rename")
             session_pool.execute_with_retries(
                 f"""
                     ALTER TABLE `{self.get_table_name(iteration)}` RENAME TO `{self.get_table_name(iteration + 1)}`;
                 """
             )
+            wait_for_undetermined_ok(lambda: session_pool.execute_with_retries(
+                f"""
+                    select count(*) as cnt from `{self.get_table_name(iteration + 1)}`;
+                """
+            ))
             result = session_pool.execute_with_retries(
                 f"""
                     select count(*) as cnt from `{self.get_table_name(iteration + 1)}`;

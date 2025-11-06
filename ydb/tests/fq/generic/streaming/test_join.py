@@ -539,7 +539,7 @@ TESTCASES = [
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(AsList(e.Data) = u.data)
                 -- MultiGet true
             ;
@@ -582,7 +582,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
                 -- MultiGet true
             ;
@@ -656,7 +656,7 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
+                left join {streamlookup} any ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
                 -- MultiGet true
             ;
@@ -713,7 +713,7 @@ TESTCASES = [
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} $listified as u
+                left join {streamlookup} any $listified as u
                 on(e.za = u.a AND e.yb = u.b)
                 -- MultiGet true
             ;
@@ -760,9 +760,9 @@ TESTCASES = [
             $enriched = select u.a as la, u.b as lb, u.c as lc, u2.a as sa, u2.b as sb, u2.c as sc, lza, lyb, sza, syb, yc
                 from
                     $input as e
-                left join {streamlookup} $listified as u
+                left join {streamlookup} any $listified as u
                 on(e.lza = u.a AND e.lyb = u.b)
-                left join /*+streamlookup()*/ $listified as u2
+                left join /*+streamlookup()*/ any $listified as u2
                 on(e.sza = u2.a AND e.syb = u2.b)
                 -- MultiGet true
             ;

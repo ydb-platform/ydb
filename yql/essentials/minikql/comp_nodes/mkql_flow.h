@@ -8,5 +8,5 @@ namespace NMiniKQL {
 IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapFromFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

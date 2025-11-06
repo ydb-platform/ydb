@@ -185,9 +185,70 @@
 @@ -620,1 +620,1 @@ class Test_verifyObject(Test_verifyClass):
 -        from zope.interface.tests import dummy
 +        from . import dummy
+--- contrib/python/zope.interface/py3/zope/interface/tests/test_declarations.py	(index)
++++ contrib/python/zope.interface/py3/zope/interface/tests/test_declarations.py	(working tree)
+@@ -672 +672 @@ class Test_implementedByFallback(unittest.TestCase):
+-        from zope.interface.tests.test_declarations import FooNoCall
++        from __tests__.tests.test_declarations import FooNoCall
+@@ -688 +688 @@ class Test_implementedByFallback(unittest.TestCase):
+-        from zope.interface.tests.test_declarations import FooImplementedNone
++        from __tests__.tests.test_declarations import FooImplementedNone
+@@ -1156 +1156 @@ class Test_implementer(Test_classImplements):
+-        from zope.interface.tests.test_declarations import Foo
++        from __tests__.tests.test_declarations import Foo
+@@ -1351 +1351 @@ class TestProvidesClassRepr(unittest.TestCase):
+-        from zope.interface.tests import dummy
++        from __tests__.tests import dummy
+@@ -1356 +1356 @@ class TestProvidesClassRepr(unittest.TestCase):
+-            "sys.modules['zope.interface.tests.dummy'], "
++            "sys.modules['__tests__.tests.dummy'], "
+@@ -1375,3 +1375,3 @@ class TestProvidesClassRepr(unittest.TestCase):
+-        from zope.interface.tests import dummy
+-        from zope.interface.tests.test_declarations import IBar
+-        from zope.interface.tests.test_declarations import IFoo
++        from __tests__.tests import dummy
++        from __tests__.tests.test_declarations import IBar
++        from __tests__.tests.test_declarations import IFoo
+@@ -1389 +1389 @@ class TestProvidesClassRepr(unittest.TestCase):
+-            "directlyProvides(sys.modules['zope.interface.tests.dummy'], IFoo)"
++            "directlyProvides(sys.modules['__tests__.tests.dummy'], IFoo)"
+@@ -1404 +1404 @@ class TestProvidesClassRepr(unittest.TestCase):
+-        from zope.interface.tests import test_declarations as my_module
++        from __tests__.tests import test_declarations as my_module
+@@ -1412,2 +1412,2 @@ class TestProvidesClassRepr(unittest.TestCase):
+-            "directlyProvides(('zope.interface.tests.dummy', "
+-            "'zope.interface.tests.test_declarations'), "
++            "directlyProvides(('__tests__.tests.dummy', "
++            "'__tests__.tests.test_declarations'), "
+@@ -2023 +2023 @@ class Test_moduleProvides(unittest.TestCase):
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.foo',
+@@ -2037 +2037 @@ class Test_moduleProvides(unittest.TestCase):
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.foo',
+@@ -2050 +2050 @@ class Test_moduleProvides(unittest.TestCase):
+-        globs = {'__name__': 'zope.interface.tests.foo',
++        globs = {'__name__': '__tests__.tests.foo',
+--- contrib/python/zope.interface/py3/zope/interface/tests/test_exceptions.py	(index)
++++ contrib/python/zope.interface/py3/zope/interface/tests/test_exceptions.py	(working tree)
+@@ -26 +26 @@ def _makeIface():
+-    from zope.interface.tests.test_exceptions import IDummy
++    from __tests__.tests.test_exceptions import IDummy
+--- contrib/python/zope.interface/py3/zope/interface/tests/test_interface.py	(index)
++++ contrib/python/zope.interface/py3/zope/interface/tests/test_interface.py	(working tree)
+@@ -1177 +1177 @@ class InterfaceClassTests(unittest.TestCase):
+-        from zope.interface.tests.test_interface import HashMe as iface
++        from __tests__.tests.test_interface import HashMe as iface
+--- contrib/python/zope.interface/py3/zope/interface/tests/test_sorting.py	(index)
++++ contrib/python/zope.interface/py3/zope/interface/tests/test_sorting.py	(working tree)
+@@ -64 +64 @@ class Test(unittest.TestCase):
+-        from zope.interface.tests.test_sorting import I1
++        from __tests__.tests.test_sorting import I1
 --- contrib/python/zope.interface/py3/zope/interface/tests/test_ro.py	(index)
 +++ contrib/python/zope.interface/py3/zope/interface/tests/test_ro.py	(working tree)
-@@ -224,218 +223,0 @@ class C3Setting:
+@@ -10,1 +10,0 @@
+-import zope.testing.renormalizing
+@@ -228,233 +227,0 @@ class C3Setting:
 -class Test_c3_ro(Test_ro):
 -
 -    def setUp(self):
@@ -274,14 +335,29 @@
 -    interface.tests.test_ro.D    interface.tests.test_ro.D
 -                               + interface.tests.test_ro.E
 -    interface.tests.test_ro.F    interface.tests.test_ro.F
--    zope.interface.Interface     zope.interface.Interface""".format(
+-    interface.Interface          interface.Interface""".format(
 -            name="interface.tests.test_ro.A"
 -        )
 -
--        self.assertEqual(
--            '\n'.join(ln.rstrip() for ln in record.getMessage().splitlines()),
--            expected,
+-        checker = zope.testing.renormalizing.OutputChecker([
+-            (re.compile(r'zope\.'), ''),  # zope is not always there
+-            # space in headline is not consistent
+-            (re.compile(
+-                r'Legacy RO \(len=7\) +C3 RO \(len=7; inconsistent=no\)'),
+-             'Legacy RO (len=7)  C3 RO (len=7; inconsistent=no)'),
+-            (re.compile(r'=+'), ''),  # header underline length varies
+-            (re.compile(r' +\+'), '    +'),  # table column spacing varies
+-            (re.compile(r'interface\.Interface +interface\.Interface'),
+-             'interface.Interface  interface.Interface'),
+-            # spacing varies in last line
+-        ]
 -        )
+-        got = '\n'.join(ln.rstrip() for ln in record.getMessage().splitlines())
+-        self.assertTrue(
+-            checker.check_output(
+-                expected, got, 0), checker.output_difference(
+-                doctest.Example(
+-                    got, expected), got, 0))
 -
 -    def test_ExtendedPathIndex_implement_thing_implementedby_super(self):
 -        # See
@@ -406,57 +482,3 @@
 -        self.assertEqual(iro, legacy_iro)
 -
 -
---- contrib/python/zope.interface/py3/zope/interface/tests/test_declarations.py	(index)
-+++ contrib/python/zope.interface/py3/zope/interface/tests/test_declarations.py	(working tree)
-@@ -672 +672 @@ class Test_implementedByFallback(unittest.TestCase):
--        from zope.interface.tests.test_declarations import FooNoCall
-+        from __tests__.tests.test_declarations import FooNoCall
-@@ -688 +688 @@ class Test_implementedByFallback(unittest.TestCase):
--        from zope.interface.tests.test_declarations import FooImplementedNone
-+        from __tests__.tests.test_declarations import FooImplementedNone
-@@ -1156 +1156 @@ class Test_implementer(Test_classImplements):
--        from zope.interface.tests.test_declarations import Foo
-+        from __tests__.tests.test_declarations import Foo
-@@ -1351 +1351 @@ class TestProvidesClassRepr(unittest.TestCase):
--        from zope.interface.tests import dummy
-+        from __tests__.tests import dummy
-@@ -1356 +1356 @@ class TestProvidesClassRepr(unittest.TestCase):
--            "sys.modules['zope.interface.tests.dummy'], "
-+            "sys.modules['__tests__.tests.dummy'], "
-@@ -1375,2 +1375,2 @@ class TestProvidesClassRepr(unittest.TestCase):
--        from zope.interface.tests import dummy
--        from zope.interface.tests.test_declarations import IFoo
-+        from __tests__.tests import dummy
-+        from __tests__.tests.test_declarations import IFoo
-@@ -1389 +1389 @@ class TestProvidesClassRepr(unittest.TestCase):
--            "directlyProvides(sys.modules['zope.interface.tests.dummy'], IFoo)"
-+            "directlyProvides(sys.modules['__tests__.tests.dummy'], IFoo)"
-@@ -1412,2 +1412,2 @@ class TestProvidesClassRepr(unittest.TestCase):
--            "directlyProvides(('zope.interface.tests.dummy', "
--            "'interface.tests.test_declarations'), "
-+            "directlyProvides(('__tests__.tests.dummy', "
-+            "'__tests__.tests.test_declarations'), "
-@@ -2023 +2023 @@ class Test_moduleProvides(unittest.TestCase):
--        globs = {'__name__': 'zope.interface.tests.foo',
-+        globs = {'__name__': '__tests__.tests.foo',
-@@ -2037 +2037 @@ class Test_moduleProvides(unittest.TestCase):
--        globs = {'__name__': 'zope.interface.tests.foo',
-+        globs = {'__name__': '__tests__.tests.foo',
-@@ -2050 +2050 @@ class Test_moduleProvides(unittest.TestCase):
--        globs = {'__name__': 'zope.interface.tests.foo',
-+        globs = {'__name__': '__tests__.tests.foo',
---- contrib/python/zope.interface/py3/zope/interface/tests/test_exceptions.py	(index)
-+++ contrib/python/zope.interface/py3/zope/interface/tests/test_exceptions.py	(working tree)
-@@ -26 +26 @@ def _makeIface():
--    from zope.interface.tests.test_exceptions import IDummy
-+    from __tests__.tests.test_exceptions import IDummy
---- contrib/python/zope.interface/py3/zope/interface/tests/test_interface.py	(index)
-+++ contrib/python/zope.interface/py3/zope/interface/tests/test_interface.py	(working tree)
-@@ -1177 +1177 @@ class InterfaceClassTests(unittest.TestCase):
--        from zope.interface.tests.test_interface import HashMe as iface
-+        from __tests__.tests.test_interface import HashMe as iface
---- contrib/python/zope.interface/py3/zope/interface/tests/test_sorting.py	(index)
-+++ contrib/python/zope.interface/py3/zope/interface/tests/test_sorting.py	(working tree)
-@@ -64 +64 @@ class Test(unittest.TestCase):
--        from zope.interface.tests.test_sorting import I1
-+        from __tests__.tests.test_sorting import I1

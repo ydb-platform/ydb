@@ -9,11 +9,12 @@ namespace NHyperscan {
 
 namespace {
 
-class THyperscan : public IRe {
+class THyperscan: public IRe {
 public:
     THyperscan(::NHyperscan::TDatabase&& db)
         : Database_(std::move(db))
-    { }
+    {
+    }
 
     bool Matches(const TStringBuf& text) const override {
         if (!Scratch_) {
@@ -25,21 +26,22 @@ public:
     TString Serialize() const override {
         // Compatibility with old versions
         return ::NHyperscan::Serialize(Database_);
-/*
- *       TSerialization proto;
- *       proto.SetHyperscan(::NHyperscan::Serialize(Database));
- *       TString data;
- *       auto res = proto.SerializeToString(&data);
- *       Y_ABORT_UNLESS(res);
- *       return data;
- */
+        /*
+         *       TSerialization proto;
+         *       proto.SetHyperscan(::NHyperscan::Serialize(Database));
+         *       TString data;
+         *       auto res = proto.SerializeToString(&data);
+         *       Y_ABORT_UNLESS(res);
+         *       return data;
+         */
     }
+
 private:
     ::NHyperscan::TDatabase Database_;
     mutable ::NHyperscan::TScratch Scratch_;
 };
 
-}
+} // namespace
 
 IRePtr Compile(const TStringBuf& regex, unsigned int flags) {
     unsigned int hyperscanFlags = 0;
@@ -65,5 +67,5 @@ IRePtr Deserialize(const TSerialization& proto) {
 
 REGISTER_RE_LIB(TSerialization::kHyperscan, Compile, Deserialize)
 
-}
-}
+} // namespace NHyperscan
+} // namespace NReWrapper

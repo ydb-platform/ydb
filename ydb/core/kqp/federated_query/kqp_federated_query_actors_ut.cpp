@@ -26,22 +26,29 @@ namespace {
     }
 
     NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>
-    ResolveSecret(const TVector<TString>& secretNames, NKikimr::NKqp::TKikimrRunner& kikimr, const TString& userId = "") {
+    ResolveSecret(const TVector<TString>& secretNames, NKikimr::NKqp::TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr) {
         auto promise = NThreading::NewPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>();
-        const auto evResolveSecret = new NKikimr::NKqp::TDescribeSchemaSecretsService::TEvResolveSecret(userId, secretNames, promise);
+        const auto evResolveSecret = new NKikimr::NKqp::TDescribeSchemaSecretsService::TEvResolveSecret(userToken, "/Root", secretNames, promise);
         auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
         actorSystem->Send(NKikimr::NKqp::MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
         return promise;
     }
 
     NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription>
-    ResolveSecret(const TString& secretName, NKikimr::NKqp::TKikimrRunner& kikimr, const TString& userId = "") {
-        return ResolveSecret(TVector<TString>{secretName}, kikimr, userId);
+    ResolveSecret(const TString& secretName, NKikimr::NKqp::TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr) {
+        return ResolveSecret(TVector<TString>{secretName}, kikimr, userToken);
     }
 
     void AssertBadRequest(NThreading::TPromise<NKikimr::NKqp::TEvDescribeSecretsResponse::TDescription> promise, const TString& err) {
         UNIT_ASSERT_VALUES_EQUAL(Ydb::StatusIds::BAD_REQUEST, promise.GetFuture().GetValueSync().Status);
         UNIT_ASSERT_VALUES_EQUAL(err, promise.GetFuture().GetValueSync().Issues.ToString());
+    }
+
+    TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken(const TString& userSid = "", const TVector<TString>& groupSids = {}) {
+        if (userSid.empty() && groupSids.empty()) {
+            return nullptr;
+        }
+        return new NACLib::TUserToken(userSid, groupSids);
     }
 }
 
@@ -96,7 +103,39 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
     }
 
     Y_UNIT_TEST(GetDroppedValue) {
-        NKikimr::NKqp::TKikimrRunner kikimr;
+        class TTestSecretUpdateListener : public NKikimr::NKqp::TDescribeSchemaSecretsService::ISecretUpdateListener {
+        public:
+            NThreading::TPromise<TString> DeletionPromise = NThreading::NewPromise<TString>();
+
+        public:
+            void HandleNotifyDelete(const TString& secretName) override {
+                Y_ENSURE(!DeletionPromise.HasValue()); // only one call of HandleNotifyDelete is expected
+                DeletionPromise.SetValue(secretName);
+            }
+        };
+
+        class TTestDescribeSchemaSecretsServiceFactory : public NKikimr::NKqp::IDescribeSchemaSecretsServiceFactory {
+        public:
+            TTestDescribeSchemaSecretsServiceFactory(NKikimr::NKqp::TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener)
+                : SecretUpdateListener(secretUpdateListener)
+            {
+            }
+
+            NActors::IActor* CreateService() override {
+                auto* service = new NKikimr::NKqp::TDescribeSchemaSecretsService();
+                service->SetSecretUpdateListener(SecretUpdateListener);
+                return service;
+            }
+
+        private:
+            NKikimr::NKqp::TDescribeSchemaSecretsService::ISecretUpdateListener* SecretUpdateListener;
+        };
+
+        NKikimr::NKqp::TKikimrSettings settings;
+        auto secretUpdateListener = MakeHolder<TTestSecretUpdateListener>();
+        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(secretUpdateListener.Get());
+        settings.SetDescribeSchemaSecretsServiceFactory(factory);
+        NKikimr::NKqp::TKikimrRunner kikimr(settings);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -109,6 +148,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
 
         DropSchemaSecret(secretName, session);
+        UNIT_ASSERT_VALUES_EQUAL("/Root/secret-name", secretUpdateListener->DeletionPromise.GetFuture().GetValueSync());
 
         promise = ResolveSecret("/Root/secret-name", kikimr);
         AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name` not found\n");
@@ -168,11 +208,12 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
         CreateSchemaSecret(secretName, secretValue, adminSession);
 
-        auto promise = ResolveSecret(secretName, kikimr, "root@builtin");
+        auto promise = ResolveSecret(secretName, kikimr, GetUserToken("root@builtin"));
         UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
 
+        const auto userToken = GetUserToken("user@builtin");
         { // assert no grants by default
-            auto promise = ResolveSecret("/Root/secret-name", kikimr, "user@builtin");
+            auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
             AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name` not found\n");
         }
 
@@ -183,7 +224,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         UNIT_ASSERT_C(grantResult.GetStatus() == NYdb::EStatus::SUCCESS, grantResult.GetIssues().ToString());
 
         { // assert grants are ok
-            auto promise = ResolveSecret("/Root/secret-name", kikimr, "user@builtin");
+            auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
             UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
         }
 
@@ -194,7 +235,54 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         UNIT_ASSERT_C(revokeResult.GetStatus() == NYdb::EStatus::SUCCESS, grantResult.GetIssues().ToString());
 
         { // assert no grants after revoking
-            auto promise = ResolveSecret("/Root/secret-name", kikimr, "user@builtin");
+            auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
+            AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name` not found\n");
+        }
+    }
+
+    Y_UNIT_TEST(GroupGrants) {
+        NKikimr::NKqp::TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+
+        const TString secretName = "/Root/secret-name";
+        const TString secretValue = "secret-value";
+        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin"))
+            .CreateSession().GetValueSync().GetSession();
+
+        CreateSchemaSecret(secretName, secretValue, adminSession);
+
+        auto promise = ResolveSecret(secretName, kikimr, GetUserToken("root@builtin"));
+        UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+
+        const auto userToken = GetUserToken("user@builtin", {"group"});
+        { // assert no grants by default
+            auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
+            AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name` not found\n");
+        }
+
+        const auto createGroupResult = adminSession.ExecuteSchemeQuery(
+            Sprintf("CREATE GROUP `group` WITH USER `user@builtin`;")
+        ).GetValueSync();
+        UNIT_ASSERT_C(createGroupResult.GetStatus() == NYdb::EStatus::SUCCESS, createGroupResult.GetIssues().ToString());
+
+        const auto grantResult = adminSession.ExecuteSchemeQuery(
+            Sprintf("GRANT 'ydb.granular.select_row' ON `%s` TO `%s`;", secretName.data(), "group")
+        ).GetValueSync();
+        UNIT_ASSERT_C(grantResult.GetStatus() == NYdb::EStatus::SUCCESS, grantResult.GetIssues().ToString());
+
+        { // assert group grants are ok
+            auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
+            UNIT_ASSERT_VALUES_EQUAL(secretValue, promise.GetFuture().GetValueSync().SecretValues[0]);
+        }
+
+        // revoke grants
+        const auto revokeResult = adminSession.ExecuteSchemeQuery(
+            Sprintf("REVOKE 'ydb.granular.select_row' ON `%s` FROM `%s`;", secretName.data(), "group")
+        ).GetValueSync();
+        UNIT_ASSERT_C(revokeResult.GetStatus() == NYdb::EStatus::SUCCESS, grantResult.GetIssues().ToString());
+
+        { // assert no grants after revoking
+            auto promise = ResolveSecret("/Root/secret-name", kikimr, userToken);
             AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name` not found\n");
         }
     }
@@ -298,8 +386,9 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         ).GetValueSync();
         UNIT_ASSERT_C(grantResult.GetStatus() == NYdb::EStatus::SUCCESS, grantResult.GetIssues().ToString());
 
+        auto userToken = GetUserToken("user@builtin");
         { // user has grants for names[0], has no grants for names[1]
-            auto promise = ResolveSecret({names[0], names[1]}, kikimr, "user@builtin");
+            auto promise = ResolveSecret({names[0], names[1]}, kikimr, userToken);
             AssertBadRequest(promise, "<main>: Error: secret `/Root/secret-name-1` not found\n");
         }
 
@@ -309,7 +398,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         UNIT_ASSERT_C(grantResult.GetStatus() == NYdb::EStatus::SUCCESS, grantResult.GetIssues().ToString());
 
         { // user has grants for all names[0]
-            auto promise = ResolveSecret({names[0], names[1]}, kikimr, "user@builtin");
+            auto promise = ResolveSecret({names[0], names[1]}, kikimr, userToken);
             for (size_t i = 0; i < values.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(values[i], promise.GetFuture().GetValueSync().SecretValues[i]);
             }

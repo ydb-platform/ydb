@@ -72,8 +72,11 @@ inline constexpr const char* BuildSuffix1 = "1build";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";
+inline constexpr const char* IdColumnSequence = "__ydb_id_sequence";
 
 inline constexpr const int DefaultKMeansRounds = 3;
+
+inline constexpr TClusterId PostingParentFlag = (1ull << 63ull);
 
 bool HasPostingParentFlag(TClusterId parent);
 void EnsureNoPostingParentFlag(TClusterId parent);
@@ -82,10 +85,6 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 }
 
 namespace NFulltext {
-    // TODO: support utf-8 in fulltext index
-    inline constexpr auto TokenType = Ydb::Type::STRING;
-    inline constexpr const char* TokenTypeName = "String";
-
     inline constexpr const char* TokenColumn = "__ydb_token";
 }
 

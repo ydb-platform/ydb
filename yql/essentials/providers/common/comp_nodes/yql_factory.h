@@ -7,5 +7,5 @@ namespace NMiniKQL {
 TComputationNodeFactory GetYqlFactory(ui32 exprCtxMutableIndex);
 TComputationNodeFactory GetYqlFactory();
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

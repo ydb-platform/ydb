@@ -367,6 +367,20 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
     RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId);
 }
 
+void TDatabase::LockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
+{
+    Y_ENSURE(mode != ELockMode::None);
+
+    for (size_t index = 0; index < key.size(); ++index) {
+        if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
+            Y_TABLET_ERROR("Key index " << index << " validation failure: " << error);
+        }
+    }
+
+    Redo->EvLockRowTx(table, mode, key, txId);
+    RequireForUpdate(table)->LockRowTx(mode, key, txId);
+}
+
 void TDatabase::RemoveTx(ui32 table, ui64 txId)
 {
     Redo->EvRemoveTx(table, txId);

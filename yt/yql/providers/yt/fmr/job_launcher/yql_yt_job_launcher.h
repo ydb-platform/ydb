@@ -7,6 +7,8 @@ namespace NYql::NFmr {
 struct TFmrUserJobLauncherOptions {
     bool RunInSeparateProcess;
     TString FmrJobBinaryPath;
+    TString TableDataServiceDiscoveryFilePath;
+    TString GatewayType;
 };
 
 class TFmrUserJobLauncher: public TThrRefBase {
@@ -19,9 +21,13 @@ public:
 
     std::variant<TError, TStatistics> LaunchJob(TFmrUserJob& job);
 
+    bool RunInSeperateProcess() const;
+
 private:
     const bool RunInSeparateProcess_;
     const TString FmrJobBinaryPath_;
+    const TString TableDataServiceDiscoveryFilePath_;
+    const TString GatewayType_;
 };
 
 } // namespace NYql::NFmr

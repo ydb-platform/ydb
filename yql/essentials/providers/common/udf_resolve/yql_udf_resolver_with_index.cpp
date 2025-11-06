@@ -22,8 +22,8 @@ namespace NCommon {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-class TUdfResolverWithIndex : public IUdfResolver {
-    class TResourceFile : public TThrRefBase {
+class TUdfResolverWithIndex: public IUdfResolver {
+    class TResourceFile: public TThrRefBase {
     public:
         typedef TIntrusivePtr<TResourceFile> TPtr;
 
@@ -43,7 +43,7 @@ class TUdfResolverWithIndex : public IUdfResolver {
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
             // assume package name has no bad symbols for file name
-            TString basename =  link->GetPath().Basename();
+            TString basename = link->GetPath().Basename();
             TString alias = basename.StartsWith("lib") ? basename : ("lib_" + packageName + "_udf.so");
             alias.to_lower();
             return MakeIntrusive<TResourceFile>(std::move(alias), TVector<TString>(modules.begin(), modules.end()), std::move(link));
@@ -68,7 +68,7 @@ public:
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
-        with_lock(Lock_) {
+        with_lock (Lock_) {
             TString moduleNameStr(moduleName);
             if (!UdfIndex_->ContainsModuleStrict(moduleNameStr)) {
                 return Nothing();
@@ -80,8 +80,8 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
-        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
-        with_lock(Lock_) {
+                      TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        with_lock (Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
             TVector<TFunction*> fallbackFunctions;

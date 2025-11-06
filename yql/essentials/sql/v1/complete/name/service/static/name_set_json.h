@@ -10,22 +10,22 @@
 
 namespace NSQLComplete {
 
-    NJson::TJsonValue LoadJsonResource(TStringBuf filename);
+NJson::TJsonValue LoadJsonResource(TStringBuf filename);
 
-    template <class T, class U>
-    T Merge(T lhs, U rhs) {
-        std::copy(std::begin(rhs), std::end(rhs), std::back_inserter(lhs));
-        return lhs;
-    }
+template <class T, class U>
+T Merge(T lhs, U rhs) {
+    std::copy(std::begin(rhs), std::end(rhs), std::back_inserter(lhs));
+    return lhs;
+}
 
-    TVector<TString> ParsePragmas(NJson::TJsonValue json);
+TVector<TString> ParsePragmas(NJson::TJsonValue json);
 
-    TVector<TString> ParseTypes(NJson::TJsonValue json);
+TVector<TString> ParseTypes(NJson::TJsonValue json);
 
-    TVector<TString> ParseFunctions(NJson::TJsonValue json);
+TVector<TString> ParseFunctions(NJson::TJsonValue json);
 
-    TVector<TString> ParseUdfs(NJson::TJsonValue json);
+TVector<TString> ParseUdfs(NJson::TJsonValue json);
 
-    THashMap<EStatementKind, TVector<TString>> ParseHints(NJson::TJsonValue json);
+THashMap<EStatementKind, TVector<TString>> ParseHints(NJson::TJsonValue json);
 
 } // namespace NSQLComplete

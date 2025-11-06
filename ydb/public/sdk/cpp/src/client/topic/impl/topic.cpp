@@ -11,6 +11,10 @@
 
 namespace NYdb::inline Dev::NTopic {
 
+static TDuration ConvertPositiveDuration(const google::protobuf::Duration& duration) {
+    return TDuration::Seconds(Max<i64>(duration.seconds(), 0)) + TDuration::MicroSeconds(Max<i32>(duration.nanos(), 0) / 1000);
+}
+
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
     , TopicDescription_(std::move(result))
@@ -50,6 +54,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
+    , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -88,7 +93,9 @@ TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
+    , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
+    , DeadLetterPolicy_(consumer.shared_consumer_type().dead_letter_policy())
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
         SupportedCodecs_.push_back((ECodec)codec);
@@ -96,14 +103,30 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     for (const auto& pair : consumer.attributes()) {
         Attributes_[pair.first] = pair.second;
     }
+
+    if (consumer.has_shared_consumer_type()) {
+        ConsumerType_ = EConsumerType::Shared;
+        KeepMessagesOrder_ = consumer.shared_consumer_type().keep_messages_order();
+        DefaultProcessingTimeout_ = TDuration::Seconds(consumer.shared_consumer_type().default_processing_timeout().seconds());
+    } else {
+        ConsumerType_ = EConsumerType::Streaming;
+    }
 }
 
 const std::string& TConsumer::GetConsumerName() const {
     return ConsumerName_;
 }
 
+EConsumerType TConsumer::GetConsumerType() const {
+    return ConsumerType_;
+}
+
 bool TConsumer::GetImportant() const {
     return Important_;
+}
+
+TDuration TConsumer::GetAvailabilityPeriod() const {
+    return AvailabilityPeriod_;
 }
 
 const TInstant& TConsumer::GetReadFrom() const {
@@ -116,6 +139,17 @@ const std::vector<ECodec>& TConsumer::GetSupportedCodecs() const {
 
 const std::map<std::string, std::string>& TConsumer::GetAttributes() const {
     return Attributes_;
+}
+
+bool TConsumer::GetKeepMessagesOrder() const {
+    return KeepMessagesOrder_;
+}
+TDuration TConsumer::GetDefaultProcessingTimeout() const {
+    return DefaultProcessingTimeout_;
+}
+
+const TDeadLetterPolicy& TConsumer::GetDeadLetterPolicy() const {
+    return DeadLetterPolicy_;
 }
 
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {
@@ -184,6 +218,9 @@ void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) con
     *request.mutable_attributes() = Proto_.attributes();
     *request.mutable_consumers() = Proto_.consumers();
     request.set_metering_mode(Proto_.metering_mode());
+    if (Proto_.has_metrics_level()) {
+        request.set_metrics_level(Proto_.metrics_level());
+    }
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
@@ -208,6 +245,10 @@ const NScheme::TVirtualTimestamp& TTopicDescription::GetCreationTimestamp() cons
 
 const TTopicStats& TTopicDescription::GetTopicStats() const {
     return TopicStats_;
+}
+
+std::optional<EMetricsLevel> TTopicDescription::GetMetricsLevel() const {
+    return MetricsLevel_;
 }
 
 const std::vector<NScheme::TPermissions>& TTopicDescription::GetPermissions() const {
@@ -282,7 +323,7 @@ uint32_t TAutoPartitioningSettings::GetDownUtilizationPercent() const {
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
     : StoreSizeBytes_(topicStats.store_size_bytes())
     , MinLastWriteTime_(TInstant::Seconds(topicStats.min_last_write_time().seconds()))
-    , MaxWriteTimeLag_(TDuration::Seconds(topicStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(topicStats.max_write_time_lag().nanos() / 1000))
+    , MaxWriteTimeLag_(ConvertPositiveDuration(topicStats.max_write_time_lag()))
     , BytesWrittenPerMinute_(topicStats.bytes_written().per_minute())
     , BytesWrittenPerHour_(topicStats.bytes_written().per_hour())
     , BytesWrittenPerDay_(topicStats.bytes_written().per_day())
@@ -319,7 +360,7 @@ TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStat
     , EndOffset_(partitionStats.partition_offsets().end())
     , StoreSizeBytes_(partitionStats.store_size_bytes())
     , LastWriteTime_(TInstant::Seconds(partitionStats.last_write_time().seconds()))
-    , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(partitionStats.max_write_time_lag().nanos() / 1000))
+    , MaxWriteTimeLag_(ConvertPositiveDuration(partitionStats.max_write_time_lag()))
     , BytesWrittenPerMinute_(partitionStats.bytes_written().per_minute())
     , BytesWrittenPerHour_(partitionStats.bytes_written().per_hour())
     , BytesWrittenPerDay_(partitionStats.bytes_written().per_day())
@@ -616,24 +657,191 @@ std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent
 
 }
 
+TDeadLetterPolicyCondition::TDeadLetterPolicyCondition(const Ydb::Topic::DeadLetterPolicyCondition& proto)
+    : MaxProcessingAttempts_(proto.max_processing_attempts())
+{
+}
+
+ui32 TDeadLetterPolicyCondition::GetMaxProcessingAttempts() const {
+    return MaxProcessingAttempts_;
+}
+
+TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
+    : Enabled_(proto.enabled())
+    , Condition_(proto.condition())
+{
+    if (proto.has_delete_action()) {
+        Action_ = EDeadLetterAction::Delete;
+    } else if (proto.has_move_action()) {
+        Action_ = EDeadLetterAction::Move;
+        DeadLetterQueue_ = proto.move_action().dead_letter_queue();
+    } else {
+        Action_ = EDeadLetterAction::Unspecified;
+    }
+}
+
+bool TDeadLetterPolicy::GetEnabled() const {
+    return Enabled_;
+}
+
+const TDeadLetterPolicyCondition& TDeadLetterPolicy::GetCondition() const {
+    return Condition_;
+}
+
+EDeadLetterAction TDeadLetterPolicy::GetAction() const {
+    return Action_;
+}
+
+const std::string& TDeadLetterPolicy::GetDeadLetterQueue() const {
+    return DeadLetterQueue_;
+}
+
+TDeadLetterPolicyConditionSettings::TDeadLetterPolicyConditionSettings(const Ydb::Topic::DeadLetterPolicyCondition& proto)
+    : MaxProcessingAttempts_(proto.max_processing_attempts())
+{
+}
+
+TDeadLetterPolicySettings::TDeadLetterPolicySettings(const Ydb::Topic::DeadLetterPolicy& proto)
+    : Enabled_(proto.enabled())
+    , Condition_(proto.condition())
+{
+    if (proto.has_move_action()) {
+        DeadLetterQueue_ = proto.move_action().dead_letter_queue();
+    }
+}
+
 template <typename TSettings>
 TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
     : ConsumerName_(proto.name())
     , Important_(proto.important())
+    , AvailabilityPeriod_(ConvertPositiveDuration(proto.availability_period()))
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
+    , KeepMessagesOrder_(proto.shared_consumer_type().keep_messages_order())
+    , DefaultProcessingTimeout_(TDuration::Seconds(proto.shared_consumer_type().default_processing_timeout().seconds()))
+    , DeadLetterPolicy_(proto.shared_consumer_type().dead_letter_policy())
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
 {
+    if (proto.has_shared_consumer_type()) {
+        ConsumerType_ = EConsumerType::Streaming;
+    } else {
+        ConsumerType_ = EConsumerType::Streaming;
+    }
 }
 
 template <typename TSettings>
 void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) const {
     proto.set_name(ConsumerName_);
     proto.set_important(Important_);
+    if (AvailabilityPeriod_ != TDuration::Zero()) {
+        proto.mutable_availability_period()->set_seconds(AvailabilityPeriod_.Seconds());
+        proto.mutable_availability_period()->set_nanos((AvailabilityPeriod_.MicroSeconds() % 1'000'000) * 1'000);
+    } else {
+        proto.clear_availability_period();
+    }
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
     *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);
+
+    switch (ConsumerType_) {
+        case EConsumerType::Shared: {
+            auto* shared = proto.mutable_shared_consumer_type();
+            if (KeepMessagesOrder_) {
+                shared->set_keep_messages_order(KeepMessagesOrder_.value());
+            }
+            if (DefaultProcessingTimeout_) {
+                shared->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+            }
+            if (DeadLetterPolicy_.Enabled_) {
+                shared->mutable_dead_letter_policy()->set_enabled(DeadLetterPolicy_.Enabled_.value());
+            }
+            if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
+                shared->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(
+                    DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
+            }
+
+            switch (DeadLetterPolicy_.Action_) {
+                case EDeadLetterAction::Move:
+                    shared->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(
+                        DeadLetterPolicy_.DeadLetterQueue_.value());
+                    break;
+                case EDeadLetterAction::Delete:
+                    shared->mutable_dead_letter_policy()->mutable_delete_action();
+                    break;
+                case EDeadLetterAction::Unspecified:
+                    break;
+            }
+
+            break;
+        }
+        case EConsumerType::Streaming:
+        case EConsumerType::Unspecified:
+            proto.mutable_streaming_consumer_type();
+            break;
+    }
+}
+
+void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const {
+    proto.set_name(TStringType{ConsumerName_});
+    if (SetImportant_) {
+        proto.set_set_important(*SetImportant_);
+    }
+    if (SetAvailabilityPeriod_) {
+        if (SetAvailabilityPeriod_ != TDuration::Zero()) {
+            proto.mutable_set_availability_period()->set_seconds(SetAvailabilityPeriod_->Seconds());
+            proto.mutable_set_availability_period()->set_nanos((SetAvailabilityPeriod_->MicroSeconds() % 1'000'000) * 1'000);
+        } else {
+            proto.mutable_reset_availability_period();
+        }
+    }
+    if (SetReadFrom_) {
+        proto.mutable_set_read_from()->set_seconds(SetReadFrom_->Seconds());
+    }
+    if (SetSupportedCodecs_) {
+        for (const auto& codec : *SetSupportedCodecs_) {
+            proto.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
+        }
+    }
+
+    for (auto& pair : AlterAttributes_) {
+        (*proto.mutable_alter_attributes())[pair.first] = pair.second;
+    }
+
+    if (DefaultProcessingTimeout_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout()
+            ->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+    }
+
+    if (DeadLetterPolicy_.Enabled_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+            ->set_set_enabled(DeadLetterPolicy_.Enabled_.value());
+    }
+    if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
+        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_alter_condition()
+            ->set_set_max_processing_attempts(DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
+    }
+
+    if (DeadLetterPolicy_.Action_) {
+        switch (DeadLetterPolicy_.Action_.value()) {
+            case EDeadLetterAction::Move:
+                if (DeadLetterPolicy_.DeadLetterQueue_) {
+                    if (DeadLetterPolicy_.DeadLetterPolicyChanged_) {
+                        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_set_move_action()
+                            ->set_dead_letter_queue(DeadLetterPolicy_.DeadLetterQueue_.value());
+                    } else {
+                        proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_alter_move_action()
+                            ->set_set_dead_letter_queue(DeadLetterPolicy_.DeadLetterQueue_.value());
+                    }
+                }
+                break;
+            case EDeadLetterAction::Delete:
+                proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()->mutable_set_delete_action();
+                break;
+            case EDeadLetterAction::Unspecified:
+                break;
+        }
+    }
 }
 
 template struct TConsumerSettings<TCreateTopicSettings>;
@@ -648,6 +856,7 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
     , Attributes_(DeserializeAttributes(proto.attributes()))
+    , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::nullopt)
 {
     Consumers_ = DeserializeConsumers(*this, proto.consumers());
 }
@@ -662,6 +871,9 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
     *request.mutable_consumers() = SerializeConsumers(Consumers_);
     *request.mutable_attributes() = SerializeAttributes(Attributes_);
+    if (MetricsLevel_) {
+        request.set_metrics_level(*MetricsLevel_);
+    }
 }
 
 } // namespace NYdb::NTopic

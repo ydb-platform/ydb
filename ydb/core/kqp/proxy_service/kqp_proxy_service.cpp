@@ -1575,7 +1575,7 @@ private:
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-                Register(CreateScriptExecutionsTablesCreator(), TMailboxType::HTSwap, AppData()->SystemPoolId);
+                Register(CreateScriptExecutionsTablesCreator(FeatureFlags), TMailboxType::HTSwap, AppData()->SystemPoolId);
                 [[fallthrough]];
             case EScriptExecutionsCreationStatus::Pending:
                 if (DelayedEventsQueue.size() < 10000) {
@@ -1757,12 +1757,13 @@ private:
     }
 
     void InitSharedReading() {
-        const auto& sharedReading = QueryServiceConfig.GetSharedReading();
-        if (!sharedReading.GetEnabled() || !FederatedQuerySetup) {
+        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
             return;
         }
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            QueryServiceConfig.GetSharedReading(),
+            streamingQueries.GetExternalStorage(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,
@@ -1779,17 +1780,17 @@ private:
     }
 
     void InitCheckpointStorage() {
-        const auto& checkpointConfig = QueryServiceConfig.GetCheckpointsConfig();
-        if (!checkpointConfig.GetEnabled() || !FederatedQuerySetup) {
+        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
             return;
         }
+
         auto service = NFq::NewCheckpointStorageService(
-            checkpointConfig,
+            {},
             "cs",
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,
             Counters->GetKqpCounters()->GetSubgroup("subsystem", "storage_service"));
-            
+
         CheckpointStorageService = TActivationContext::Register(service.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::NDq::MakeCheckpointStorageID(), CheckpointStorageService);

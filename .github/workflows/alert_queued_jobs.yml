@@ -28,7 +28,10 @@ jobs:
     - name: Run queued jobs checker and send to Telegram
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+        GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
       run: |
         python .github/scripts/telegram/alert_queued_jobs.py \
           --chat-id 3017506311 \
-          --send-when-all-good
+          --send-when-all-good \
+          --notify-on-api-errors \
+          --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"

@@ -7,6 +7,7 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Topic;
@@ -122,8 +123,6 @@ message StreamWriteMessage {
         // Explicitly request for last sequential number
         // It may be expensive, if producer wrote to many partitions before.
         bool get_last_seq_no = 6;
-
-
     }
 
     // Response to the handshake.
@@ -155,7 +154,7 @@ message StreamWriteMessage {
             // Message sequence number, provided by client for deduplication.
             // Starts at 1
             int64 seq_no = 1;
-            // Creation timestamp
+            // Creation timestamp.
             google.protobuf.Timestamp created_at = 2;
             // Compressed client message body.
             bytes data = 3;
@@ -787,6 +786,75 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
+
+message DeadLetterPolicyCondition {
+    uint32 max_processing_attempts = 1;
+}
+
+message AlterDeadLetterPolicyCondition {
+    optional uint32 set_max_processing_attempts = 1;
+}
+
+message DeleteDeadLetterPolicyAction {
+}
+
+message MoveDeadLetterPolicyAction {
+    string dead_letter_queue = 1;
+}
+
+message AlterMoveDeadLetterPolicyAction {
+    optional string set_dead_letter_queue = 1;
+}
+
+message DeadLetterPolicy {
+    bool enabled = 1;
+
+    DeadLetterPolicyCondition condition = 2;
+
+    oneof action {
+        DeleteDeadLetterPolicyAction delete_action = 4;
+        MoveDeadLetterPolicyAction move_action = 5;
+    }
+}
+
+message AlterDeadLetterPolicy {
+    optional bool set_enabled = 1;
+
+    optional AlterDeadLetterPolicyCondition alter_condition = 2;
+
+    oneof action {
+        AlterMoveDeadLetterPolicyAction alter_move_action = 3;
+        DeleteDeadLetterPolicyAction set_delete_action = 4;
+        MoveDeadLetterPolicyAction set_move_action = 5;
+    }
+}
+
+message StreamingConsumerType {
+}
+
+message AlterStreamingConsumerType {
+}
+
+message SharedConsumerType {
+    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
+    // For streaming consumers, the order of messages is always preserved.
+    optional bool keep_messages_order = 10;
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    optional google.protobuf.Duration default_processing_timeout = 11;
+    // The dedad letter policy for this consumer.
+    optional DeadLetterPolicy dead_letter_policy = 12;
+}
+
+message AlterSharedConsumerType {
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    google.protobuf.Duration set_default_processing_timeout = 10;
+
+    // Change dead letter policy.
+    AlterDeadLetterPolicy alter_dead_letter_policy = 11;
+}
+
 // Consumer description.
 message Consumer {
     // Must have valid not empty name as a key.
@@ -822,6 +890,14 @@ message Consumer {
         // Bytes read statistics.
         MultipleWindowsStat bytes_read = 4;
     }
+
+    // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
+    optional google.protobuf.Duration availability_period = 8;
+
+    oneof consumer_type {
+        StreamingConsumerType streaming_consumer_type = 9;
+        SharedConsumerType shared_consumer_type = 10;
+    }
 }
 
 // Consumer alter description.
@@ -844,6 +920,17 @@ message AlterConsumer {
     // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 6;
+
+    // Change message lifetime if consumer is important.
+    oneof availability_period_action {
+        google.protobuf.Duration set_availability_period = 7;
+        google.protobuf.Empty reset_availability_period = 8;
+    }
+
+    oneof alter_consumer_type {
+        AlterStreamingConsumerType alter_streaming_consumer_type = 9;
+        AlterSharedConsumerType alter_shared_consumer_type = 10;
+    }
 }
 
 enum AutoPartitioningStrategy {
@@ -992,6 +1079,9 @@ message CreateTopicRequest {
 
     // Metering mode for the topic in a serverless database.
     MeteringMode metering_mode = 12;
+
+    // Metrics level. If the level is unset, use database setting.
+    optional uint32 metrics_level = 13;
 }
 
 // Create topic response sent from server to client.
@@ -1125,6 +1215,9 @@ message DescribeTopicResult {
         // How much bytes were written statistics.
         MultipleWindowsStat bytes_written = 4;
     }
+
+    // Metrics level.
+    optional uint32 metrics_level = 16;
 }
 
 // Describe partition request sent from client to server.
@@ -1252,7 +1345,6 @@ message PartitionStats {
     int32 partition_node_id = 8 [deprecated=true]; //Use PartitionLocation
 }
 
-
 // Update existing topic request sent from client to server.
 message AlterTopicRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -1297,6 +1389,12 @@ message AlterTopicRequest {
 
     // Set metering mode for topic in serverless database.
     MeteringMode set_metering_mode = 14;
+
+    // Set or reset metrics level.
+    oneof metrics_level {
+        uint32 set_metrics_level = 15;
+        google.protobuf.Empty reset_metrics_level = 16;
+    }
 }
 
 // Update topic response sent from server to client.

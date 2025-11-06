@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/object_client/public.h>
 
+#include <yt/yt/library/constrained/nonempty.h>
+
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
@@ -158,8 +160,7 @@ class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
 using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
-/// Empty vector means that no tags are specified. Should be considered as `Maybe<NonEmptyVector<int>>`.
-using TPartitionTags = TCompactVector<int, 1>;
+using TPartitionTags = TNonEmpty<TCompactVector<int, 1>>;
 
 extern const std::string DefaultStoreAccountName;
 extern const std::string DefaultStoreMediumName;

@@ -108,7 +108,7 @@ TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
     for (auto& column: protoFmrTableRef.GetColumns()) {
         fmrTableRef.Columns.emplace_back(column);
     }
-    fmrTableRef.SerializedColumnGroups =protoFmrTableRef.GetColumnGroups();
+    fmrTableRef.SerializedColumnGroups = protoFmrTableRef.GetColumnGroups();
     return fmrTableRef;
 }
 

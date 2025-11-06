@@ -80,6 +80,7 @@
 
 /ydb/core/formats/arrow @ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
+/ydb/core/tx/schemeshard/olap @ydb-platform/cs
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli

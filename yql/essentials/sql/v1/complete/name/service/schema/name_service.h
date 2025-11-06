@@ -5,6 +5,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeSchemaNameService(ISchema::TPtr schema);
+INameService::TPtr MakeSchemaNameService(ISchema::TPtr schema);
 
 } // namespace NSQLComplete

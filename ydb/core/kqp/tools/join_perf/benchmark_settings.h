@@ -7,30 +7,31 @@ namespace NKikimr::NMiniKQL {
 
 enum class ETestedJoinAlgo { kScalarGrace, kScalarMap, kBlockMap, kBlockHash, kScalarHash };
 enum class ETestedJoinKeyType { kString, kInteger };
+enum class ETestedInputFlavour { kSameSizeTable, kLittleRightTable };
 
 struct TTableSizes {
     int Left;
     int Right;
 };
 
-struct TBenchmarkSettings {
-    struct TPreset {
-        TVector<TTableSizes> Cases;
-        TString PresetName;
-    };
-
-    TVector<TPreset> Presets;
-    TSet<ETestedJoinKeyType> KeyTypes;
-    TSet<ETestedJoinAlgo> Algorithms;
+struct TPreset {
+    TVector<TTableSizes> Sizes;
+    TString PresetName;
 };
 
-TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, const TBenchmarkSettings::TPreset& preset,
-                 TTableSizes size);
+struct TBenchmarkSettings {
+    int Seed;
+    int Scale;
+    int Samples;
+    TPreset Preset;
+    TSet<ETestedJoinKeyType> KeyTypes;
+    TSet<ETestedJoinAlgo> Algorithms;
+    TSet<ETestedInputFlavour> Flavours;
+};
 
-namespace NBenchmarkSizes {
-TVector<TTableSizes> ExponentialSizeIncrease();
-TVector<TTableSizes> LinearSizeIncrease();
-TVector<TTableSizes> VerySmallSizes();
-} // namespace NBenchmarkSizes
+TString CaseName(ETestedJoinAlgo algo, ETestedJoinKeyType keyType, ETestedInputFlavour inputFlavour,
+                 const TBenchmarkSettings& preset, TTableSizes sizes);
+
+TVector<TPreset> ParsePresetsFile(const TString& path);
 
 } // namespace NKikimr::NMiniKQL

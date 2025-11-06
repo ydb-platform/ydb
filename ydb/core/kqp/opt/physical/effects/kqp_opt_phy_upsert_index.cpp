@@ -339,11 +339,7 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         hasUniqIndex |= (indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique);
         for (const auto& indexKeyCol : indexDesc->KeyColumns) {
             if (inputColumns.contains(indexKeyCol)) {
-                if (!usedIndexes.contains(indexDesc->Name) &&
-                    std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end())
-                {
-                    usedIndexes.insert(indexDesc->Name);
-                }
+                usedIndexes.insert(indexDesc->Name);
             } else {
                 // input always contains key columns
                 YQL_ENSURE(std::find(mainPk.begin(), mainPk.end(), indexKeyCol) == mainPk.end());
@@ -351,6 +347,8 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
             }
         }
     }
+
+    AFL_ENSURE(!hasUniqIndex || !usedIndexes.empty());
 
     if (!hasUniqIndex) {
         missedKeyInput.clear();
@@ -614,7 +612,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     }
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
+    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
 
     const bool isSink = NeedSinks(table, kqpCtx);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
@@ -911,13 +909,26 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 ? MakeRowsFromTupleDict(lookupDictRecomputed, pk, indexTableColumnsWithoutData, pos, ctx)
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (indexDesc->KeyColumns.size() > 1) {
-                    deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // deleteIndexKeys are already correct
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+                    }
+                    deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
+                        indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+                    break;
                 }
-
-                deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text and create deleted rows
+                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
+                        indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
+                    break;
+                }
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -942,14 +953,34 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeUpsertIndexRows(mode, rowsPrecompute.Cast(), lookupDict.Cast(),
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (indexDesc->KeyColumns.size() > 1) {
-                    upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // upsertIndexRows are already correct
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                            auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                            upsertIndexRows = std::move(res.first);
+                            effects.emplace_back(std::move(res.second));
+                        } else {
+                            // Handle old prefixed vector index tables without the sequence
+                            upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                        }
+                    }
+                    upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
+                        indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
+                    indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                    break;
                 }
-
-                upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
-                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text and create upserted rows
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
+                        indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
+                    break;
+                }
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)

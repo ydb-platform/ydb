@@ -1,8 +1,9 @@
 #include "create_view_formatter.h"
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -43,26 +44,13 @@ TParsers BuildParsers() {
     return parsers;
 }
 
-bool SplitViewQuery(const TString& query, const TLexers& lexers, const TParsers& parsers, const TTranslationSettings& translationSettings, TViewQuerySplit& split, TIssues& issues) {
-    TVector<TString> statements;
-    if (!SplitQueryToStatements(lexers, parsers, query, statements, issues, translationSettings)) {
-        return false;
-    }
-    if (statements.empty()) {
-        issues.AddIssue(TStringBuilder() << "No select statement in the view query: " << query.Quote());
-        return false;
-    }
-    split = TViewQuerySplit(statements);
-    return true;
-}
-
 struct TTokenCollector {
     mutable TStringBuilder Tokens;
 
     void operator()(const NProtoBuf::Message& message) const {
         if (const auto* token = dynamic_cast<const TToken*>(&message)) {
             const auto& value = token->GetValue();
-            if (token->GetId() != NALPDefault::SQLv1LexerTokens::TOKEN_EOF) {
+            if (token->GetValue() != "<EOF>") {
                 if (!Tokens.empty()) {
                     Tokens << ' ';
                 }
@@ -136,27 +124,6 @@ TString GetRelativePath(const TFsPath& prefix, const TFsPath& absolutePath) {
 
 }
 
-TViewQuerySplit::TViewQuerySplit(const TVector<TString>& statements) {
-    TStringBuilder context;
-    for (int i = 0; i < std::ssize(statements) - 1; ++i) {
-        context << statements[i] << '\n';
-    }
-    ContextRecreation = context;
-    Y_ENSURE(!statements.empty());
-    Select = statements.back();
-}
-
-bool SplitViewQuery(const TString& query, TViewQuerySplit& split, TIssues& issues) {
-    google::protobuf::Arena arena;
-    TTranslationSettings translationSettings;
-    if (!BuildTranslationSettings(query, arena, translationSettings, issues)) {
-        return false;
-    }
-    auto lexers = BuildLexers();
-    auto parsers = BuildParsers();
-    return SplitViewQuery(query, lexers, parsers, translationSettings, split, issues);
-}
-
 TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, const TString& viewAbsolutePath, const NKikimrSchemeOp::TViewDescription& viewDesc) {
     const auto& query = viewDesc.GetQueryText();
 
@@ -169,8 +136,8 @@ TFormatResult TCreateViewFormatter::Format(const TString& viewRelativePath, cons
 
     auto lexers = BuildLexers();
     auto parsers = BuildParsers();
-    TViewQuerySplit split;
-    if (!SplitViewQuery(query, lexers, parsers, translationSettings, split, issues)) {
+    NYdb::NDump::TViewQuerySplit split;
+    if (!SplitViewQuery(query, lexers, translationSettings, split, issues)) {
         return TFormatResult(Ydb::StatusIds::SCHEME_ERROR, issues);
     }
 

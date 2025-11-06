@@ -44,4 +44,4 @@ public:
         return result;
     }
 };
-}
+} // namespace NYql

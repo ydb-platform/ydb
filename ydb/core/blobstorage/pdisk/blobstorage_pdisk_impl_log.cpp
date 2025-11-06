@@ -9,6 +9,36 @@
 
 namespace NKikimr::NPDisk {
 
+void InitializeKeeperLogParams(TKeeperParams& params, const TIntrusivePtr<TPDiskConfig>& cfg, const TDiskFormat& format) {
+    if (cfg->FeatureFlags.GetEnablePDiskLogForSmallDisks()) {
+        params.SeparateCommonLog = true;
+        if (format.DiskSize > SmallDiskSizeLogBoundary) {
+            params.MaxCommonLogChunks = cfg->MaxCommonLogChunks;
+            params.CommonStaticLogChunks = cfg->CommonStaticLogChunks;
+        } else if (format.DiskSize < TinyDiskSizeLogBoundary) {
+            params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks;
+            params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks;
+        } else {
+            params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks +
+                double(format.DiskSize - TinyDiskSizeLogBoundary) *
+                (cfg->MaxCommonLogChunks - TinyDiskMaxCommonLogChunks) /
+                (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
+            params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks +
+                double(format.DiskSize - TinyDiskSizeLogBoundary) *
+                (cfg->CommonStaticLogChunks - TinyDiskCommonStaticLogChunks) /
+                (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
+        }
+    } else {
+        if (format.IsDiskSmall() && cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
+            params.SeparateCommonLog = false;
+        } else {
+            params.SeparateCommonLog = true;
+        }
+        params.MaxCommonLogChunks = cfg->MaxCommonLogChunks;
+        params.CommonStaticLogChunks = cfg->CommonStaticLogChunks;
+    }
+}
+
 class TLogFlushCompletionAction : public TCompletionAction {
     const ui32 EndChunkIdx;
     const ui32 EndSectorIdx;
@@ -409,7 +439,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             ui64 minSize = noneSize + sizeof(TSysLogFirstNoncesToKeep);
             Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
                     << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
-            memcpy(&SysLogFirstNoncesToKeep, firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
+            memcpy(&SysLogFirstNoncesToKeep, (const ui8*)firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
         }
     }
 
@@ -1648,14 +1678,11 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.TotalChunks = Format.DiskSizeChunks();
                 params.ExpectedOwnerCount = Cfg->ExpectedSlotCount;
                 params.SysLogSize = Format.SystemChunkCount; // sysLogSize = chunk 0 + additional SysLog chunks
-                if (Format.IsDiskSmall() && Cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
-                    params.SeparateCommonLog = false;
-                } else {
-                    params.SeparateCommonLog = true;
-                }
                 params.CommonLogSize = LogChunks.size();
-                params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
-                params.SpaceColorBorder = Cfg->SpaceColorBorder;
+
+                InitializeKeeperLogParams(params, Cfg, Format);
+
+                params.SpaceColorBorder = GetColorBorderIcb();
                 ui64 chunkBaseLimitIcb = ChunkBaseLimitPerMille;
                 if (chunkBaseLimitIcb) {
                     params.ChunkBaseLimit = std::clamp(chunkBaseLimitIcb,

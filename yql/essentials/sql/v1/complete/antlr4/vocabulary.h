@@ -8,6 +8,6 @@
 
 namespace NSQLComplete {
 
-    std::string Display(const antlr4::dfa::Vocabulary& vocabulary, TTokenId tokenType);
+std::string Display(const antlr4::dfa::Vocabulary& vocabulary, TTokenId tokenType);
 
 } // namespace NSQLComplete

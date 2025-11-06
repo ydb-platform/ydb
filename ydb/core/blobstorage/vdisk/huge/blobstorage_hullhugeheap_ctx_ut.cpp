@@ -30,7 +30,10 @@ namespace NKikimr {
                     cfg.MilestoneHugeBlobInBytes,
                     cfg.MaxLogoBlobDataSize,
                     cfg.HugeBlobOverhead,
+                    cfg.HugeBlobStepsBetweenPowersOf2,
+                    false,
                     cfg.HugeBlobsFreeChunkReservation,
+                    cfg.GarbageThresholdToRunFullCompactionPerMille,
                     logFunc);
 
             return std::make_shared<THugeBlobCtx>("",

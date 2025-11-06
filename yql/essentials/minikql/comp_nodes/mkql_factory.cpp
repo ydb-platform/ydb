@@ -122,7 +122,7 @@
 #include "mkql_withcontext.h"
 #include "mkql_zip.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
 #include <string_view>
 #include <unordered_map>
@@ -148,7 +148,8 @@ namespace {
 
 struct TCallableComputationNodeBuilderFuncMapFiller {
     TCallableComputationNodeBuilderFuncMapFiller()
-    {}
+    {
+    }
 
     const TCallableComputationNodeBuilderMap Map = {
         {"Append", &WrapAppend},
@@ -384,18 +385,18 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"MutDictItems", &WrapMutDictItems},
         {"MutDictKeys", &WrapMutDictKeys},
         {"MutDictPayloads", &WrapMutDictPayloads},
-        {"FromMutDict", &WrapFromMutDict}
-    };
+        {"FromMutDict", &WrapFromMutDict}};
 };
 
-}
+} // namespace
 
 TComputationNodeFactory GetBuiltinFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const auto& map = Singleton<TCallableComputationNodeBuilderFuncMapFiller>()->Map;
         const auto it = map.find(callable.GetType()->GetName());
-        if (it == map.end())
+        if (it == map.end()) {
             return nullptr;
+        }
 
         return it->second(callable, ctx);
     };
@@ -403,7 +404,7 @@ TComputationNodeFactory GetBuiltinFactory() {
 
 TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeFactory> factories) {
     return [factories = std::move(factories), builtins = GetBuiltinFactory()](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
-        for (auto& f: factories) {
+        for (auto& f : factories) {
             if (auto res = f(callable, ctx)) {
                 return res;
             }
@@ -413,5 +414,5 @@ TComputationNodeFactory GetCompositeWithBuiltinFactory(TVector<TComputationNodeF
     };
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

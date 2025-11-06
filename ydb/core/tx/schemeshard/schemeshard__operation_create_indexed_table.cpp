@@ -290,7 +290,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
-        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -300,7 +300,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
             *scheme.MutableCreateTable() = std::move(implTableDesc);
 
-            return CreateNewTable(NextPartId(nextId, result), scheme);
+            return CreateNewTable(NextPartId(nextId, result), scheme, localSequences);
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
@@ -332,7 +332,22 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
                 if (prefixVectorIndex) {
                     const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
-                    result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
+                    result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(
+                        prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc),
+                        THashSet<TString>{NTableIndex::NKMeans::IdColumnSequence}));
+                    // Create the sequence
+                    auto outTx = TransactionTemplate(tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" +
+                        indexDescription.GetName() + "/" + NTableIndex::NKMeans::PrefixTable,
+                        NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+                    outTx.MutableSequence()->SetName(NTableIndex::NKMeans::IdColumnSequence);
+                    outTx.MutableSequence()->SetMinValue(-0x7FFFFFFFFFFFFFFF);
+                    outTx.MutableSequence()->SetMaxValue(-1);
+                    outTx.MutableSequence()->SetStartValue(NTableIndex::NKMeans::SetPostingParentFlag(1));
+                    outTx.MutableSequence()->SetRestart(true);
+                    outTx.SetFailOnExist(tx.GetFailOnExist());
+                    outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+                    outTx.SetInternal(tx.GetInternal());
+                    result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
                 }
                 break;
             }
@@ -343,7 +358,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription())));
                 break;
             }
             default:

@@ -189,7 +189,7 @@ bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
                 if (user.IsExist(ace.GetSID())) {
                     switch(static_cast<EAccessType>(ace.GetAccessType())) {
                     case EAccessType::Deny:
-                        if (access && ace.GetAccessRight() != 0)
+                        if (access & ace.GetAccessRight())
                             return false; // deny entries have precedence over allow entries
                         break;
                     case EAccessType::Allow:
@@ -587,6 +587,8 @@ ui32 TACL::SpecialRightsFromString(const TString& string) {
             result |= EAccessRights::GrantAccessRights;
         if (r == "ConnDB")
             result |= EAccessRights::ConnectDatabase;
+        if (r == "WUA")
+            result |= EAccessRights::WriteUserAttributes;
     }
     return result;
 }

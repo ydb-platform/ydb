@@ -38,6 +38,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> BurstUsageExtra = 0;
         std::atomic<ui64> BurstThrottle = 0;
 
+        std::atomic<ui64> ActualDemand = 0;
+
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
 
         TPool* GetParent() const;
@@ -56,6 +58,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         void RemoveTask(const TSchedulableTaskList::iterator& it);
         ui32 ResumeTasks(ui32 count);
 
+        void UpdateActualDemand();
+
     public:
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks
         std::atomic<ui64> WaitingTasksTime = 0; // sum of average execution time for all throttled tasks
@@ -64,6 +68,12 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         const TDelayParams* const DelayParams; // owned by scheduler
 
     private:
+        // used to calculate adjusted satisfaction between snapshots
+        ui64 PrevBurstUsage = 0;
+        ui64 PrevBurstUsageResume = 0;
+        ui64 PrevBurstUsageExtra = 0;
+        ui64 PrevBurstThrottle = 0;
+
         TRWMutex TasksMutex;
         TSchedulableTaskList SchedulableTasks; // protected by TasksMutex
     };

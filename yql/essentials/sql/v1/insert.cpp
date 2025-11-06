@@ -54,7 +54,7 @@ public:
     std::pair<TNodePtr, bool> BuildAggregation(const TString& label, TContext& ctx) override {
         Y_UNUSED(label);
         Y_UNUSED(ctx);
-        return { nullptr, true };
+        return {nullptr, true};
     }
 
 protected:
@@ -68,14 +68,15 @@ public:
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName_(operationHumanName)
         , Values_(values)
-    {}
+    {
+    }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (ColumnsHint_.size() != Values_.size()) {
             ctx.Error(Pos_) << "VALUES have " << Values_.size() << " columns, " << OperationHumanName_ << " expects: " << ColumnsHint_.size();
             return false;
         }
-        for (auto& value: Values_) {
+        for (auto& value : Values_) {
             if (!value->Init(ctx, src)) {
                 return false;
             }
@@ -102,6 +103,7 @@ public:
     TNodePtr DoClone() const final {
         return new TUpdateByValues(Pos_, OperationHumanName_, ColumnsHint_, CloneContainer(Values_));
     }
+
 private:
     TString OperationHumanName_;
 
@@ -122,7 +124,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
         bool hasError = false;
-        for (const auto& row: Values_) {
+        for (const auto& row : Values_) {
             if (ColumnsHint_.empty()) {
                 ctx.Error(Pos_) << OperationHumanName_ << " ... VALUES requires specification of table columns";
                 hasError = true;
@@ -133,7 +135,7 @@ public:
                 hasError = true;
                 continue;
             }
-            for (auto& value: row) {
+            for (auto& value : row) {
                 if (!value->Init(ctx, FakeSource_.Get())) {
                     hasError = true;
                     continue;
@@ -146,10 +148,10 @@ public:
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
         auto tuple = Y();
-        for (const auto& row: Values_) {
+        for (const auto& row : Values_) {
             auto rowValues = Y("AsStruct"); // ordered struct
             auto column = ColumnsHint_.begin();
-            for (auto value: row) {
+            for (auto value : row) {
                 rowValues = L(rowValues, Q(Y(BuildQuotedAtom(Pos_, *column), value)));
                 ++column;
             }
@@ -161,7 +163,7 @@ public:
     TNodePtr DoClone() const final {
         TVector<TVector<TNodePtr>> clonedValues;
         clonedValues.reserve(Values_.size());
-        for (auto cur: Values_) {
+        for (auto cur : Values_) {
             clonedValues.push_back(CloneContainer(cur));
         }
         return new TModifyByValues(Pos_, OperationHumanName_, ColumnsHint_, clonedValues);
@@ -179,7 +181,8 @@ public:
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName_(operationHumanName)
         , Source_(std::move(source))
-    {}
+    {
+    }
 
     void GetInputTables(TTableList& tableList) const override {
         if (Source_) {
@@ -221,8 +224,8 @@ public:
             }
             if (mismatchFound) {
                 if (!ctx.Warning(Pos_, TIssuesIds::YQL_SOURCE_SELECT_COLUMN_MISMATCH, [&](auto& out) {
-                    out << str.Str();
-                })) {
+                        out << str.Str();
+                    })) {
                     return false;
                 }
             }
@@ -236,7 +239,7 @@ public:
             return input;
         }
         auto columns = Y();
-        for (auto column: ColumnsHint_) {
+        for (auto column : ColumnsHint_) {
             columns = L(columns, BuildQuotedAtom(Pos_, column));
         }
         const auto sourceColumns = Source_->GetColumns();
@@ -248,10 +251,9 @@ public:
         YQL_ENSURE(sourceColumns->List.size() == ColumnsHint_.size());
         auto srcColumn = Source_->GetColumns()->List.begin();
         auto structObj = Y("AsStruct"); // ordered struct
-        for (auto column: ColumnsHint_) {
+        for (auto column : ColumnsHint_) {
             structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos_, column),
-                Y("Member", "row", BuildQuotedAtom(Pos_, *srcColumn))
-            )));
+                                         Y("Member", "row", BuildQuotedAtom(Pos_, *srcColumn)))));
             ++srcColumn;
         }
         return Y("AssumeColumnOrder", Y("OrderedMap", input, BuildLambda(Pos_, Y("row"), structObj)), Q(columns));
@@ -285,7 +287,7 @@ TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint,
 class TWriteColumnsNode: public TAstListNode {
 public:
     TWriteColumnsNode(TPosition pos, TScopedStatePtr scoped,
-        const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr)
+                      const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr)
         : TAstListNode(pos)
         , Scoped_(scoped)
         , Table_(table)
@@ -433,7 +435,6 @@ TNodePtr BuildBatchDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef
     return writeNode;
 }
 
-
 class TEraseColumnsNode: public TAstListNode {
 public:
     TEraseColumnsNode(TPosition pos, const TVector<TString>& columns)
@@ -447,7 +448,7 @@ public:
         Y_UNUSED(src);
 
         TNodePtr columnList = Y();
-        for (const auto& column: Columns_) {
+        for (const auto& column : Columns_) {
             columnList->Add(Q(column));
         }
 
@@ -463,7 +464,6 @@ public:
 private:
     TVector<TString> Columns_;
 };
-
 
 TNodePtr BuildEraseColumns(TPosition pos, const TVector<TString>& columns) {
     return new TEraseColumnsNode(pos, columns);

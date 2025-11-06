@@ -15,7 +15,8 @@ private:
 public:
     TVector()
         : Vector_()
-    {}
+    {
+    }
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
@@ -45,14 +46,13 @@ public:
 };
 
 extern const char VectorResourceName[] = "Vector.VectorResource";
-class TVectorResource:
-    public TBoxedResource<TVector, VectorResourceName>
-{
+class TVectorResource: public TBoxedResource<TVector, VectorResourceName> {
 public:
     template <typename... Args>
     inline TVectorResource(Args&&... args)
         : TBoxedResource(std::forward<Args>(args)...)
-    {}
+    {
+    }
 };
 
 TVectorResource* GetVectorResource(const TUnboxedValuePod& arg) {
@@ -120,8 +120,7 @@ public:
         TType* userType,
         const TStringRef& typeConfig,
         ui32 flags,
-        IFunctionTypeInfoBuilder& builder) const final
-    {
+        IFunctionTypeInfoBuilder& builder) const final {
         Y_UNUSED(typeConfig);
 
         try {

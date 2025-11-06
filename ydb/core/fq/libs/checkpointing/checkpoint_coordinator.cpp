@@ -3,13 +3,13 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
-
+#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
 #include <util/string/builder.h>
+#include <util/system/env.h>
 
 #include <utility>
 
@@ -24,10 +24,28 @@
 
 namespace NFq {
 
+using namespace NActors;
+
+TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings() {
+    ui64 ms = 0;
+    if (!TryFromString<ui64>(GetEnv("YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"), ms)) {
+        return;
+    }
+    if (ms) {
+        CheckpointingPeriod = TDuration::MilliSeconds(ms);
+    }
+}
+
+TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config)
+    : CheckpointingPeriod(TDuration::MilliSeconds(config.GetCheckpointingPeriodMillis() ? config.GetCheckpointingPeriodMillis() : 30'000))
+    , CheckpointingSnapshotRotationPeriod(config.GetCheckpointingSnapshotRotationPeriod())
+    , MaxInflight(config.GetMaxInflight())
+{}
+
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& storageProxy,
                                                const TActorId& runActorId,
-                                               const NKikimrConfig::TCheckpointsConfig& settings,
+                                               const TCheckpointCoordinatorSettings& settings,
                                                const ::NMonitoring::TDynamicCounterPtr& counters,
                                                const NProto::TGraphParams& graphParams,
                                                const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -37,7 +55,6 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
     , Settings(settings)
-    , CheckpointingPeriod(TDuration::MilliSeconds(Settings.GetCheckpointingPeriodMillis() ? Settings.GetCheckpointingPeriodMillis() : 30'000))
     , CheckpointingSnapshotRotationPeriod(Settings.GetCheckpointingSnapshotRotationPeriod())
     , CheckpointingSnapshotRotationIndex(CheckpointingSnapshotRotationPeriod)   // First - snapshot
     , GraphParams(graphParams)
@@ -48,7 +65,9 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 }
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
-    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
+    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition 
+        << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode)
+        << ", checkpointing period " << Settings.GetCheckpointingPeriod());
     ControlId = ev->Sender;
 
     for (const auto& task : ev->Get()->Tasks) {
@@ -97,7 +116,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
 }
 
 void TCheckpointCoordinator::ScheduleNextCheckpoint() {
-    Schedule(CheckpointingPeriod, new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
+    Schedule(Settings.GetCheckpointingPeriod(), new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
 }
 
 void TCheckpointCoordinator::UpdateInProgressMetric() {
@@ -237,6 +256,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         Send(RunActorId, new NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues(std::move(issues)));
     }
 
+    CC_LOG_I("Going to restore offsets from foreign checkpoint " << checkpoint.CheckpointId << " for tasks #" << plan.size());
+
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);
     ++*Metrics.RestoredStreamingOffsetsFromCheckpoint;
     for (const auto& [taskId, taskPlan] : plan) {
@@ -249,6 +270,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         }
         const auto transportIt = ActorsToWaitFor.find(actorIdIt->second);
         if (transportIt != ActorsToWaitFor.end()) {
+            CC_LOG_D("Restore offsets from foreign checkpoint " << checkpoint.CheckpointId << " for task " << taskId);
             transportIt->second->EventsQueue.Send(
                 new NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint(
                     checkpoint.CheckpointId.SeqNo,
@@ -664,7 +686,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointCoordinatorSettings& config,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,

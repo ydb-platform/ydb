@@ -111,6 +111,7 @@ struct TListQueriesOptions
 
     bool SearchByTokenPrefix = false;
     bool UseFullTextSearch = true;
+    EListQueriesSortOrder SortOrder = EListQueriesSortOrder::Cursor;
 };
 
 struct TQuery
@@ -185,7 +186,7 @@ struct TGetQueryTrackerInfoResult
     std::optional<int> ExpectedTablesVersion;
 };
 
-struct TGetDeclaredParametersInfoOptions
+struct TGetQueryDeclaredParametersInfoOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
 {
@@ -194,7 +195,7 @@ struct TGetDeclaredParametersInfoOptions
     NQueryTrackerClient::EQueryEngine Engine;
 };
 
-struct TGetDeclaredParametersInfoResult
+struct TGetQueryDeclaredParametersInfoResult
 {
     NYson::TYsonString Parameters;
 };
@@ -236,7 +237,7 @@ struct IQueryTrackerClient
 
     virtual TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(const TGetQueryTrackerInfoOptions& options = {}) = 0;
 
-    virtual TFuture<TGetDeclaredParametersInfoResult> GetDeclaredParametersInfo(const TGetDeclaredParametersInfoOptions& options = {}) = 0;
+    virtual TFuture<TGetQueryDeclaredParametersInfoResult> GetQueryDeclaredParametersInfo(const TGetQueryDeclaredParametersInfoOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -4,6 +4,7 @@ SRCS(
     empty_stream.h
     fake_spec.cpp
     fake_spec.h
+    test_compile_settings.cpp
     test_langver.cpp
     test_schema.cpp
     test_sexpr.cpp

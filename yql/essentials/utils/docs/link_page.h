@@ -5,8 +5,8 @@
 
 namespace NYql::NDocs {
 
-    TLinks GetLinksFromPages(const TPages& pages);
+TLinks GetLinksFromPages(const TPages& pages);
 
-    TPages Stripped(TPages&& pages, const TLinks& links);
+TPages Stripped(TPages&& pages, const TLinks& links);
 
 } // namespace NYql::NDocs

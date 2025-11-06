@@ -76,13 +76,18 @@ namespace NKikimr {
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
+                                                           const ui32 stepsBetweenPowersOf2,
+                                                           const bool enableTinyDisks,
                                                            const ui32 freeChunksReservation,
+                                                           TControlWrapper chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, stepsBetweenPowersOf2,
+                                    enableTinyDisks, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
+            , EnableTinyDisks(enableTinyDisks)
         {
             Heap->FinishRecovery();
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
@@ -97,16 +102,21 @@ namespace NKikimr {
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
+                                                           const ui32 stepsBetweenPowersOf2,
+                                                           const bool enableTinyDisks,
                                                            const ui32 freeChunksReservation,
                                                            const ui64 entryPointLsn,
                                                            const TContiguousSpan &entryPointData,
+                                                           TControlWrapper chunksSoftLocking,
                                                            std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
                                     minHugeBlobInBytes, milestoneHugeBlobInBytes,
-                                    maxBlobInBytes, overhead, freeChunksReservation))
+                                    maxBlobInBytes, overhead, stepsBetweenPowersOf2,
+                                    false, freeChunksReservation, chunksSoftLocking))
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
+            , EnableTinyDisks(enableTinyDisks)
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
             Heap->FinishRecovery();
@@ -120,8 +130,7 @@ namespace NKikimr {
         }
 
         TString THullHugeKeeperPersState::Serialize() const {
-            // enable in next version
-            if (false) {
+            if (EnableTinyDisks || LoadedFromProto) {
                 return SaveToProto();
             }
 
@@ -241,6 +250,8 @@ namespace NKikimr {
 
             LogPos.LoadFromProto(entryPoint.GetLogPos());
             Heap.reset(new NHuge::THeap(VCtx->VDiskLogPrefix, entryPoint.GetHeap()));
+
+            LoadedFromProto = true;
         }
 
         bool THullHugeKeeperPersState::CheckEntryPoint(TContiguousSpan data) {

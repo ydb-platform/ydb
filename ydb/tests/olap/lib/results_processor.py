@@ -35,6 +35,7 @@ class ResultsProcessor:
     _run_id: int = None
 
     send_results = external_param_is_true('send-results')
+    ignore_stderr_content = external_param_is_true('ignore_stderr_content')
     _columns_types = (
         ydb.BulkUpsertColumns()
         .add_column('Db', ydb.PrimitiveType.Utf8)
@@ -152,6 +153,8 @@ class ResultsProcessor:
             ci_job_title = os.getenv('CI_JOB_TITLE', None)
             ci_cluster_name = os.getenv('CI_CLUSTER_NAME', None)
             ci_nemesis = os.getenv('CI_NEMESIS', None)
+            ci_build_type = os.getenv('CI_BUILD_TYPE', None)
+            ci_sanitizer = os.getenv('CI_SANITIZER', None)
 
             if ci_launch_id:
                 info['ci_launch_id'] = ci_launch_id
@@ -167,6 +170,12 @@ class ResultsProcessor:
                 info['ci_nemesis'] = ci_nemesis
             if get_ci_version():
                 info['ci_version'] = get_ci_version()
+            if ci_build_type:
+                info['ci_build_type'] = ci_build_type
+            if ci_sanitizer:
+                info['ci_sanitizer'] = ci_sanitizer
+            info['ignore_stderr_content'] = cls.ignore_stderr_content
+
             info['test_tools_version'] = get_self_version()
 
             data = {

@@ -1,30 +1,68 @@
 #!/usr/bin/env python3
 
 import argparse
-import configparser
 import datetime
 import os
-import posixpath
-import traceback
-import time
 import ydb
-from collections import Counter
-
-dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
-config.read(config_file_path)
+from ydb_wrapper import YDBWrapper
 
 
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+def main():
+    parser = argparse.ArgumentParser()
 
+    parser.add_argument('--build_type', default='relwithdebinfo', type=str, help='build types')
+    parser.add_argument('--branch', default='main', type=str, help='branch')
 
-def create_tables(pool,  table_path):
-    print(f"> create table if not exists:'{table_path}'")
-
-    def callee(session):
-        session.execute_scheme(f"""
+    args, unknown = parser.parse_known_args()
+    build_type = args.build_type
+    branch = args.branch
+    
+    # Always use 1 day window
+    history_for_n_day = 1
+    
+    print(f'🚀 Starting flaky_tests_history.py')
+    print(f'   📅 Days window: {history_for_n_day}')
+    print(f'   🔧 Build type: {build_type}')
+    print(f'   🌿 Branch: {branch}')
+    
+    with YDBWrapper() as ydb_wrapper:
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        testowners_table = ydb_wrapper.get_table_path("testowners")
+        flaky_tests_table = ydb_wrapper.get_table_path("flaky_tests_window")
+      
+        # Get last date from history
+        table_path = flaky_tests_table
+        last_date_query = f"""
+            select max(date_window) as max_date_window from `{table_path}`
+            where build_type = '{build_type}' and branch = '{branch}'
+        """
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(last_date_query, query_name="get_last_date_from_history")
+            
+            default_start_date = datetime.date(2024, 9, 1)
+            base_date = datetime.date(1970, 1, 1)
+            
+            # YDB may return date_window as int (days since 1970-01-01) or datetime.date
+            max_date_window = results[0].get('max_date_window') if results[0] else None
+            if max_date_window is not None:
+                # Convert int to date if needed
+                if isinstance(max_date_window, int):
+                    max_date_window = base_date + datetime.timedelta(days=max_date_window)
+                # Now max_date_window is datetime.date, can compare
+                if max_date_window > default_start_date:
+                    last_datetime = max_date_window
+                else:
+                    last_datetime = default_start_date
+            else:
+                last_datetime = default_start_date
+                
+            last_date = last_datetime.strftime('%Y-%m-%d')
+            print(f'📅 Last history date: {last_date}')
+            
+            # Create table if it doesn't exist
+            create_table_sql = f"""
             CREATE table IF NOT EXISTS `{table_path}` (
                 `test_name` Utf8 NOT NULL,
                 `suite_folder` Utf8 NOT NULL,
@@ -46,294 +84,152 @@ def create_tables(pool,  table_path):
             )
                 PARTITION BY HASH(`full_name`,build_type,branch)
                 WITH (STORE = COLUMN)
-            """)
-
-    return pool.retry_operation_sync(callee)
-
-
-def bulk_upsert(table_client, table_path, rows):
-    print(f"> bulk upsert: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
-        .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
-        .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-    )
-    table_client.bulk_upsert(table_path, rows, column_types)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--days-window', default=1, type=int, help='how many days back we collecting history')
-    parser.add_argument('--build_type', default='relwithdebinfo', type=str, help='build types')
-    parser.add_argument('--branch', default='main', type=str, help='branch')
-
-    args, unknown = parser.parse_known_args()
-    history_for_n_day = args.days_window
-    build_type = args.build_type
-    branch = args.branch
-
-    print(f'Getting history in window {history_for_n_day} days')
-
-
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
-        )
-        return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(
-            lambda: driver.table_client.session().create()
-        )
-
-        # settings, paths, consts
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-        table_client = ydb.TableClient(driver, tc_settings)
-
-        table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
-        default_start_date = datetime.date.today() - datetime.timedelta(days=7)
-
-        with ydb.SessionPool(driver) as pool:
-            create_tables(pool, table_path)
-
-        # Getting last date from history
-        print(f"Checking existing flaky history data for branch '{branch}' and build_type '{build_type}'...")
-        last_date_query = f"""select max(date_window) as max_date_window from `{table_path}`
-            where build_type = '{build_type}' and branch = '{branch}'"""
-        query = ydb.ScanQuery(last_date_query, {})
-        it = table_client.scan_query(query)
-        results = []
-        while True:
-            try:
-                result = next(it)
-                results = results + result.result_set.rows
-            except StopIteration:
-                break
-
-        if results[0] and results[0].get( 'max_date_window', default_start_date) is not None and results[0].get( 'max_date_window', default_start_date) > default_start_date:
-            last_datetime = results[0].get(
-                'max_date_window', default_start_date)
-            print(f"Found existing history data, last date: {last_datetime}")
-
-        else:
-            # If no data exists, try to find when this branch was created
-            print(f"No flaky history data exist for branch '{branch}' - checking when branch was created...")
+        """
             
-            # Try to find the earliest date when this branch had any test runs
-            print(f"Querying test_runs_column for earliest test run in branch '{branch}'...")
-            query_branch_creation = f"""
-                SELECT MIN(run_timestamp) as earliest_run
-                FROM `test_results/test_runs_column`
-                WHERE branch = '{branch}' AND build_type = '{build_type}'
-            """
-            query = ydb.ScanQuery(query_branch_creation, {})
-            it = table_client.scan_query(query)
-            branch_creation_date = None
+            ydb_wrapper.create_table(table_path, create_table_sql)
             
-            while True:
-                try:
-                    result = next(it)
-                    if result.result_set.rows and result.result_set.rows[0]['earliest_run']:
-                        earliest_run = result.result_set.rows[0]['earliest_run']
-                        print(f"Raw earliest_run value: {earliest_run}")
-                        
-                        try:
-                            # Convert timestamp to datetime
-                            if earliest_run > 1000000000000000:  # Microseconds
-                                timestamp_seconds = earliest_run / 1000000
-                                branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                                print(f"Converted from microseconds: {branch_creation_date}")
-                            else:  # Seconds or milliseconds
-                                if earliest_run > 1000000000000:  # Milliseconds
-                                    timestamp_seconds = earliest_run / 1000
-                                    branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
-                                    print(f"Converted from milliseconds: {branch_creation_date}")
-                                else:  # Seconds
-                                    branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
-                                    print(f"Converted from seconds: {branch_creation_date}")
-                        except (OverflowError, OSError, ValueError) as e:
-                            print(f"Error converting timestamp {earliest_run}: {e}")
-                            branch_creation_date = None
-                        break
-                except StopIteration:
-                    break
+            # Process each date
+            today = datetime.date.today()
+            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
             
-            # Use branch creation date if found, otherwise fall back to default date
-            if branch_creation_date:
-                last_datetime = branch_creation_date
-                print(f"✓ Found branch creation date: {branch_creation_date}")
-            else:
-                last_datetime = default_start_date
-                print(f"⚠ No test runs found for branch '{branch}', using default date: {default_start_date}")
+            print(f'📊 Processing {len(date_list)} dates from {last_date} to {today}')
+            
+            # Collect all data for bulk upsert
+            all_prepared_rows = []
+            
+            for i, date in enumerate(sorted(date_list), 1):
+                print(f'📅 Processing date {i}/{len(date_list)}: {date}')
+                
+                query_get_history = f"""
+                select
+                    full_name,
+                    date_base,
+                    history_list,
+                    if(dist_hist = '','no_runs',dist_hist) as dist_hist,
+                    suite_folder,
+                    test_name,
+                    build_type,
+                    branch,
+                    owners,
+                    first_run,
+                    last_run
 
-        last_date = last_datetime.strftime('%Y-%m-%d')
-
-        print(f'Last history date: {last_date}')
-        print(f'Default start date: {default_start_date}')
-        
-        # Getting history for dates >= last_date
-        today = datetime.date.today()
-        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
-        print(f'Will process {len(date_list)} dates: from {min(date_list)} to {max(date_list)}')
-        
-        for date in sorted(date_list):
-            print(f'\n--- Processing date: {date} ---')
-            query_get_history = f"""
-
-        select
-            full_name,
-            date_base,
-            history_list,
-            if(dist_hist = '','no_runs',dist_hist) as dist_hist,
-            suite_folder,
-            test_name,
-            build_type,
-            branch,
-            owners,
-            first_run,
-            last_run
-
-        from (
-            select
-                full_name,
-                date_base,
-                AGG_LIST(status) as history_list ,
-                String::JoinFromList( ListSort(AGG_LIST_DISTINCT(status)) ,',') as dist_hist,
-                suite_folder,
-                test_name,
-                owners,
-                build_type,
-                branch,
-                min(run_timestamp) as first_run,
-                max(run_timestamp) as last_run
-            from (
-                select * from (
-
-                    select distinct
+                from (
+                    select
                         full_name,
+                        date_base,
+                        AGG_LIST(status) as history_list ,
+                        String::JoinFromList( ListSort(AGG_LIST_DISTINCT(status)) ,',') as dist_hist,
                         suite_folder,
                         test_name,
                         owners,
-                        Date('{date}') as date_base,
-                        '{build_type}' as  build_type,
-                        '{branch}' as  branch
-                    from  `test_results/analytics/testowners`
-                    where run_timestamp_last >= Date('{date}') - Interval('P30D')
-                ) as test_and_date
-                left JOIN (
+                        build_type,
+                        branch,
+                        min(run_timestamp) as first_run,
+                        max(run_timestamp) as last_run
+                    from (
+                        select * from (
+       
+                            select distinct
+                                full_name,
+                                suite_folder,
+                                test_name,
+                                owners,
+                                Date('{date}') as date_base,
+                                '{build_type}' as  build_type,
+                                '{branch}' as  branch
+                            from  `{testowners_table}` 
+                        ) as test_and_date
+                        left JOIN (
+                            
+                            select
+                                suite_folder || '/' || test_name as full_name,
+                                run_timestamp,
+                                status
+                            from  `{test_runs_table}`
+                            where
+                                run_timestamp <= Date('{date}') + Interval("P1D")
+                                and run_timestamp >= Date('{date}') - 2*Interval("P1D") 
 
-                    select
-                        suite_folder || '/' || test_name as full_name,
-                        run_timestamp,
-                        status
-                    from  `test_results/test_runs_column`
-                    where
-                        run_timestamp <= Date('{date}') + Interval("P1D")
-                        and run_timestamp >= Date('{date}') {'' if history_for_n_day==1 else  f'-{history_for_n_day}*Interval("P1D")'}
-                        and job_name in (
-                            'Nightly-run',
-                            'Regression-run',
-                            'Regression-run_Large',
-                            'Regression-run_Small_and_Medium',
-                            'Regression-run_compatibility',
-                            'Regression-whitelist-run',
-                            'Postcommit_relwithdebinfo',
-                            'Postcommit_asan'
-                        )
-                        and build_type = '{build_type}'
-                        and branch = '{branch}'
-                    order by full_name,run_timestamp desc
-
-                ) as hist
-                ON test_and_date.full_name=hist.full_name
-            )
-            GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
-        )
+                                and job_name in (
+                                    'Nightly-run',
+                                    'Regression-run',
+                                    'Regression-run_Large',
+                                    'Regression-run_Small_and_Medium',
+                                    'Regression-run_compatibility',
+                                    'Regression-whitelist-run',
+                                    'Postcommit_relwithdebinfo', 
+                                    'Postcommit_asan'
+                                ) 
+                                and build_type = '{build_type}'
+                                and branch = '{branch}'
+                            order by full_name,run_timestamp desc
+                            
+                        ) as hist
+                        ON test_and_date.full_name=hist.full_name
+                    )
+                    GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
+                )
             """
-            query = ydb.ScanQuery(query_get_history, {})
-            # start transaction time
-            start_time = time.time()
-            it = driver.table_client.scan_query(query)
-            # end transaction time
-
-            results = []
-            prepared_for_update_rows = []
-            while True:
-                try:
-                    result = next(it)
-                    results = results + result.result_set.rows
-                except StopIteration:
-                    break
-            end_time = time.time()
-            print(f'Transaction duration: {end_time - start_time:.2f}s')
-
-            print(f'History data captured: {len(results)} rows')
-            if len(results) == 0:
-                print(f'⚠ No test data found for date {date} - this might be normal for new branches')
-            else:
-                print(f'✓ Successfully found test data for date {date}')
                 
-            for row in results:
-                row['count'] = dict(zip(list(row['history_list']), [list(
-                    row['history_list']).count(i) for i in list(row['history_list'])]))   
-                prepared_for_update_rows.append({
-                    'suite_folder': row['suite_folder'],
-                    'test_name': row['test_name'],
-                    'full_name': row['full_name'],
-                    'date_window': row['date_base'],
-                    'days_ago_window': history_for_n_day,
-                    'build_type': row['build_type'],
-                    'branch': row['branch'],
-                    'first_run': row['first_run'],
-                    'last_run': row['last_run'],
-                    'history': ','.join(row['history_list']).encode('utf8'),
-                    'history_class': row['dist_hist'],
-                    'pass_count': row['count'].get('passed', 0),
-                    'mute_count': row['count'].get('mute', 0),
-                    'fail_count': row['count'].get('failure', 0),
-                    'skip_count': row['count'].get('skipped', 0),
-                })
-            print(f'Upserting history for date {date}...')
-            with ydb.SessionPool(driver) as pool:
+                results = ydb_wrapper.execute_scan_query(query_get_history, query_name="get_flaky_test_history_for_date")
+                print(f'📈 History data captured, {len(results)} rows')
+                
+                # Prepare data for upsert
+                for row in results:
+                    row['count'] = dict(zip(list(row['history_list']), [list(
+                        row['history_list']).count(i) for i in list(row['history_list'])]))   
+                    all_prepared_rows.append({
+                        'suite_folder': row['suite_folder'],
+                        'test_name': row['test_name'],
+                        'full_name': row['full_name'],
+                        'date_window': row['date_base'],
+                        'days_ago_window': history_for_n_day,
+                        'build_type': row['build_type'],
+                        'branch': row['branch'],
+                        'first_run': row['first_run'],
+                        'last_run': row['last_run'],
+                        'history': ','.join(row['history_list']).encode('utf8'),
+                        'history_class': row['dist_hist'],
+                        'pass_count': row['count'].get('passed', 0),
+                        'mute_count': row['count'].get('mute', 0),
+                        'fail_count': row['count'].get('failure', 0),
+                        'skip_count': row['count'].get('skipped', 0),
+                    })
+            
+            # Insert all data in one batch
+            if all_prepared_rows:
+                print(f'💾 Upserting {len(all_prepared_rows)} rows of history data')
+                
+                # Prepare column types for bulk upsert
+                column_types = (
+                    ydb.BulkUpsertColumns()
+                    .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                    .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                    .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
+                    .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
+                    .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
+                    .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                )
+                
+                ydb_wrapper.bulk_upsert_batches(table_path, all_prepared_rows, column_types, batch_size=1000)
+                
+                print('✅ History updated successfully')
+            else:
+                print('ℹ️  No data to upload')
 
-                create_tables(pool, table_path)
-                full_path = posixpath.join(DATABASE_PATH, table_path)
-                print(f'Upserting {len(prepared_for_update_rows)} rows to {full_path}')
-                bulk_upsert(driver.table_client, full_path,
-                            prepared_for_update_rows)
-                print(f'✓ Successfully upserted data for date {date}')
-
-        print('\n' + '='*50)
-        print('✓ Flaky tests history collection completed successfully!')
-        print(f'  Branch: {branch}')
-        print(f'  Build type: {build_type}')
-        print(f'  Date range: {min(date_list)} to {max(date_list)}')
-        print(f'  Total dates processed: {len(date_list)}')
-        print('='*50)
+        except Exception as e:
+            print(f'❌ Script failed: {e}')
+            raise
 
 
 if __name__ == "__main__":

@@ -135,7 +135,7 @@ message ImportFromFsSettings {
         Or, if the export contains the database objects list, you may specify the database object name,
         and the FS prefix will be looked up in the database objects list by the import procedure
         */
-        string source_path = 3;
+        string source_path = 1;
 
         // Database path to a database object to import the item to
         // Resolved relative to the default destination_path
@@ -166,12 +166,12 @@ message ImportFromFsSettings {
 
     // Destination path to restore paths inside database
     // Default value is database root
-    string destination_path = 8;
+    string destination_path = 7;
 
     // Settings how data is encrypted.
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
-    Ydb.Export.EncryptionSettings encryption_settings = 9;
+    Ydb.Export.EncryptionSettings encryption_settings = 8;
 }
 
 message ImportFromFsResult {

@@ -188,7 +188,7 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime64(const std::shared_pt
         if (baseValue % multiplier) {
             throw parquet::ParquetException(TStringBuilder()
                 << "datetime in parquet should have integer amount of seconds, have: "
-                    << baseValue * 1.0 / multiplier);
+                << baseValue * 1.0 / multiplier);
         }
         const i64 v = baseValue / static_cast<i64>(multiplier);
         builder.Add(NUdf::TBlockItem(v));

@@ -147,7 +147,7 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<
 
         const i64 baseValue = item.As<i64>();
         if (baseValue < minDatetime64 * multiplier || baseValue > maxDatetime64 * multiplier) {
-            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [" << minDatetime64 << ", " << maxDatetime64 << "]: " << baseValue / multiplier);
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [" << minDatetime64 << ", " << maxDatetime64 << "] (seconds): " << baseValue / multiplier << " (seconds)");
         }
 
         if (baseValue % multiplier) {

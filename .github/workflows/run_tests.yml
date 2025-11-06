@@ -117,7 +117,7 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, fat-worker] 
+    runs-on: [ self-hosted,auto-provisioned,fat-worker] 
     strategy:
       fail-fast: false
       matrix:

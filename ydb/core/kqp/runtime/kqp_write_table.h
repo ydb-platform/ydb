@@ -68,7 +68,7 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual void Fill(const IDataBatchPtr& data, std::optional<size_t> limit = std::nullopt) = 0;
+    virtual void Fill(const IDataBatchPtr& data, const std::vector<bool>& mask = {}) = 0;
     virtual void Fill(const TRowsRef& data) = 0;
     virtual IDataBatchPtr Flush() = 0;
 };

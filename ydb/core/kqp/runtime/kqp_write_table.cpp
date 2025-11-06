@@ -1000,34 +1000,33 @@ public:
             , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    void Fill(const IDataBatchPtr& data, std::optional<size_t> limit) override {
+    void Fill(const IDataBatchPtr& data, const std::vector<bool>& mask) override {
         YQL_ENSURE(RowBatcher.IsEmpty());
         auto* batch = dynamic_cast<TRowBatch*>(data.Get());
         AFL_ENSURE(batch);
         const auto& rows = batch->GetRows();
-        AddDataShard(
-            rows.begin(),
-            limit
-                ? rows.begin() + std::min(*limit, rows.Size())
-                : rows.end());
+        AddDataShard(rows.begin(), rows.end(), mask);
     }
 
     void Fill(const TRowsRef& data) override {
         YQL_ENSURE(RowBatcher.IsEmpty());
-        AddDataShard(data.begin(), data.end());
+        AddDataShard(data.begin(), data.end(), {});
     }
 
     void AddDataShard(
             TVector<TConstArrayRef<TCell>>::const_iterator begin,
-            TVector<TConstArrayRef<TCell>>::const_iterator end) {
+            TVector<TConstArrayRef<TCell>>::const_iterator end,
+            const std::vector<bool>& mask) {
         const size_t columnsCount = ColumnsMapping.size();
         std::vector<TCell> cells(columnsCount);
         for (auto it = begin; it != end; ++it) {
-            const auto& row = *it;
-            for (size_t index = 0; index < columnsCount; ++index) {
-                cells[index] = row[ColumnsMapping[index]];
+            if (mask.empty() || mask[it - begin]) {
+                const auto& row = *it;
+                for (size_t index = 0; index < columnsCount; ++index) {
+                    cells[index] = row[ColumnsMapping[index]];
+                }
+                RowBatcher.AddRow(cells);
             }
-            RowBatcher.AddRow(cells);
         }
     }
 
@@ -1249,12 +1248,16 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
     };
 
     const auto primaryKey = createPrimaryKey(row);
+    const auto secondaryKey = row.first(SecondaryKeyColumns.size());
     const auto iterPrimary = PrimaryToSecondary.find(primaryKey);
 
     // In case on unique indexes NULL != NULL,
     // so we don't need to check if rows with NULLs are unique. 
-    const bool rowHasNull = std::any_of(row.begin(), row.end(), [](const TCell& cell) { return cell.IsNull(); });
-    if (rowHasNull) {
+    const bool secondaryKeyHasNull = std::any_of(
+        secondaryKey.begin(),
+        secondaryKey.end(),
+        [](const TCell& cell) { return cell.IsNull(); });
+    if (secondaryKeyHasNull) {
         // Can't conflict with other keys
         if (iterPrimary != PrimaryToSecondary.end()) {
             const auto& oldSecondaryKey = TConstArrayRef<TCell>(Cells.at(iterPrimary->second)).first(SecondaryKeyColumns.size());
@@ -1262,7 +1265,6 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
             PrimaryToSecondary.erase(primaryKey);
         }
     } else {
-        const auto& secondaryKey = row.first(SecondaryKeyColumns.size());
         const auto iterSecondary = SecondaryToPrimary.find(secondaryKey);
 
         if (iterSecondary != SecondaryToPrimary.end()) {

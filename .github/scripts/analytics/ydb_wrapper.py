@@ -833,6 +833,19 @@ class YDBWrapper:
         else:
             raise ValueError(f"Unknown database: {database}. Use 'main' or 'statistics'")
     
+    def get_flag(self, flag_name: str, default: Any = None) -> Any:
+        """Get flag value from configuration
+        
+        Args:
+            flag_name: Flag name (e.g., 'enable_backup_write')
+            default: Default value if flag is not found
+        
+        Returns:
+            Flag value or default if not found
+        """
+        flags = getattr(self, '_flags', {})
+        return flags.get(flag_name, default)
+    
     def get_available_tables(self, database: str = "main") -> dict:
         """Get dictionary of all available tables
         

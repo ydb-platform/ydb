@@ -328,7 +328,7 @@ def main():
             upload_to_table(wrapper, test_table_path, main_rows, main_column_types, "main table")
             
             # Dual write to backup table if enabled in config
-            enable_backup_write = getattr(wrapper, '_flags', {}).get('enable_backup_write', False)
+            enable_backup_write = wrapper.get_flag('enable_backup_write', False)
             
             if enable_backup_write:
                 try:

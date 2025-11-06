@@ -95,9 +95,10 @@ void TConsumerActor::Bootstrap() {
     LOG_D("Start MLP consumer " << Config.GetName());
     Become(&TConsumerActor::StateInit);
 
-    // TODO MLP Update consumer config and reteintion
+    // TODO MLP Update consumer config
+    LOG_D("Initializing with consumer config: " << Config.ShortDebugString());
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
-    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+    Storage->SetMaxMessageReceiveCount(Config.GetMaxProcessingAttempts());
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(static_cast<ui64>(EKvCookie::InitialRead));
@@ -454,7 +455,7 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
         if (visibilityDeadline == TInstant::Zero()) {
-            visibilityDeadline = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds()).ToDeadLine(now);
+            visibilityDeadline = TDuration::Seconds(Config.GetDefaultProcessingTimeoutSeconds()).ToDeadLine(now);
         }
 
         std::deque<ui64> messages;

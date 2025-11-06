@@ -768,6 +768,9 @@ private:
                 insert({TSchema::TxRejectedByOutOfStorage::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return TCell::Make<ui64>(stats.GetTxRejectedBySpace());
                 }});
+                insert({TSchema::TxCompleteLag::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetTxCompleteLagMsec() * 1000);
+                }});
                 insert({TSchema::LastTtlRunTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return stats.HasTtlStats() ? TCell::Make<ui64>(stats.GetTtlStats().GetLastRunTime() * 1000) : TCell();
                 }});

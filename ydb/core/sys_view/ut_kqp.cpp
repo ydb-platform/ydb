@@ -2804,6 +2804,7 @@ R"(CREATE TABLE `test_show_create` (
                 TabletId,
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
+                TxCompleteLag,
                 FollowerId,
                 LocksAcquired,
                 LocksWholeShard,
@@ -2814,7 +2815,7 @@ R"(CREATE TABLE `test_show_create` (
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-        TYsonFieldChecker check(ysonString, 27);
+        TYsonFieldChecker check(ysonString, 28);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -2838,6 +2839,7 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
+        check.Int64(0u); // TxCompleteLag
         check.Uint64(0u); // FollowerId
         check.Uint64(0u); // LocksAcquired
         check.Uint64(0u); // LocksWholeShard

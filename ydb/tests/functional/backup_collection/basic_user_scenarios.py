@@ -206,14 +206,7 @@ class Snapshot:
         self.tables[table_name] = snapshot
 
     def get_table(self, table_name: str) -> Optional[TableSnapshot]:
-        """
-        Get snapshot for a specific table.
-
-        Warning:
-            When using basename only (without full path), if multiple tables
-            with the same name exist in different directories, this method
-            returns the FIRST match found. This may lead to unexpected results!
-        """
+        """Get snapshot for a specific table."""
         if table_name in self.tables:
             return self.tables[table_name]
         base_name = os.path.basename(table_name)
@@ -853,27 +846,6 @@ class BackupBuilder:
         self._backup_type = BackupType.INCREMENTAL
         return self
 
-    # def execute(self) -> Tuple[bool, str]:
-    #     """Execute the backup and return success status and snapshot name."""
-    #     time.sleep(1.1)
-
-    #     if self._backup_type == BackupType.INCREMENTAL:
-    #         sql = f"BACKUP `{self.collection}` INCREMENTAL;"
-    #     else:
-    #         sql = f"BACKUP `{self.collection}`;"
-
-    #     res = self.test._execute_yql(sql)
-    #     if res.exit_code != 0:
-    #         out = (res.std_out or b"").decode('utf-8', 'ignore')
-    #         err = (res.std_err or b"").decode('utf-8', 'ignore')
-    #         raise AssertionError(f"BACKUP failed: code={res.exit_code} STDOUT: {out} STDERR: {err}")
-
-    #     self.test.wait_for_collection_has_snapshot(self.collection, timeout_s=self._timeout)
-    #     kids = sorted(self.test.get_collection_children(self.collection))
-    #     snap_name = kids[-1] if kids else None
-
-    #     return True, snap_name
-
     def execute(self) -> BackupResult:
         """Execute the backup and return result."""
         time.sleep(1.1)
@@ -946,46 +918,6 @@ class RestoreBuilder:
         """Set timeout for restore operation."""
         self._timeout = seconds
         return self
-
-    # def execute(self) -> Dict:
-    #     """Execute restore and return results."""
-    #     # Remove tables if specified
-    #     if self._remove_tables:
-    #         self.test._try_remove_tables(self._remove_tables)
-
-    #     # Track restore operations BEFORE restore
-    #     start_total, start_success, _ = self.test._count_restore_operations()
-
-    #     # Execute restore
-    #     res = self.test._execute_yql(f"RESTORE `{self._collection}`;")
-
-    #     if self._should_fail:
-    #         assert res.exit_code != 0, "Expected RESTORE to fail but it succeeded"
-    #         return {'expected_failure': True}
-
-    #     assert res.exit_code == 0, f"RESTORE failed: {res.std_err}"
-
-    #     if self._use_polling:
-    #         # Poll for completion
-    #         ok, info = self.test.poll_restore_by_count(
-    #             start_total=start_total,
-    #             start_success=start_success,
-    #             timeout_s=self._timeout,
-    #             poll_interval=2.0,
-    #             verbose=True
-    #         )
-
-    #         if not ok:
-    #             raise AssertionError(f"Timeout waiting restore. Diagnostics: {info}")
-
-    #     # Verify if expected snapshot provided
-    #     result = {'success': True}
-
-    #     if self._expected_snapshot:
-    #         verified = self._verify_restored_data()
-    #         result.update(verified)
-
-    #     return result
 
     def execute(self) -> RestoreResult:
         """Execute restore and return results."""
@@ -1150,31 +1082,6 @@ class BackupTestOrchestrator:
 
         self.test.wait_for_collection(self.collection, timeout_s=30)
         return self
-
-    # def stage(self, backup_type: BackupType = BackupType.FULL,
-    #           description: str = "") -> BackupStage:
-    #     """Execute a complete backup stage with snapshot capture."""
-    #     if isinstance(backup_type, str):
-    #         backup_type = BackupType(backup_type)
-
-    #     snapshot = self.snapshot_capture.capture_tables(self.tables)
-
-    #     success, snap_name = BackupBuilder(self.test, self.collection).full().execute() \
-    #         if backup_type == BackupType.FULL else \
-    #         BackupBuilder(self.test, self.collection).incremental().execute()
-
-    #     self.created_snapshots.append(snap_name)
-    #     snapshot.name = snap_name
-
-    #     stage = BackupStage(
-    #         snapshot=snapshot,
-    #         backup_type=backup_type,
-    #         stage_number=len(self.stages) + 1,
-    #         description=description
-    #     )
-    #     self.stages.append(stage)
-
-    #     return stage
 
     def stage(self, backup_type: BackupType = BackupType.FULL, description: str = "") -> BackupStage:
         """Execute a complete backup stage with snapshot capture."""

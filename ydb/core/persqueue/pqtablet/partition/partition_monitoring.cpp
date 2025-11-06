@@ -29,7 +29,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         if (CurrentStateFunc() == &TThis::StateInit) {
             return "Init";
         } else if (CurrentStateFunc() == &TThis::StateIdle) {
-            return "Idle";
+            return KVWriteInProgress ? "Write" : "Idle";
         } else {
             return "Unknown";
         }

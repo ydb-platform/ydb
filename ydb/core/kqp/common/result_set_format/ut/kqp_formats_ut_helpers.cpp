@@ -256,8 +256,6 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 
                 auto innerArray = array;
                 auto innerType = itemType;
-
-                NUdf::TUnboxedValue value;
                 int depth = 0;
 
                 while (innerArray->type_id() == arrow::Type::STRUCT) {
@@ -265,8 +263,11 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                     YQL_ENSURE(structArray->num_fields() == 1, "Unexpected count of fields");
 
                     if (structArray->IsNull(row)) {
-                        value = NUdf::TUnboxedValuePod();
-                        break;
+                        NUdf::TUnboxedValue value;
+                        for (int i = 0; i < depth; ++i) {
+                            value = value.MakeOptional();
+                        }
+                        return value;
                     }
 
                     innerType = static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType();
@@ -274,10 +275,10 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                     ++depth;
                 }
 
-                auto wrap = NeedWrapByExternalOptional(innerType);
-                if (wrap || !innerArray->IsNull(row)) {
+                NUdf::TUnboxedValue value;
+                if (NeedWrapByExternalOptional(innerType) || !innerArray->IsNull(row)) {
                     value = ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
-                    if (wrap) {
+                    if (NeedWrapByExternalOptional(innerType)) {
                         --depth;
                     }
                 }

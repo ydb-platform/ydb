@@ -182,17 +182,18 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TOptionalType* opt
         ++depth;
     }
 
+    // For types without native validity bitmap (e.g., Variant, Null) we need to wrap them in an additional struct layer
+    // Furthermore, other singular types (e.g., Void, EmptyList, EmptyDict) also need to wrap (from YQL-15332)
+    // Thus, the depth == 2 for Optional<Variant<T, F, ...>> type
     if (NeedWrapByExternalOptional(currentType)) {
         ++depth;
     }
 
     std::shared_ptr<arrow::DataType> innerArrowType = NFormats::GetArrowType(currentType);
-
-    for (ui32 i = 1; i < depth; ++i) {
-        auto field = std::make_shared<arrow::Field>("opt", innerArrowType, false);
-        innerArrowType = std::make_shared<arrow::StructType>(std::vector<std::shared_ptr<arrow::Field>>{field});
+    while (depth > 1) {
+        innerArrowType = arrow::struct_({std::make_shared<arrow::Field>("opt", innerArrowType, true)});
+        --depth;
     }
-
     return innerArrowType;
 }
 
@@ -619,6 +620,9 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
                 ++depth;
             }
 
+            // For types without native validity bitmap (e.g., Variant, Null) we need to wrap them in an additional struct layer
+            // Furthermore, other singular types (e.g., Void, EmptyList, EmptyDict) also need to wrap (from YQL-15332)
+            // Thus, the depth == 2 for Optional<Variant<T, F, ...>> type
             if (NeedWrapByExternalOptional(innerType)) {
                 ++depth;
             }

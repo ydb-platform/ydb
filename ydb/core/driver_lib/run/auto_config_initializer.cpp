@@ -227,7 +227,7 @@ namespace NKikimr::NAutoConfigInitializer {
         return servicePools;
     }
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode) {
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode, bool tinyMode) {
         config->SetUseAutoConfig(true);
         config->ClearExecutor();
 
@@ -239,7 +239,7 @@ namespace NKikimr::NAutoConfigInitializer {
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
-            scheduler->SetResolution(64);
+            scheduler->SetResolution(tinyMode ? 1024 : 64);
             scheduler->SetSpinThreshold(0);
             scheduler->SetProgressThreshold(10'000);
         }

@@ -1354,7 +1354,7 @@ public:
 
     class TAppConfigFieldsPreserver {
     public:
-        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig)
             : AppConfig(appConfig)
             , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
             , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
@@ -1461,6 +1461,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
@@ -1469,6 +1470,7 @@ public:
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
+        tinyMode = CommonAppOptions.TinyMode;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();

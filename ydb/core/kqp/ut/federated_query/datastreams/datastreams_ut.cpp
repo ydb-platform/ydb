@@ -2931,7 +2931,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 5,
+                .ListSplitsCount = 4,
                 .ValidateListSplitsArgs = false
             });
 

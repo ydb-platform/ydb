@@ -47,7 +47,7 @@ BELONGS ya.make
 
 KEEP     MIT                  4b22d8fd72d8f6c6211edffd2b6983d7
 BELONGS ya.make
-FILE_INCLUDE LICENSE found in files: utf8_validity.cc at line 4, utf8_validity.h at line 4
+FILE_INCLUDE LICENSE found in files: utf8_range.c at line 4, utf8_validity.h at line 4
     License text:
         // Use of this source code is governed by an MIT-style
         // license that can be found in the LICENSE file or at
@@ -58,7 +58,7 @@ FILE_INCLUDE LICENSE found in files: utf8_validity.cc at line 4, utf8_validity.h
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        utf8_validity.cc [3:5]
+        utf8_range.c [3:5]
         utf8_validity.h [3:5]
 
 KEEP     Protobuf-License     77b55cb8215e726b6ae7c1cf484bc45f

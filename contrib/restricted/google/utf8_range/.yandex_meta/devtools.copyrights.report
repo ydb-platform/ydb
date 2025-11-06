@@ -33,6 +33,17 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 2262ded0743695851a47ffc3df0bc8c1
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Google LLC
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utf8_range.c [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 7ddb2995f48012001146c0eb94d23367
 BELONGS ya.make
     License text:
@@ -53,5 +64,4 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        utf8_validity.cc [1:1]
         utf8_validity.h [1:1]

@@ -42,7 +42,6 @@ struct TEvPrivate {
         EvPeriodicWakeup,
         EvReportBaseStatistics,
         EvReportExecutorStatistics,
-        EvBuildStatisticsPipe,
         EvEviction,
         EvS3Settings,
         EvExport,
@@ -82,7 +81,7 @@ struct TEvPrivate {
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
-
+        
         EvReportScanDiagnostics,
         EvReportScanIteratorDiagnostics,
 
@@ -295,6 +294,7 @@ struct TEvPrivate {
     };
 
     struct TEvReportBaseStatistics: public TEventLocal<TEvReportBaseStatistics, EvReportBaseStatistics> {};
+
     struct TEvReportExecutorStatistics: public TEventLocal<TEvReportExecutorStatistics, EvReportExecutorStatistics> {};
 
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
@@ -354,7 +354,7 @@ struct TEvPrivate {
             return WritesBuffer;
         }
     };
-
+    
     struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
         TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
             : RequestMessage(std::move(requestMessage))

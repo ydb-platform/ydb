@@ -377,6 +377,8 @@ private:
     void ProcessUserActionAndTxPendingCommit(TMessage& msg,
                                              TEvKeyValue::TEvRequest* request);
 
+    bool WritingCycleDoesNotExceedTheLimits() const;
+
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);
     void PushFrontDistrTx(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> event);

@@ -122,7 +122,7 @@ static const TDuration WAKE_TIMEOUT = TDuration::Seconds(5);
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 static const TDuration MIN_UPDATE_COUNTERS_DELAY = TDuration::MilliSeconds(300);
 static const ui32 MAX_USERS = 1000;
-//static const ui32 MAX_KEYS = 10000;
+static const ui32 MAX_KEYS = 10000;
 static const ui32 MAX_TXS = 1000;
 static const ui32 MAX_WRITE_CYCLE_SIZE = 16_MB;
 
@@ -2404,6 +2404,11 @@ auto TPartition::ProcessUserActionAndTxEvent(TMessage& msg,
     return PreProcessUserActionOrTransaction(msg, affectedSourceIdsAndConsumers);
 }
 
+bool TPartition::WritingCycleDoesNotExceedTheLimits() const
+{
+    return WriteCycleSizeEstimate < MAX_WRITE_CYCLE_SIZE && WriteKeysSizeEstimate < MAX_KEYS;
+}
+
 void TPartition::ProcessUserActionAndTxPendingCommits() {
     CurrentBatchSize = 0;
 
@@ -2412,7 +2417,7 @@ void TPartition::ProcessUserActionAndTxPendingCommits() {
         PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
 
-    while (!UserActionAndTxPendingCommit.empty()) {
+    while (!UserActionAndTxPendingCommit.empty() && WritingCycleDoesNotExceedTheLimits()) {
         auto& front = UserActionAndTxPendingCommit.front();
         auto state = ECommitState::Committed;
 

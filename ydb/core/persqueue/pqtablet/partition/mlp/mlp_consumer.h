@@ -18,12 +18,10 @@ using namespace NActors;
 
 class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
-    friend class TSerializer;
-
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
 
 public:
-    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config);
+    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config, std::optional<TDuration> reteintion);
 
     void Bootstrap();
     void PassAway() override;
@@ -42,8 +40,10 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
+    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
+
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
-    void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
+    void Handle(TEvKeyValue::TEvResponse::TPtr&);
 
     void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
@@ -61,7 +61,7 @@ private:
     void ProcessEventQueue();
     bool FetchMessagesIfNeeded();
     void ReadSnapshot();
-    void PersistSnapshot();
+    void Persist();
 
     void CommitIfNeeded();
     
@@ -85,6 +85,9 @@ private:
     std::deque<TResult> PendingCommitQueue;
     std::deque<TResult> PendingUnlockQueue;
     std::deque<TResult> PendingChangeMessageDeadlineQueue;
+
+    ui64 LastWALIndex = 0;
+    bool HasSnapshot = false;
 };
 
 }

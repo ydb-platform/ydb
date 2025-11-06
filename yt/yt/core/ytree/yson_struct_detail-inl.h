@@ -1172,7 +1172,7 @@ void TYsonStructParameter<TValue>::WriteMemberSchema(
         .BeginMap()
             .Item("name").Value(Key_)
             .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
-                fluent.Item("cpp_type_name").Value(TypeName<TValueType>());
+                fluent.Item("cpp_type_name").Value(TypeName<TValue>());
                 fluent.Item("containing_struct_cpp_type_name").Value(TypeName(RegisteringStructTypeInfo_));
             })
             .DoIf(options.AddDefaultValues && !IsRequired(), [&] (auto fluent) {

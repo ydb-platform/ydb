@@ -2598,7 +2598,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TStringBuilder log; log << "PQ - create read proxy" << Endl;
         TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
@@ -5275,6 +5274,10 @@ void TPersQueue::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
+void TPersQueue::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
 template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
@@ -5360,6 +5363,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         default:
             return false;
     }

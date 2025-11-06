@@ -52,7 +52,7 @@ RETURNING *;
 
 ```yql
 UPDATE products
-SET price = price * 0.9 
+SET price = price * 0.9
 WHERE category = 'Electronics'
 RETURNING product_id, name, price AS new_price;
 ```

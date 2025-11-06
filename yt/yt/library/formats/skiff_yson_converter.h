@@ -131,7 +131,7 @@ Y_FORCE_INLINE void CheckIntSize(TValueType value);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::Formats
+} // namespace NYT::NFormats
 
 #define SKIFF_YSON_CONVERTER_INL_H_
 #include "skiff_yson_converter-inl.h"

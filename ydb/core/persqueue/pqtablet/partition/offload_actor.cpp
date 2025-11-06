@@ -30,6 +30,7 @@ class TOffloadActor
 {
 private:
     const ui32 Partition;
+    const TString Database;
     const NKikimrPQ::TOffloadConfig Config;
 
     TActorId Worker;
@@ -48,9 +49,12 @@ public:
         return NKikimrServices::TActivity::BACKUP_PQ_OFFLOAD_ACTOR;
     }
 
-    TOffloadActor(TActorId parentTablet, ui64 tabletId, ui32 partition, const NKikimrPQ::TOffloadConfig& config)
+    TOffloadActor(TActorId parentTablet, ui64 tabletId, ui32 partition,
+        const TString& database, const NKikimrPQ::TOffloadConfig& config
+    )
         : TBaseTabletActor(tabletId, parentTablet, NKikimrServices::CONTINUOUS_BACKUP)
         , Partition(partition)
+        , Database(database)
         , Config(config)
     {}
 
@@ -63,10 +67,11 @@ public:
     auto CreateWriterFactory() {
         return [=, this]() -> IActor* {
             if (Config.HasIncrementalBackup()) {
-                return NBackup::NImpl::CreateLocalTableWriter(TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
+                return NBackup::NImpl::CreateLocalTableWriter(
+                    Database, TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
             } else {
                 return NBackup::NImpl::CreateLocalTableWriter(
-                    TPathId::FromProto(Config.GetIncrementalRestore().GetDstPathId()),
+                    Database, TPathId::FromProto(Config.GetIncrementalRestore().GetDstPathId()),
                     NBackup::NImpl::EWriterType::Restore);
             }
         };
@@ -147,8 +152,10 @@ public:
     }
 };
 
-IActor* CreateOffloadActor(TActorId parentTablet, ui64 tabletId, TPartitionId partition, const NKikimrPQ::TOffloadConfig& config) {
-    return new TOffloadActor(parentTablet, tabletId, partition.OriginalPartitionId, config);
+IActor* CreateOffloadActor(TActorId parentTablet, ui64 tabletId,
+    TPartitionId partition, const TString& database, const NKikimrPQ::TOffloadConfig& config)
+{
+    return new TOffloadActor(parentTablet, tabletId, partition.OriginalPartitionId, database, config);
 }
 
 } // namespace NKikimr::NPQ

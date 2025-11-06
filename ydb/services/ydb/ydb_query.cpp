@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/query/service_query.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -30,43 +31,47 @@ TGRpcYdbQueryService::TGRpcYdbQueryService(NActors::TActorSystem *system,
 void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::Query;
     using namespace NQuery;
-
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     size_t proxyCounter = 0;
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_QUERY_METHOD
+#error SETUP_QUERY_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB, REQUEST_TYPE, AUDIT_MODE) \
-    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {  \
-        for (auto* cq: CQS) { \
-            MakeIntrusive<TGRpcRequest<IN, OUT, TGRpcYdbQueryService>>(this, &Service_, cq, \
-                [this, proxyCounter](NYdbGrpc::IRequestContextBase* ctx) { \
-                    NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-                    ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()], \
-                        new TGrpcRequestNoOperationCall<IN, OUT> \
-                            (ctx, &CB, TRequestAuxSettings { \
-                                .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
-                                .AuditMode = AUDIT_MODE, \
-                                .RequestType = NJaegerTracing::ERequestType::QUERY_##REQUEST_TYPE, \
-                            })); \
-                }, &Ydb::Query::V1::QueryService::AsyncService::Request ## NAME, \
-                #NAME, logger, getCounterBlock("query", #NAME))->Run(); \
-            ++proxyCounter; \
-        }  \
+
+#define SETUP_QUERY_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                          \
+        for (auto* cq: CQS) {                                                          \
+            SETUP_RUNTIME_EVENT_METHOD(                                                \
+                methodName,                                                            \
+                inputType,                                                             \
+                outputType,                                                            \
+                methodCallback,                                                        \
+                rlMode,                                                                \
+                requestType,                                                           \
+                YDB_API_DEFAULT_COUNTER_BLOCK(query, methodName),                      \
+                auditMode,                                                             \
+                COMMON,                                                                \
+                ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                  \
+                GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
+                cq,                                                                    \
+                nullptr,                                                               \
+                nullptr                                                                \
+            );                                                                         \
+            ++proxyCounter;                                                            \
+        }                                                                              \
     }
 
-    ADD_REQUEST(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, EXECUTEQUERY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, EXECUTESCRIPT, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, FETCHSCRIPTRESULTS, TAuditMode::NonModifying());
-    ADD_REQUEST(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, CREATESESSION, TAuditMode::NonModifying());
-    ADD_REQUEST(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, DELETESESSION, TAuditMode::NonModifying());
-    ADD_REQUEST(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, ATTACHSESSION, TAuditMode::NonModifying());
-    ADD_REQUEST(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, BEGINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, COMMITTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    ADD_REQUEST(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, ROLLBACKTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_QUERY_METHOD(ExecuteQuery, ExecuteQueryRequest, ExecuteQueryResponsePart, DoExecuteQuery, RLSWITCH(Rps), QUERY_EXECUTEQUERY, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_QUERY_METHOD(ExecuteScript, ExecuteScriptRequest, Ydb::Operations::Operation, DoExecuteScript, RLSWITCH(Rps), QUERY_EXECUTESCRIPT, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_QUERY_METHOD(FetchScriptResults, FetchScriptResultsRequest, FetchScriptResultsResponse, DoFetchScriptResults, RLSWITCH(Rps), QUERY_FETCHSCRIPTRESULTS, TAuditMode::NonModifying());
+    SETUP_QUERY_METHOD(CreateSession, CreateSessionRequest, CreateSessionResponse, DoCreateSession, RLSWITCH(Rps), QUERY_CREATESESSION, TAuditMode::NonModifying());
+    SETUP_QUERY_METHOD(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, DoDeleteSession, RLSWITCH(Rps), QUERY_DELETESESSION, TAuditMode::NonModifying());
+    SETUP_QUERY_METHOD(AttachSession, AttachSessionRequest, SessionState, DoAttachSession, RLSWITCH(Rps), QUERY_ATTACHSESSION, TAuditMode::NonModifying());
+    SETUP_QUERY_METHOD(BeginTransaction, BeginTransactionRequest, BeginTransactionResponse, DoBeginTransaction, RLSWITCH(Rps), QUERY_BEGINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_QUERY_METHOD(CommitTransaction, CommitTransactionRequest, CommitTransactionResponse, DoCommitTransaction, RLSWITCH(Rps), QUERY_COMMITTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_QUERY_METHOD(RollbackTransaction, RollbackTransactionRequest, RollbackTransactionResponse, DoRollbackTransaction, RLSWITCH(Rps), QUERY_ROLLBACKTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
 
-#undef ADD_REQUEST
+#undef SETUP_QUERY_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

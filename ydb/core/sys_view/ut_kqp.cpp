@@ -1287,7 +1287,7 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
     }
 
     Y_UNIT_TEST(ShowCreateTable) {
-        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableFulltextIndex = true});
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1325,6 +1325,17 @@ R"(CREATE TEMPORARY TABLE `test_show_create` (
                 INDEX Index1 GLOBAL USING vector_kmeans_tree ON (`Value3`) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2)
             );
             ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Key2, Value1, Value2);
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext ON (Text) WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_min=3)
+            );
+            ALTER TABLE test_show_create ADD INDEX Index2 GLOBAL SYNC ON (Data);
         )", "test_show_create");
 
         checker.CheckShowCreateTable(R"(
@@ -2793,6 +2804,7 @@ R"(CREATE TABLE `test_show_create` (
                 TabletId,
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
+                TxCompleteLag,
                 FollowerId,
                 LocksAcquired,
                 LocksWholeShard,
@@ -2803,7 +2815,7 @@ R"(CREATE TABLE `test_show_create` (
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-        TYsonFieldChecker check(ysonString, 27);
+        TYsonFieldChecker check(ysonString, 28);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -2827,6 +2839,7 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
+        check.Int64(0); // TxCompleteLag
         check.Uint64(0u); // FollowerId
         check.Uint64(0u); // LocksAcquired
         check.Uint64(0u); // LocksWholeShard
@@ -3688,7 +3701,7 @@ R"(CREATE TABLE `test_show_create` (
                 UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
                 const auto& columns = systemView.GetTableColumns();
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
                 UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
                 UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -3708,7 +3721,7 @@ R"(CREATE TABLE `test_show_create` (
                 const auto& columns = table.GetTableColumns();
                 const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
                 UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
                 UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 

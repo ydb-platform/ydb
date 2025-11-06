@@ -860,6 +860,15 @@ private:
             }
 
             Types_.DebugPositions = (name == "DebugPositions");
+        } else if (name == "UseCanonicalLibrarySuffix" || name == "DisableUseCanonicalLibrarySuffix") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            if (auto modules = dynamic_cast<TModuleResolver*>(Types_.Modules.get())) {
+                modules->SetUseCanonicalLibrarySuffix(name == "UseCanonicalLibrarySuffix");
+            }
         } else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
@@ -1089,6 +1098,12 @@ private:
                 return false;
             }
             Types_.EnableLineage = ("EnableLineage" == name);
+        } else if (name == "EnableStandaloneLineage" || name == "DisableStandaloneLineage") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
         } else if (name == "Layer") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));

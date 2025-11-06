@@ -399,16 +399,25 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         });
         opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&OperationId).DefaultValue("dummy_op");
         opts.AddLongOption("capture", "Write query metadata to QStorage").NoArgument().Handler0([this]() {
-            if (EQPlayerMode::Replay == QPlayerMode) {
-                throw yexception() << "replay and capture options can't be used simultaneously";
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
             }
             QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
+        });
+        opts.AddLongOption("capture-full", "Keep actual data needed for query run (input tables & attached files)").NoArgument().Handler0([this]() {
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
+            }
+            QPlayerMode = EQPlayerMode::Capture;
+            QPlayerCaptureMode = EQPlayerCaptureMode::Full;
         });
         opts.AddLongOption("replay", "Read query metadata from QStorage").NoArgument().Handler0([this]() {
-            if (EQPlayerMode::Capture == QPlayerMode) {
-                throw yexception() << "replay and capture options can't be used simultaneously";
+            if (EQPlayerMode::None != QPlayerMode) {
+                throw yexception() << "QPlayer mode options (capture/capture-full/replay) can't be used simultaneously";
             }
             QPlayerMode = EQPlayerMode::Replay;
+            QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
         });
         opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
             GatewaysPatch = TFileInput(file).ReadAll();
@@ -452,14 +461,22 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
         }
         if (EQPlayerMode::Replay == QPlayerMode) {
             try {
-                QPlayerContext = TQContext(QPlayerStorage_->MakeReader(OperationId, {}));
+                auto reader = QPlayerStorage_->MakeReader(OperationId, {});
+                if (Mode == ERunMode::Run) {
+                    // Check replay data to contain full capture
+                    if (HasFullCapture(reader)) {
+                        QPlayerCaptureMode = EQPlayerCaptureMode::Full;
+                    }
+                }
+
+                QPlayerContext = TQContext(std::move(reader), QPlayerCaptureMode);
             } catch (...) {
                 throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
             }
             ProgramFile = "-replay-";
             ProgramText = "";
-        } else if (EQPlayerMode::Capture == QPlayerMode) {
-            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}));
+        } else {
+            QPlayerContext = TQContext(QPlayerStorage_->MakeWriter(OperationId, {}), QPlayerCaptureMode);
         }
     }
     if (EQPlayerMode::Replay != QPlayerMode && !ProgramText) {
@@ -471,6 +488,10 @@ void TFacadeRunOptions::Parse(int argc, const char* argv[]) {
 
     if (Mode >= ERunMode::Validate && GatewayTypes.empty()) {
         throw yexception() << "At least one gateway from the list " << JoinSeq(",", SupportedGateways_).Quote() << " must be specified";
+    }
+
+    if (Mode == ERunMode::Run && QPlayerMode == EQPlayerMode::Replay && QPlayerCaptureMode != EQPlayerCaptureMode::Full) {
+        throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
     }
 
     if (!GatewaysConfig) {
@@ -745,8 +766,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
+    }
+
+    for (auto& factoryFn : RemoteLayersFactories_) {
+        auto result = factoryFn();
+        factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
     int result = DoRun(factory);
@@ -780,6 +807,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     if (RunOptions_.EnableLineage) {
         program->SetEnableLineage();
     }
+
+    program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;
     if (RunOptions_.ProgramType != EProgramType::SExpr) {
@@ -981,6 +1010,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     RunOptions_.PrintInfo("");
     RunOptions_.PrintInfo("Done");
+
+    program->CommitFullCapture();
 
     return 0;
 }

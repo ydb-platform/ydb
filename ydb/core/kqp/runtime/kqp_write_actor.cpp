@@ -1872,7 +1872,7 @@ private:
 
     void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
-        YQL_ENSURE(!Closed || (data.empty() && checkpoint));
+        YQL_ENSURE(!Closed || data.empty());
         Closed = finished;
         EgressStats.Resume();
         Y_UNUSED(size);

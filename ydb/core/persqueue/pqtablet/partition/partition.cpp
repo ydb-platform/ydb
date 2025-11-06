@@ -1393,7 +1393,15 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
         }
     }
 
+
     auto txIter = TransactionsInflight.begin();
+    if (txIter->second->ProposeConfig) {
+        Y_ABORT_UNLESS(!ChangeConfig);
+        ChangeConfig =
+            MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
+                                                              txIter->second->ProposeConfig->Config);
+        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
+    }
     if (ChangeConfig) {
         PQ_ENSURE(TransactionsInflight.size() == 1)("Step", ev->Step)("TxId",  ev->TxId);
         PendingExplicitMessageGroups = ev->ExplicitMessageGroups;
@@ -2959,7 +2967,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         if (!FirstEvent) {
             return EProcessResult::Blocked;
         }
-        t->Predicate = BeginTransactionConfig(*t);
+        t->Predicate = BeginTransactionConfig();
         ChangingConfig = true;
         PendingPartitionConfig = GetPartitionConfig(t->ProposeConfig->Config);
         //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
@@ -3008,10 +3016,7 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
         SendChangeConfigReply = t->SendReply;
         BeginChangePartitionConfig(ChangeConfig->Config);
     } else if (t->ProposeConfig) {
-        PQ_ENSURE(ChangingConfig);
-        ChangeConfig = MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                                         t->ProposeConfig->Config);
-        PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
+        PQ_ENSURE(ChangeConfig);
         SendChangeConfigReply = false;
     }
     CommitTransaction(t);
@@ -3129,15 +3134,8 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
     return EProcessResult::Continue;
 }
 
-bool TPartition::BeginTransactionConfig(TTransaction& t)
+bool TPartition::BeginTransactionConfig()
 {
-    const TEvPQ::TEvProposePartitionConfig& event = *t.ProposeConfig;
-
-    ChangeConfig =
-        MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
-                                                          event.Config);
-    PendingPartitionConfig = GetPartitionConfig(ChangeConfig->Config);
-
     SendChangeConfigReply = false;
     return true;
 }

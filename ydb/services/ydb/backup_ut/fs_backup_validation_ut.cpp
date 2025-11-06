@@ -261,6 +261,7 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         // Test that base_path must be absolute for import
         NImport::TImportFromFsSettings settings = MakeImportSettings("");
         settings.BasePath("relative/path");
+        settings.AppendItem({"table1", "/Root/Restored/table1"});  // Add item to pass items validation
 
         auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(), 
@@ -291,7 +292,7 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
             res.Status().GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), 
-            "Empty import item",
+            "source_path is required but not set",
             res.Status().GetIssues().ToString());
     }
 }

@@ -475,6 +475,10 @@ public:
                     return this->Reply(status, TIssuesIds::DEFAULT_ERROR, error);
                 }
             }
+
+            if (settings.items().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
         }
 
         if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {

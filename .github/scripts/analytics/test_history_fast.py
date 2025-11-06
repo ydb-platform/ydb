@@ -8,7 +8,7 @@ from ydb_wrapper import YDBWrapper
 def create_test_history_fast_table(ydb_wrapper, table_path):
     print(f"> Creating table: '{table_path}'")
     create_sql = f"""
-        CREATE TABLE `{table_path}` (
+        CREATE TABLE IF NOT EXISTS  `{table_path}` (
             `build_type` Utf8 NOT NULL,
             `job_name` Utf8 NOT NULL,
             `job_id` Uint64,
@@ -24,18 +24,22 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
             `status` Utf8,
             `status_description` Utf8,
             `owners` Utf8,
-            PRIMARY KEY (`run_timestamp`, `full_name`, `job_name`, `branch`, `build_type`, test_id)
+            `log` Utf8,
+            `logsdir` Utf8,
+            `stderr` Utf8,
+            `stdout` Utf8,
+            PRIMARY KEY (`run_timestamp`, `build_type`, `branch`, `full_name`, `job_name`, `test_id`)
         )
-        PARTITION BY HASH(run_timestamp)
+        PARTITION BY HASH(`run_timestamp`, `build_type`, `branch`, `full_name`)
         WITH (
         STORE = COLUMN,
-        TTL = Interval("P7D") ON run_timestamp
+        TTL = Interval("P60D") ON run_timestamp
         )
     """
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def get_missed_data_for_upload(ydb_wrapper):
+def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table):
     query = f"""
        SELECT 
         build_type, 
@@ -44,22 +48,27 @@ def get_missed_data_for_upload(ydb_wrapper):
         commit, 
         branch, 
         pull, 
-        all_data.run_timestamp as run_timestamp, 
-        test_id, 
+        run_timestamp, 
+        all_data.test_id as test_id, 
         suite_folder, 
         test_name,
         cast(suite_folder || '/' || test_name as UTF8)  as full_name, 
         duration,
         status,
         status_description,
-        owners
-    FROM `test_results/test_runs_column`  as all_data
+        owners,
+        log,
+        logsdir,
+        stderr,
+        stdout
+    FROM `{test_runs_table}`  as all_data
     LEFT JOIN (
-        select distinct run_timestamp  from `test_results/analytics/test_history_fast`
+        select distinct test_id  from `{test_history_fast_table}`
+        where run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
     ) as fast_data_missed
-    ON all_data.run_timestamp = fast_data_missed.run_timestamp
+    ON all_data.test_id = fast_data_missed.test_id
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
+        all_data.run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
         and (CASE 
             WHEN String::Contains(all_data.test_name, 'sole chunk') 
@@ -69,7 +78,7 @@ def get_missed_data_for_upload(ydb_wrapper):
             ELSE FALSE
             END) = FALSE
         and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
-        and fast_data_missed.run_timestamp is NULL
+        and fast_data_missed.test_id is NULL
     """
 
     print(f'missed data capturing')
@@ -78,28 +87,29 @@ def get_missed_data_for_upload(ydb_wrapper):
 
 
 def main():
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         
         
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
         
-        table_path = "test_results/analytics/test_history_fast"
-        full_table_path = f'{ydb_wrapper.database_path}/{table_path}'
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        test_history_fast_table = ydb_wrapper.get_table_path("test_history_fast")
+        
+        table_path = test_history_fast_table
         batch_size = 1000
 
-        # Create table if it doesn't exist
-        create_test_history_fast_table(ydb_wrapper, full_table_path)
+        # Create table if it doesn't exist (wrapper will add database_path automatically)
+        create_test_history_fast_table(ydb_wrapper, table_path)
         
         # Get missed data for upload
-        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper)
+        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_table)
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:
-            # Подготавливаем column_types один раз (те же поля, что возвращает get_missed_data_for_upload)
+            # Prepare column_types once (same fields as returned by get_missed_data_for_upload)
             column_types = (
                 ydb.BulkUpsertColumns()
                 .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -117,10 +127,14 @@ def main():
                 .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("logsdir", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("stderr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
-            # Используем bulk_upsert_batches для агрегированной статистики
-            ydb_wrapper.bulk_upsert_batches(full_table_path, prepared_for_upload_rows, column_types, batch_size)
+            # Use bulk_upsert_batches for aggregated statistics (wrapper will add database_path automatically)
+            ydb_wrapper.bulk_upsert_batches(table_path, prepared_for_upload_rows, column_types, batch_size)
             print('Tests uploaded')
         else:
             print('Nothing to upload')

@@ -11,6 +11,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+using TTupleData = std::vector<ui8, TMKQLAllocator<ui8>>;
+
 template <typename TData>
 struct TCastPtrTransform {
     using T = TData;
@@ -192,6 +194,12 @@ struct TTupleLayout {
     void TupleDeepCopy(
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
+
+
+    void TupleDeepCopy(
+        const ui8* inTuple, const ui8* inOverflow,
+        TTupleData& outTuple, TTupleData& outOverflow) const;
+
 
     void Concat(
         std::vector<ui8, TMKQLAllocator<ui8>>& dst,

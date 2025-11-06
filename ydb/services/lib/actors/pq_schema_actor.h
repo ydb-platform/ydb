@@ -142,7 +142,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return RespondWithCode(Ydb::StatusIds::UNAUTHORIZED);
             }
 
-            navigateRequest->DatabaseName = CanonizePath(Database);
+            navigateRequest->DatabaseName = Database;
             navigateRequest->ResultSet.emplace_back(NSchemeCache::TSchemeCacheNavigate::TEntry{
                 .Path = NKikimr::SplitPath(GetTopicPath()),
                 .Access = CheckAccessWithWriteTopicPermission ? NACLib::UpdateRow : NACLib::DescribeSchema,

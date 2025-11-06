@@ -20,6 +20,8 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/ytree/yson_struct.h>
+
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
 #include <util/datetime/base.h>
@@ -166,6 +168,24 @@ struct TTableMountInfo final
 };
 
 DEFINE_REFCOUNTED_TYPE(TTableMountInfo)
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Describes the new location of a tablet that is not available at the old
+//! location. May be located in the error attributes.
+struct TTabletRedirectionHint
+    : public NYTree::TYsonStructLite
+{
+    NHydra::TRevision PreviousMountRevision;
+
+    NHydra::TRevision MountRevision;
+    TTabletCellId CellId;
+    NYTree::INodePtr CellDescriptor;
+
+    REGISTER_YSON_STRUCT_LITE(TTabletRedirectionHint);
+
+    static void Register(TRegistrar registrar);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

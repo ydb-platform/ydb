@@ -41,6 +41,12 @@ struct TListMetricsResult {
 };
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
 
+struct TListMetricsLabelsResult {
+    std::vector<TLabelValues> Labels;
+    ui64 TotalCount;
+};
+using TListMetricsLabelsResponse = TSolomonClientResponse<TListMetricsLabelsResult>;
+
 struct TGetPointsCountResult {
     ui64 PointsCount;
 };

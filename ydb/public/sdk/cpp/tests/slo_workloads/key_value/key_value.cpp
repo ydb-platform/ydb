@@ -70,12 +70,12 @@ int DoRun(TDatabaseOptions& dbOptions, int argc, char** argv) {
 
     if (!runOptions.DontRunA) {
         runOptions.CommonOptions.Rps = runOptions.Read_rps;
-        runOptions.CommonOptions.ReactionTime = TDuration::MilliSeconds(runOptions.CommonOptions.A_ReactionTime);
+        runOptions.CommonOptions.ReactionTime = runOptions.ReadTimeout;
         jobs->Add(new TReadJob(runOptions.CommonOptions, maxId));
     }
     if (!runOptions.DontRunB) {
         runOptions.CommonOptions.Rps = runOptions.Write_rps;
-        runOptions.CommonOptions.ReactionTime = DefaultReactionTime;
+        runOptions.CommonOptions.ReactionTime = runOptions.WriteTimeout;
         jobs->Add(new TWriteJob(runOptions.CommonOptions, maxId));
     }
 

@@ -124,7 +124,7 @@ public:
                             Request.SetHeader(meta, "authorization", token);
                         }
                     }
-                    meta.Timeout = GetClientTimeout();
+                    meta.Timeout = NYdb::TDeadline::SafeDurationCast(GetClientTimeout());
                     auto connection = Location.CreateGRpcServiceConnectionFromEndpoint<yandex::cloud::priv::resourcemanager::v1::CloudService>(resource_manager);
                     connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::resourcemanager::v1::CloudService::Stub::AsyncGet, meta);
                     return;

@@ -8,6 +8,7 @@
 #include "config.h"
 #include "cypress_commands.h"
 #include "distributed_table_commands.h"
+#include "distributed_file_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
 #include "flow_commands.h"
@@ -412,6 +413,11 @@ public:
         REGISTER    (TPingDistributedWriteSessionCommand,  "ping_distributed_write_session",  Null,       Null,       true,  false, ApiVersion4);
         REGISTER    (TFinishDistributedWriteSessionCommand, "finish_distributed_write_session", Null,     Null,       true,  false, ApiVersion4);
         REGISTER    (TWriteTableFragmentCommand,           "write_table_fragment",            Tabular,    Structured, true,   true, ApiVersion4);
+
+        REGISTER    (TStartDistributedWriteFileSessionCommand, "start_distributed_write_file_session",Null,Structured,true,  false, ApiVersion4);
+        REGISTER    (TPingDistributedWriteFileSessionCommand,  "ping_distributed_write_file_session",Null, Null,      true,  false, ApiVersion4);
+        REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
+        REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );

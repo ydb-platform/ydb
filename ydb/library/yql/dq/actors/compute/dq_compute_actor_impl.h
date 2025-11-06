@@ -1160,7 +1160,12 @@ protected:
                 break;
             }
             default: {
-                CA_LOG_C("Handle unexpected event undelivery: " << lostEventType);
+                if (Checkpoints) {
+                    TAutoPtr<NActors::IEventHandle> iev(ev.Release());
+                    Checkpoints->Receive(iev);
+                } else {
+                    CA_LOG_C("Handle unexpected event undelivery: " << lostEventType);
+                }
             }
         }
     }

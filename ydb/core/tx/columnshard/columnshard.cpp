@@ -516,17 +516,4 @@ void TColumnShard::ScheduleExecutorStatistics() {
     }
 }
 
-
-void TColumnShard::Handle(TEvPrivate::TEvBuildStatisticsPipe::TPtr& /*ev*/) {
-    if (!CurrentSchemeShardId) {
-        ActorContext().Schedule(TDuration::Seconds(1), new TEvPrivate::TEvBuildStatisticsPipe);
-        return;
-    }
-
-    StatsReportPipe = ActorContext().Register(NTabletPipe::CreateClient(ActorContext().SelfID, CurrentSchemeShardId, {}));
-
-    ScheduleBaseStatistics();
-    ScheduleExecutorStatistics();
-}
-
 }   // namespace NKikimr::NColumnShard

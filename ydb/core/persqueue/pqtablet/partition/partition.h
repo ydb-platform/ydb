@@ -903,6 +903,8 @@ private:
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
     void EndAppendHeadWithNewWrites(const TActorContext& ctx);
 
+    bool HasPendingCommitsOrPendingWrites() const;
+
     //
     // user actions and transactions
     //

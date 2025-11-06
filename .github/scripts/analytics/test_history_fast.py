@@ -8,7 +8,7 @@ from ydb_wrapper import YDBWrapper
 def create_test_history_fast_table(ydb_wrapper, table_path):
     print(f"> Creating table: '{table_path}'")
     create_sql = f"""
-        CREATE TABLE `{table_path}` (
+        CREATE TABLE IF NOT EXISTS  `{table_path}` (
             `build_type` Utf8 NOT NULL,
             `job_name` Utf8 NOT NULL,
             `job_id` Uint64,
@@ -44,8 +44,8 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         commit, 
         branch, 
         pull, 
-        all_data.run_timestamp as run_timestamp, 
-        test_id, 
+        run_timestamp, 
+        all_data.test_id as test_id, 
         suite_folder, 
         test_name,
         cast(suite_folder || '/' || test_name as UTF8)  as full_name, 
@@ -55,11 +55,12 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         owners
     FROM `{test_runs_table}`  as all_data
     LEFT JOIN (
-        select distinct run_timestamp  from `{test_history_fast_table}`
+        select distinct test_id  from `{test_history_fast_table}`
+        where run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
     ) as fast_data_missed
-    ON all_data.run_timestamp = fast_data_missed.run_timestamp
+    ON all_data.test_id = fast_data_missed.test_id
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 2*Interval("P1D")
+        all_data.run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
         and String::Contains(all_data.test_name, '.flake8')  = FALSE
         and (CASE 
             WHEN String::Contains(all_data.test_name, 'sole chunk') 
@@ -69,7 +70,7 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
             ELSE FALSE
             END) = FALSE
         and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
-        and fast_data_missed.run_timestamp is NULL
+        and fast_data_missed.test_id is NULL
     """
 
     print(f'missed data capturing')

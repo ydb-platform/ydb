@@ -25,6 +25,10 @@ public:
     // values points to array in row-major order: [tuple0_col0, tuple0_col1, ..., tuple1_col0, tuple1_col1, ...]
     virtual void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPackResult& packed) = 0;
 
+    // Pack multiple tuples into buckets based on hash of key columns
+    // values points to array in row-major order, packs is array of TPackResult[2^bucketsLogNum]
+    virtual void BucketPack(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
+
     // Unpack single tuple to scalar values
     virtual void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) = 0;
 

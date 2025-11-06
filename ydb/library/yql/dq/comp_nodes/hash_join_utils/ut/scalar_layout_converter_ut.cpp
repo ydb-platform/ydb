@@ -548,7 +548,63 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             
             UNIT_ASSERT_VALUES_EQUAL_C(unpacked[2].Get<i64>(), 
                 testValues[i * numColumns + 2].Get<i64>(), 
-                "Expected the same int value after batch pack/unpack");
+                    "Expected the same int value after batch pack/unpack");
         }
+    }
+
+    Y_UNIT_TEST(TestBucketPack) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key,  // First column is key - will be used for bucketing
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
+
+        // Create test data
+        constexpr ui32 numTuples = 128;
+        const ui32 numColumns = types.size();
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(numTuples * numColumns);
+        
+        for (ui32 i = 0; i < numTuples; i++) {
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i)));      // Key column
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i * 10))); // Payload column
+        }
+
+        // Pack into buckets
+        constexpr ui32 bucketsLogNum = 4;  // 16 buckets
+        constexpr ui32 numBuckets = 1u << bucketsLogNum;
+        TVector<TPackResult> packResults(numBuckets);
+        
+        converter->BucketPack(testValues.data(), numTuples, packResults.data(), bucketsLogNum);
+
+        // Verify that all tuples are distributed across buckets
+        ui32 totalTuples = 0;
+        for (ui32 bucketIdx = 0; bucketIdx < numBuckets; ++bucketIdx) {
+            totalTuples += packResults[bucketIdx].NTuples;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(totalTuples, numTuples, "All tuples should be distributed across buckets");
+
+        // Verify that we can unpack tuples from each bucket
+        ui32 unpackedCount = 0;
+        for (ui32 bucketIdx = 0; bucketIdx < numBuckets; ++bucketIdx) {
+            const auto& packRes = packResults[bucketIdx];
+            for (ui32 tupleIdx = 0; tupleIdx < static_cast<ui32>(packRes.NTuples); ++tupleIdx) {
+                NYql::NUdf::TUnboxedValue unpacked[2];
+                converter->Unpack(packRes, tupleIdx, unpacked);
+                
+                // Just verify that values are valid int64
+                UNIT_ASSERT_C(unpacked[0].Get<i64>() >= 0 && unpacked[0].Get<i64>() < static_cast<i64>(numTuples),
+                    "Key value should be in valid range");
+                UNIT_ASSERT_C(unpacked[1].Get<i64>() >= 0 && unpacked[1].Get<i64>() < static_cast<i64>(numTuples * 10),
+                    "Payload value should be in valid range");
+                
+                unpackedCount++;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(unpackedCount, numTuples, "Should be able to unpack all tuples");
     }
 }

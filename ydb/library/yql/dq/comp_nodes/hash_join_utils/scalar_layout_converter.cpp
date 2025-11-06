@@ -673,6 +673,71 @@ public:
         }
     }
 
+    void BucketPack(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
+        if (numTuples == 0) return;
+        
+        // Static dummy buffer to use instead of nullptr
+        static ui8 DummyBuffer[8] = {0};
+        
+        const ui32 numColumns = Extractors_.size();
+        const ui32 numBuckets = 1u << bucketsLogNum;
+        
+        TVector<const ui8*> allColumnsData;
+        TVector<const ui8*> allColumnsNullBitmap;
+        TVector<TVector<ui8>> tempStorage;
+        
+        // Reserve space for all tuples
+        allColumnsData.reserve(InnerExtractors_.size() * numTuples * 2);
+        allColumnsNullBitmap.reserve(InnerExtractors_.size() * numTuples * 2);
+        tempStorage.reserve(InnerExtractors_.size() * numTuples * 4);
+        
+        // Extract all tuples first
+        for (ui32 tupleIdx = 0; tupleIdx < numTuples; ++tupleIdx) {
+            const NYql::NUdf::TUnboxedValue* tupleValues = values + tupleIdx * numColumns;
+            for (size_t colIdx = 0; colIdx < Extractors_.size(); ++colIdx) {
+                Extractors_[colIdx]->ExtractForPack(tupleValues[colIdx], allColumnsData, allColumnsNullBitmap, tempStorage);
+            }
+        }
+        
+        // Replace any nullptr with dummy buffer
+        for (size_t i = 0; i < allColumnsData.size(); ++i) {
+            if (allColumnsData[i] == nullptr) {
+                allColumnsData[i] = DummyBuffer;
+            }
+        }
+        for (size_t i = 0; i < allColumnsNullBitmap.size(); ++i) {
+            if (allColumnsNullBitmap[i] == nullptr) {
+                allColumnsNullBitmap[i] = DummyBuffer;
+            }
+        }
+        
+        // Prepare arrays for BucketPack
+        TVector<std::vector<ui8, TMKQLAllocator<ui8>>> resesData(numBuckets);
+        TVector<std::vector<ui8, TMKQLAllocator<ui8>>> overflowsData(numBuckets);
+        
+        auto reses = TPaddedPtr(resesData.data(), sizeof(resesData[0]));
+        auto overflows = TPaddedPtr(overflowsData.data(), sizeof(overflowsData[0]));
+        
+        // Call TupleLayout BucketPack
+        TupleLayout_->BucketPack(
+            allColumnsData.data(), allColumnsNullBitmap.data(),
+            reses, overflows, 0, numTuples, bucketsLogNum);
+        
+        // Copy results to output packs
+        for (ui32 bucketIdx = 0; bucketIdx < numBuckets; ++bucketIdx) {
+            auto& packRes = packs[bucketIdx];
+            packRes.PackedTuples = std::move(resesData[bucketIdx]);
+            packRes.Overflow = std::move(overflowsData[bucketIdx]);
+            
+            // Calculate number of tuples from packed size
+            if (TupleLayout_->TotalRowSize > 0) {
+                packRes.NTuples = packRes.PackedTuples.size() / TupleLayout_->TotalRowSize;
+            } else {
+                packRes.NTuples = 0;
+            }
+        }
+    }
+
     void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) override {
         Y_ENSURE(tupleIndex < static_cast<ui32>(packed.NTuples));
 

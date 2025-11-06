@@ -89,17 +89,15 @@ TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui3
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
+    , RetentionPeriod(retentionPeriod)
     , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
-    Storage->SetRetentionPeriod(retentionPeriod);
 }
 
 void TConsumerActor::Bootstrap() {
     LOG_D("Start MLP consumer " << Config.GetName());
     Become(&TConsumerActor::StateInit);
 
-    // TODO MLP Update consumer config and retention period
-    Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
-    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+    UpdateStorageConfig();
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(static_cast<ui64>(EKvCookie::InitialRead));
@@ -332,6 +330,19 @@ void TConsumerActor::CommitIfNeeded() {
     }
 }
 
+void TConsumerActor::UpdateStorageConfig() {
+    Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
+    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+    Storage->SetRetentionPeriod(RetentionPeriod);
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
+    Config = std::move(ev->Get()->Config);
+    RetentionPeriod = ev->Get()->RetentionPeriod;
+
+   UpdateStorageConfig();
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     auto response = std::make_unique<TEvPQ::TEvGetMLPConsumerStateResponse>();
 
@@ -356,6 +367,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
@@ -374,6 +386,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Handle);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
@@ -392,6 +405,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
@@ -670,8 +684,8 @@ NActors::IActor* CreateConsumerActor(
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    const std::optional<TDuration> retentionPeriod) {
-    return new TConsumerActor(tabletId, tabletActorId, partitionId, partitionActorId, config, retentionPeriod);
+    const std::optional<TDuration> reteintion) {
+    return new TConsumerActor(tabletId, tabletActorId, partitionId, partitionActorId, config, reteintion);
 }
 
 }

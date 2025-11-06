@@ -356,6 +356,18 @@ struct TTestContext {
         return values;
     }
 
+    TType* GetTaggedType() {
+        return TTaggedType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), "tag", TypeEnv);
+    }
+
+    TUnboxedValueVector CreateTaggeds(ui32 quantity) {
+        TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            values.push_back(NUdf::TUnboxedValuePod(static_cast<i32>(value)));
+        }
+        return values;
+    }
+
     TType* GetOptionalListOfOptional() {
         TType* itemType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TypeEnv);
         return TOptionalType::Create(TListType::Create(itemType, TypeEnv), TypeEnv);
@@ -826,6 +838,12 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
         //     break;
         // }
 
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<const TTaggedType*>(type);
+            AssertUnboxedValuesAreEqual(left, right, taggedType->GetBaseType());
+            break;
+        }
+
         default: {
             UNIT_ASSERT_C(false, TStringBuilder() << "Unsupported type: " << type->GetKindAsStr());
         }
@@ -1288,6 +1306,25 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Tagged) {
+        TTestContext context;
+
+        auto taggedType = context.GetTaggedType();
+        auto values = context.CreateTaggeds(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(taggedType));
+
+        auto array = MakeArrowArray(values, taggedType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], taggedType);
         }
     }
 }

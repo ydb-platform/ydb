@@ -2,6 +2,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -174,11 +175,11 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TVariantType* vari
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TOptionalType* optionalType) {
-    auto currentType = optionalType->GetItemType();
+    auto currentType = SkipTaggedType(optionalType->GetItemType());
     ui32 depth = 1;
 
     while (currentType->IsOptional()) {
-        currentType = static_cast<const NMiniKQL::TOptionalType*>(currentType)->GetItemType();
+        currentType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(currentType)->GetItemType());
         ++depth;
     }
 
@@ -612,11 +613,11 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         }
 
         case NMiniKQL::TType::EKind::Optional: {
-            auto innerType = static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType();
+            auto innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType());
             ui32 depth = 1;
 
             while (innerType->IsOptional()) {
-                innerType = static_cast<const NMiniKQL::TOptionalType*>(innerType) ->GetItemType();
+                innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType) ->GetItemType());
                 ++depth;
             }
 
@@ -797,7 +798,8 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         }
 
         case NMiniKQL::TType::EKind::Tagged: {
-            // TODO: Support Tagged type
+            auto taggedType = static_cast<const NMiniKQL::TTaggedType*>(type);
+            AppendElement(value, builder, taggedType->GetBaseType());
             break;
         }
 

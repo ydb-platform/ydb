@@ -5,6 +5,14 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
+/**
+ * @file kqp_formats_ut_helpers.h
+ * @brief Utilities for testing KQP formats.
+ *
+ * This module provides utilities for testing KQP formats.
+ * It includes functions for making arrow arrays and extracting unboxed values from arrow arrays.
+ */
+
 namespace NKikimr::NKqp::NFormats {
 
 /**

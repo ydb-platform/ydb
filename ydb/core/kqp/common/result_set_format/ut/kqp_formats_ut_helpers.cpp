@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -249,7 +250,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 
         case NMiniKQL::TType::EKind::Optional: {
             auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(itemType);
-            auto innerOptionalType = optionalType->GetItemType();
+            auto innerOptionalType = SkipTaggedType(optionalType->GetItemType());
 
             if (NeedWrapByExternalOptional(innerOptionalType)) {
                 YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
@@ -270,7 +271,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                         return value;
                     }
 
-                    innerType = static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType();
+                    innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType());
                     innerArray = structArray->field(0);
                     ++depth;
                 }
@@ -369,7 +370,23 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             NUdf::TUnboxedValue value = ExtractUnboxedValue(valuesArray, rowInChild, innerType, holderFactory);
             return holderFactory.CreateVariantHolder(value.Release(), variantIndex);
         }
-        default: {
+
+        case NMiniKQL::TType::EKind::Tagged: {
+            auto taggedType = static_cast<const NMiniKQL::TTaggedType*>(itemType);
+            return ExtractUnboxedValue(array, row, taggedType->GetBaseType(), holderFactory);
+        }
+
+        case NMiniKQL::TType::EKind::Type:
+        case NMiniKQL::TType::EKind::Stream:
+        case NMiniKQL::TType::EKind::Callable:
+        case NMiniKQL::TType::EKind::Any:
+        case NMiniKQL::TType::EKind::Resource:
+        case NMiniKQL::TType::EKind::Flow:
+        case NMiniKQL::TType::EKind::ReservedKind:
+        case NMiniKQL::TType::EKind::Block:
+        case NMiniKQL::TType::EKind::Pg:
+        case NMiniKQL::TType::EKind::Multi:
+        case NMiniKQL::TType::EKind::Linear: {
             YQL_ENSURE(false, "Unsupported type: " << itemType->GetKindAsStr());
         }
     }

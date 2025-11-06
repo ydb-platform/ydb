@@ -26,14 +26,14 @@ public:
     virtual void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPackResult& packed) = 0;
 
     // Unpack single tuple to scalar values
-    virtual void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values, const THolderFactory& holderFactory) = 0;
+    virtual void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) = 0;
 
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles);
+    const TVector<NPackedTuple::EColumnRole>& roles, const THolderFactory& holderFactory);
 }
 
 

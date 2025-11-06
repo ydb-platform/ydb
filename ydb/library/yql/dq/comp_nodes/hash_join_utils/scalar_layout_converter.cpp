@@ -583,10 +583,12 @@ class TScalarLayoutConverter : public IScalarLayoutConverter {
 public:
     TScalarLayoutConverter(
         TVector<IColumnDataExtractor::TPtr>&& packers,
-        const TVector<NPackedTuple::EColumnRole>& roles
+        const TVector<NPackedTuple::EColumnRole>& roles,
+        const THolderFactory& holderFactory
     )
         : Extractors_(std::move(packers))
         , InnerMapping_(Extractors_.size())
+        , HolderFactory_(holderFactory)
     {
         Y_ENSURE(roles.size() == Extractors_.size());
 
@@ -671,7 +673,7 @@ public:
         }
     }
 
-    void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values, const THolderFactory& holderFactory) override {
+    void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) override {
         Y_ENSURE(tupleIndex < static_cast<ui32>(packed.NTuples));
 
         // We need to unpack all tuples to get proper column pointers
@@ -750,7 +752,7 @@ public:
                 columnsData.data() + pointerOffset,
                 columnsNullBitmap.data() + pointerOffset,
                 tupleIndex,
-                holderFactory);
+                HolderFactory_);
         }
     }
 
@@ -763,6 +765,7 @@ private:
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
+    const THolderFactory& HolderFactory_;
 };
 
 } // anonymous namespace
@@ -771,7 +774,7 @@ private:
 
 IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles)
+    const TVector<NPackedTuple::EColumnRole>& roles, const THolderFactory& holderFactory)
 {
     TVector<IColumnDataExtractor::TPtr> packers;
 
@@ -779,7 +782,7 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
         packers.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, type));
     }
 
-    return std::make_unique<TScalarLayoutConverter>(std::move(packers), roles);
+    return std::make_unique<TScalarLayoutConverter>(std::move(packers), roles, holderFactory);
 }
 
 } // namespace NKikimr::NMiniKQL

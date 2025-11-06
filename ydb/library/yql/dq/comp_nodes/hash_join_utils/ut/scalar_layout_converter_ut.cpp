@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].Get<i64>(), testValues[i].Get<i64>(), 
                 "Expected the same value after pack/unpack");
         }
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
             NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Payload};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         TVector<TVector<NYql::NUdf::TUnboxedValue>> testValues;
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[4];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             for (size_t j = 0; j < types.size(); j++) {
                 UNIT_ASSERT_VALUES_EQUAL_C(unpacked[j].Get<i64>(), testValues[i][j].Get<i64>(), 
                     "Expected the same value after pack/unpack");
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             auto unpackedStr = unpacked[0].AsStringRef();
             UNIT_ASSERT_VALUES_EQUAL_C(TString(unpackedStr), testStrings[i], 
                 "Expected the same string after pack/unpack");
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             NPackedTuple::EColumnRole::Key, NPackedTuple::EColumnRole::Key,
             NPackedTuple::EColumnRole::Payload, NPackedTuple::EColumnRole::Payload};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         TVector<TVector<NYql::NUdf::TUnboxedValue>> testValues;
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[4];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             
             UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].Get<i64>(), testValues[i][0].Get<i64>(), 
                 "Expected the same int value after pack/unpack");
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{optionalInt64Type};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data with nulls
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             
             bool expectedHasValue = (i % 2 == 0);
             bool actualHasValue = unpacked[0].HasValue();
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{optionalStringType};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             
             bool expectedHasValue = testStrings[i].Defined();
             bool actualHasValue = unpacked[0].HasValue();
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data with empty strings
         TVector<NYql::NUdf::TUnboxedValue> testValues;
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < TestSize; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             auto unpackedStr = unpacked[0].AsStringRef();
             UNIT_ASSERT_VALUES_EQUAL_C(unpackedStr.Size(), 0, 
                 "Expected empty string after pack/unpack");
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data with large strings (trigger overflow)
         constexpr size_t LargeSize = 256; // Larger than inline threshold
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < testValues.size(); i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             auto unpackedStr = unpacked[0].AsStringRef();
             UNIT_ASSERT_VALUES_EQUAL_C(TString(unpackedStr), testStrings[i], 
                 "Expected the same large string after pack/unpack");
@@ -386,7 +386,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{int64Type};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data as flat array
         constexpr ui32 numTuples = TestSize;
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < numTuples; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].Get<i64>(), testValues[i].Get<i64>(), 
                 "Expected the same value after batch pack/unpack");
         }
@@ -420,7 +420,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             NPackedTuple::EColumnRole::Key,
             NPackedTuple::EColumnRole::Payload};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data as flat array
         constexpr ui32 numTuples = 64;
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (ui32 i = 0; i < numTuples; i++) {
             NYql::NUdf::TUnboxedValue unpacked[numColumns];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             for (ui32 j = 0; j < numColumns; j++) {
                 UNIT_ASSERT_VALUES_EQUAL_C(unpacked[j].Get<i64>(), 
                     testValues[i * numColumns + j].Get<i64>(), 
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         TVector<NKikimr::NMiniKQL::TType*> types{stringType};
         TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         constexpr ui32 numTuples = 64;
@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (size_t i = 0; i < numTuples; i++) {
             NYql::NUdf::TUnboxedValue unpacked[1];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             auto unpackedStr = unpacked[0].AsStringRef();
             UNIT_ASSERT_VALUES_EQUAL_C(TString(unpackedStr), testStrings[i], 
                 "Expected the same string after batch pack/unpack");
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             NPackedTuple::EColumnRole::Key,
             NPackedTuple::EColumnRole::Payload};
 
-        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.HolderFactory);
 
         // Create test data
         constexpr ui32 numTuples = 64;
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         // Unpack and verify
         for (ui32 i = 0; i < numTuples; i++) {
             NYql::NUdf::TUnboxedValue unpacked[numColumns];
-            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            converter->Unpack(packRes, i, unpacked);
             
             UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].Get<i64>(), 
                 testValues[i * numColumns].Get<i64>(), 

@@ -184,6 +184,11 @@ public:
             settings.Add(topicKeyParser.GetDateFormat());
         }
 
+        if (topicKeyParser.GetSkipJsonErrors()) {
+            Cerr << "settings.Add(topicKeyParser.GetSkipErrors());" << Endl; 
+            settings.Add(topicKeyParser.GetSkipJsonErrors());
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
@@ -255,6 +260,8 @@ public:
         TString sharedReading = properties.Value("shared_reading", "false");
         sharedReading.to_lower();
         cluster.SetSharedReading(sharedReading == "true"sv);
+        //TString skipJsonErrors = properties.Value("skip_errors", "false");
+        //cluster.SetSkipErrors(skipErrors == "true"sv);
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);

@@ -315,6 +315,23 @@ public:
             }
         }
 
+        if (const auto maybeSkipJsonErrorsSetting = FindSetting(settings, SkipJsonErrors)) {
+            const auto value = maybeSkipJsonErrorsSetting.Cast().Ptr();
+            if (!EnsureAtom(*value, ctx)) {
+                return TStatus::Error;
+            }
+            bool skipJsonErrorsSetting;
+            if (!TryFromString<bool>(value->Content(), skipJsonErrorsSetting)) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder()
+                    << "Expected bool, but got: " << value->Content()));
+                return TStatus::Error;
+            }
+            if (skipJsonErrorsSetting) {
+                input->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType->GetTypeAnn()));
+                return TStatus::Ok;     // TODO: errors?
+            }
+        }
+
         if (metadata->ChildrenSize() == 0) {
             input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
             return TStatus::Ok;

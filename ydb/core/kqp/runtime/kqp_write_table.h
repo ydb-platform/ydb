@@ -68,7 +68,7 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual void Fill(const IDataBatchPtr& data, const std::vector<bool>& mask = {}) = 0;
+    virtual void Fill(const IDataBatchPtr& data) = 0;
     virtual void Fill(const TRowsRef& data) = 0;
     virtual IDataBatchPtr Flush() = 0;
 };
@@ -96,6 +96,7 @@ std::vector<TConstArrayRef<TCell>> GetRows(
     const NKikimr::NKqp::IDataBatchPtr& batch);
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
     const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
+    const std::vector<TConstArrayRef<bool>>& masks,
     const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(

@@ -1590,7 +1590,8 @@ private:
             return true;
         }
 
-        if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+        // TODO: remove !PathLookupInfo.empty() after full error support
+        if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT && !PathLookupInfo.empty()) {
             THashSet<TConstArrayRef<TCell>, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> primaryKeysSet;
             for (const auto& batch : ProcessBatches) {
                 for (const auto& row : GetRows(batch)) {
@@ -1820,54 +1821,66 @@ private:
 
     void FlushWritesToActors() {
         AFL_ENSURE(!IsError());
-        for (auto& write : Writes) {
-            Memory -= write.Batch->GetMemory();
-            WriteBatchToActors(std::move(write.Batch), write.ExistsMask);
-        }
-        Writes.clear();
-    }
 
-    void WriteBatchToActors(IDataBatchPtr batch, const std::vector<bool>& existsMask) {
-        AFL_ENSURE(!IsError());
         const bool updateWithoutLookup = (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !PathLookupInfo.contains(PathId));
-        for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
-            // At first, write to indexes
-            if (PathId != actorPathId) {
-                if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                        && !updateWithoutLookup) {
-                    AFL_ENSURE(actorInfo.DeleteProjection);
-                    const auto& rowsCount = batch->GetRowsCount();
-                    AFL_ENSURE(rowsCount == existsMask.size());
 
-                    {
-                        actorInfo.DeleteProjection->Fill(batch, existsMask);
-                        auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
-                        actorInfo.WriteActor->Write(
-                            DeleteCookie,
-                            std::move(preparedKeyBatch));
+        if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
+            // Secondary index exists
+            std::vector<NKikimr::NKqp::IDataBatchPtr> batches;
+            std::vector<TConstArrayRef<bool>> masks;
+            for (auto& write : Writes) {
+                batches.push_back(write.Batch);
+                masks.emplace_back(write.ExistsMask);
+            }
+            const auto deleteRows = GetSortedUniqueRows(batches, masks, KeyColumnTypes);
+            const auto writeRows = GetSortedUniqueRows(batches, {}, KeyColumnTypes);
+
+            for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
+                // At first, write to indexes
+                if (PathId != actorPathId) {
+                    if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                            && !updateWithoutLookup) {
+                        AFL_ENSURE(actorInfo.DeleteProjection);
+
+                        {
+                            actorInfo.DeleteProjection->Fill(deleteRows);
+                            auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
+                            actorInfo.WriteActor->Write(
+                                DeleteCookie,
+                                std::move(preparedKeyBatch));
+                        }
+                        actorInfo.WriteActor->FlushBuffer(DeleteCookie);
                     }
-                    actorInfo.WriteActor->FlushBuffer(DeleteCookie);
+
+                    AFL_ENSURE(actorInfo.Projection);
+                    actorInfo.Projection->Fill(writeRows);
+                    auto preparedBatch = actorInfo.Projection->Flush();
+                    actorInfo.WriteActor->Write(
+                        Cookie,
+                        preparedBatch);
+                    actorInfo.WriteActor->FlushBuffer(Cookie);
                 }
-                AFL_ENSURE(actorInfo.Projection);
-                actorInfo.Projection->Fill(batch);
-                auto preparedBatch = actorInfo.Projection->Flush();
-                actorInfo.WriteActor->Write(
-                    Cookie,
-                    preparedBatch);
-                actorInfo.WriteActor->FlushBuffer(Cookie);
             }
         }
 
-        auto& actorInfo = PathWriteInfo.at(PathId);
-        if (actorInfo.Projection) {
-            actorInfo.Projection->Fill(batch);
-            batch = actorInfo.Projection->Flush();
+        for (auto& write : Writes) {
+            auto& batch = write.Batch;
+
+            Memory -= batch->GetMemory();
+
+            auto& actorInfo = PathWriteInfo.at(PathId);
+            if (actorInfo.Projection) {
+                actorInfo.Projection->Fill(batch);
+                batch = actorInfo.Projection->Flush();
+            }
+            AFL_ENSURE(!actorInfo.DeleteProjection);
+            PathWriteInfo.at(PathId).WriteActor->Write(
+                Cookie,
+                std::move(batch));
         }
-        AFL_ENSURE(!actorInfo.DeleteProjection);
-        PathWriteInfo.at(PathId).WriteActor->Write(
-            Cookie,
-            std::move(batch));
+
+        Writes.clear();
     }
 
     void CloseWrite() {

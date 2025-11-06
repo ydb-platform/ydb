@@ -1000,33 +1000,30 @@ public:
             , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    void Fill(const IDataBatchPtr& data, const std::vector<bool>& mask) override {
+    void Fill(const IDataBatchPtr& data) override {
         YQL_ENSURE(RowBatcher.IsEmpty());
         auto* batch = dynamic_cast<TRowBatch*>(data.Get());
         AFL_ENSURE(batch);
         const auto& rows = batch->GetRows();
-        AddDataShard(rows.begin(), rows.end(), mask);
+        AddDataShard(rows.begin(), rows.end());
     }
 
     void Fill(const TRowsRef& data) override {
         YQL_ENSURE(RowBatcher.IsEmpty());
-        AddDataShard(data.begin(), data.end(), {});
+        AddDataShard(data.begin(), data.end());
     }
 
     void AddDataShard(
             TVector<TConstArrayRef<TCell>>::const_iterator begin,
-            TVector<TConstArrayRef<TCell>>::const_iterator end,
-            const std::vector<bool>& mask) {
+            TVector<TConstArrayRef<TCell>>::const_iterator end) {
         const size_t columnsCount = ColumnsMapping.size();
         std::vector<TCell> cells(columnsCount);
         for (auto it = begin; it != end; ++it) {
-            if (mask.empty() || mask[it - begin]) {
-                const auto& row = *it;
-                for (size_t index = 0; index < columnsCount; ++index) {
-                    cells[index] = row[ColumnsMapping[index]];
-                }
-                RowBatcher.AddRow(cells);
+            const auto& row = *it;
+            for (size_t index = 0; index < columnsCount; ++index) {
+                cells[index] = row[ColumnsMapping[index]];
             }
+            RowBatcher.AddRow(cells);
         }
     }
 
@@ -1145,6 +1142,7 @@ std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& b
 
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
         const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
+        const std::vector<TConstArrayRef<bool>>& masks,
         const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes) {
     size_t totalRows = 0;
     for (const auto& batch : batches) {
@@ -1156,11 +1154,18 @@ std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
     std::vector<TConstArrayRef<TCell>> rows;
     rows.reserve(totalRows);
 
-    for (const auto& batch : batches) {
+    for (size_t batchIndex = 0; batchIndex < batches.size(); ++batchIndex) {
+        const auto& batch = batches[batchIndex];
+
         auto* data = dynamic_cast<TRowBatch*>(batch.Get());
         AFL_ENSURE(data);
         const auto& batchRows = data->GetRows();
-        rows.insert(rows.end(), batchRows.begin(), batchRows.end());
+        
+        for (size_t rowIndex = 0; rowIndex < batchRows.Size(); ++rowIndex) {
+            if (masks.empty() || masks[batchIndex][rowIndex]) {
+                rows.push_back(batchRows[rowIndex]);
+            }
+        }
     }
     // We need only last written row for each key
     std::reverse(rows.begin(), rows.end());

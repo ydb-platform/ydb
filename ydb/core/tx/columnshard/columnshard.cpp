@@ -89,7 +89,10 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPeriodicWakeup());
     ctx.Send(SelfId(), new TEvPrivate::TEvPingSnapshotsUsage());
-    ctx.Send(SelfId(), new TEvPrivate::TEvBuildStatisticsPipe());
+    ExecutorStatsEvInflight++;
+    ctx.Send(SelfId(), new TEvPrivate::TEvReportExecutorStatistics);
+    ScheduleBaseStatistics();
+
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
     AFL_VERIFY(!!StartInstant);
     Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
@@ -161,13 +164,13 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
     if (clientId == StatsReportPipe) {
         if (ev->Get()->Status == NKikimrProto::OK) {
             LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
-            ExecutorStatsEvInflight++;
-            ActorContext().Send(SelfId(), new TEvPrivate::TEvBuildStatisticsPipe());
         } else {
             LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
             LastStats = {};
-            ActorContext().Send(SelfId(), new TEvPrivate::TEvBuildStatisticsPipe());
+            StatsReportPipe = {};
         }
+        ExecutorStatsEvInflight++;
+        ActorContext().Send(SelfId(), new TEvPrivate::TEvReportExecutorStatistics());
         return;
     }
 
@@ -186,6 +189,7 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
     LOG_S_DEBUG("Client pipe reset to " << tabletId << " at tablet " << TabletID());
 
     if (clientId == StatsReportPipe) {
+        StatsReportPipe = {};
         LastStats = {};
         return;
     }
@@ -439,8 +443,19 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
 }
 
 void TColumnShard::SendPeriodicStats(bool withExecutor) {
+    if (!CurrentSchemeShardId) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("No CurrentSchemeShardId", TabletID());
+        return;
+    }
+
+    if (!StatsReportPipe) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("StatsReportPipe created", TabletID());
+        StatsReportPipe = ActorContext().Register(NTabletPipe::CreateClient(ActorContext().SelfID, CurrentSchemeShardId, {}));
+        return;
+    }
+
     if (!TablesManager.GetTabletPathIdOptional()) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("Table Manager not ready", TabletID());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("TablesManager not ready", TabletID());
         return;
     }
 

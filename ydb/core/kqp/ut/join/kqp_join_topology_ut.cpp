@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             withoutShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
 
             if (resultType.contains("0")) {
-                results.emplace("CBO-0", (*withoutShuffleElimination - *withoutCBO).Filter([](double value) { return value >= 0; }));
+                results.emplace("CBO-0", (*withoutShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
             }
 
             if (!withoutShuffleElimination) {
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
 
             if (resultType.contains("0")) {
-                results.emplace("SE-0", (*withShuffleElimination - *withoutCBO).Filter([](double value) { return value >= 0; }));
+                results.emplace("SE-0", (*withShuffleElimination - *withoutCBO).Filter([](double value) { return value > 0; }));
             }
 
             if (!withShuffleElimination) {

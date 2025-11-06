@@ -663,6 +663,56 @@ Y_UNIT_TEST(ReturningTypes) {
     }
 }
 
+Y_UNIT_TEST(ReturningWithListParameterNotNullColumns) {
+    // Test for the issue: UPSERT with RETURNING on table with only NOT NULL fields
+    // using List query parameters should not cause infinite loop
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    // Create table with only NOT NULL fields
+    const auto queryCreate = Q_(R"(
+        CREATE TABLE test_table (
+            id Uint64 NOT NULL,
+            value Utf8 NOT NULL,
+            PRIMARY KEY (id)
+        );
+    )");
+
+    auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
+    UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+    // This query should not cause infinite loop
+    const auto query = Q_(R"(
+        DECLARE $data AS List<Struct<id: UInt64, value: Utf8>>;
+
+        UPSERT INTO test_table
+        SELECT * FROM AS_TABLE($data)
+        RETURNING *;
+    )");
+
+    auto params = TParamsBuilder()
+        .AddParam("$data")
+            .BeginList()
+            .AddListItem()
+                .BeginStruct()
+                .AddMember("id").Uint64(1).Build()
+                .AddMember("value").Utf8("test").Build()
+                .EndStruct()
+            .AddListItem()
+                .BeginStruct()
+                .AddMember("id").Uint64(2).Build()
+                .AddMember("value").Utf8("test2").Build()
+                .EndStruct()
+            .EndList()
+            .Build()
+        .Build();
+
+    auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    CompareYson(R"([[[1u];["test"]];[[2u];["test2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+}
+
 }
 
 } // namespace NKikimr::NKqp

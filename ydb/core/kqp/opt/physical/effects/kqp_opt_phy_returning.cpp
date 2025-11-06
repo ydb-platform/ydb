@@ -203,6 +203,12 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
         return node;
     }
 
+    // If Update is already an ExtractMembers (from a previous buildReturningRows call),
+    // it's already in its final form and should not be processed again
+    if (returning.Update().Maybe<TCoExtractMembers>()) {
+        return node;
+    }
+
     TExprNode::TPtr result = returning.Update().Ptr();
     auto status = TryConvertTo(result, *result->GetTypeAnn(), *returning.Raw()->GetTypeAnn(), ctx, typeCtx);
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error, "wrong returning expr type");

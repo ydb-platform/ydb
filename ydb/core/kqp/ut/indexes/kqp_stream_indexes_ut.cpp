@@ -1,8 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/common_helper.h>
-//#include <ydb/core/tx/data_events/events.h> 
-//#include <ydb/core/tx/datashard/datashard.h>
-//#include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 

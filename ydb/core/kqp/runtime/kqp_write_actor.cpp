@@ -1749,7 +1749,7 @@ private:
                         lookupInfo.FullKeyIndexes,
                         lookupInfo.PkInFullKeyIndexes);
 
-                // TODO: skip initial unchanged rows.
+                // TODO: skip unchanged rows
                 for (const auto& row : writeRows) {
                     if (!collector.AddRow(row)) {
                         Error = "TODO";
@@ -1838,6 +1838,7 @@ private:
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
+                    // TODO: skip unchanged rows for UPSERT/REPLACE
                     if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                             && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
                             && !updateWithoutLookup) {
@@ -2534,7 +2535,7 @@ public:
                     .Counters = Counters,
                 });
 
-                //ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+                //TODO: ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(actor);
                 CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
 

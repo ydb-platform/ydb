@@ -1353,16 +1353,15 @@ private:
                                 || indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique) {
                                 const auto& implTable = tableMeta->ImplTables[index];
                                 
-                                //TODO: affected Indexes and primary key check
                                 if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE) {
                                     if (std::any_of(implTable->Columns.begin(), implTable->Columns.end(), [&](const auto& column) {
-                                            return columnsSet.contains(column.first);
+                                            return columnsSet.contains(column.first) && !mainKeyColumnsSet.contains(column.first);
                                         })) {
                                             affectedIndexes.push_back(index);
                                     }
 
                                     if (std::any_of(implTable->KeyColumnNames.begin(), implTable->KeyColumnNames.end(), [&](const auto& column) {
-                                            return columnsSet.contains(column);
+                                            return columnsSet.contains(column) && !mainKeyColumnsSet.contains(column);
                                         })) {
                                             affectedKeysIndexes.insert(index);
                                     }

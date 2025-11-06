@@ -411,11 +411,7 @@ public:
         : TBase(operationName, queryPath)
         , Database(database)
         , UserToken(userToken)
-    {
-        if (UserToken && UserToken->GetSerializedToken().empty()) {
-            UserToken->SaveSerializationInfo();
-        }
-    }
+    {}
 
     void Bootstrap() {
         LOG_D("Bootstrap. Database: " << Database);
@@ -470,19 +466,11 @@ protected:
         return ScheduleRetry({NYql::TIssue(message)}, longDelay);
     }
 
-    TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
-        if (!UserToken) {
-            return nullptr;
-        }
-
-        return MakeIntrusiveConst<NACLib::TUserToken>(*UserToken);
-    }
-
 protected:
     const TString Database;
+    const std::optional<NACLib::TUserToken> UserToken;
 
 private:
-    std::optional<NACLib::TUserToken> UserToken;
     TRetryPolicy::IRetryState::TPtr RetryState;
 };
 
@@ -564,8 +552,11 @@ protected:
         LOG_D("Describe streaming query in database: " << Database);
 
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = CanonizePath(Database);
-        request->UserToken = GetUserToken();
+        request->DatabaseName = Database;
+
+        if (UserToken && UserToken->GetSanitizedToken()) {
+            request->UserToken = MakeIntrusiveConst<NACLib::TUserToken>(*UserToken);
+        }
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -763,8 +754,8 @@ protected:
         *event->Record.MutableTransaction()->MutableModifyScheme() = SchemeTx;
         event->Record.SetDatabaseName(Database);
 
-        if (const auto token = GetUserToken()) {
-            event->Record.SetUserToken(token->GetSerializedToken());
+        if (UserToken) {
+            event->Record.SetUserToken(UserToken->GetSerializedToken());
         }
 
         Send(MakeTxProxyID(), std::move(event));
@@ -2210,7 +2201,7 @@ public:
         }
 
         SchemeInfo = ev->Get()->Info;
-        if (Context.GetUserToken() && SchemeInfo && SchemeInfo->SecurityObject) {
+        if (Context.GetUserToken() && Context.GetUserToken()->GetSerializedToken() && SchemeInfo && SchemeInfo->SecurityObject) {
             if (const auto& securityObject = *SchemeInfo->SecurityObject; !securityObject.CheckAccess(Access, *Context.GetUserToken())) {
                 LOG_W("Access denied for " << Context.GetUserToken()->GetUserSID() << ", access: " << Access);
 

@@ -63,12 +63,14 @@ class TPartitionCompaction;
 
 struct TTransaction {
 
-    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
-                          TMaybe<bool> predicate = Nothing())
+    TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
+                 TInstant calcPredicateTimestamp,
+                 TMaybe<bool> predicate = Nothing())
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
         , CalcPredicateSpan(std::move(tx->Span))
+        , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
         Y_ABORT_UNLESS(Tx);
     }
@@ -128,6 +130,7 @@ struct TTransaction {
     NWilson::TSpan CommitSpan;
 
     TInstant WriteInfoResponseTimestamp;
+    TInstant CalcPredicateTimestamp;
 };
 class TPartitionCompaction;
 

@@ -11,6 +11,8 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
 #include "tls/tls.h"
 
@@ -54,6 +56,10 @@ public:
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
 
+        #if !defined(_msan_enabled_)
+        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+        #endif
+
         if (withTls) {
             common->Settings.Certificate = NInterconnect::GetCertificateForTest();
             common->Settings.PrivateKey = NInterconnect::GetPrivateKeyForTest();
@@ -78,6 +84,8 @@ public:
         }
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
+            TMailboxType::ReadAsFilled, 0));
+        setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(), TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 32),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

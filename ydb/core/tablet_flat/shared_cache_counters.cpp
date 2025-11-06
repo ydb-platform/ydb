@@ -18,6 +18,8 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , CacheHitBytes(counters->GetCounter("CacheHitBytes", true))
     , CacheMissPages(counters->GetCounter("CacheMissPages", true))
     , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
+    , CacheMissInMemoryPages(counters->GetCounter("CacheMissInMemoryPages", true))
+    , CacheMissInMemoryBytes(counters->GetCounter("CacheMissInMemoryBytes", true))
     , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
     , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
     , TargetInMemoryBytes(counters->GetCounter("TargetInMemoryBytes"))

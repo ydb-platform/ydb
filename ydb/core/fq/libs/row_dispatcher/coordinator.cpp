@@ -388,6 +388,12 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
         }
         Y_ENSURE(!info.IsLocal, "EvNodeDisconnected from local row dispatcher");
         info.Connected = false;
+
+        if (!RebalancingScheduled) {
+            LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
+            Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
+            RebalancingScheduled = true;
+        }
         // if (info.State == ENodeState::Connected) {
         //     info.State = ENodeState::Disconnected;
         // }
@@ -408,6 +414,12 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             continue;
         }
         info.Connected = false;
+
+        if (!RebalancingScheduled) {
+            LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
+            Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
+            RebalancingScheduled = true;
+        }
         // if (info.State == ENodeState::Connected) {
         //     info.State = ENodeState::Disconnected;
         // }
@@ -593,17 +605,21 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
     RebalancingScheduled = false;
 
     bool isUpdated = false;
+    TSet<TActorId> toDelete;
+
     for (auto& [actorId, info] : RowDispatchers) {
-        if (info.State != ENodeState::Initializing) {
-            continue;
-        }
         LOG_ROW_DISPATCHER_DEBUG("Move rd (actorId " << actorId << ") to Started state");
-        if (info.Connected) {
+        if (info.State == ENodeState::Initializing && info.Connected) {
             info.State = ENodeState::Started;
             isUpdated = true;
-        } else {
+        } else (info.State == ENodeState::Started && !info.Connected) {
             // Schedue
+            toDelete.insert(actorId);
+            isUpdated = true;
         }
+    }
+    for (const auto& actorId : toDelete) {
+        RowDispatchers.erase(actorId);
     }
     if (isUpdated) {
         for (const auto& readActorId : KnownReadActors) {
@@ -615,9 +631,9 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
         PartitionLocations.clear();
         TopicsInfo.clear();
         KnownReadActors.clear();
-
-        //UpdatePendingReadActors();
     }
+
+
 }
 
 bool TActorCoordinator::IsReadyPartitionDistribution() const {

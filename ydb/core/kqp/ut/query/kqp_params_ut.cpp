@@ -1450,6 +1450,97 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(WriteDatetimeValues, ColumnStore) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto query = Sprintf(R"(
+                CREATE TABLE TestTable (
+                    Key UInt32 NOT NULL,
+                    V_Date32 Date32,
+                    V_Datetime64 Datetime64,
+                    V_Timestamp64 Timestamp64,
+                    PRIMARY KEY (Key)
+                ) WITH ( STORE = %s );
+            )", ColumnStore ? "COLUMN" : "ROW");
+            auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto fUpsert = [&] (ui32 key, i32 date, i64 datetime, i64 timestamp) {
+            auto params = TParamsBuilder()
+                .AddParam("$key")
+                    .Uint32(key).Build()
+                .AddParam("$date")
+                    .OptionalDate32(std::chrono::sys_time<TWideDays>(TWideDays(date)))
+                    .Build()
+                .AddParam("$datetime")
+                    .OptionalDatetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(datetime)))
+                    .Build()
+                .AddParam("$timestamp")
+                    .OptionalTimestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(timestamp)))
+                    .Build()
+                .Build();
+
+            auto result = db.ExecuteQuery(Q_(R"(
+                DECLARE $key AS UInt32;
+                DECLARE $date AS Optional<Date32>;
+                DECLARE $datetime AS Optional<Datetime64>;
+                DECLARE $timestamp AS Optional<Timestamp64>;
+                UPSERT INTO TestTable (Key, V_Date32, V_Datetime64, V_Timestamp64) VALUES ($key, $date, $datetime, $timestamp);
+            )"), NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        std::vector<std::tuple<i32, i64, i64>> testData = {    // Some values cannot be converted with TInstant::ParseIso8601():
+            {0, -2208988800, 4611669811199999999},             //    1970-01-01,      1900-01-01T00:00:00Z,   148107-12-31T23:59:59.999999Z
+            {53375807, 0, 654243132},                          //  148107-12-31,      1970-01-01T00:00:00Z,     1970-01-01T00:10:54.243132Z
+            {6412542, 4611669811199, 0},                       //   19526-12-12,    148107-12-31T23:59:59Z,     1970-01-01T00:00:00Z
+            {-5677, -4611669897600, 1234567890123456},         //    1954-06-17,   -144169-01-01T00:00:00Z,     2009-02-13T23:31:30.123456Z
+            {123, -2208988801, -4235647865},                   //    1970-05-04,      1899-12-31T23:59:59Z,     1969-12-31T22:49:24.352135Z
+            {-53375809, -1234567890, -4611669897600000000},    // -144169-01-01,      1930-11-18T00:28:30Z,  -144169-01-01T00:00:00Z
+            {2145, 1362485267, 1564354654123456},              //    1975-11-16,      2013-03-05T12:07:47Z,     2019-07-28T22:57:34.123456Z
+            {74, 2208988801, 922337203854775807},              //    1970-03-16,      2040-01-01T00:00:01Z,    31197-09-14T02:50:54.775807Z
+            {-389, 1762441275, 321456},                        //    1968-12-08,      2025-11-06T15:01:15Z,     1970-01-01T00:00:00.321456Z
+        };
+
+        for (ui32 i = 0; i < testData.size(); ++i) {
+            auto [date, datetime, timestamp] = testData[i];
+            fUpsert(i + 1, date, datetime, timestamp);
+        }
+
+        {
+            TString expected = "[";
+            for (size_t i = 0; i < testData.size(); ++i) {
+                if (i > 0) {
+                    expected += ";";
+                }
+                auto [date, datetime, timestamp] = testData[i];
+                expected += TStringBuilder() << "[" << (i + 1) << "u;[" << date << "];[" << datetime << "];[" << timestamp << "]]";
+            }
+            expected += "]";
+
+            auto result = db.ExecuteQuery(Q_(R"(
+                SELECT Key, V_Date32, V_Datetime64, V_Timestamp64 FROM TestTable ORDER BY Key;
+            )"), NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto result = db.ExecuteQuery(Q_(R"(
+                SELECT DateTime::ToMicroseconds(MAX(V_Datetime64)) FROM TestTable;
+            )"), NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            i64 maxValue = std::get<1>(*std::max_element(testData.begin(), testData.end(),
+                [](const auto& a, const auto& b) { return std::get<1>(a) < std::get<1>(b); }));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson("[[[" + std::to_string(maxValue) + "000000]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
 }
 
 } // namespace NKqp

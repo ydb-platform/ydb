@@ -662,26 +662,31 @@ public:
     void BucketPack(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) override {
         if (numTuples == 0) return;
         
-        // Simple implementation: Pack into single result, then distribute via regular Pack
-        // This avoids complexity of bitmap format conversion
-        TPackResult tempPacked;
-        PackBatch(values, numTuples, tempPacked);
-        
-        // Now distribute packed tuples into buckets based on hash
         const ui32 numColumns = Extractors_.size();
         
-        // Unpack each tuple, compute hash, and repack into appropriate bucket
+        // Pack each tuple and distribute to buckets based on hash
+        // Hash is computed during Pack and stored in first 4 bytes of packed tuple
         for (ui32 tupleIdx = 0; tupleIdx < numTuples; ++tupleIdx) {
-            NYql::NUdf::TUnboxedValue tupleValues[numColumns];
-            Unpack(tempPacked, tupleIdx, tupleValues);
+            const NYql::NUdf::TUnboxedValue* tupleValues = values + tupleIdx * numColumns;
             
-            // Compute hash from packed data
-            const ui8* packedTuple = tempPacked.PackedTuples.data() + tupleIdx * TupleLayout_->TotalRowSize;
-            ui32 hash = ReadUnaligned<ui32>(packedTuple);
+            // Pack tuple to temporary buffer to get its hash
+            TPackResult tempPack;
+            Pack(tupleValues, tempPack);
+            
+            // Extract hash from packed tuple (first 4 bytes)
+            ui32 hash = ReadUnaligned<ui32>(tempPack.PackedTuples.data());
             ui32 bucketIdx = hash & ((1u << bucketsLogNum) - 1);
             
-            // Pack into the appropriate bucket
-            Pack(tupleValues, packs[bucketIdx]);
+            // Move packed data to the appropriate bucket
+            packs[bucketIdx].PackedTuples.insert(
+                packs[bucketIdx].PackedTuples.end(),
+                tempPack.PackedTuples.begin(),
+                tempPack.PackedTuples.end());
+            packs[bucketIdx].Overflow.insert(
+                packs[bucketIdx].Overflow.end(),
+                tempPack.Overflow.begin(),
+                tempPack.Overflow.end());
+            packs[bucketIdx].NTuples++;
         }
     }
 

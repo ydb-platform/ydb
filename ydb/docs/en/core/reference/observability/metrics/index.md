@@ -197,6 +197,7 @@ The following table shows aggregated partition metrics for the topic. The maximu
 | `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last hour, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
 | `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last minute, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
 | `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum time the partition is idle for recording.br/>Label:<br/>- _topic_ – topic name |
+
 ## Resource pool metrics {#resource_pools}
 
 | Metric name<br/>Type, units of measurement | Description<br/>Tags |

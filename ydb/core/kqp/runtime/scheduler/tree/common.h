@@ -7,6 +7,7 @@
 #include <util/generic/hash.h>
 
 #include <optional>
+#include <set>
 
 template <typename Base, typename Derived>
 concept CStaticallyDowncastable = requires(Base* b) {
@@ -132,8 +133,19 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         TTreeElementBase* Parent = nullptr;
 
     private:
-        std::unordered_set<TPtr> Children;
+        struct TCompareChildren {
+            bool operator() (const TPtr& left, const TPtr& right) const;
+        };
+
+        std::set<TPtr, TCompareChildren> Children;
     };
+
+    template <ETreeType T>
+    bool TTreeElementBase<T>::TCompareChildren::operator() (
+        const TTreeElementBase<T>::TPtr& left, const TTreeElementBase<T>::TPtr& right
+    ) const {
+        return left->GetId() < right->GetId();
+    }
 
     template <ETreeType T>
     struct TQuery : public virtual TTreeElementBase<T> {

@@ -939,15 +939,6 @@ private:
     TMessageQueue Responses;
     ui64 CurrentBatchSize = 0;
 
-    enum class ETxBatchingState{
-        PreProcessing,
-        Executing,
-        Finishing
-    };
-    ETxBatchingState BatchingState = ETxBatchingState::PreProcessing;
-    //
-    //
-    //
     std::deque<std::pair<TString, ui64>> UpdateUserInfoTimestamp;
     bool ReadingTimestamp;
     TString ReadingForUser;

@@ -2332,7 +2332,6 @@ void TPartition::ProcessUserActionAndTxEvents()
 {
     while (!UserActionAndTransactionEvents.empty()) {
         if (ChangingConfig) {
-            BatchingState = ETxBatchingState::Finishing;
             break;
         }
 
@@ -2353,10 +2352,8 @@ void TPartition::ProcessUserActionAndTxEvents()
                 break;
             case EProcessResult::Break:
                 MoveUserActionAndTxToPendingCommitQueue();
-                BatchingState = ETxBatchingState::Finishing;
                 break;
             case EProcessResult::Blocked:
-                BatchingState = ETxBatchingState::Executing;
                 return;
             case EProcessResult::NotReady:
                 return;
@@ -2442,10 +2439,6 @@ void TPartition::ProcessUserActionAndTxPendingCommits() {
         std::visit(visitor, event);
 
         ++CurrentBatchSize;
-    }
-
-    if (UserActionAndTxPendingCommit.empty()) {
-        BatchingState = ETxBatchingState::Finishing;
     }
 }
 
@@ -3204,7 +3197,6 @@ void TPartition::ExecChangePartitionConfig() {
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) {
     DeleteAffectedSourceIdsAndConsumers();
-    BatchingState = ETxBatchingState::PreProcessing;
     WriteCycleSizeEstimate = 0;
 
     if (ChangeConfig) {
@@ -3290,8 +3282,6 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
         ChangeConfig = nullptr;
         PendingPartitionConfig = nullptr;
     }
-    //ChangingConfig = false;
-    BatchingState = ETxBatchingState::PreProcessing;
 }
 
 void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,

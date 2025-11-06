@@ -1966,9 +1966,14 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(false, TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
-            Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(),
-            std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = 0;
+
+        if (!graphRestored) {
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks(false, TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
+                Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(),
+                std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), &ShardsWithEffects);
+        }
+
         OnEmptyResult();
 
         TIssue validateIssue;

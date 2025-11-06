@@ -24,6 +24,10 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
             `status` Utf8,
             `status_description` Utf8,
             `owners` Utf8,
+            `log` Utf8,
+            `logsdir` Utf8,
+            `stderr` Utf8,
+            `stdout` Utf8,
             PRIMARY KEY (`run_timestamp`, `build_type`, `branch`, `full_name`, `job_name`, `test_id`)
         )
         PARTITION BY HASH(`run_timestamp`, `build_type`, `branch`, `full_name`)
@@ -52,7 +56,11 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
         duration,
         status,
         status_description,
-        owners
+        owners,
+        log,
+        logsdir,
+        stderr,
+        stdout
     FROM `{test_runs_table}`  as all_data
     LEFT JOIN (
         select distinct test_id  from `{test_history_fast_table}`
@@ -119,6 +127,10 @@ def main():
                 .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("logsdir", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("stderr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
             )
             
             # Use bulk_upsert_batches for aggregated statistics (wrapper will add database_path automatically)

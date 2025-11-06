@@ -63,6 +63,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             WHERE
                 job_id = {job_id} 
                 and branch = '{branch}'
+                and run_timestamp >= CurrentUtcDate() - 30*Interval("P1D")
         )
         """
         else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
@@ -87,6 +88,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             FROM `{test_runs_table}`
             WHERE branch = '{branch}'
             AND build_type = '{build_type}'
+            and  run_timestamp >= CurrentUtcDate() - 90*Interval("P1D")
             GROUP BY suite_folder, test_name
         ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
         """
@@ -94,8 +96,15 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         print(f'📝 Executing SQL query:')
         print(tests_query)
         
+        # Determine query name based on mode
+        branch_name = branch if branch else "unknown"
+        if job_id and branch:
+            query_name = f"get_all_tests_for_branch_{branch_name}_from_pr"
+        else:
+            query_name = f"get_all_tests_for_branch_{branch_name}"
+        
         print(f'⏱️  Starting query execution...')
-        results = ydb_wrapper.execute_scan_query(tests_query)
+        results = ydb_wrapper.execute_scan_query(tests_query, query_name=query_name)
         
         print(f'✅ Query completed successfully')
         print(f'📊 Total results: {len(results)} tests')

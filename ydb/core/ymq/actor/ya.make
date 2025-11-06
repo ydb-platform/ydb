@@ -13,6 +13,7 @@ SRCS(
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp
+    error.cpp
     executor.cpp
     fifo_cleanup.cpp
     garbage_collector.cpp

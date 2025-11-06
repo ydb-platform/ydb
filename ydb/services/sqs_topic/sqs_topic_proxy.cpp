@@ -1,5 +1,7 @@
 #include "sqs_topic_proxy.h"
+#include "send_message.h"
 #include "utils.h"
+#include "request.h"
 
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
@@ -13,7 +15,6 @@
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
-
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
@@ -23,14 +24,6 @@ using namespace NActors;
 using namespace NKikimrClient;
 
 namespace NKikimr::NSqsTopic::V1 {
-
-    template <class TRequest>
-    static const TRequest& GetRequest(NGRpcService::IRequestOpCtx* ctx) {
-        Y_ASSERT(ctx != nullptr);
-        const auto* request = ctx->GetRequest();
-        Y_ASSERT(request != nullptr);
-        return dynamic_cast<const TRequest&>(*request);
-    }
 
     const TString DEFAULT_SQS_CONSUMER = "ydb-sqs-consumer";
 
@@ -144,7 +137,6 @@ namespace NKikimr::NGRpcService {
 
     DECLARE_RPC(GetQueueUrl);
     DECLARE_RPC_NI(CreateQueue);
-    DECLARE_RPC_NI(SendMessage);
     DECLARE_RPC_NI(ReceiveMessage);
     DECLARE_RPC_NI(GetQueueAttributes);
     DECLARE_RPC_NI(ListQueues);
@@ -153,12 +145,21 @@ namespace NKikimr::NGRpcService {
     DECLARE_RPC_NI(DeleteQueue);
     DECLARE_RPC_NI(ChangeMessageVisibility);
     DECLARE_RPC_NI(SetQueueAttributes);
-    DECLARE_RPC_NI(SendMessageBatch);
     DECLARE_RPC_NI(DeleteMessageBatch);
     DECLARE_RPC_NI(ChangeMessageVisibilityBatch);
     DECLARE_RPC_NI(ListDeadLetterSourceQueues);
     DECLARE_RPC_NI(ListQueueTags);
     DECLARE_RPC_NI(TagQueue);
     DECLARE_RPC_NI(UntagQueue);
+
+    template <>
+    IActor* TEvSqsTopicSendMessageRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateSendMessageActor(msg).release();
+    }
+
+    template <>
+    IActor* TEvSqsTopicSendMessageBatchRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateSendMessageBatchActor(msg).release();
+    }
 
 } // namespace NKikimr::NGRpcService

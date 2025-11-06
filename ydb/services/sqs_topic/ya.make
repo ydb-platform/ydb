@@ -3,6 +3,9 @@ LIBRARY()
 SRCS(
     sqs_topic_proxy.cpp
     utils.cpp
+    send_message.cpp
+    statuses.cpp
+    error.cpp
 )
 
 PEERDIR(
@@ -21,6 +24,10 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/sqs_topic/queue_url
     ydb/services/ydb
+    ydb/core/persqueue/public/describer
+    ydb/core/ymq/attributes
+    ydb/core/ymq/base
+    ydb/core/ymq/error
 )
 
 END()

@@ -22,14 +22,8 @@ PEERDIR(
 )
 
 SRCS(
-    ../kinesis_ut.cpp
-    ../ymq_ut.cpp
+    ../sqs_topic_ut.cpp
     inside_ydb_ut.cpp
-)
-
-RESOURCE(
-    ydb/core/http_proxy/ut/internal_counters.json internal_counters.json
-    ydb/core/http_proxy/ut/proxy_counters.json proxy_counters.json
 )
 
 ENV(INSIDE_YDB="1")

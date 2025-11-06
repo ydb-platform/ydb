@@ -77,6 +77,32 @@ def get_active_processes_at_time(processes, target_time):
     return active
 
 
+def get_suite_consumption_text(timeline, memory_usage, all_processes, ram_text, top_n=100):
+    detailed_hover_texts = []
+    process_counts = []
+    for t, mem in zip(timeline, memory_usage):
+        active = get_active_processes_at_time(all_processes, t)
+        process_counts.append(len(active))
+        test_suites = defaultdict(float)
+        for rss, path, _, _ in active:
+            test_suites[path.split(' ')[0]] += rss
+        test_suites = sorted(test_suites.items(),
+                             key=lambda x: x[1], reverse=True)
+
+        hover_text = f"<b>Time:</b> {timestamp_to_time(t)}<br>"
+        hover_text += f"<b>{ram_text}:</b> {mem} GB<br>"
+        hover_text += f"<b>Processes:</b> {len(active)}<br><br>"
+
+        suites_hover_text = []
+        if active:
+            suites_hover_text = ["<b>Test Suites consumption:</b><br>"]
+            for suite, rss in test_suites:
+                suites_hover_text += [f"  • {suite}: {round(rss, 2)} GB"]
+
+        detailed_hover_texts.append(hover_text + '<br>'.join(suites_hover_text[:top_n + 1]))
+    return detailed_hover_texts, process_counts
+
+
 def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
     timeline, memory_usage = calculate_total_memory_consumption(processes)
 
@@ -89,56 +115,28 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
     )
 
     # Готовим hover-текст с информацией об активных процессах
-    hover_texts = []
-    process_counts = []
+
     timeline_in_time = list(map(timestamp_to_time, timeline))
-    for t, mem in zip(timeline, memory_usage):
-        active = get_active_processes_at_time(processes, t)
-        process_counts.append(len(active))
-        test_suites = defaultdict(float)
-        for rss, path, _, _ in active:
-            test_suites[path.split(' ')[0]] += rss
-        test_suites = sorted(test_suites.items(),
-                             key=lambda x: x[1], reverse=True)
 
-        hover_text = f"<b>Time:</b> {timestamp_to_time(t)}<br>"
-        hover_text += f"<b>Sum of suites:</b> {mem} GB<br>"
-        hover_text += f"<b>Processes:</b> {len(active)}<br><br>"
-
-        if active:
-            hover_text += "<b>Top 5 Test Suites:</b><br>"
-            for suite, rss in test_suites[:5]:
-                hover_text += f"  • {suite}: {round(rss, 2)} GB<br>"
-
-        hover_texts.append(hover_text)
+    detailed_hover_texts, process_counts = get_suite_consumption_text(timeline, memory_usage, processes, 'Suites Max RAM')
 
     min_ts = timeline[0]
     max_ts = timeline[-1]
     ram_usage_with_ts = list(filter(lambda x: min_ts <= x[0] <= max_ts, ram_usage_with_ts))
     ram_usage = list(map(lambda x: x[1], ram_usage_with_ts))
-    ts_of_ram_usage = list(map(lambda x: timestamp_to_time(x[0]), ram_usage_with_ts))
+    ts_of_ram_usage = list(map(lambda x: x[0], ram_usage_with_ts))
+    time_of_ram_usage = list(map(lambda x: timestamp_to_time(x), ts_of_ram_usage))
+
+    hover_texts, _ = get_suite_consumption_text(ts_of_ram_usage, ram_usage, processes, 'RAM consumed', top_n=5)
     fig.add_trace(
         go.Scatter(
-            x=ts_of_ram_usage,
+            x=time_of_ram_usage,
             y=ram_usage,
             mode='lines',
-            name='RSS, meminfo',
+            name='RAM, meminfo',
             line=dict(shape='hv', width=1, color='rgb(115, 187, 142)'),
             fill='tozeroy',
             fillcolor='rgba(115, 187, 142, 0.3)',
-        ),
-        row=1, col=1
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=timeline_in_time,
-            y=memory_usage,
-            mode='lines',
-            name='RSS, ya make',
-            line=dict(shape='hv', width=1, color='rgb(46, 134, 171)'),
-            fill='tozeroy',
-            fillcolor='rgba(46, 134, 171, 0.3)',
             hovertext=hover_texts,
             hoverinfo='text'
         ),
@@ -147,10 +145,67 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
     fig.add_trace(
         go.Scatter(
             x=timeline_in_time,
+            y=memory_usage,
+            mode='lines',
+            name='RAM, ya make',
+            line=dict(shape='hv', width=1, color='rgb(46, 134, 171)'),
+            fill='tozeroy',
+            fillcolor='rgba(46, 134, 171, 0.3)',
+            # hover text is ignored in chart, but used for details
+            hovertext=detailed_hover_texts,
+            hoverinfo='none'
+        ),
+        row=1, col=1
+    )
+
+    # Обновляем layout, чтобы добавить место под текстовый блок
+    fig.update_layout(
+        margin=dict(b=100)  # Добавляем отступ снизу для текстового блока
+    )
+
+    # JavaScript для создания и обновления текстового блока
+    custom_js = """
+    document.addEventListener('DOMContentLoaded', function() {
+        var gd = document.getElementById('{plot_id}');
+        
+        var textContainer = document.createElement('div');
+        textContainer.id = 'custom-hover-text';
+        textContainer.style = `
+            position: relative;
+            width: 100%;
+            min-height: 80px;
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            overflow: auto;
+            user-select: text;
+            white-space: pre-wrap;
+        `;
+        textContainer.innerHTML = "<b>point details:</b><br>Click on the chart";
+        
+        gd.parentNode.insertBefore(textContainer, gd.nextSibling);
+        
+        gd.on('plotly_click', function(data) {
+            if(data.points && data.points.length > 1) {
+                var text = data.points[1].hovertext;
+                textContainer.innerHTML = "<b>Active point:</b><br>" + text;
+            }
+        });
+    });
+    """
+
+    fig.add_trace(
+        go.Scatter(
+            x=timeline_in_time,
             y=process_counts,
             mode='lines',
             name='Active processes',
             line=dict(shape='hv', width=1, color='rgb(248, 157, 33)'),
+            hoverinfo='none'
         ),
         row=1, col=1
     )
@@ -158,10 +213,10 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
     # Отмечаем пик
     max_memory = max(ram_usage)
     max_idx = ram_usage.index(max_memory)
-    max_time = ts_of_ram_usage[max_idx]
+    max_time = time_of_ram_usage[max_idx]
 
     if not output_file:
-        print(hover_texts[max_idx].replace('<br>', '\n'))
+        print(detailed_hover_texts[max_idx].replace('<br>', '\n'))
 
     fig.add_trace(
         go.Scatter(
@@ -180,13 +235,17 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
     fig.update_yaxes(title_text="Memory (GB)", row=1, col=1)
 
     fig.update_layout(
-        height=800,
+        height=600,
         hovermode='x unified',
         template='plotly_white',
         title_text="Interactive Memory Consumption Monitor"
     )
     if output_file:
-        fig.write_html(output_file)
+        fig.write_html(output_file,
+                       full_html=True,
+                       include_plotlyjs='cdn',
+                       post_script=custom_js
+                       )
     else:
         fig.show()
     return max_memory
@@ -236,7 +295,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-file-url",
         help="Path to graph file in run artifacts",
-        required=True
     )
     parser.add_argument('--dry-run', action='store_true',
                         help='Debug mode without sending to Telegram')
@@ -256,8 +314,8 @@ if __name__ == "__main__":
     report_file = args.report_file
     obj = json.load(report_file)
     all = parse_report_file(obj)
-
     ram_usage = parse_ram_usage_file(args.ram_usage_file)
+
     output_file = args.output_file
     # Draw or export fig with RAM usage
     create_simple_interactive_plot(all, ram_usage, output_file)

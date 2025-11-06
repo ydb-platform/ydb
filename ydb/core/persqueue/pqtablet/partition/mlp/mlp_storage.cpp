@@ -30,8 +30,8 @@ void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
     KeepMessageOrder = keepMessageOrder;
 }
 
-void TStorage::SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount) {
-    MaxMessageProcessingCount = MaxMessageProcessingCount;
+void TStorage::SetMaxMessageProcessingCount(ui32 maxMessageProcessingCount) {
+    MaxMessageProcessingCount = maxMessageProcessingCount;
 }
 
 void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {

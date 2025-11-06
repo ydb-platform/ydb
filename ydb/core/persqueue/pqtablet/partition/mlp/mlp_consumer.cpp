@@ -332,7 +332,7 @@ void TConsumerActor::CommitIfNeeded() {
 
 void TConsumerActor::UpdateStorageConfig() {
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
-    Storage->SetMaxMessageProcessingCount(Config.GetMaxMessageProcessingCount());
+    Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
 }
 
@@ -470,7 +470,7 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
         if (visibilityDeadline == TInstant::Zero()) {
-            visibilityDeadline = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds()).ToDeadLine(now);
+            visibilityDeadline = TDuration::Seconds(Config.GetDefaultProcessingTimeoutSeconds()).ToDeadLine(now);
         }
 
         std::deque<ui64> messages;

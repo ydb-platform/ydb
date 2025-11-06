@@ -104,6 +104,9 @@ class YDBWrapper:
         variables = config_dict.get("variables", {})
         flags = config_dict.get("flags", {})
         
+        # Сохранить флаги как атрибут для доступа из других скриптов
+        self._flags = flags
+        
         # Automatic field mapping
         config_mapping = {
             'database_endpoint': main["endpoint"],

@@ -7,7 +7,7 @@ def post_install(self):
         utf8range.PEERDIR.add("contrib/restricted/abseil-cpp")
         # bestow compatibility with contrib/libs/grpc
         utf8range.SRCS |= {
-            "naive.c", 
+            "naive.c",
             "range2-neon.c",
             "range2-sse.c",
         }

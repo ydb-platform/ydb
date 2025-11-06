@@ -72,7 +72,7 @@ The following placeholders are used in this guide:
     * `file` - the name of the file where the connector will write data.
     * `topics` - the name of the topic from which the connector will read data.
 
-6.  Run Kafka Connect in standalone mode:
+6. Run Kafka Connect in standalone mode:
 
     ```bash
     cd ~/opt/kafka/bin/ && \

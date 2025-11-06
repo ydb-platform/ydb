@@ -8,4 +8,3 @@ The Kafka API  documentation contains the following sections:
 * [Usage examples](examples.md)
 * [Kafka Connect](./connect/index.md)
 * [Constraints](constraints.md)
- 

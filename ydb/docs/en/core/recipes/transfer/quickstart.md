@@ -61,8 +61,8 @@ CREATE TRANSFER `transfer_recipe/example_transfer`
 
 In this example:
 
-*  `$transformation_lambda` - a transformation rule for converting a topic message into table columns. In this case, the topic message is transferred to the table without any changes. To learn more about configuring transformation rules, see the [documentation](../../yql/reference/syntax/create-transfer.md#lambda);
-*  `$msg` - a variable that contains the topic message being processed.
+* `$transformation_lambda` - a transformation rule for converting a topic message into table columns. In this case, the topic message is transferred to the table without any changes. To learn more about configuring transformation rules, see the [documentation](../../yql/reference/syntax/create-transfer.md#lambda);
+* `$msg` - a variable that contains the topic message being processed.
 
 
 ## Step 4. Populate the topic with data {#step4}

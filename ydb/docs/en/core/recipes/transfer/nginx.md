@@ -18,19 +18,19 @@ Example:
 
 This guide covers the following steps:
 
-*   [creating a table](#step1) to write the data to;
-*   [creating the transfer](#step2);
-*   [verifying the table contents](#step3).
+* [creating a table](#step1) to write the data to;
+* [creating the transfer](#step2);
+* [verifying the table contents](#step3).
 
 ## Prerequisites
 
 To complete the examples in this guide, it needs:
 
-*   A {{ ydb-short-name }} cluster, version 25.2 or later. For instructions on how to install a single-node {{ ydb-short-name }} cluster, see the [guide](../../quickstart.md). For recommendations on deploying {{ ydb-short-name }} for production use, see this [guide](../../devops/deployment-options/index.md).
+* A {{ ydb-short-name }} cluster, version 25.2 or later. For instructions on how to install a single-node {{ ydb-short-name }} cluster, see the [guide](../../quickstart.md). For recommendations on deploying {{ ydb-short-name }} for production use, see this [guide](../../devops/deployment-options/index.md).
 
-*   An installed [NGINX HTTP server](https://nginx.org/) with access logging enabled, or access to NGINX access logs from another server.
+* An installed [NGINX HTTP server](https://nginx.org/) with access logging enabled, or access to NGINX access logs from another server.
 
-*   A configured process to stream NGINX access logs from a file to the `transfer_recipe/access_log_topic` topic. For example, you can use [Kafka Connect](../../reference/kafka-api/connect/index.md) [configured](../../reference/kafka-api/connect/connect-examples.md#file-to-topic) to stream data from a file to a topic.
+* A configured process to stream NGINX access logs from a file to the `transfer_recipe/access_log_topic` topic. For example, you can use [Kafka Connect](../../reference/kafka-api/connect/index.md) [configured](../../reference/kafka-api/connect/connect-examples.md#file-to-topic) to stream data from a file to a topic.
 
 ## Step 1. Create a table {#step1}
 
@@ -126,9 +126,9 @@ CREATE TRANSFER `transfer_recipe/access_log_transfer`
 
 In this example:
 
-*  `$transformation_lambda` - a transformation rule for converting a topic message into table columns. Each access log line within the message is processed individually using `line_transformation_lambda`;
-*  `$line_lambda` - a transformation rule for converting a single access log line into a table row;
-*  `$msg` - variable that contains the topic message being processed.
+* `$transformation_lambda` - a transformation rule for converting a topic message into table columns. Each access log line within the message is processed individually using `line_transformation_lambda`;
+* `$line_lambda` - a transformation rule for converting a single access log line into a table row;
+* `$msg` - variable that contains the topic message being processed.
 
 ## Step 3. Verify the table contents {#step3}
 

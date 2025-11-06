@@ -1557,7 +1557,7 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
     }
 }
 
-void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
+void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<IKqpGateway::TPhysicalTxData>& transactions, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
     GetMeta().IsRestored = true;
     GetMeta().AllowWithSpilling = false;
 
@@ -1743,8 +1743,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         YQL_ENSURE(id == newChannel.Id);
     }
 
-    for (ui64 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
-        const auto& tx = Transactions.at(txIdx);
+    for (ui64 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
+        const auto& tx = transactions.at(txIdx);
         const auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
 
         for (ui64 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {

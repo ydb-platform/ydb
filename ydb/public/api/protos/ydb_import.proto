@@ -146,7 +146,7 @@ message ImportFromFsSettings {
     // Base path on FS where the export is located
     // In the case of NFS, one of the directories in the path must be mounted
     // Example: /mnt/exports
-    // SchemaMapping file with the list of objects is written at this path
+    // SchemaMapping file with the list of objects is read from this path
     string base_path = 1 [(required) = true];
 
     repeated Item items = 2; // Empty collection means import of all export objects

@@ -1291,6 +1291,7 @@ namespace NKikimr::NHttpProxy {
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
                 if (HttpContext.IamToken.empty() && Signature) {
+
                     AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
                         ctx.SelfID, HttpContext, std::move(Signature)));
                 } else {
@@ -1408,11 +1409,13 @@ namespace NKikimr::NHttpProxy {
 
 #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
                                                           Ydb::SqsTopic::V1::SqsTopicService,                                   \
-                                                          Ydb::SqsTopic::V1::name##Request,                                     \
-                                                          Ydb::SqsTopic::V1::name##Response,                                    \
-                                                          Ydb::SqsTopic::V1::name##Result,                                      \
-                                                          decltype(&Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name),       \
-                                                          NKikimr::NGRpcService::TEvYmq##name##Request>>(#name, &Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name)
+                                                          Ydb::Ymq::V1::name##Request,                                     \
+                                                          Ydb::Ymq::V1::name##Response,                                    \
+                                                          Ydb::Ymq::V1::name##Result,                                      \
+                                                          decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name),       \
+                                                          NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessage);
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(SendMessageBatch);
 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 

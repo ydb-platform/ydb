@@ -4,7 +4,6 @@
 
 using namespace NKikimr::NSqsTopic;
 
-
 TEST(SqsTopicQueueUrl, ParseEmpty) {
     EXPECT_FALSE(ParseQueueUrl("").has_value());
     EXPECT_FALSE(ParseQueueUrl("http://sqs.ydb.tech/").has_value());

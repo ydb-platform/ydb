@@ -6,7 +6,6 @@
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
-
 #include <expected>
 
 namespace NKikimr::NSqsTopic {
@@ -97,6 +96,9 @@ namespace NKikimr::NSqsTopic {
                 return std::unexpected{"Invalid QueueUrl: " + std::move(r.error())};
             }
         }
+        if (path.empty()) {
+            return std::unexpected{"Invalid QueueUrl: empty path"};
+        }
         return std::unexpected{"Invalid QueueUrl: unsupported version"};
     }
 
@@ -115,4 +117,4 @@ namespace NKikimr::NSqsTopic {
         }
         return result;
     }
-}
+} // namespace NKikimr::NSqsTopic

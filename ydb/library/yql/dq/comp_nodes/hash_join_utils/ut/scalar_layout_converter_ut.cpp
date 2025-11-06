@@ -378,4 +378,179 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
                 "Expected the same large string after pack/unpack");
         }
     }
+
+    Y_UNIT_TEST(TestBatchPackFixedSize) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+
+        // Create test data as flat array (numTuples * numColumns)
+        constexpr ui32 numTuples = TestSize;
+        constexpr ui32 numColumns = 1;
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(numTuples * numColumns);
+        for (size_t i = 0; i < numTuples; i++) {
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i)));
+        }
+
+        // Pack all values using batch method
+        TPackResult packRes;
+        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
+
+        // Unpack and verify
+        for (size_t i = 0; i < numTuples; i++) {
+            NYql::NUdf::TUnboxedValue unpacked[1];
+            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].Get<i64>(), testValues[i].Get<i64>(), 
+                "Expected the same value after batch pack/unpack");
+        }
+    }
+
+    Y_UNIT_TEST(TestBatchPackMultipleColumns) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, int64Type, int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key, 
+            NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+
+        // Create test data as flat array
+        constexpr ui32 numTuples = 64;
+        constexpr ui32 numColumns = 3;
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        testValues.reserve(numTuples * numColumns);
+        
+        for (ui32 i = 0; i < numTuples; i++) {
+            for (ui32 j = 0; j < numColumns; j++) {
+                testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i * 100 + j)));
+            }
+        }
+
+        // Pack using batch method
+        TPackResult packRes;
+        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
+
+        // Unpack and verify
+        for (ui32 i = 0; i < numTuples; i++) {
+            NYql::NUdf::TUnboxedValue unpacked[numColumns];
+            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            for (ui32 j = 0; j < numColumns; j++) {
+                UNIT_ASSERT_VALUES_EQUAL_C(unpacked[j].Get<i64>(), 
+                    testValues[i * numColumns + j].Get<i64>(), 
+                    "Expected the same value after batch pack/unpack");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TestBatchPackStrings) {
+        TScalarLayoutConverterTestData data;
+
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{stringType};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+
+        // Create test data
+        constexpr ui32 numTuples = 64;
+        constexpr ui32 numColumns = 1;
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        TVector<TString> testStrings;
+        testValues.reserve(numTuples);
+        testStrings.reserve(numTuples);
+        
+        for (size_t i = 0; i < numTuples; i++) {
+            TString str;
+            for (size_t j = 0; j <= i % 15; j++) {
+                str += static_cast<char>('a' + (j % 26));
+            }
+            testStrings.push_back(str);
+            testValues.push_back(MakeString(NUdf::TStringRef(str)));
+        }
+
+        // Pack using batch method
+        TPackResult packRes;
+        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
+
+        // Unpack and verify
+        for (size_t i = 0; i < numTuples; i++) {
+            NYql::NUdf::TUnboxedValue unpacked[1];
+            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            auto unpackedStr = unpacked[0].AsStringRef();
+            UNIT_ASSERT_VALUES_EQUAL_C(TString(unpackedStr), testStrings[i], 
+                "Expected the same string after batch pack/unpack");
+        }
+    }
+
+    Y_UNIT_TEST(TestBatchPackMixedTypes) {
+        TScalarLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+        TVector<NKikimr::NMiniKQL::TType*> types{int64Type, stringType, int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{
+            NPackedTuple::EColumnRole::Key, 
+            NPackedTuple::EColumnRole::Key,
+            NPackedTuple::EColumnRole::Payload};
+
+        auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
+
+        // Create test data
+        constexpr ui32 numTuples = 64;
+        constexpr ui32 numColumns = 3;
+        TVector<NYql::NUdf::TUnboxedValue> testValues;
+        TVector<TString> testStrings;
+        testValues.reserve(numTuples * numColumns);
+        testStrings.reserve(numTuples);
+        
+        for (ui32 i = 0; i < numTuples; i++) {
+            // Column 0: int64
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i)));
+            
+            // Column 1: string
+            TString str;
+            for (size_t j = 0; j <= i % 10; j++) {
+                str += static_cast<char>('a' + (j % 26));
+            }
+            testStrings.push_back(str);
+            testValues.push_back(MakeString(NUdf::TStringRef(str)));
+            
+            // Column 2: int64
+            testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i * 2)));
+        }
+
+        // Pack using batch method
+        TPackResult packRes;
+        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
+
+        // Unpack and verify
+        for (ui32 i = 0; i < numTuples; i++) {
+            NYql::NUdf::TUnboxedValue unpacked[numColumns];
+            converter->Unpack(packRes, i, unpacked, data.HolderFactory);
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(unpacked[0].Get<i64>(), 
+                testValues[i * numColumns].Get<i64>(), 
+                "Expected the same int value after batch pack/unpack");
+            
+            auto unpackedStr = unpacked[1].AsStringRef();
+            UNIT_ASSERT_VALUES_EQUAL_C(TString(unpackedStr), testStrings[i], 
+                "Expected the same string after batch pack/unpack");
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(unpacked[2].Get<i64>(), 
+                testValues[i * numColumns + 2].Get<i64>(), 
+                "Expected the same int value after batch pack/unpack");
+        }
+    }
 }

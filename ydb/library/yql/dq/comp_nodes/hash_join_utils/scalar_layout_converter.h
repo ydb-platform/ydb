@@ -21,6 +21,11 @@ public:
     // Pack single tuple from scalar values
     virtual void Pack(const NYql::NUdf::TUnboxedValue* values, TPackResult& packed) = 0;
 
+    // Pack multiple tuples from scalar values (batch version for performance)
+    // values points to array of tuples: values[0..numColumns-1] is first tuple, 
+    // values[numColumns..2*numColumns-1] is second tuple, etc.
+    virtual void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, ui32 numColumns, TPackResult& packed) = 0;
+
     // Unpack single tuple to scalar values
     virtual void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values, const THolderFactory& holderFactory) = 0;
 

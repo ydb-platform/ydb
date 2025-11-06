@@ -26,12 +26,27 @@ struct IColumnDataExtractor {
     virtual ~IColumnDataExtractor() = default;
 
     virtual void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) = 0;
+    
+    // Batch version to reduce virtual call overhead - non-virtual wrapper
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) {
+        ExtractForPackBatchImpl(values, count, columnsData, columnsNullBitmap, tempStorage);
+    }
+    
     virtual NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) = 0;
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
+
+protected:
+    // Virtual implementation that can be overridden
+    virtual void ExtractForPackBatchImpl(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) {
+        // Default implementation: fallback to single-value calls
+        for (ui32 i = 0; i < count; ++i) {
+            ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+        }
+    }
 };
 
 // ------------------------------------------------------------
@@ -62,6 +77,39 @@ public:
 
         columnsData.push_back(dataStorage.data());
         columnsNullBitmap.push_back(bitmapStorage.data());
+    }
+
+protected:
+    void ExtractForPackBatchImpl(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        if (count == 0) return;
+        
+        // Allocate storage for all values at once
+        auto& dataStorage = tempStorage.emplace_back(sizeof(TLayout) * count);
+        auto& bitmapStorage = tempStorage.emplace_back(count);
+        
+        TLayout* dataPtr = reinterpret_cast<TLayout*>(dataStorage.data());
+        ui8* bitmapPtr = bitmapStorage.data();
+        
+        if constexpr (Nullable) {
+            for (ui32 i = 0; i < count; ++i) {
+                if (!values[i]) {
+                    bitmapPtr[i] = 0; // null
+                    std::memset(&dataPtr[i], 0, sizeof(TLayout));
+                } else {
+                    bitmapPtr[i] = 1; // not null
+                    dataPtr[i] = values[i].Get<TLayout>();
+                }
+                columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
+                columnsNullBitmap.push_back(&bitmapPtr[i]);
+            }
+        } else {
+            for (ui32 i = 0; i < count; ++i) {
+                bitmapPtr[i] = 1;
+                dataPtr[i] = values[i].Get<TLayout>();
+                columnsData.push_back(reinterpret_cast<const ui8*>(&dataPtr[i]));
+                columnsNullBitmap.push_back(&bitmapPtr[i]);
+            }
+        }
     }
 
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
@@ -244,6 +292,73 @@ public:
         columnsData.push_back(stringData.data());
         columnsNullBitmap.push_back(bitmapStorage.data());
         columnsNullBitmap.push_back(nullptr);
+    }
+
+protected:
+    void ExtractForPackBatchImpl(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        if (count == 0) return;
+        
+        // First pass: calculate total string data size
+        ui32 totalSize = 0;
+        for (ui32 i = 0; i < count; ++i) {
+            if constexpr (Nullable) {
+                if (values[i]) {
+                    totalSize += values[i].AsStringRef().Size();
+                }
+            } else {
+                totalSize += values[i].AsStringRef().Size();
+            }
+        }
+        
+        // Allocate storage for all strings at once
+        auto& bitmapStorage = tempStorage.emplace_back(count);
+        auto& offsetStorage = tempStorage.emplace_back((count + 1) * sizeof(ui32));
+        auto& stringDataStorage = tempStorage.emplace_back(totalSize > 0 ? totalSize : 1);
+        
+        ui8* bitmapPtr = bitmapStorage.data();
+        ui32* offsets = reinterpret_cast<ui32*>(offsetStorage.data());
+        ui8* stringDataPtr = stringDataStorage.data();
+        
+        ui32 currentOffset = 0;
+        offsets[0] = 0;
+        
+        for (ui32 i = 0; i < count; ++i) {
+            if constexpr (Nullable) {
+                if (!values[i]) {
+                    bitmapPtr[i] = 0;
+                    offsets[i + 1] = currentOffset; // empty string
+                } else {
+                    bitmapPtr[i] = 1;
+                    auto ref = values[i].AsStringRef();
+                    ui32 size = ref.Size();
+                    if (size > 0) {
+                        std::memcpy(stringDataPtr + currentOffset, ref.Data(), size);
+                        currentOffset += size;
+                    }
+                    offsets[i + 1] = currentOffset;
+                }
+            } else {
+                bitmapPtr[i] = 1;
+                auto ref = values[i].AsStringRef();
+                ui32 size = ref.Size();
+                if (size > 0) {
+                    std::memcpy(stringDataPtr + currentOffset, ref.Data(), size);
+                    currentOffset += size;
+                }
+                offsets[i + 1] = currentOffset;
+            }
+            
+            // Create individual offset buffers for each value
+            auto& individualOffsetStorage = tempStorage.emplace_back(2 * sizeof(ui32));
+            ui32* individualOffsets = reinterpret_cast<ui32*>(individualOffsetStorage.data());
+            individualOffsets[0] = offsets[i];
+            individualOffsets[1] = offsets[i + 1];
+            
+            columnsData.push_back(individualOffsetStorage.data());
+            columnsData.push_back(stringDataPtr);
+            columnsNullBitmap.push_back(&bitmapPtr[i]);
+            columnsNullBitmap.push_back(nullptr);
+        }
     }
 
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
@@ -534,6 +649,18 @@ public:
         TupleLayout_->Pack(
             columnsData.data(), columnsNullBitmap.data(),
             packedTuples.data() + currentSize, overflow, 0, 1);
+    }
+
+    void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, ui32 numColumns, TPackResult& packed) override {
+        Y_ENSURE(numColumns == Extractors_.size(), "Number of columns must match number of extractors");
+        
+        if (numTuples == 0) return;
+        
+        // For now, use simple loop over Pack to ensure correctness
+        // TODO: Optimize by doing batch extraction and single Pack call
+        for (ui32 tupleIdx = 0; tupleIdx < numTuples; ++tupleIdx) {
+            Pack(values + tupleIdx * numColumns, packed);
+        }
     }
 
     void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values, const THolderFactory& holderFactory) override {

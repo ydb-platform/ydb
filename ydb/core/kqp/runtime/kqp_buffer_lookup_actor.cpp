@@ -287,9 +287,6 @@ public:
         if (Settings.MvccSnapshot) {
             record.MutableSnapshot()->SetStep(Settings.MvccSnapshot->GetStep());
             record.MutableSnapshot()->SetTxId(Settings.MvccSnapshot->GetTxId());
-        } else {
-            // Unique index check is ensure, so it requires snapshot. TODO: if there is another read/ensure
-            //AFL_ENSURE(!isUniqueCheck);
         }
         AFL_ENSURE(!failOnUniqueCheck || isUniqueCheck);
 

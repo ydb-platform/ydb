@@ -173,19 +173,11 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     size_t readPhases = 0;
     bool hasEffects = false;
     bool hasStreamLookup = false;
-    bool hasSinkWrite = false;
-    bool hasSinkInsert = false;
     bool hasVectorResolve = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
-        switch (tx.GetType()) {
-            case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
-                // ignore pure computations
-                break;
-
-            default:
-                ++readPhases;
-                break;
+        if (tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
+            ++readPhases;
         }
 
         if (tx.GetHasEffects()) {
@@ -193,16 +185,32 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
 
         for (const auto &stage : tx.GetStages()) {
-            hasSinkWrite |= !stage.GetSinks().empty();
-
             for (const auto &sink : stage.GetSinks()) {
+                AFL_ENSURE(tx.GetHasEffects());
+
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
                     && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
                 {
+                    AFL_ENSURE(tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
                     NKikimrKqp::TKqpTableSinkSettings sinkSettings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
                     if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                        hasSinkInsert = true;
+                        // Insert operations create new read phases,
+                        // so in presence of other reads we have to acquire snapshot.
+                        // This is unique to INSERT operation, because it can fail.
+                        ++readPhases;
+                    }
+
+                    if (!sinkSettings.GetLookupColumns().empty()) {
+                        // Lookup for index update
+                        ++readPhases;
+                    }
+                    
+                    for (const auto& index : sinkSettings.GetIndexes()) {
+                        if (index.GetIsUniq()) {
+                            // Unique index check
+                            ++readPhases;
+                        }
                     }
                 }
             }
@@ -225,8 +233,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    YQL_ENSURE(!hasSinkWrite || hasEffects);
-
     // We need snapshot for stream lookup, besause it's used for dependent reads
     if (hasStreamLookup || hasVectorResolve) {
         return true;
@@ -243,14 +249,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             return true;
         }
         // ReadOnly transaction here
-    }
-
-    if (hasSinkInsert && readPhases > 0) {
-        YQL_ENSURE(hasEffects);
-        // Insert operations create new read phases,
-        // so in presence of other reads we have to acquire snapshot.
-        // This is unique to INSERT operation, because it can fail.
-        return true;
     }
 
     // We need snapshot when there are multiple table read phases, most

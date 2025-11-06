@@ -781,6 +781,36 @@ class BaseTestBackupInFiles(object):
 
         raise AssertionError("describe_path returned SchemeEntry in unexpected shape. Cannot locate columns.")
 
+    def has_changefeeds(self, table_name: str) -> Tuple[bool, int]:
+        r = yatest.common.execute(
+            [
+                backup_bin(),
+                "--endpoint",
+                f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                "--database",
+                self.root_dir,
+                "scheme",
+                "describe",
+                table_name
+            ],
+            check_exit_code=False,
+        )
+        out = (r.std_out or b"").decode("utf-8", "ignore")
+
+        # Count total backup changefeeds and their states
+        total_backup_cfs = out.count("_continuousBackupImpl")
+        enabled_count = out.count("Enabled")
+        disabled_count = out.count("Disabled")
+
+        # Check if all changefeeds are accounted for (enabled + disabled)
+        has_backup_cfs = total_backup_cfs > 0 and total_backup_cfs == (disabled_count + enabled_count)
+
+        return has_backup_cfs, enabled_count
+
+    def drop_backup_collection(self, collection_name: str) -> None:
+        res = self._execute_yql(f"DROP BACKUP COLLECTION `{collection_name}`;")
+        assert res.exit_code == 0, f"Failed to drop backup collection '{collection_name}': {res.std_err}"
+
 
 # ================ BUILDER AND HELPER CLASSES ================
 class BackupBuilder:
@@ -1974,3 +2004,90 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(BaseTestBackupInFile
             # Cleanup
             if os.path.exists(export_dir):
                 shutil.rmtree(export_dir)
+
+
+class TestBackupCollectionServiceObjectsCleanup(BaseTestBackupInFiles):
+    def test_service_schema_objects_cleanup_on_delete(self):
+        # Setup
+        t_orders = "orders"
+        t_products = "products"
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
+
+        # Create initial tables
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
+
+        # Before creating backup collection - should have no changefeeds
+        has_cfs_orders, enabled_orders = self.has_changefeeds(t_orders)
+        has_cfs_products, enabled_products = self.has_changefeeds(t_products)
+
+        assert not has_cfs_orders, "Table orders should not have changefeeds before backup collection creation"
+        assert not has_cfs_products, "Table products should not have changefeeds before backup collection creation"
+        assert enabled_orders == 0, f"No enabled changefeeds expected on orders, got {enabled_orders}"
+        assert enabled_products == 0, f"No enabled changefeeds expected on products, got {enabled_products}"
+
+        collection_name = f"test_cleanup_{uuid.uuid4().hex[:8]}"
+
+        # Use orchestrator for backup lifecycle
+        with backup_lifecycle(self, collection_name, [full_orders, full_products]) as backup:
+
+            # Create backup collection with incremental enabled
+            backup.create_collection(incremental_enabled=True)
+
+            # Check changefeeds after collection creation (should still be 0 - created only on first backup)
+            has_cfs_orders, enabled_orders = self.has_changefeeds(t_orders)
+            has_cfs_products, enabled_products = self.has_changefeeds(t_products)
+
+            assert not has_cfs_orders, "Changefeeds should not exist yet on orders (created on first backup)"
+            assert not has_cfs_products, "Changefeeds should not exist yet on products (created on first backup)"
+
+            # Create a full backup - this should create the first changefeed
+            backup.stage(BackupType.FULL, "Initial full backup")
+
+            # Check changefeeds after full backup - should have 1 enabled changefeed
+            has_cfs_orders, enabled_orders = self.has_changefeeds(t_orders)
+            has_cfs_products, enabled_products = self.has_changefeeds(t_products)
+
+            assert has_cfs_orders, "Changefeeds should exist on orders after full backup"
+            assert has_cfs_products, "Changefeeds should exist on products after full backup"
+            assert enabled_orders == 1, f"Expected 1 enabled changefeed on orders after full backup, got {enabled_orders}"
+            assert enabled_products == 1, f"Expected 1 enabled changefeed on products after full backup, got {enabled_products}"
+
+            # Modify data for incremental
+            DataHelper(self, t_orders).modify(add_rows=[(100, 1000, "for_incremental")], remove_ids=[1])
+
+            # Create incremental backup - old changefeed becomes Disabled, new one is Enabled
+            backup.stage(BackupType.INCREMENTAL, "First incremental backup")
+
+            # Check changefeeds after incremental backup
+            has_cfs_orders, enabled_orders = self.has_changefeeds(t_orders)
+            has_cfs_products, enabled_products = self.has_changefeeds(t_products)
+
+            assert has_cfs_orders, "Changefeeds should still exist on orders after incremental backup"
+            assert has_cfs_products, "Changefeeds should still exist on products after incremental backup"
+            # After incremental, we still have 1 enabled (previous disabled, new enabled)
+            assert enabled_orders == 1, f"Expected 1 enabled changefeed on orders after incremental, got {enabled_orders}"
+            assert enabled_products == 1, f"Expected 1 enabled changefeed on products after incremental, got {enabled_products}"
+
+        # Drop the backup collection
+        self.drop_backup_collection(collection_name)
+
+        # Verify collection no longer exists
+        assert not self.collection_exists(collection_name), f"Collection {collection_name} should not exist after DROP"
+
+        # Changefeeds should be cleaned up
+        has_cfs_orders, enabled_orders = self.has_changefeeds(t_orders)
+        has_cfs_products, enabled_products = self.has_changefeeds(t_products)
+
+        assert not has_cfs_orders, (
+            "CRITICAL: Changefeeds were NOT cleaned up on orders table after dropping backup collection! "
+            "This may lead to resource leaks."
+        )
+        assert not has_cfs_products, (
+            "CRITICAL: Changefeeds were NOT cleaned up on products table after dropping backup collection! "
+            "This may lead to resource leaks."
+        )
+        assert enabled_orders == 0, f"No enabled changefeeds expected on orders after cleanup, got {enabled_orders}"
+        assert enabled_products == 0, f"No enabled changefeeds expected on products after cleanup, got {enabled_products}"

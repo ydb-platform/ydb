@@ -2305,6 +2305,14 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 
     DBGTRACE_LOG("");
     WaitCmdWrite({.Count=5, .UserInfos={
+                 {1, {.Session="session-2", .Offset=0}},
+                 {3, {.Session="session-1", .Offset=0}}
+                 }});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=5, .UserInfos={
                  {1, {.Session="session-2", .Offset=1}},
                  {3, {.Session="session-1", .Offset=6}}
                  }});

@@ -14,24 +14,24 @@
 
 {% endif %}
 
+```yql
 CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] table_name (
-	column_name column_type [FAMILY <family_name>] [NOT] NULL [DEFAULT <column_defult_value>],
+  column_name column_data_type [FAMILY <family_name>] [NOT] NULL,
     INDEX `<index_name>`
-		GLOBAL
-		[UNIQUE]
-		[SYNC|ASYNC]
-		[USING <index_type>]
-		ON ( <index_columns> )
-			[COVER ( <cover_columns> )]
-			[WITH ( <parameter_name> = <parameter_value>[, ...])]
-	PRIMARY KEY ( <column>[, ...]),
-	PARTITION BY ( <column>[, ...]),
-    FAMILY column_family ( family_options[, ...])
+      GLOBAL
+      [UNIQUE]
+      [SYNC|ASYNC]
+      [USING <index_type>]
+      ON ( <index_columns> )
+      [COVER ( <cover_columns> )]
+      [WITH ( <parameter_name> = <parameter_value>[, ...])]
+  PRIMARY KEY ( <column>[, ...]),
+  FAMILY column_family ( family_options[, ...])
 )
-[PARTITION BY HASH (column[, ...])],
 [WITH (<setting_name> = <setting_value>[, ...])]
 
 [AS SELECT ...]
+```
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -64,6 +64,32 @@ WITH (
 При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
+
+## Параметры
+
+### IF NOT EXISTS
+
+Не считать ошибкой, если таблица с таким именем уже существует. Заметьте, что нет никакой гарантии, что существующая таблица как-то соотносится с той, которая могла бы быть создана.
+
+### table_name
+
+Имя создаваемой таблицы.
+
+### column_name
+
+Имя столбца, создаваемого в новой таблице.
+
+### column_data_type
+
+Тип данных столбца. Полный список типов данных, которые поддерживает {{ ydb-short-name }} доступен в разделе [Типы данных](../../types/index.md).
+
+### NULL
+
+Данный столбец может содержать значения NULL (по умолчанию).
+
+### NOT NULL
+
+Данный столбец не принимает значения NULL.
 
 ## Примеры создания таблиц
 

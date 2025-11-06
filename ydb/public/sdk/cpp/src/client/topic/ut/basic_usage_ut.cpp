@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
             auto issue = status.GetIssues().ToOneLineString();
             UNIT_ASSERT_C(!status.IsSuccess(), issue);
-            UNIT_ASSERT_C(issue.contains("Cannot alter dead letter policy action"), issue);
+            UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
         }
     }
 

@@ -31,7 +31,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         } else if (CurrentStateFunc() == &TThis::StateIdle) {
             return "Idle";
         } else {
-            Y_ABORT("");
+            return "Unknown";
         }
     };
     static constexpr std::pair<TStringBuf, const TPartitionBlobEncoder TPartition::*> encoders[2]{

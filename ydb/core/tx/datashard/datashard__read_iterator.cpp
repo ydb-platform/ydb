@@ -2953,7 +2953,8 @@ public:
 
             ApplyLocks(ctx);
 
-            if (Reader->NeedVolatileWaitForCommit() ||
+            if (txc.DB.HasChanges() ||
+                Reader->NeedVolatileWaitForCommit() ||
                 Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
                 Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
             {

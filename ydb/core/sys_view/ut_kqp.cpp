@@ -2839,7 +2839,7 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
-        check.Int64(0u); // TxCompleteLag
+        check.Int64(0); // TxCompleteLag
         check.Uint64(0u); // FollowerId
         check.Uint64(0u); // LocksAcquired
         check.Uint64(0u); // LocksWholeShard

@@ -138,7 +138,7 @@ public:
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
 
     void SetKeepMessageOrder(bool keepMessageOrder);
-    void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
+    void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
 
     ui64 GetFirstOffset() const;
@@ -213,7 +213,7 @@ private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 
     bool KeepMessageOrder = false;
-    ui32 MaxMessageReceiveCount = 1000;
+    ui32 MaxMessageProcessingCount = 1000;
     std::optional<TDuration> RetentionPeriod = TDuration::Days(365);
 
     // Offset of the first message loaded for processing. All messages with a smaller offset

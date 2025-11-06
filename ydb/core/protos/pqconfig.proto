@@ -384,7 +384,7 @@ message TPQTabletConfig {
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
         optional bool KeepMessageOrder = 13 [default = false]; // For MLP consumers
-        optional uint32 MaxMessageReceiveCount = 14 [default = 1000]; // For MLP consumers
+        optional uint32 MaxMessageProcessingCount = 14 [default = 1000]; // For MLP consumers
         optional uint32 DefaultVisibilityTimeoutSeconds = 15 [default = 30]; // For MLP consumers
     }
 

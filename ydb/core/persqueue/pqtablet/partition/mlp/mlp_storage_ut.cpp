@@ -949,7 +949,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
     {
         TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
-        storage.SetMaxMessageReceiveCount(1);
+        storage.SetMaxMessageProcessingCount(1);
         storage.SerializeTo(snapshot);
 
         storage.AddMessage(3, true, 5, writeTimestamp);
@@ -1280,7 +1280,7 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
 
 Y_UNIT_TEST(CompactStorage_WithDLQ) {
     TStorage storage(CreateDefaultTimeProvider());
-    storage.SetMaxMessageReceiveCount(1);
+    storage.SetMaxMessageProcessingCount(1);
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
 
@@ -1411,7 +1411,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
 
     TStorage storage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
     storage.SetKeepMessageOrder(true);
-    storage.SetMaxMessageReceiveCount(1);
+    storage.SetMaxMessageProcessingCount(1);
     storage.SetRetentionPeriod(TDuration::Seconds(7 * 13));
 
     NKikimrPQ::TMLPStorageSnapshot snapshot;
@@ -1621,7 +1621,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
 
     TStorage restoredStorage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
     restoredStorage.SetKeepMessageOrder(true);
-    restoredStorage.SetMaxMessageReceiveCount(1);
+    restoredStorage.SetMaxMessageProcessingCount(1);
     restoredStorage.SetRetentionPeriod(TDuration::Seconds(7 * 13));
 
     Cerr << "SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
@@ -1732,7 +1732,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
 
     TStorage restoredStorage5(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
     restoredStorage5.SetKeepMessageOrder(true);
-    restoredStorage5.SetMaxMessageReceiveCount(1);
+    restoredStorage5.SetMaxMessageProcessingCount(1);
     restoredStorage5.SetRetentionPeriod(TDuration::Seconds(7 * 13));
 
     Cerr << "RESTORED SNAPSHOT 5: " << snapshot5.ShortDebugString() << Endl;

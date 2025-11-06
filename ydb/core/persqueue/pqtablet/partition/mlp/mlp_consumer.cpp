@@ -332,7 +332,7 @@ void TConsumerActor::CommitIfNeeded() {
 
 void TConsumerActor::UpdateStorageConfig() {
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
-    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+    Storage->SetMaxMessageProcessingCount(Config.GetMaxMessageProcessingCount());
     Storage->SetRetentionPeriod(RetentionPeriod);
 }
 

@@ -30,8 +30,8 @@ void TStorage::SetKeepMessageOrder(bool keepMessageOrder) {
     KeepMessageOrder = keepMessageOrder;
 }
 
-void TStorage::SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount) {
-    MaxMessageReceiveCount = maxMessageReceiveCount;
+void TStorage::SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount) {
+    MaxMessageProcessingCount = MaxMessageProcessingCount;
 }
 
 void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
@@ -466,7 +466,7 @@ void TStorage::DoUnlock( ui64 offset, TMessage& message) {
 
     --Metrics.LockedMessageCount;
 
-    if (message.ReceiveCount >= MaxMessageReceiveCount) {
+    if (message.ReceiveCount >= MaxMessageProcessingCount) {
         // TODO Move to DLQ or remove message
         message.Status = EMessageStatus::DLQ;
         DLQQueue.push_back(offset);

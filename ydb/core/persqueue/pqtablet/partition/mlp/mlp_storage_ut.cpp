@@ -247,18 +247,18 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
-Y_UNIT_TEST(NextWithWriteReteintion) {
+Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
     TStorage storage(timeProvider);
-    storage.SetReteintion(TDuration::Seconds(5));
+    storage.SetRetentionPeriod(TDuration::Seconds(5));
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
     storage.AddMessage(4, true, 5, timeProvider->Now() + TDuration::Seconds(7));
 
     timeProvider->Tick(TDuration::Seconds(6));
 
-    // skip message by reteintion
+    // skip message by retention
     TStorage::TPosition position;
     auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
@@ -1235,12 +1235,12 @@ Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
-Y_UNIT_TEST(CompactStorage_ByReteintion) {
+Y_UNIT_TEST(CompactStorage_ByRetention) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(12);
 
     TStorage storage(timeProvider);
-    storage.SetReteintion(TDuration::Seconds(1));
+    storage.SetRetentionPeriod(TDuration::Seconds(1));
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
     storage.AddMessage(4, true, 7, timeProvider->Now() + TDuration::Seconds(11));
@@ -1412,7 +1412,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
     TStorage storage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
     storage.SetKeepMessageOrder(true);
     storage.SetMaxMessageReceiveCount(1);
-    storage.SetReteintion(TDuration::Seconds(7 * 13));
+    storage.SetRetentionPeriod(TDuration::Seconds(7 * 13));
 
     NKikimrPQ::TMLPStorageSnapshot snapshot;
     storage.SerializeTo(snapshot);
@@ -1622,7 +1622,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
     TStorage restoredStorage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
     restoredStorage.SetKeepMessageOrder(true);
     restoredStorage.SetMaxMessageReceiveCount(1);
-    restoredStorage.SetReteintion(TDuration::Seconds(7 * 13));
+    restoredStorage.SetRetentionPeriod(TDuration::Seconds(7 * 13));
 
     Cerr << "SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
     restoredStorage.Initialize(snapshot);
@@ -1733,7 +1733,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
     TStorage restoredStorage5(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
     restoredStorage5.SetKeepMessageOrder(true);
     restoredStorage5.SetMaxMessageReceiveCount(1);
-    restoredStorage5.SetReteintion(TDuration::Seconds(7 * 13));
+    restoredStorage5.SetRetentionPeriod(TDuration::Seconds(7 * 13));
 
     Cerr << "RESTORED SNAPSHOT 5: " << snapshot5.ShortDebugString() << Endl;
 

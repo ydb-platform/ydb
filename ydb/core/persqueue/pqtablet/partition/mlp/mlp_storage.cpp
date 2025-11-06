@@ -34,14 +34,14 @@ void TStorage::SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount) {
     MaxMessageReceiveCount = maxMessageReceiveCount;
 }
 
-void TStorage::SetReteintion(std::optional<TDuration> reteintion) {
-    Reteintion = reteintion;
+void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
+    RetentionPeriod = retentionPeriod;
 }
 
 std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
     auto dieDelta = Max<ui64>();
-    if (Reteintion) {
-        auto dieTime = TimeProvider->Now() - Reteintion.value();
+    if (RetentionPeriod) {
+        auto dieTime = TimeProvider->Now() - RetentionPeriod.value();
         dieDelta = dieTime > BaseWriteTimestamp ? (dieTime - BaseWriteTimestamp).Seconds() : 0;
     }
 
@@ -156,9 +156,9 @@ size_t TStorage::Compact() {
 
     size_t removed = 0;
 
-    // Remove messages by reteintion
-    if (Reteintion && (TimeProvider->Now() - Reteintion.value()) > BaseWriteTimestamp) {
-        auto dieDelta = (TimeProvider->Now() - Reteintion.value() - BaseWriteTimestamp).Seconds();
+    // Remove messages by retention
+    if (RetentionPeriod && (TimeProvider->Now() - RetentionPeriod.value()) > BaseWriteTimestamp) {
+        auto dieDelta = (TimeProvider->Now() - RetentionPeriod.value() - BaseWriteTimestamp).Seconds();
         auto dieProcessingDelta = dieDelta + 60;
 
         auto canRemove = [&](auto& message) {

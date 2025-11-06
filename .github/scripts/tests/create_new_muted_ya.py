@@ -146,7 +146,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
             logging.info("Successfully connected to YDB")
             
             logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string)
+            results = ydb_wrapper.execute_scan_query(query_string, query_name="get_tests_monitor_data")
             
             logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
             return results

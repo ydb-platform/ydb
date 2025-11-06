@@ -82,7 +82,7 @@ def get_missed_data_for_upload(ydb_wrapper, test_runs_table, test_history_fast_t
     """
 
     print(f'missed data capturing')
-    results = ydb_wrapper.execute_scan_query(query)
+    results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
     return results
 
 

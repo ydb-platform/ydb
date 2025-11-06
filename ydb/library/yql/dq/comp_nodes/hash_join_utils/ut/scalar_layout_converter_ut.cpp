@@ -388,18 +388,17 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         auto converter = MakeScalarLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles);
 
-        // Create test data as flat array (numTuples * numColumns)
+        // Create test data as flat array
         constexpr ui32 numTuples = TestSize;
-        constexpr ui32 numColumns = 1;
         TVector<NYql::NUdf::TUnboxedValue> testValues;
-        testValues.reserve(numTuples * numColumns);
+        testValues.reserve(numTuples);
         for (size_t i = 0; i < numTuples; i++) {
             testValues.push_back(NYql::NUdf::TUnboxedValuePod(static_cast<i64>(i)));
         }
 
         // Pack all values using batch method
         TPackResult packRes;
-        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        converter->PackBatch(testValues.data(), numTuples, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
 
         // Unpack and verify
@@ -425,7 +424,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         // Create test data as flat array
         constexpr ui32 numTuples = 64;
-        constexpr ui32 numColumns = 3;
+        const ui32 numColumns = types.size();
         TVector<NYql::NUdf::TUnboxedValue> testValues;
         testValues.reserve(numTuples * numColumns);
         
@@ -437,7 +436,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         // Pack using batch method
         TPackResult packRes;
-        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        converter->PackBatch(testValues.data(), numTuples, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
 
         // Unpack and verify
@@ -463,7 +462,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         // Create test data
         constexpr ui32 numTuples = 64;
-        constexpr ui32 numColumns = 1;
         TVector<NYql::NUdf::TUnboxedValue> testValues;
         TVector<TString> testStrings;
         testValues.reserve(numTuples);
@@ -480,7 +478,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         // Pack using batch method
         TPackResult packRes;
-        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        converter->PackBatch(testValues.data(), numTuples, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
 
         // Unpack and verify
@@ -508,7 +506,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         // Create test data
         constexpr ui32 numTuples = 64;
-        constexpr ui32 numColumns = 3;
+        const ui32 numColumns = types.size();
         TVector<NYql::NUdf::TUnboxedValue> testValues;
         TVector<TString> testStrings;
         testValues.reserve(numTuples * numColumns);
@@ -532,7 +530,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
 
         // Pack using batch method
         TPackResult packRes;
-        converter->PackBatch(testValues.data(), numTuples, numColumns, packRes);
+        converter->PackBatch(testValues.data(), numTuples, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, numTuples, "Expected all tuples to be packed");
 
         // Unpack and verify

@@ -27,10 +27,7 @@ struct IColumnDataExtractor {
 
     virtual void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) = 0;
     
-    // Batch version to reduce virtual call overhead - non-virtual wrapper
-    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) {
-        ExtractForPackBatchImpl(values, count, columnsData, columnsNullBitmap, tempStorage);
-    }
+    virtual void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) = 0;
     
     virtual NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) = 0;
     
@@ -38,15 +35,6 @@ struct IColumnDataExtractor {
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
-
-protected:
-    // Virtual implementation that can be overridden
-    virtual void ExtractForPackBatchImpl(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) {
-        // Default implementation: fallback to single-value calls
-        for (ui32 i = 0; i < count; ++i) {
-            ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
-        }
-    }
 };
 
 // ------------------------------------------------------------
@@ -79,8 +67,7 @@ public:
         columnsNullBitmap.push_back(bitmapStorage.data());
     }
 
-protected:
-    void ExtractForPackBatchImpl(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         if (count == 0) return;
         
         // Allocate storage for all values at once
@@ -173,6 +160,13 @@ public:
         columnsNullBitmap.push_back(bitmapStorage.data());
     }
 
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        // Fallback to single-value extraction
+        for (ui32 i = 0; i < count; ++i) {
+            ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+        }
+    }
+
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         Y_UNUSED(holderFactory);
 
@@ -218,6 +212,13 @@ public:
 
         columnsData.push_back(dataStorage.data());
         columnsNullBitmap.push_back(nullptr);
+    }
+
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        // Fallback to single-value extraction
+        for (ui32 i = 0; i < count; ++i) {
+            ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+        }
     }
 
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
@@ -294,8 +295,7 @@ public:
         columnsNullBitmap.push_back(nullptr);
     }
 
-protected:
-    void ExtractForPackBatchImpl(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         if (count == 0) return;
         
         // First pass: calculate total string data size
@@ -423,6 +423,13 @@ public:
         }
     }
 
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        // Fallback to single-value extraction
+        for (ui32 i = 0; i < count; ++i) {
+            ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+        }
+    }
+
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         NYql::NUdf::TUnboxedValue* items = nullptr;
         auto result = holderFactory.CreateDirectArrayHolder(Children_.size(), items);
@@ -492,6 +499,10 @@ public:
 
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         Inner_->ExtractForPack(value, columnsData, columnsNullBitmap, tempStorage);
+    }
+
+    void ExtractForPackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 count, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
+        Inner_->ExtractForPackBatch(values, count, columnsData, columnsNullBitmap, tempStorage);
     }
 
     NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
@@ -651,13 +662,10 @@ public:
             packedTuples.data() + currentSize, overflow, 0, 1);
     }
 
-    void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, ui32 numColumns, TPackResult& packed) override {
-        Y_ENSURE(numColumns == Extractors_.size(), "Number of columns must match number of extractors");
-        
+    void PackBatch(const NYql::NUdf::TUnboxedValue* values, ui32 numTuples, TPackResult& packed) override {
         if (numTuples == 0) return;
         
-        // For now, use simple loop over Pack to ensure correctness
-        // TODO: Optimize by doing batch extraction and single Pack call
+        const ui32 numColumns = Extractors_.size();
         for (ui32 tupleIdx = 0; tupleIdx < numTuples; ++tupleIdx) {
             Pack(values + tupleIdx * numColumns, packed);
         }

@@ -1615,9 +1615,7 @@ protected:
     }
 
     void ScheduleIdlenessCheck() {
-        auto checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
-        // only schedule new check if nothing scheduled at same or earlier time
-        if (checkTime && WatermarksTracker.AddScheduledIdlenessCheck(*checkTime)) {
+        if (auto checkTime = WatermarksTracker.PrepareIdlenessCheck()) {
             CA_LOG_T("Schedule next idleness check from " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }

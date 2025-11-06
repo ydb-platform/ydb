@@ -579,7 +579,7 @@ private:
         }
 
         if (WatermarkTracker) {
-            WatermarkTracker->ProcessIdlenessCheck(now);
+            WatermarkTracker->ProcessIdlenessCheck(now); // drop obsolete checks
             const auto watermark = WatermarkTracker->HandleIdleness(now);
 
             if (watermark) {

@@ -45,9 +45,12 @@ public:
 
     TMaybe<TInstant> GetMaxWatermark() const;
 
+    // Return watermark that was generated after input idleness processing
     TMaybe<TInstant> HandleIdleness(TInstant systemTime);
-    TMaybe<TInstant> GetNextIdlenessCheckAt() const;
-    [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime);
+
+    // Return idleness check that should be scheduled or Nothing()
+    [[nodiscard]] TMaybe<TInstant> PrepareIdlenessCheck();
+    // Return true if idleness check should be performed
     [[nodiscard]] bool ProcessIdlenessCheck(TInstant notifyTime);
 
     void SetLogPrefix(const TString& logPrefix);

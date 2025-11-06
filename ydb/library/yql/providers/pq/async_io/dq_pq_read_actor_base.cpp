@@ -167,18 +167,10 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
 
 void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
     Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
-
-    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-    if (!nextIdleCheckAt) {
-        return;
+    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
+        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+        SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
     }
-    Y_DEBUG_ABORT_UNLESS(*nextIdleCheckAt >= systemTime);
-
-    if (!WatermarkTracker->AddScheduledIdlenessCheck(*nextIdleCheckAt)) {
-        return;
-    }
-    SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-    SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
 }
 
 } // namespace NYql::NDq::NInternal

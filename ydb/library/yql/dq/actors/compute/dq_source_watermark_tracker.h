@@ -42,13 +42,15 @@ public:
         return Impl_.HandleIdleness(ToDiscreteTime(systemTime));
     }
 
-    [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt(TInstant systemTime) {
-        auto nextCheck = Impl_.GetNextIdlenessCheckAt();
-        return nextCheck ? TMaybe<TInstant>(ToNextDiscreteTime(Max(*nextCheck, systemTime))) : Nothing();
-    }
-
-    [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime) {
-        return Impl_.AddScheduledIdlenessCheck(notifyTime);
+    // returns time for idleness check that should be scheduled now
+    [[nodiscard]] TMaybe<TInstant> PrepareIdlenessCheck(TInstant systemTime) {
+        if (auto nextCheck = Impl_.GetNextIdlenessCheckAt()) {
+            auto notifyTime = ToNextDiscreteTime(Max(*nextCheck, systemTime));
+            if (Impl_.AddScheduledIdlenessCheck(notifyTime)) {
+                return notifyTime;
+            }
+        }
+        return Nothing();
     }
 
     bool ProcessIdlenessCheck(TInstant notifyTime) {

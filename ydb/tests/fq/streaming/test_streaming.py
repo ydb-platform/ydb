@@ -296,7 +296,6 @@ class TestStreamingInYdb(TestYdsBase):
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 
-
     def test_restart_query_by_rescaling(self, kikimr):
         sourceName = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=10)
@@ -356,5 +355,3 @@ class TestStreamingInYdb(TestYdsBase):
         self.read_stream(message_count, topic_path=self.output_topic) == expected
 
         kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
-
-

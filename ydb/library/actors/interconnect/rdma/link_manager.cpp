@@ -1,6 +1,7 @@
 #include "link_manager.h"
 #include "ctx.h"
 #include "ctx_impl.h"
+#include <mutex>
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -37,6 +38,10 @@ public:
         return CtxMap;
     }
 
+    bool IsLoadFail() const noexcept {
+        return LoadFail;
+    }
+
     TRdmaCtx* GetCtx(const ibv_gid& gid) {
         auto it = std::lower_bound(
             CtxMap.begin(), CtxMap.end(),
@@ -57,13 +62,16 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
+            LoadFail = true;
             return;
         }
     }
-private:
-    TCtxsMap CtxMap;
 
     void ScanDevices() {
+        std::lock_guard<std::mutex> lock(Mtx);
+        if (Inited) {
+            return;
+        }
         int numDevices = 0;
         int err;
         ibv_device** deviceList = ibv_get_device_list(&numDevices);
@@ -130,10 +138,16 @@ private:
                 }
             }
         }
+        Inited = true;
     }
 
+private:
+    TCtxsMap CtxMap;
     int ErrNo = 0;
     TString Err;
+    std::mutex Mtx;
+    bool Inited = false;
+    bool LoadFail = false;
 
 } RdmaLinkManager;
 
@@ -157,6 +171,14 @@ TRdmaCtx* GetCtx(const in6_addr& ip) {
 
 const TCtxsMap& GetAllCtxs() {
     return RdmaLinkManager.GetAllCtxs();
+}
+
+bool Init() {
+    if (RdmaLinkManager.IsLoadFail()) {
+        return false;
+    }
+    RdmaLinkManager.ScanDevices();
+    return true;
 }
 
 } 

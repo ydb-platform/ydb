@@ -1206,7 +1206,7 @@ public:
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U) {
+                if (Key == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                     fields[i] = &Items[i]->RefValue(ctx);
                 }
             }
@@ -1282,7 +1282,7 @@ public:
 
         if (!PasstroughKey) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependencesCount() > 0U) {
+                if (Items[i]->GetDependentsCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
                 }
             }
@@ -1725,7 +1725,7 @@ public:
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U) {
+                if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                     fields[i] = &Items[i]->RefValue(ctx);
                 }
             }
@@ -1801,7 +1801,7 @@ public:
 
         if (!(PasstroughKey && PasstroughPayload)) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependencesCount() > 0U) {
+                if (Items[i]->GetDependentsCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
                 }
             }

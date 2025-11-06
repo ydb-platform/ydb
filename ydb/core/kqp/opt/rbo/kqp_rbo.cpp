@@ -31,6 +31,10 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
     int nMatches = 0;
 
+    if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+        Y_ENSURE(false, "RBO type annotation failed");
+    }
+
     while (fired && nMatches < 1000) {
         fired = false;
 
@@ -39,6 +43,8 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                 auto op = iter.Current;
 
                 if (rule->TestAndApply(op, ctx, root.PlanProps)) {
+                    fired = true;
+
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
                     if (iter.Parent) {
@@ -47,11 +53,11 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                         root.Children[0] = op;
                     }
 
-                    fired = true;
-
                     if (rule->RequiresParentRecompute) {
                         root.ComputeParents();
                     }
+
+                    YQL_CLOG(TRACE, CoreDq) << "After rule:\n" << root.PlanToString(ctx.ExprCtx);
 
                     if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
                         Y_ENSURE(false, "RBO type annotation failed");

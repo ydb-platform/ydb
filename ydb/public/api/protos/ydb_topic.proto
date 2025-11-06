@@ -35,12 +35,6 @@ message SupportedCodecs {
     repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
 }
 
-enum ConsumerType {
-    CONSUMER_TYPE_UNSPECIFIED = 0;
-    CONSUMER_TYPE_STREAMING = 1;
-    CONSUMER_TYPE_SHARED = 2;
-}
-
 // Represents range [start, end).
 // I.e. (end - 1) is the greatest of offsets, included in non-empty range.
 message OffsetsRange {
@@ -835,6 +829,32 @@ message AlterDeadLetterPolicy {
     }
 }
 
+message StreamingConsumerType {
+}
+
+message AlterStreamingConsumerType {
+}
+
+message SharedConsumerType {
+    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
+    // For streaming consumers, the order of messages is always preserved.
+    optional bool keep_messages_order = 10;
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    optional google.protobuf.Duration default_processing_timeout = 11;
+    // The dedad letter policy for this consumer.
+    optional DeadLetterPolicy dead_letter_policy = 12;
+}
+
+message AlterSharedConsumerType {
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    google.protobuf.Duration set_default_processing_timeout = 10;
+
+    // Change dead letter policy.
+    AlterDeadLetterPolicy alter_dead_letter_policy = 11;
+}
+
 // Consumer description.
 message Consumer {
     // Must have valid not empty name as a key.
@@ -874,16 +894,10 @@ message Consumer {
     // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
     optional google.protobuf.Duration availability_period = 8;
 
-    optional ConsumerType consumer_type = 9;
-
-    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
-    // For streaming consumers, the order of messages is always preserved.
-    optional bool keep_messages_order = 10;
-    // The duration of blocking messages for its processing. If the message is not committed during this time,
-    // it will be returned to the queue and sent for re-processing.
-    optional google.protobuf.Duration default_processing_timeout = 11;
-    // The dedad letter policy for this consumer.
-    optional DeadLetterPolicy dead_letter_policy = 12;
+    oneof consumer_type {
+        StreamingConsumerType streaming_consumer_type = 9;
+        SharedConsumerType shared_consumer_type = 10;
+    }
 }
 
 // Consumer alter description.
@@ -913,12 +927,10 @@ message AlterConsumer {
         google.protobuf.Empty reset_availability_period = 8;
     }
 
-    // The duration of blocking messages for its processing. If the message is not committed during this time,
-    // it will be returned to the queue and sent for re-processing.
-    google.protobuf.Duration set_default_processing_timeout = 10;
-
-    // Change dead letter policy.
-    AlterDeadLetterPolicy alter_dead_letter_policy = 11;
+    oneof alter_consumer_type {
+        AlterStreamingConsumerType alter_streaming_consumer_type = 9;
+        AlterSharedConsumerType alter_shared_consumer_type = 10;
+    }
 }
 
 enum AutoPartitioningStrategy {

@@ -208,14 +208,25 @@ namespace NKikimr::NGRpcProxy::V1 {
             consumer.clear_availability_period();
         }
 
-        if (consumer.consumer_type() == Ydb::Topic::CONSUMER_TYPE_SHARED) {
-            if (alter.has_set_default_processing_timeout()) {
-                consumer.mutable_default_processing_timeout()->CopyFrom(alter.set_default_processing_timeout());
+        if (alter.has_alter_streaming_consumer_type()) {
+            if (!consumer.has_streaming_consumer_type()) {
+                return "Cannot alter consumer type";
+            }
+        } else if (alter.has_alter_shared_consumer_type()) {
+            if (!consumer.has_shared_consumer_type()) {
+                return "Cannot alter consumer type";
             }
 
-            if (alter.has_alter_dead_letter_policy()) {
-                auto& alterPolicy = alter.alter_dead_letter_policy();
-                auto* policy = consumer.mutable_dead_letter_policy();
+            auto* type = consumer.mutable_shared_consumer_type();
+            auto& alterType = alter.alter_shared_consumer_type();
+
+            if (alterType.has_set_default_processing_timeout()) {
+                type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
+            }
+
+            if (alterType.has_alter_dead_letter_policy()) {
+                auto& alterPolicy = alterType.alter_dead_letter_policy();
+                auto* policy = type->mutable_dead_letter_policy();
                 if (alterPolicy.has_set_enabled()) {
                     policy->set_enabled(alterPolicy.set_enabled());
                 }
@@ -245,24 +256,6 @@ namespace NKikimr::NGRpcProxy::V1 {
                     policy->mutable_delete_action();
                 }
             }
-        } else {
-            if (alter.has_set_default_processing_timeout()) {
-                return "Cannot alter default processing timeout for streaming consumer";
-            }
-            if (alter.has_alter_dead_letter_policy()) {
-                auto& alterPolicy = alter.alter_dead_letter_policy();
-                if (alterPolicy.has_set_enabled()) {
-                    return "Cannot alter dead letter policy for streaming consumer";
-                }
-
-                if (alterPolicy.has_alter_condition()) {
-                    return "Cannot alter dead letter policy condition for streaming consumer";
-                }
-
-                if (alterPolicy.has_alter_move_action() || alterPolicy.has_set_move_action() || alterPolicy.has_set_delete_action()) {
-                    return "Cannot alter dead letter policy action for streaming consumer";
-                }
-            }
         }
 
         return {};
@@ -288,48 +281,25 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         consumer->SetName(consumerName);
 
-        switch (rr.consumer_type()) {
-            case Ydb::Topic::CONSUMER_TYPE_STREAMING:
-            case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
-                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
-
-                if (rr.has_keep_messages_order()) {
-                    return TMsgPqCodes("cannot set keep messages order for streaming consumer",
-                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-                }
-                if (rr.has_default_processing_timeout()) {
-                    return TMsgPqCodes("cannot set default processing timeout for streaming consumer",
-                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-                }
-                if (rr.has_dead_letter_policy()) {
-                    return TMsgPqCodes("cannot set dead letter policy for streaming consumer",
-                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
-                }
-
-                break;
-            case Ydb::Topic::CONSUMER_TYPE_SHARED: {
+        if (rr.has_shared_consumer_type()) {
                 consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
-                consumer->SetKeepMessageOrder(rr.keep_messages_order());
-                consumer->SetDefaultProcessingTimeoutSeconds(rr.default_processing_timeout().seconds());
+                consumer->SetKeepMessageOrder(rr.shared_consumer_type().keep_messages_order());
+                consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_consumer_type().default_processing_timeout().seconds());
 
-                consumer->SetDeadLetterPolicyEnabled(rr.dead_letter_policy().enabled());
-                consumer->SetMaxProcessingAttempts(rr.dead_letter_policy().condition().max_processing_attempts());
+                consumer->SetDeadLetterPolicyEnabled(rr.shared_consumer_type().dead_letter_policy().enabled());
+                consumer->SetMaxProcessingAttempts(rr.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());
 
-                if (rr.dead_letter_policy().has_move_action()) {
+                if (rr.shared_consumer_type().dead_letter_policy().has_move_action()) {
                     consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-                    consumer->SetDeadLetterQueue(rr.dead_letter_policy().move_action().dead_letter_queue());
-                } else if (rr.dead_letter_policy().has_delete_action()) {
+                    consumer->SetDeadLetterQueue(rr.shared_consumer_type().dead_letter_policy().move_action().dead_letter_queue());
+                } else if (rr.shared_consumer_type().dead_letter_policy().has_delete_action()) {
                     consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
                 } else {
                     consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
                 }
-
-                break;
-            }
-            case Ydb::Topic::ConsumerType::ConsumerType_INT_MAX_SENTINEL_DO_NOT_USE_:
-            case Ydb::Topic::ConsumerType::ConsumerType_INT_MIN_SENTINEL_DO_NOT_USE_:
-                return TMsgPqCodes(TStringBuilder() << "Unsupported consumer type", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+        } else {
+            consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
         }
 
         if (rr.read_from().seconds() < 0) {

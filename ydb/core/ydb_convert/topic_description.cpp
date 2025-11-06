@@ -44,16 +44,16 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
 
     switch (in.GetType()) {
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
-            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_STREAMING);
+            out.mutable_streaming_consumer_type();
             break;
         }
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
-            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
+            auto* shared = out.mutable_shared_consumer_type();
 
-            out.set_keep_messages_order(in.GetKeepMessageOrder());
-            out.mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
+            shared->set_keep_messages_order(in.GetKeepMessageOrder());
+            shared->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
 
-            auto* deadLetterPolicy = out.mutable_dead_letter_policy();
+            auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
             deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
             deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
 

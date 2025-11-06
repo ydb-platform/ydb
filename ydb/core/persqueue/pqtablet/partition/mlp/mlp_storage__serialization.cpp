@@ -291,7 +291,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         TDeserializerWithOffset<TMessage> deserializer(snapshot.GetSlowMessages());
         ui64 offset;
         TMessage message;
-        while(deserializer.Next(offset, message)) {
+        while (deserializer.Next(offset, message)) {
             SlowMessages[offset] = message;
 
             switch(message.Status) {
@@ -338,7 +338,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
         ui64 offset;
         TAddedMessage msg;
-        while(deserializer.Next(offset, msg)) {
+        while (deserializer.Next(offset, msg)) {
             newMessages[offset] = msg;
         }
     }
@@ -383,7 +383,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
         ui64 offset;
         TAddedMessage msg;
-        while(deserializer.Next(offset, msg)) {
+        while (deserializer.Next(offset, msg)) {
             if (offset >= GetLastOffset()) {
                 Messages.push_back({
                     .Status = EMessageStatus::Unprocessed,
@@ -405,7 +405,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
 
         ui64 offset;
         TMessageChange msg;
-        while(deserializer.Next(offset, msg)) {
+        while (deserializer.Next(offset, msg)) {
             auto [message, _] = GetMessageInt(offset);
             if (!message) {
                 continue;

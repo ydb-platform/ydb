@@ -1624,11 +1624,11 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
     restoredStorage.SetMaxMessageReceiveCount(1);
     restoredStorage.SetReteintion(TDuration::Seconds(7 * 13));
 
-    Cerr << "SNAPSHOT: " << snapshot.ShortDebugString() << Endl; 
+    Cerr << "SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
     restoredStorage.Initialize(snapshot);
     Cerr << "RESTORED SNAPSHOT: " << restoredStorage.DebugString() << Endl;
 
-    Cerr << "WAL 1: " << wal1.ShortDebugString() << Endl; 
+    Cerr << "WAL 1: " << wal1.ShortDebugString() << Endl;
     restoredStorage.ApplyWAL(wal1);
     Cerr << "RESTORED WAL 1: " << restoredStorage.DebugString() << Endl;
     assertMetrics(metrics1, restoredStorage.GetMetrics());
@@ -1644,7 +1644,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
         }
     }
 
-    Cerr << "WAL 2: " << wal2.ShortDebugString() << Endl; 
+    Cerr << "WAL 2: " << wal2.ShortDebugString() << Endl;
     restoredStorage.ApplyWAL(wal2);
     Cerr << "RESTORED WAL 2: " << restoredStorage.DebugString() << Endl;
     assertMetrics(metrics2, restoredStorage.GetMetrics());
@@ -1667,7 +1667,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
         }
     }
 
-    Cerr << "WAL 3: " << wal3.ShortDebugString() << Endl; 
+    Cerr << "WAL 3: " << wal3.ShortDebugString() << Endl;
     restoredStorage.ApplyWAL(wal3);
     Cerr << "RESTORED WAL 3: " << restoredStorage.DebugString() << Endl;
     assertMetrics(metrics3, restoredStorage.GetMetrics());
@@ -1690,7 +1690,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
         }
     }
 
-    Cerr << "WAL 4: " << wal4.ShortDebugString() << Endl; 
+    Cerr << "WAL 4: " << wal4.ShortDebugString() << Endl;
     restoredStorage.ApplyWAL(wal4);
     Cerr << "RESTORED WAL 4: " << restoredStorage.DebugString() << Endl;
     assertMetrics(metrics4, restoredStorage.GetMetrics());
@@ -1706,7 +1706,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
         }
     }
 
-    Cerr << "WAL 5: " << wal5.ShortDebugString() << Endl; 
+    Cerr << "WAL 5: " << wal5.ShortDebugString() << Endl;
     restoredStorage.ApplyWAL(wal5);
     Cerr << "RESTORED WAL 5: " << restoredStorage.DebugString() << Endl;
     assertMetrics(metrics5, restoredStorage.GetMetrics());
@@ -1735,7 +1735,7 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
     restoredStorage5.SetMaxMessageReceiveCount(1);
     restoredStorage5.SetReteintion(TDuration::Seconds(7 * 13));
 
-    Cerr << "RESTORED SNAPSHOT 5: " << snapshot5.ShortDebugString() << Endl; 
+    Cerr << "RESTORED SNAPSHOT 5: " << snapshot5.ShortDebugString() << Endl;
 
     restoredStorage5.Initialize(snapshot5);
     assertMetrics(metrics5, restoredStorage5.GetMetrics());

@@ -2243,6 +2243,11 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
     SendCommitTx(step, txId_1);
 
     DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=0}}}});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    DBGTRACE_LOG("");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_1, .UserInfos={{1, {.Session=session, .Offset=1}}}});
     DBGTRACE_LOG("");
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
@@ -2259,6 +2264,11 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Transactions, TPartitionFixture)
     WaitCalcPredicateResult({.Step=step, .TxId=txId_3, .Partition=TPartitionId(partition), .Predicate=false});
     DBGTRACE_LOG("");
     SendRollbackTx(step, txId_3);
+
+    DBGTRACE_LOG("");
+    WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_2, .UserInfos={{1, {.Session=session, .Offset=1}}}});
+    DBGTRACE_LOG("");
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
 
     DBGTRACE_LOG("");
     WaitCmdWrite({.Count=1, .PlanStep=step, .TxId=txId_3, .UserInfos={{1, {.Session=session, .Offset=1}}}});

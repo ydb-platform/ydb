@@ -13,9 +13,15 @@ Y_UNIT_TEST(Reload) {
     auto& runtime = setup->GetRuntime();
 
     CreateTopic(setup, "/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName("mlp-consumer")
-                .AddAttribute("_mlp", "1")
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
             .EndAddConsumer());
 
     // Write many messaes because small snapshot do not write wal

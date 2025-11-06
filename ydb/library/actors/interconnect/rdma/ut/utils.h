@@ -5,6 +5,7 @@
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
+#include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 
@@ -13,9 +14,6 @@ namespace NInterconnect::NRdma {
 }
 
 namespace NRdmaTest {
-
-extern const char* RdmaTestEnvSwitchName;
-bool IsRdmaTestDisabled();
 
 inline void GTestSkip() {
     GTEST_SKIP() << "Skipping all rdma tests for suit, set \""

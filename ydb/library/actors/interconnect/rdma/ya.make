@@ -11,6 +11,7 @@ IF (OS_LINUX)
     )
 
     PEERDIR(
+        ydb/library/actors/interconnect/address
         contrib/libs/ibdrv
         contrib/libs/protobuf
     )
@@ -24,6 +25,7 @@ ELSE()
     )
 
     PEERDIR(
+        ydb/library/actors/interconnect/address
         contrib/libs/protobuf
     )
 

@@ -4,6 +4,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeImpatientNameService(INameService::TPtr origin);
+INameService::TPtr MakeImpatientNameService(INameService::TPtr origin);
 
 } // namespace NSQLComplete

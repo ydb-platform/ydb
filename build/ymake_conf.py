@@ -502,6 +502,53 @@ def select_multiple(selectors):
             yield value
 
 
+def get_target_triple(target):
+    target_triple = select(
+        default=None,
+        selectors=[
+            (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
+
+            (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
+            (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+            (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
+            (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
+
+            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
+
+            (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
+            (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
+            (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
+            (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
+            (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
+
+            (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
+
+            (target.is_android and target.is_x86, 'i686-linux-android'),
+            (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
+            (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
+            (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+
+            (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
+            (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
+
+            (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
+        ],
+    )
+
+    if target.is_android:
+        # Android NDK allows specification of API level in target triple, e.g.:
+        # armv7a-linux-androideabi16, aarch64-linux-android21
+        target_triple += str(target.android_api)
+
+    return target_triple
+
+
 def unique(it):
     known = set()
     for i in it:
@@ -1012,10 +1059,6 @@ class ToolchainOptions(object):
         # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
-        self.arch_opt = self.params.get('arch_opt', [])
-        self.triplet_opt = self.params.get('triplet_opt', {})
-        self.target_opt = self.params.get('target_opt', [])
-
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
@@ -1163,7 +1206,7 @@ class GnuToolchain(Toolchain):
         host = build.host
         target = build.target
 
-        self.c_flags_platform = list(tc.target_opt)
+        self.c_flags_platform = []
 
         self.default_os_sdk_root = get_os_sdk(target)
 
@@ -1182,6 +1225,8 @@ class GnuToolchain(Toolchain):
                     '$MACOS_SDK_RESOURCE_GLOBAL/usr/bin',
                     '$GO_FAKE_XCRUN_RESOURCE_GLOBAL',
                 ])
+            elif target.is_android:
+                self.env_go['PATH'] = ['{}/llvm-toolchain/bin'.format(self.tc.name_marker), '/usr/bin']
 
         self.swift_flags_platform = []
         self.swift_lib_path = None
@@ -1207,55 +1252,15 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            target_triple = self.tc.triplet_opt.get(target.arch, None)
-            if not target_triple:
-                target_triple = select(default=None, selectors=[
-                    (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
-
-                    (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
-                    (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
-                    (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
-                    (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
-
-                    (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
-
-                    (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
-                    (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
-                    (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
-                    (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
-                    (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
-
-                    (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
-
-                    (target.is_android and target.is_x86, 'i686-linux-android'),
-                    (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
-                    (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
-                    (target.is_android and target.is_armv8, 'aarch64-linux-android'),
-
-                    (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
-                    (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
-                ])
-
-            if target.is_android:
-                # Android NDK allows specification of API level in target triple, e.g.:
-                # armv7a-linux-androideabi16, aarch64-linux-android21
-                target_triple += str(target.android_api)
-
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
             if target_triple:
                 self.c_flags_platform.append('--target={}'.format(target_triple))
 
         if self.tc.isystem:
             for root in list(self.tc.isystem):
                 self.c_flags_platform.extend(['-isystem', root])
-
-        if target.is_android:
-            self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)])
 
         if target.is_cortex_a9:
             self.c_flags_platform.append('-mcpu=cortex-a9')
@@ -1383,7 +1388,10 @@ class GnuToolchain(Toolchain):
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
-        self.c_flags_platform.append('--sysroot={}'.format(var))
+        if is_positive('MUSL'):
+            self.c_flags_platform.append('--sysroot=/nowhere')
+        else:
+            self.c_flags_platform.append('--sysroot={}'.format(var))
         self.swift_flags_platform += ['-sdk', var]
 
     def setup_xcode_sdk(self, project, var):
@@ -1542,7 +1550,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
-        self.c_flags += self.tc.arch_opt + ['-pipe']
+        self.c_flags += ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
@@ -2053,7 +2061,6 @@ class MSVCCompiler(MSVC, Compiler):
             # enable standard conforming mode
             '/permissive-'
         ]
-        flags += self.tc.arch_opt
 
         c_warnings = [
             "/WX",
@@ -2063,7 +2070,15 @@ class MSVCCompiler(MSVC, Compiler):
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
 
+        c_flags_platform = []
+
         if self.tc.use_clang:
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
+            if target_triple:
+                c_flags_platform.append('--target={}'.format(target_triple))
+
             if not self.tc.is_system_cxx:
                 flags += [
                     # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
@@ -2142,6 +2157,7 @@ class MSVCCompiler(MSVC, Compiler):
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
+        emit('C_FLAGS_PLATFORM', c_flags_platform)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2437,7 +2453,7 @@ class Cuda(object):
             mtime = ' --mtime ${tool:"tools/mtime0"} '
             custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 
@@ -2474,7 +2490,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.6'
+            return '12.9'
 
         if not self.have_cuda.value:
             return None
@@ -2590,7 +2606,7 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.12.0')
 
     def auto_cudnn_version(self):
         return '9.0.0'

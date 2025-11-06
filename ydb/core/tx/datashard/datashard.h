@@ -153,7 +153,6 @@ namespace NDataShard {
 
     // NOTE: this switch should be modified only in tests !!!
     extern bool gAllowLogBatchingDefaultValue;
-    extern TDuration gDbStatsReportInterval;
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
     extern ui32 gDbStatsHistogramBucketsCount;
@@ -366,6 +365,9 @@ namespace TEvDataShard {
         EvValidateUniqueIndexResponse,
 
         EvIncrementalRestoreResponse,
+
+        EvBuildFulltextIndexRequest,
+        EvBuildFulltextIndexResponse,
 
         EvEnd
     };
@@ -917,6 +919,15 @@ namespace TEvDataShard {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
         }
+
+        bool IsRetriableError() const {
+            Y_ASSERT(Record.GetStatus() != NKikimrTxDataShard::TError::OK);
+            return
+                Record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE // = Ydb::StatusIds::OVERLOADED
+                || Record.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED // = Ydb::StatusIds::OVERLOADED
+                || Record.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED // Ydb::StatusIds::GENERIC_ERROR
+            ;
+        }
     };
 
     struct TEvOverloadReady
@@ -1431,6 +1442,13 @@ namespace TEvDataShard {
             Record.SetStatus(status);
         }
 
+        TEvS3UploadRowsResponse() {}
+
+        bool IsRetriableError() const {
+            return TEvUploadRowsResponse(Record.GetTabletID(), Record.GetStatus())
+                .IsRetriableError();
+        }
+
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
                 << " Record: " << Record.ShortDebugString()
@@ -1558,6 +1576,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvPrefixKMeansResponse,
                           NKikimrTxDataShard::TEvPrefixKMeansResponse,
                           TEvDataShard::EvPrefixKMeansResponse> {
+    };
+
+    struct TEvBuildFulltextIndexRequest
+        : public TEventPB<TEvBuildFulltextIndexRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexRequest,
+                          TEvDataShard::EvBuildFulltextIndexRequest> {
+    };
+
+    struct TEvBuildFulltextIndexResponse
+        : public TEventPB<TEvBuildFulltextIndexResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexResponse,
+                          TEvDataShard::EvBuildFulltextIndexResponse> {
     };
 
     struct TEvIncrementalRestoreResponse

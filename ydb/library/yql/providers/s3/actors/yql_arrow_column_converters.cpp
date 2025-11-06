@@ -12,6 +12,7 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_item.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <arrow/api.h>
@@ -89,9 +90,9 @@ ui32 GetMultiplierForDatetime(arrow::TimeUnit::type unit) {
         case arrow::TimeUnit::SECOND:
             return 1;
         case arrow::TimeUnit::MILLI:
-            throw parquet::ParquetException(TStringBuilder() << "millisecond accuracy does not fit into the datetime");
+            return 1000;
         case arrow::TimeUnit::MICRO:
-            throw parquet::ParquetException(TStringBuilder() << "microsecond accuracy does not fit into the datetime");
+            return 1000000;
         case arrow::TimeUnit::NANO:
             throw parquet::ParquetException(TStringBuilder() << "nanosecond accuracy does not fit into the datetime");
     }
@@ -123,6 +124,35 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(const std::shared_ptr<arrow
             throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "] after transformation: " << v);
         }
         builder.Add(NUdf::TBlockItem(static_cast<ui32>(v)));
+    }
+    return builder.Build(true).make_array();
+}
+
+template <bool isOptional, typename TArrowType>
+std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<TArrowType, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+    ::NYql::NUdf::TFixedSizeBlockReader<i64, isOptional> reader;
+    for (i64 i = 0; i < value->length(); ++i) {
+        const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
+        if constexpr (isOptional) {
+            if (!item) {
+                builder.Add(item);
+                continue;
+            }
+        } else if (!item) {
+            throw parquet::ParquetException(TStringBuilder() << "null value for datetime could not be represented in non-optional type");
+        }
+
+        const i64 baseValue = item.As<i64>();
+        if (baseValue < 0 && baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME)) {
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
+        }
+
+        if (baseValue % multiplier) {
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet should have integer amount of seconds, have: " << baseValue * 1.0 / multiplier);
+        }
+        const TArrowType v = baseValue / static_cast<ui64>(multiplier);
+        builder.Add(NUdf::TBlockItem(static_cast<TArrowType>(v)));
     }
     return builder.Build(true).make_array();
 }
@@ -330,8 +360,16 @@ TColumnConverter ArrowDate64AsYqlDatetime(const std::shared_ptr<arrow::DataType>
 TColumnConverter ArrowTimestampAsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
     return [targetType, isOptional, multiplier = GetMultiplierForDatetime(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
         return isOptional
-                ? ArrowTypeAsYqlDatetime<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlDatetime<false, i64>(targetType, value, multiplier);
+                ? ArrowTimestampAsYqlDatetime<true, ui32>(targetType, value, multiplier)
+                : ArrowTimestampAsYqlDatetime<false, ui32>(targetType, value, multiplier);
+    };
+}
+
+TColumnConverter ArrowTimestampAsYqlDatetime64(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
+    return [targetType, isOptional, multiplier = GetMultiplierForDatetime(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional
+                ? ArrowTimestampAsYqlDatetime<true, i64>(targetType, value, multiplier)
+                : ArrowTimestampAsYqlDatetime<false, i64>(targetType, value, multiplier);
     };
 }
 
@@ -624,6 +662,8 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
             switch (slotItem) {
                 case NUdf::EDataSlot::Datetime:
                     return ArrowTimestampAsYqlDatetime(targetType, isOptional, timestampType.unit());
+                case NUdf::EDataSlot::Datetime64:
+                    return ArrowTimestampAsYqlDatetime64(targetType, isOptional, timestampType.unit());
                 case NUdf::EDataSlot::Timestamp:
                     return ArrowTimestampAsYqlTimestamp(targetType, isOptional, timestampType.unit());
                 case NUdf::EDataSlot::String:
@@ -654,7 +694,7 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
                     ) {
                         return [](const std::shared_ptr<arrow::Array>& value) {
                             auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
-                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values());
+                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values(), decimals->null_bitmap(), decimals->null_count());
                             return output;
                         };
                     }
@@ -689,6 +729,39 @@ TColumnConverter YqlBlockTzDateToArrow(const std::string& columnName, const std:
         dateField->buffers[0] = structValue->null_bitmap();
         return arrow::MakeArray(dateField);
     };
+}
+
+template <bool isOptional>
+TColumnConverter DecimalToArrowBaseConverter(const std::shared_ptr<arrow::DataType>& targetType) {
+    return [targetType](const std::shared_ptr<arrow::Array>& value) {
+        arrow::Decimal128Builder builder(targetType, arrow::default_memory_pool());
+        ::NYql::NUdf::TFixedSizeBlockReader<NYql::NDecimal::TInt128, isOptional> reader;
+
+        for (i64 i = 0; i < value->length(); ++i) {
+            NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
+
+            if (!item) {
+                THROW_ARROW_NOT_OK(builder.AppendNull());
+                continue;
+            }
+
+            NYql::NDecimal::TInt128 val = item.GetInt128();
+            arrow::Decimal128 newValue((uint8_t*)(&val));
+            THROW_ARROW_NOT_OK(builder.Append(newValue));
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        THROW_ARROW_NOT_OK(builder.Finish(&array));
+        return array;
+    };
+}
+
+TColumnConverter DecimalToArrowConverter(bool isOptional, const std::shared_ptr<arrow::DataType>& targetType) {
+    if (isOptional) {
+        return DecimalToArrowBaseConverter<true>(targetType);
+    } else {
+        return DecimalToArrowBaseConverter<false>(targetType);
+    }
 }
 
 }
@@ -728,7 +801,9 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
     YQL_ENSURE(ConvertArrowType(columnType, yqlArrowType), "Got unsupported yql block type: " << *columnType << " in column " << columnName);
     YQL_ENSURE(S3ConvertArrowOutputType(columnType, s3OutputType), "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
 
-    if (columnType->IsOptional()) {
+    bool isOptional = columnType->IsOptional();
+
+    if (isOptional) {
         columnType = AS_TYPE(TOptionalType, columnType)->GetItemType();
     }
     YQL_ENSURE(columnType->IsData(), "Allowed only data types for S3 output, but got: " << *columnType << " in column " << columnName);
@@ -752,6 +827,9 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Timestamp:
             return {};
+        case NUdf::EDataSlot::Date32:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
             return ArrowComputeConvertor(columnName, yqlArrowType, s3OutputType);
@@ -759,6 +837,8 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::TzTimestamp:
             return YqlBlockTzDateToArrow(columnName, yqlArrowType);
+        case NUdf::EDataSlot::Decimal:
+            return DecimalToArrowConverter(isOptional, s3OutputType);
         default:
             YQL_ENSURE(false, "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
     }
@@ -815,7 +895,7 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
 }
 
 // Type conversion same as in ClickHouseClient.SerializeFormat udf
-bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type, TType* itemType) {
     switch (slot) {
         case NUdf::EDataSlot::Int8:
             type = arrow::int8();
@@ -835,10 +915,16 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::Int32:
             type = arrow::int32();
             return true;
+        case NUdf::EDataSlot::Date32:
+            type = arrow::date32();
+            return true;
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::TzDatetime:
         case NUdf::EDataSlot::Uint32:
             type = arrow::uint32();
+            return true;
+        case NUdf::EDataSlot::Datetime64:
+            type = arrow::timestamp(arrow::TimeUnit::SECOND, "UTC");
             return true;
         case NUdf::EDataSlot::Int64:
             type = arrow::int64();
@@ -857,7 +943,17 @@ bool S3ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataT
         case NUdf::EDataSlot::Json:
             type = arrow::binary();
             return true;
+        case NUdf::EDataSlot::Decimal: {
+            if (itemType) {
+                auto [precision, scale] = static_cast<TDataDecimalType*>(itemType)->GetParams();
+                type = arrow::decimal128(precision, scale);
+            } else {
+                type = arrow::decimal128(22, 9);
+            }
+            return true;
+        }
         case NUdf::EDataSlot::Timestamp:
+        case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::TzTimestamp:
             type = arrow::timestamp(arrow::TimeUnit::MICRO, "UTC");
             return true;
@@ -880,7 +976,7 @@ bool S3ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>&
         return false;
     }
 
-    return S3ConvertArrowOutputType(*slot, type);
+    return S3ConvertArrowOutputType(*slot, type, itemType);
 }
 
 void BuildOutputColumnConverters(const NKikimr::NMiniKQL::TStructType* outputStructType, std::vector<TColumnConverter>& columnConverters) {

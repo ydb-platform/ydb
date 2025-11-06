@@ -68,6 +68,8 @@
 
 #include <util/generic/ptr.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 namespace NKikimr::NSchemeShard::NBackground {
 struct TEvListRequest;
 }
@@ -359,6 +361,7 @@ public:
     bool EnableVectorIndex = false;
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
+    bool EnableFulltextIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
@@ -382,7 +385,7 @@ public:
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
     ui32 StatsMaxBatchSize = 0;
-    THashMap<TTxState::ETxType, ui32> InFlightLimits;
+    absl::flat_hash_map<TTxState::ETxType, ui32> InFlightLimits;
 
     // time when we opened the batch
     bool TableStatsBatchScheduled = false;
@@ -994,7 +997,7 @@ public:
     void RemoveBackgroundCleaning(const TPathId& pathId);
     std::optional<TTempDirInfo> ResolveTempDirInfo(const TPathId& pathId);
 
-    void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats);
+    void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats, TInstant now);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
 
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
@@ -1568,6 +1571,7 @@ public:
         struct TTxReplyPrefixKMeans;
         struct TTxReplyUploadSample;
         struct TTxReplyValidateUniqueIndex;
+        struct TTxReplyFulltextIndex;
 
         struct TTxPipeReset;
         struct TTxBilling;
@@ -1589,7 +1593,8 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
-    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& progress);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& response);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
 
@@ -1607,6 +1612,7 @@ public:
     void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);
 

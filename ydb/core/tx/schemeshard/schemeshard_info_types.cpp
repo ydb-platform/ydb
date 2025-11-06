@@ -6,10 +6,12 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -272,6 +274,31 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartiti
             dataSize -= dataSizeDecrement;
             indexSize -= indexSizeDecrement;
             counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), -dataSizeDecrement, -indexSizeDecrement);
+        }
+    }
+}
+
+void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& diskSpaceUsageDelta) {
+    // see filling of diskSpaceUsageDelta in UpdateShardStats()
+    for (const auto& [poolKind, delta] : diskSpaceUsageDelta) {
+        if (poolKind.empty()) {
+            // total space
+            DiskSpaceUsage.Tables.DataSize += delta.DataSize;
+            counters->ChangeDiskSpaceTablesDataBytes(delta.DataSize);
+
+            DiskSpaceUsage.Tables.IndexSize += delta.IndexSize;
+            counters->ChangeDiskSpaceTablesIndexBytes(delta.IndexSize);
+
+            i64 oldTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+            DiskSpaceUsage.Tables.TotalSize = DiskSpaceUsage.Tables.DataSize + DiskSpaceUsage.Tables.IndexSize;
+            i64 newTotalBytes = DiskSpaceUsage.Tables.TotalSize;
+            counters->ChangeDiskSpaceTablesTotalBytes(newTotalBytes - oldTotalBytes);
+        } else {
+            // space separated by storage pool kinds
+            auto& r = DiskSpaceUsage.StoragePoolsUsage[poolKind];
+            r.DataSize += delta.DataSize;
+            r.IndexSize += delta.IndexSize;
+            counters->AddDiskSpaceTables(GetUserFacingStorageType(poolKind), delta.DataSize, delta.IndexSize);
         }
     }
 }
@@ -618,8 +645,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (op.HasTTLSettings()) {
         for (const auto& indexDescription : op.GetTableIndexes()) {
-            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                errStr = "Table with vector indexes doesn't support TTL";
+            if (!DoesIndexSupportTTL(indexDescription.GetType())) {
+                errStr = TStringBuilder() << "Table with " << indexDescription.GetType() << " index doesn't support TTL";
                 return nullptr;
             }
         }
@@ -856,11 +883,11 @@ NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TA
 bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
-    const TAppData *appData, TString &errDescr)
+    const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
     result.CopyFrom(src); // inherit all data from src
 
-    if (!ApplyChangesInColumnFamilies(result, src, changes, errDescr)) {
+    if (!ApplyChangesInColumnFamilies(result, src, changes, isServerlessDomain, errDescr)) {
         return false;
     }
 
@@ -1060,6 +1087,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const bool isServerlessDomain,
     TString &errDescr)
 {
     result.MutableColumnFamilies()->CopyFrom(src.GetColumnFamilies());
@@ -1133,6 +1161,11 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (changesFamily.HasColumnCacheMode()) {
+            if (isServerlessDomain && changesFamily.GetColumnCacheMode() == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory) {
+                errDescr = TStringBuilder()
+                    << "CacheMode InMemory is not supported in serverless databases. ColumnFamily id: " << familyId << " name: " << familyName;
+                return false;
+            }
             dstFamily.SetColumnCacheMode(changesFamily.GetColumnCacheMode());
         }
 
@@ -1387,26 +1420,6 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         return false;
     }
 
-    if (dstConfig.HasChannelProfileId()) {
-        for (const auto& family : dstConfig.GetColumnFamilies()) {
-            if (family.HasStorageConfig()) {
-                errDescr = TStringBuilder()
-                        << "Migration from profile id by storage config is not allowed, was "
-                        << srcConfig.GetChannelProfileId() << ", asks storage config";
-                return false;
-            }
-        }
-
-        if (srcConfig.GetChannelProfileId() != dstConfig.GetChannelProfileId()) {
-            errDescr = TStringBuilder()
-                    << "Profile modification is not allowed, was "
-                    << srcConfig.GetChannelProfileId()
-                    << ", asks "
-                    <<  dstConfig.GetChannelProfileId();
-            return false;
-        }
-    }
-
     const NKikimrSchemeOp::TStorageConfig* wasStorageConfig = nullptr;
     for (const auto& family : srcConfig.GetColumnFamilies()) {
         if (family.GetId() == 0 && family.HasStorageConfig()) {
@@ -1447,7 +1460,26 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     if (isStorageConfig) {
         if (!wasStorageConfig) {
             errDescr = TStringBuilder()
-                    << "Couldn't add storage configuration if it hasn't been set before";
+                    << "Cannot add storage config if it hasn't been set before";
+            return false;
+        }
+    }
+
+    if (dstConfig.HasChannelProfileId()) {
+        // Note: ChannelProfileId == 0 may have been implicit
+        if (dstConfig.GetChannelProfileId() != srcConfig.GetChannelProfileId()) {
+            errDescr = TStringBuilder()
+                    << "Profile modification is not allowed, was "
+                    << srcConfig.GetChannelProfileId()
+                    << ", asks "
+                    <<  dstConfig.GetChannelProfileId();
+            return false;
+        }
+
+        if (isStorageConfig && !srcConfig.HasChannelProfileId()) {
+            errDescr = TStringBuilder()
+                    << "Setting ChannelProfileId to " << dstConfig.GetChannelProfileId()
+                    << " for tables with storage config is not allowed";
             return false;
         }
     }
@@ -1635,6 +1667,8 @@ void TTableInfo::FinishAlter() {
         partitionConfig.ClearShadowData();
     }
 
+    IsExternalBlobsEnabled = PartitionConfigHasExternalBlobsEnabled(PartitionConfig());
+
     // Apply TTL params
     if (AlterData->TableDescriptionFull.Defined() && AlterData->TableDescriptionFull->HasTTLSettings()) {
         MutableTTLSettings().Swap(AlterData->TableDescriptionFull->MutableTTLSettings());
@@ -1753,16 +1787,18 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
 }
 
-void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
-    Stats.UpdateShardStats(datashardIdx, newStats);
+void TTableInfo::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
+    Stats.UpdateShardStats(diskSpaceUsageDelta, datashardIdx, newStats, now);
 }
 
-void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
+    auto found = PartitionStats.find(datashardIdx);
     // Ignore stats from unknown datashard (it could have been split)
-    if (!PartitionStats.contains(datashardIdx))
+    if (found == PartitionStats.end()) {
         return;
+    }
 
-    TPartitionStats& oldStats = PartitionStats[datashardIdx];
+    TPartitionStats& oldStats = found->second;
 
     if (newStats.SeqNo <= oldStats.SeqNo) {
         // Ignore outdated message
@@ -1782,29 +1818,52 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
         oldStats.RangeReadRows = 0;
     }
 
-    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
-    Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
-    Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
-    Aggregated.ByKeyFilterSize += (newStats.ByKeyFilterSize - oldStats.ByKeyFilterSize);
+    // disk space related stuff
+    // first, total space aggregation
+    {
+        TStoragePoolStatsDelta delta{
+            .DataSize = (static_cast<i64>(newStats.DataSize) - static_cast<i64>(oldStats.DataSize)),
+            .IndexSize = (static_cast<i64>(newStats.IndexSize) - static_cast<i64>(oldStats.IndexSize)),
+        };
+        diskSpaceUsageDelta->emplace_back(TString(), delta);
+        Aggregated.DataSize += delta.DataSize;
+        Aggregated.IndexSize += delta.IndexSize;
+    }
+    // second, aggregation of space separated by storage pool kinds
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
-        auto& [dataSize, indexSize] = Aggregated.StoragePoolsStats[poolKind];
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);
         // Missing old stats for a particular storage pool are interpreted as if this data
         // has just been written to the datashard and we need to increment the aggregate by the entire new stats' sizes.
-        dataSize += newStoragePoolStats.DataSize - (oldStoragePoolStats ? oldStoragePoolStats->DataSize : 0u);
-        indexSize += newStoragePoolStats.IndexSize - (oldStoragePoolStats ? oldStoragePoolStats->IndexSize : 0u);
+        TStoragePoolStatsDelta delta{
+            .DataSize = (static_cast<i64>(newStoragePoolStats.DataSize) - (oldStoragePoolStats ? static_cast<i64>(oldStoragePoolStats->DataSize) : 0)),
+            .IndexSize = (static_cast<i64>(newStoragePoolStats.IndexSize) - (oldStoragePoolStats ? static_cast<i64>(oldStoragePoolStats->IndexSize) : 0)),
+        };
+        diskSpaceUsageDelta->emplace_back(poolKind, delta);
     }
     for (const auto& [poolKind, oldStoragePoolStats] : oldStats.StoragePoolsStats) {
         if (const auto* newStoragePoolStats = newStats.StoragePoolsStats.FindPtr(poolKind);
             !newStoragePoolStats
         ) {
-            auto& [dataSize, indexSize] = Aggregated.StoragePoolsStats[poolKind];
             // Missing new stats for a particular storage pool are interpreted as if this data
             // has been removed from the datashard and we need to subtract the old stats' sizes from the aggregate.
-            dataSize -= oldStoragePoolStats.DataSize;
-            indexSize -= oldStoragePoolStats.IndexSize;
+            TStoragePoolStatsDelta delta{
+                .DataSize = -static_cast<i64>(oldStoragePoolStats.DataSize),
+                .IndexSize = -static_cast<i64>(oldStoragePoolStats.IndexSize),
+            };
+            diskSpaceUsageDelta->emplace_back(poolKind, delta);
         }
     }
+    for (const auto& [poolKind, delta] : *diskSpaceUsageDelta) {
+        if (poolKind.empty()) {
+            continue;
+        }
+        auto& r = Aggregated.StoragePoolsStats[poolKind];
+        r.DataSize += delta.DataSize;
+        r.IndexSize += delta.IndexSize;
+    }
+
+    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
+    Aggregated.ByKeyFilterSize += (newStats.ByKeyFilterSize - oldStats.ByKeyFilterSize);
     Aggregated.LastAccessTime = Max(Aggregated.LastAccessTime, newStats.LastAccessTime);
     Aggregated.LastUpdateTime = Max(Aggregated.LastUpdateTime, newStats.LastUpdateTime);
     Aggregated.ImmediateTxCompleted += (newStats.ImmediateTxCompleted - oldStats.ImmediateTxCompleted);
@@ -1822,7 +1881,6 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     i64 cpuUsageDelta = newStats.GetCurrentRawCpuUsage() - oldStats.GetCurrentRawCpuUsage();
     i64 prevCpuUsage = Aggregated.GetCurrentRawCpuUsage();
     ui64 newAggregatedCpuUsage = std::max<i64>(0, prevCpuUsage + cpuUsageDelta);
-    TInstant now = AppData()->TimeProvider->Now();
     Aggregated.SetCurrentRawCpuUsage(newAggregatedCpuUsage, now);
     Aggregated.Memory += (newStats.Memory - oldStats.Memory);
     Aggregated.Network += (newStats.Network - oldStats.Network);
@@ -1836,9 +1894,13 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
     Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
 
-    auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
+    // NOTE: Updating the CPU usage buckets is essentially taking the maximum
+    //       of the latest update time for each bucket. Thus, updating new -> old
+    //       and old -> new are equivalent: the result is the same.
+    const auto oldTopCpuUsage = oldStats.TopCpuUsage;
     oldStats = newStats;
-    oldStats.TopUsage = std::move(topUsage);
+    oldStats.TopCpuUsage.Update(oldTopCpuUsage); // The left is new stats now!
+
     PartitionStatsUpdated++;
 
     // Rescan stats for aggregations only once in a while
@@ -1853,10 +1915,10 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     UpdatedStats.insert(datashardIdx);
 }
 
-void TAggregatedStats::UpdateTableStats(TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+void TAggregatedStats::UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
     auto& tableStats = TableStats[pathId];
     tableStats.PartitionStats[shardIdx]; // insert if none
-    tableStats.UpdateShardStats(shardIdx, newStats);
+    tableStats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
 }
 
 void TTableInfo::RegisterSplitMergeOp(TOperationId opId, const TTxState& txState) {
@@ -1925,6 +1987,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
                                     float cpuUsageThreshold, const TTableInfo* mainTableForIndex,
+                                    TInstant now,
                                     TString& reason) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
@@ -1964,7 +2027,6 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     }
 
     // Check if we can try merging by load
-    TInstant now = AppData()->TimeProvider->Now();
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
     if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
         reason = "merge by load";
@@ -2012,6 +2074,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                          const TForceShardSplitSettings& forceShardSplitSettings,
                                          TShardIdx shardIdx, const TTabletId& tabletId,
                                          TVector<TShardIdx>& shardsToMerge, const TTableInfo* mainTableForIndex,
+                                         TInstant now,
                                          TString& reason) const
 {
     // Don't split/merge backup tables
@@ -2051,7 +2114,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     TString shardMergeReason;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, shardMergeReason)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
         return false;
     }
 
@@ -2059,7 +2122,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
         << " " << shardMergeReason;
 
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
             break;
         }
     }
@@ -2067,7 +2130,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
             break;
         }
     }
@@ -2105,12 +2168,9 @@ bool TTableInfo::CheckSplitByLoad(
     }
 
     // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx)) {
+    const auto* stats = Stats.PartitionStats.FindPtr(shardIdx);
+    if (!stats) {
         reason = "UnknownDataShard";
-        return false;
-    }
-    if (!Shard2PartitionIdx.contains(shardIdx)) {
-        reason = "ShardNotInIndex";
         return false;
     }
 
@@ -2141,17 +2201,25 @@ bool TTableInfo::CheckSplitByLoad(
         }
     }
 
-    const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
+    // NOTE: Do not suggest splitting-by-load, if the expected number of partitions
+    //       (taking into account all in-flight split operations) already exceeds
+    //       the overall limit on the number of partitions. Using the maximum
+    //       between the current partition count and the expected partition count
+    //       prevents splitting-by-load when there are some in-flight merge
+    //       operations (which reduce the expected partition count).
+    const ui64 effectiveShardCount = Max(ExpectedPartitionCount, Stats.PartitionStats.size());
+
     if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
         dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
-        Stats.PartitionStats.size() >= maxShards ||
-        stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
+        effectiveShardCount >= maxShards ||
+        stats->GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
         reason = TStringBuilder() << "ConditionsNotMet"
-            << " rowCount: " << rowCount << " minRows: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
-            << " dataSize: " << dataSize << " minSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
-            << " shardCount: " << Stats.PartitionStats.size() << " maxShards: " << maxShards
-            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " threshold: " << cpuUsageThreshold * 1000000;
+            << " rowCount: " << rowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " shardSize: " << dataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size()
+            << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
+            << " cpuUsage: " << stats->GetCurrentRawCpuUsage() << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
@@ -2161,8 +2229,9 @@ bool TTableInfo::CheckSplitByLoad(
         << "shardSize: " << dataSize << ", "
         << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
         << "shardCount: " << Stats.PartitionStats.size() << ", "
+        << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
-        << "cpuUsage: " << stats.GetCurrentRawCpuUsage() << ", "
+        << "cpuUsage: " << stats->GetCurrentRawCpuUsage() << ", "
         << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
 
     return true;
@@ -2292,8 +2361,22 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         ImplTableDescriptions.end()
     };
 
-    if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+    switch (IndexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *index.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
+            break;
     }
 }
 
@@ -2523,6 +2606,60 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
 
     // Add the remaining range
     Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
+}
+
+bool TIndexBuildInfo::IsValidState(EState value)
+{
+    switch (value) {
+        case EState::Invalid:
+        case EState::AlterMainTable:
+        case EState::Locking:
+        case EState::GatheringStatistics:
+        case EState::Initiating:
+        case EState::Filling:
+        case EState::DropBuild:
+        case EState::CreateBuild:
+        case EState::LockBuild:
+        case EState::Applying:
+        case EState::Unlocking:
+        case EState::AlterSequence:
+        case EState::Done:
+        case EState::Cancellation_Applying:
+        case EState::Cancellation_Unlocking:
+        case EState::Cancellation_DroppingColumns:
+        case EState::Cancelled:
+        case EState::Rejection_Applying:
+        case EState::Rejection_Unlocking:
+        case EState::Rejection_DroppingColumns:
+        case EState::Rejected:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidSubState(ESubState value)
+{
+    switch (value) {
+        case ESubState::None:
+        case ESubState::UniqIndexValidation:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidBuildKind(EBuildKind value)
+{
+    switch (value) {
+        case EBuildKind::BuildKindUnspecified:
+        case EBuildKind::BuildSecondaryIndex:
+        case EBuildKind::BuildVectorIndex:
+        case EBuildKind::BuildPrefixedVectorIndex:
+        case EBuildKind::BuildSecondaryUniqueIndex:
+        case EBuildKind::BuildColumns:
+        case EBuildKind::BuildFulltext:
+            return true;
+    }
+    return false;
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -166,6 +167,21 @@ public:
         const TDistributedWriteSessionFinishOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteFileSession, (
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options),
+        (override));
+
     // ITransaction
     IClientPtr Client;
     NTransactionClient::ETransactionType Type;
@@ -228,6 +244,25 @@ public:
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<TRowModification> modifications,
+        const TModifyRowsOptions& options), (override));
+
+    MOCK_METHOD(void, WriteRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TUnversionedRow> rows,
+        const TModifyRowsOptions& options,
+        NTableClient::ELockType lockType), (override));
+
+    MOCK_METHOD(void, WriteRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TVersionedRow> rows,
+        const TModifyRowsOptions& options), (override));
+
+    MOCK_METHOD(void, DeleteRows, (
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NTableClient::TLegacyKey> keys,
         const TModifyRowsOptions& options), (override));
 
     MOCK_METHOD(TFuture<TPushQueueProducerResult>, PushQueueProducer, (

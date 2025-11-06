@@ -3,20 +3,21 @@ items:
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
 - { name: ACTION,                       href: action.md }
-- { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md,    when: feature_async_replication }
+- { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md }
+- { name: ALTER DATABASE,                   include: { mode: link, path: alter_database/toc_p.yaml },                                                                                }
 - { name: ALTER GROUP,                  href: alter-group.md,                when: feature_user_and_group }
 - { name: ALTER TABLE,                  include: { mode: link, path: alter_table/toc_p.yaml },                when: feature_map_tables }
-- { name: ALTER VIEW,                   href: alter-view.md,                 when: feature_view }
-- { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md,        when: feature_resource_pool }
-- { name: ALTER RESOURCE POOL CLASSIFIER,    href: alter-resource-pool-classifier.md,   when: feature_resource_pool_classifier }
+- { name: ALTER VIEW,                   href: alter-view.md }
+- { name: ALTER RESOURCE POOL,          href: alter-resource-pool.md }
+- { name: ALTER RESOURCE POOL CLASSIFIER,    href: alter-resource-pool-classifier.md }
 - { name: ALTER STREAMING QUERY,        href: alter-streaming-query.md,      when: feature_federated_queries}
 - { name: ALTER TOPIC,                  href: alter-topic.md,                when: feature_topic_control_plane }
-- { name: ALTER TRANSFER,               href: alter-transfer.md,             when: feature_transfer }
+- { name: ALTER TRANSFER,               href: alter-transfer.md}
 - { name: ALTER USER,                   href: alter-user.md,                 when: feature_user_and_group }
 - { name: ANALYZE,                      href: analyze.md, when: backend_name == "YDB" }
-- { name: BATCH DELETE,                 href: batch-delete.md,               when: feature_batch_operations }
-- { name: BATCH UPDATE,                 href: batch-update.md,               when: feature_batch_operations }
-- { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md,   when: feature_async_replication }
+- { name: BATCH DELETE,                 href: batch-delete.md }
+- { name: BATCH UPDATE,                 href: batch-update.md }
+- { name: CREATE ASYNC REPLICATION,     href: create-async-replication.md }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE EXTERNAL DATA SOURCE,  href: create-external-data-source.md,when: feature_federated_queries}
 - { name: CREATE STREAMING QUERY,       href: create-streaming-query.md,     when: feature_federated_queries}
@@ -24,17 +25,17 @@ items:
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: CREATE TABLE,                 include: { mode: link, path: create_table/toc_p.yaml } }
-- { name: CREATE TRANSFER,              href: create-transfer.md,            when: feature_transfer }
-- { name: CREATE VIEW,                  href: create-view.md,                when: feature_view }
-- { name: CREATE RESOURCE POOL,         href: create-resource-pool.md,                when: feature_resource_pool }
-- { name: CREATE RESOURCE POOL CLASSIFIER,    href: create-resource-pool-classifier.md,          when: feature_resource_pool_classifier }
+- { name: CREATE TRANSFER,              href: create-transfer.md}
+- { name: CREATE VIEW,                  href: create-view.md }
+- { name: CREATE RESOURCE POOL,         href: create-resource-pool.md }
+- { name: CREATE RESOURCE POOL CLASSIFIER,    href: create-resource-pool-classifier.md }
 - { name: CREATE TOPIC,                 href: create-topic.md,               when: feature_topic_control_plane }
 - { name: CREATE USER,                  href: create-user.md,                when: feature_user_and_group }
 - { name: COMMIT,                       href: commit.md                                                   }
 - { name: DECLARE,                      href: declare.md }
 - { name: DELETE,                       href: delete.md,                     when: feature_map_tables }
 - { name: DISCARD,                      href: discard.md,                    when: backend_name != "YDB" }
-- { name: DROP ASYNC REPLICATION,       href: drop-async-replication.md,     when: feature_async_replication }
+- { name: DROP ASYNC REPLICATION,       href: drop-async-replication.md }
 - { name: DROP GROUP,                   href: drop-group.md,                 when: feature_user_and_group }
 - { name: DROP EXTERNAL DATA SOURCE,    href: drop-external-data-source.md,  when: feature_federated_queries}
 - { name: DROP EXTERNAL TABLE,          href: drop-external-table.md,        when: feature_federated_queries}
@@ -42,10 +43,10 @@ items:
 - { name: DROP OBJECT TYPE SECRET_ACCESS,    href: drop-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: DROP STREAMING QUERY,         href: drop-streaming-query.md,       when: feature_federated_queries}
 - { name: DROP TABLE,                   href: drop_table.md }
-- { name: DROP TRANSFER,                href: drop-transfer.md,              when: feature_transfer }
-- { name: DROP VIEW,                    href: drop-view.md,                  when: feature_view }
-- { name: DROP RESOURCE POOL,           href: drop-resource-pool.md,         when: feature_resource_pool }
-- { name: DROP RESOURCE POOL CLASSIFIER,    href: drop-resource-pool-classifier.md,     when: feature_resource_pool_classifier }
+- { name: DROP TRANSFER,                href: drop-transfer.md}
+- { name: DROP VIEW,                    href: drop-view.md }
+- { name: DROP RESOURCE POOL,           href: drop-resource-pool.md }
+- { name: DROP RESOURCE POOL CLASSIFIER,    href: drop-resource-pool-classifier.md }
 - { name: DROP TOPIC,                   href: drop-topic.md,                 when: feature_topic_control_plane }
 - { name: DROP USER,                    href: drop-user.md,                  when: feature_user_and_group }
 - { name: GRANT,                        href: grant.md,                      when: feature_user_and_group }

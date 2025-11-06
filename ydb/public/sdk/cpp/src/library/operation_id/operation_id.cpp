@@ -130,8 +130,12 @@ public:
         if (er != TState::ParsedOK) {
             ythrow yexception() << "Unable to parse input string";
         }
-        std::string path = uri.PrintS(TField::FlagPath).substr(1); // start from 1 to remove first '/'
-        if (path.length() < 1) {
+        std::string path = uri.PrintS(TField::FlagPath);
+        if (path.empty() || path[0] != '/') {
+            ythrow yexception() << "Operation ID must have a path";
+        }
+        path = path.substr(1); // start from 1 to remove first '/'
+        if (path.empty()) {
             ythrow yexception() << "Invalid path length";
         }
         int kind;
@@ -153,7 +157,7 @@ public:
                 auto data = Proto.add_data();
                 data->set_key(it.first);
                 data->set_value(it.second);
-#ifdef YDB_SDK_USE_STD_STRING
+#ifdef YDB_SDK_OSS
                 Index[it.first].push_back(&data->value());
 #else
                 Index[it.first].push_back(&data->value().ConstRef());
@@ -206,7 +210,7 @@ public:
 private:
     void BuildIndex() {
         for (const auto& data : Proto.data()) {
-#ifdef YDB_SDK_USE_STD_STRING
+#ifdef YDB_SDK_OSS
             Index[data.key()].push_back(&data.value());
 #else
             Index[data.key()].push_back(&data.value().ConstRef());

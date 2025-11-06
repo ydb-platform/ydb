@@ -522,21 +522,21 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
                 return TStatus::Error;
             }
 
-            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
+            if (!EnsureOptionalType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
                 return TStatus::Error;
             }
 
-            auto joinKeyType = tupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+            auto joinKeyType = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
             if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
                 return TStatus::Error;
             }
 
-            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[1], ctx)) {
+            if (!EnsureStructType(node->Pos(), *tupleType->GetItems()[0], ctx)) {
                 return TStatus::Error;
             }
 
             structType = joinKeyType->Cast<TStructExprType>();
-            auto leftRowType = tupleType->GetItems()[1]->Cast<TStructExprType>();
+            auto leftRowType = tupleType->GetItems()[0]->Cast<TStructExprType>();
 
             TVector<const TTypeAnnotationNode*> outputTypes;
             outputTypes.push_back(leftRowType);
@@ -1760,6 +1760,54 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    // First argument: text (should be String or Utf8)
+    const auto* textArg = node->Child(0);
+    if (!EnsureComputable(*textArg, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TDataExprType* textDataType;
+    bool isOptional;
+    if (!EnsureDataOrOptionalOfData(*textArg, isOptional, textDataType, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (textDataType->GetSlot() != EDataSlot::String && textDataType->GetSlot() != EDataSlot::Utf8) {
+        ctx.AddError(TIssue(ctx.GetPosition(textArg->Pos()), TStringBuilder()
+            << "Expected String or Utf8 for text argument, but got: " << *textArg->GetTypeAnn()));
+        return TStatus::Error;
+    }
+
+    // Second argument: settings (should be String - serialized proto)
+    const auto* settingsArg = node->Child(1);
+    if (!EnsureComputable(*settingsArg, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TDataExprType* settingsDataType;
+    if (!EnsureDataOrOptionalOfData(*settingsArg, isOptional, settingsDataType, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (settingsDataType->GetSlot() != EDataSlot::String) {
+        ctx.AddError(TIssue(ctx.GetPosition(settingsArg->Pos()), TStringBuilder()
+            << "Expected String for settings argument, but got: " << *settingsArg->GetTypeAnn()));
+        return TStatus::Error;
+    }
+
+    // Return type: List<String or Utf8>
+    auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
+    auto listType = ctx.MakeType<TListExprType>(stringType);
+    node->SetTypeAnn(listType);
+    
+    return TStatus::Ok;
+}
+
 TStatus AnnotateSequencerConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -1882,21 +1930,21 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
             return TStatus::Error;
         }
 
-        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
+        if (!EnsureOptionalType(node->Pos(), *inputTupleType->GetItems()[1], ctx)) {
             return TStatus::Error;
         }
 
-        auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+        auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
         if (!EnsureStructType(node->Pos(), *joinKeyType, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[1], ctx)) {
+        if (!EnsureStructType(node->Pos(), *inputTupleType->GetItems()[0], ctx)) {
             return TStatus::Error;
         }
 
         const TStructExprType* joinKeys = joinKeyType->Cast<TStructExprType>();
-        const TStructExprType* leftRowType = inputTupleType->GetItems()[1]->Cast<TStructExprType>();
+        const TStructExprType* leftRowType = inputTupleType->GetItems()[0]->Cast<TStructExprType>();
 
         for (const auto& inputKey : joinKeys->GetItems()) {
             if (!table.second->GetKeyColumnIndex(TString(inputKey->GetName()))) {
@@ -2180,6 +2228,17 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
     return TStatus::Ok;
 }
 
+TStatus AnnotatePgExprSublink(const TExprNode::TPtr& node, TExprContext& ctx) {
+    auto expr = node->Child(TKqpPgExprSublink::idx_Expr);
+    auto itemType = expr->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto valueType = itemType->GetItems()[0]->GetItemType();
+    if (!valueType->IsOptionalOrNull()) {
+        valueType = ctx.MakeType<TOptionalExprType>(valueType);
+    }
+    node->SetTypeAnn(valueType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRead(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2229,11 +2288,11 @@ TStatus AnnotateOpEmptySource(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateOpMapElement(const TExprNode::TPtr& input, TExprContext& ctx) {
-    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElement::idx_Input)->GetTypeAnn();
+TStatus AnnotateOpMapElementLambda(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElementLambda::idx_Input)->GetTypeAnn();
     const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
 
-    auto& lambda = input->ChildRef(TKqpOpMapElement::idx_Lambda);
+    auto& lambda = input->ChildRef(TKqpOpMapElementLambda::idx_Lambda);
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -2243,44 +2302,92 @@ TStatus AnnotateOpMapElement(const TExprNode::TPtr& input, TExprContext& ctx) {
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    input->SetTypeAnn(lambdaType);
+    auto variable = input->ChildRef(TKqpOpMapElementLambda::idx_Variable);
+    auto res = ctx.MakeType<TItemExprType>(variable->Content(), lambdaType);
+
+    input->SetTypeAnn(res);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpMapElementRename(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMapElementLambda::idx_Input)->GetTypeAnn();
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto typeItems = structType->GetItems();
+
+    auto from = input->ChildRef(TKqpOpMapElementRename::idx_From);
+    auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
+        return from->Content() == t->GetName();
+    });
+
+    if (typeIt==typeItems.end()) {
+        YQL_CLOG(TRACE, CoreDq) << "Trying to find " << from->Content() << " in " << *(TTypeAnnotationNode*)structType;
+    }
+
+    Y_ENSURE(typeIt!=typeItems.end());
+
+    auto variable = input->ChildRef(TKqpOpMapElementRename::idx_Variable);
+    auto res = ctx.MakeType<TItemExprType>(variable->Content(), (*typeIt)->GetItemType());
+
+    input->SetTypeAnn(res);
     return TStatus::Ok;
 }
 
 TStatus AnnotateOpMap(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-
-    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
-    //YQL_CLOG(TRACE, CoreDq) << "Annotating OpMap, input type:" << *inputType;
-
-    const TTypeAnnotationNode* itemType = inputType->Cast<TListExprType>()->GetItemType();
-    //YQL_CLOG(TRACE, CoreDq) << "item type:" << *itemType;
+    Y_UNUSED(typesCtx);
 
     TVector<const TItemExprType*> structItemTypes;
 
+    if (input->ChildrenSize() <= TKqpOpMap::idx_Project) {
+        const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpMap::idx_Input)->GetTypeAnn();
+        auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+        for (auto t : structType->GetItems()) {
+            structItemTypes.push_back(t);
+        }
+    }
+
     for (size_t idx = 0; idx < input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildrenSize(); idx++) {
         auto& element = input->ChildPtr(TKqpOpMap::idx_MapElements)->ChildRef(idx);
-        auto variable = element->ChildPtr(TKqpOpMapElement::idx_Variable);
-        auto& lambda = element->ChildRef(TKqpOpMapElement::idx_Lambda);
-
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto lambdaType = lambda->GetTypeAnn();
-        if (!lambdaType) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
-
-        structItemTypes.push_back(ctx.MakeType<TItemExprType>(variable->Content(),lambdaType));
+        auto type = element->GetTypeAnn();
+        structItemTypes.push_back((TItemExprType*)type);
     }
 
     auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
     const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
 
     input->SetTypeAnn(resultAnn);
-    typesCtx.ExpectedTypes[input->UniqueId()] = resultAnn;
+    //typesCtx.ExpectedTypes[input->UniqueId()] = resultAnn;
 
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpMap done: " << *resultAnn;
+
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpProject(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto structType = input->ChildPtr(TKqpOpProject::idx_Input)->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes;
+    auto typeItems = structType->GetItems();
+
+    for (size_t i=0; i<input->ChildPtr(TKqpOpProject::idx_ProjectList)->ChildrenSize(); i++) {
+        auto proj = input->ChildPtr(TKqpOpProject::idx_ProjectList)->ChildRef(i);
+        auto typeItemIt = std::find_if(typeItems.begin(), typeItems.end(), [&proj](const TItemExprType* t){
+            return proj->Content() == t->GetName();
+        });
+        if (typeItemIt == typeItems.end()) {
+            continue;
+        }
+
+        structItemTypes.push_back(*typeItemIt);
+    }
+
+    auto resultItemType = ctx.MakeType<TStructExprType>(structItemTypes);
+    const TTypeAnnotationNode* resultAnn = ctx.MakeType<TListExprType>(resultItemType);
+
+    input->SetTypeAnn(resultAnn);
+
+    YQL_CLOG(TRACE, CoreDq) << "Type annotation for OpProject done: " << *resultAnn;
 
     return TStatus::Ok;
 }
@@ -2332,10 +2439,58 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
+    // TODO: Add sanity checks.
+    input->SetTypeAnn(leftInputType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpLimit(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
     input->SetTypeAnn(inputType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpSortElement(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    input->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
+    input->SetTypeAnn(inputType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto* inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashMap<TString, std::pair<TString, const TTypeAnnotationNode*>> aggTraitsMap;
+    for (const auto& item : TExprBase(input->ChildPtr(TKqpOpAggregate::idx_AggregationTraitsList)).Cast<TExprList>()) {
+        const auto aggTrait = TExprBase(item).Cast<TKqpOpAggregationTraits>();
+        const auto originalColName = TString(aggTrait.OriginalColName());
+        const auto resultColName = TString(aggTrait.ResultColName());
+        const auto* resultType = aggTrait.AggregationFunctionResultType().Ptr()->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        aggTraitsMap[originalColName] = {resultColName, resultType};
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto* itemType : structType->GetItems()) {
+        if (auto it = aggTraitsMap.find(TString(itemType->GetName())); it != aggTraitsMap.end()) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(it->second.first, it->second.second));
+        } else {
+            newItemTypes.push_back(itemType);
+        }
+    }
+
+    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    input->SetTypeAnn(resultType);
     return TStatus::Ok;
 }
 
@@ -2508,6 +2663,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKqpEnsure(input, ctx);
             }
 
+            if (TFulltextAnalyze::Match(input.Get())) {
+                return AnnotateFulltextAnalyze(input, ctx);
+            }
+
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -2528,6 +2687,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateTableSinkSettings(input, ctx);
             }
 
+            if (TKqpPgExprSublink::Match(input.Get())) {
+                return AnnotatePgExprSublink(input, ctx);
+            }
+
             if (TKqpOpRead::Match(input.Get())) {
                 return AnnotateOpRead(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -2536,14 +2699,22 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOpEmptySource(input, ctx);
             }
 
-            if (TKqpOpMapElement::Match(input.Get())) {
-                return AnnotateOpMapElement(input, ctx);
+            if (TKqpOpMapElementLambda::Match(input.Get())) {
+                return AnnotateOpMapElementLambda(input, ctx);
+            }
+
+            if (TKqpOpMapElementRename::Match(input.Get())) {
+                return AnnotateOpMapElementRename(input, ctx);
             }
 
             if (TKqpOpMap::Match(input.Get())) {
                 return AnnotateOpMap(input, ctx, typesCtx);
             }
 
+            if (TKqpOpProject::Match(input.Get())) {
+                return AnnotateOpProject(input, ctx);
+            }
+            
             if (TKqpOpFilter::Match(input.Get())) {
                 return AnnotateOpFilter(input, ctx);
             }
@@ -2552,8 +2723,24 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOpJoin(input, ctx);
             }
 
+            if (TKqpOpUnionAll::Match(input.Get())) {
+                return AnnotateOpUnionAll(input, ctx);
+            }
+
             if (TKqpOpLimit::Match(input.Get())) {
                 return AnnotateOpLimit(input, ctx);
+            }
+
+            if (TKqpOpSortElement::Match(input.Get())) {
+                return AnnotateOpSortElement(input, ctx);
+            }
+
+            if (TKqpOpSort::Match(input.Get())) {
+                return AnnotateOpSort(input, ctx);
+            }
+
+            if (TKqpOpAggregate::Match(input.Get())) {
+                return AnnotateOpAggregate(input, ctx);
             }
 
             if (TKqpOpRoot::Match(input.Get())) {

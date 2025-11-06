@@ -276,7 +276,7 @@ class Stylesheet:
         """
         filename = os.path.expanduser(filename)
         try:
-            with open(filename, "rt") as css_file:
+            with open(filename, "rt", encoding="utf-8") as css_file:
                 css = css_file.read()
             path = os.path.abspath(filename)
         except Exception:
@@ -482,7 +482,10 @@ class Stylesheet:
         node._has_hover_style = "hover" in all_pseudo_classes
         node._has_focus_within = "focus-within" in all_pseudo_classes
         node._has_order_style = not all_pseudo_classes.isdisjoint(
-            {"first-of-type", "last-of-type", "odd", "even"}
+            {"first-of-type", "last-of-type"}
+        )
+        node._has_odd_or_even = (
+            "odd" in all_pseudo_classes or "even" in all_pseudo_classes
         )
 
         cache_key: tuple | None = None

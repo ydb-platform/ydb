@@ -30,7 +30,8 @@ struct TCommonProgress {
     ui32 TotalPaths = 0;
     ui32 ProcessedPaths = 0;
     EStatus Status = EStatus::Idle;
-    TString ErrorMessage;
+    TString Error;
+    TString Warning;
 
     TCommonProgress() = default;
 
@@ -59,7 +60,7 @@ struct TRestoreProgress: TCommonProgress {
     using TCommonProgress::TCommonProgress;
 };
 
-IActor* CreateSchemeBoardBackuper(const TString& filePath, ui32 inFlightLimit, const TActorId& parent);
+IActor* CreateSchemeBoardBackuper(const TString& filePath, ui32 inFlightLimit, bool requireMajority, const TActorId& parent);
 
 IActor* CreateSchemeBoardRestorer(const TString& filePath, ui64 schemeShardId, ui64 generation, const TActorId& parent);
 

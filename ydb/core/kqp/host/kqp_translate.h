@@ -146,14 +146,18 @@ public:
         return *this;
     }
 
-    TKqpTranslationSettingsBuilder& SetIsEnableAntlr4Parser(bool value) {
-        IsEnableAntlr4Parser = value;
-        return *this;
-    }
-
     TKqpTranslationSettingsBuilder& SetLangVer(ui32 langVer) {
         LangVer = langVer;
         return *this;
+    }
+
+    TKqpTranslationSettingsBuilder& SetIsAmbiguityError(bool isAmbiguityError) {
+        IsAmbiguityError = isAmbiguityError;
+        return *this;
+    }
+
+    bool GetIsAmbiguityError() const {
+        return IsAmbiguityError;
     }
 
 private:
@@ -168,7 +172,6 @@ private:
     bool IsEnableExternalDataSources = false;
     bool IsEnablePgConstsToParams = false;
     bool IsEnablePgSyntax = false;
-    bool IsEnableAntlr4Parser = false;
     TMaybe<bool> SqlAutoCommit = {};
     TGUCSettings::TPtr GUCSettings;
     TMaybe<TString> ApplicationName = {};
@@ -176,6 +179,7 @@ private:
     TMaybe<ui16> SqlVersion = {};
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+    bool IsAmbiguityError = false;
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);

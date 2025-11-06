@@ -30,8 +30,7 @@ void TFmrTableDataServiceWriter::DoWrite(const void* buf, size_t len) {
 }
 
 void TFmrTableDataServiceWriter::NotifyRowEnd()  {
-    ++CurrentChunkRows_;
-    if (TableContent_.size() >= MaxRowWeight_) {
+    if (TableContent_.size() > MaxRowWeight_) {
         ythrow yexception() << "Current row size: " << TableContent_.size() << " is larger than max row weight: " << MaxRowWeight_;
     }
     if (TableContent_.size() >= ChunkSize_) {
@@ -52,17 +51,14 @@ void TFmrTableDataServiceWriter::DoFlush() {
 }
 
 void TFmrTableDataServiceWriter::PutRows() {
-
     auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
     std::unordered_map<TString, TString> splittedYsonByColumnGroups;
 
-    if (!ColumnGroupSpec_.IsEmpty()) {;
-        // Split current yson buffer by column groups
-        splittedYsonByColumnGroups = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
-    } else {
-        // Create single column group with empty name in case spec is not set
-        splittedYsonByColumnGroups = {{TString(), currentYsonContent}};
-    }
+    // Split current yson buffer by column groups
+    auto columnGroupSplitYsonResult = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
+    ui64 recordsCount = columnGroupSplitYsonResult.RecordsCount;
+    CurrentChunkRows_ += recordsCount;
+    splittedYsonByColumnGroups = columnGroupSplitYsonResult.SplittedYsonByColumnGroups;
 
     with_lock(State_->Mutex) {
         State_->CondVar.Wait(State_->Mutex, [&] {

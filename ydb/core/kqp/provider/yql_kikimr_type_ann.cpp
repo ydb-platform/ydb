@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
@@ -204,8 +205,21 @@ private:
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
-                YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
-                return Types.SetColumnOrder(node.Ref(), TColumnOrder(tableDesc->Metadata->ColumnOrder), ctx);
+                const auto& cols = tableDesc->Metadata->Columns;
+
+                TColumnOrder columnOrder;
+                size_t buildInProgressColumns = 0;
+
+                for (const auto& name : tableDesc->Metadata->ColumnOrder) {
+                    if (auto it = cols.find(name); it != cols.end() && it->second.IsBuildInProgress) {
+                        ++buildInProgressColumns;
+                    } else {
+                        columnOrder.AddColumn(name);
+                    }
+                }
+
+                YQL_ENSURE(columnOrder.Size() + buildInProgressColumns == tableDesc->Metadata->Columns.size());
+                return Types.SetColumnOrder(node.Ref(), columnOrder, ctx);
             }
 
             case TKikimrKey::Type::TableList:
@@ -992,7 +1006,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableVectorIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Vector index support is disabled"));
+                    return TStatus::Error;
+                }
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            } else if (type == "globalFulltext") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalFulltext;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
             }
@@ -1018,25 +1042,66 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
-            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
-            if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                Ydb::Table::KMeansTreeSettings& settings = *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>().MutableSettings();
+            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
+            NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+            // fulltext index has per-column analyzers settings, single value for now
+            fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
+                indexColums.empty() ? "<none>" : indexColums.back()
+            );
+            for (const auto& indexSetting : index.IndexSettings()) {
+                const auto& name = indexSetting.Name();
+                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
                 TString error;
+                switch (indexType) {
+                    case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                        NKikimr::NKMeans::FillSetting(
+                            *vectorIndexKmeansTreeDescription.MutableSettings(),
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::GlobalFulltext: {
+                        NKikimr::NFulltext::FillSetting(
+                            *fulltextIndexDescription.MutableSettings(),
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    default:
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder()
+                            << "Unknown index setting: " << name.StringValue()));
+                        return IGraphTransformer::TStatus::Error;
+                }
+                if (error) {
+                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
 
-                for (const auto& indexSetting : index.IndexSettings()) {
-                    const auto& name = indexSetting.Name();
-                    const auto& value = indexSetting.Value().Cast<TCoAtom>();
-
-                    if (!NKikimr::NKMeans::FillSetting(settings, name.StringValue(), value.StringValue(), error))
-                    {
-                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
+            switch (indexType) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // no specialized index description
+                    // no settings validation
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    TString error;
+                    if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }
+                    specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
+                    break;
                 }
-
-                if (!NKikimr::NKMeans::ValidateSettings(settings, error)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
-                    return IGraphTransformer::TStatus::Error;
+                case TIndexDescription::EType::GlobalFulltext: {
+                    TString error;
+                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(fulltextIndexDescription);
+                    break;
                 }
             }
 
@@ -1637,9 +1702,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
     static bool CheckConsumerSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         for (const auto& setting : settings) {
-            auto name = setting.Name().Value();
-            auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
+            const auto name = setting.Name().Value();
             if (name == "setSupportedCodecs") {
+                auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
                 auto codecsList = GetTopicCodecsFromString(val);
                 if (codecsList.empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),

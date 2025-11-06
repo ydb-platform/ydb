@@ -7,7 +7,7 @@ $p = (
         key,
         sum(value) AS a
     FROM
-        AS_TABLE([<|key: 1, value: 2|>])
+        AsTable([<|key: 1, value: 2|>])
     GROUP BY
         key
 );

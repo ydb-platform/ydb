@@ -16,11 +16,13 @@ using NYT::FromProto;
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-void TAggregate<T>::operator=(T value)
+void TAggregate<T>::Set(T value, EStatisticsAggregation statisticsAggregation)
 {
     Total_ = value;
     Max_ = value;
-    ArgmaxNode_ = NNet::GetLocalHostName();
+    if (statisticsAggregation == EStatisticsAggregation::Depth) {
+        ArgmaxNode_ = NNet::GetLocalHostName();
+    }
 }
 
 template <class T>
@@ -57,7 +59,9 @@ void ToProto(NProto::TQueryStatistics::TAggregate* serialized, const TAggregate<
         serialized->set_total(original.GetTotal());
         serialized->set_max(original.GetMax());
     }
-    serialized->set_argmax_node(original.ArgmaxNode());
+    if (!original.ArgmaxNode().empty()) {
+        serialized->set_argmax_node(original.ArgmaxNode());
+    }
 }
 
 template <class T>
@@ -84,22 +88,23 @@ void FromProto(TAggregate<T>* original, const NProto::TQueryStatistics::TAggrega
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TQueryStatistics TQueryStatistics::FromExecutionStatistics(const TExecutionStatistics& statistics)
+TQueryStatistics TQueryStatistics::FromExecutionStatistics(
+    const TExecutionStatistics& statistics,
+    EStatisticsAggregation statisticsAggregation)
 {
     TQueryStatistics queryStatistics;
 
-    queryStatistics.RowsRead = statistics.RowsRead;
-    queryStatistics.DataWeightRead = statistics.DataWeightRead;
-    queryStatistics.RowsWritten = statistics.RowsWritten;
-    queryStatistics.SyncTime = statistics.SyncTime;
-    queryStatistics.AsyncTime = statistics.AsyncTime;
-    queryStatistics.ExecuteTime = statistics.ExecuteTime;
-    queryStatistics.ReadTime = statistics.ReadTime;
-    queryStatistics.WriteTime = statistics.WriteTime;
-    queryStatistics.CodegenTime = statistics.CodegenTime;
-    queryStatistics.WaitOnReadyEventTime = statistics.WaitOnReadyEventTime;
-    queryStatistics.MemoryUsage = statistics.MemoryUsage;
-    queryStatistics.GroupedRowCount = statistics.GroupedRowCount;
+    queryStatistics.RowsRead.Set(statistics.RowsRead, statisticsAggregation);
+    queryStatistics.DataWeightRead.Set(statistics.DataWeightRead, statisticsAggregation);
+    queryStatistics.RowsWritten.Set(statistics.RowsWritten, statisticsAggregation);
+    queryStatistics.SyncTime.Set(statistics.SyncTime, statisticsAggregation);
+    queryStatistics.AsyncTime.Set(statistics.AsyncTime, statisticsAggregation);
+    queryStatistics.ExecuteTime.Set(statistics.ExecuteTime, statisticsAggregation);
+    queryStatistics.ReadTime.Set(statistics.ReadTime, statisticsAggregation);
+    queryStatistics.WriteTime.Set(statistics.WriteTime, statisticsAggregation);
+    queryStatistics.CodegenTime.Set(statistics.CodegenTime, statisticsAggregation);
+    queryStatistics.WaitOnReadyEventTime.Set(statistics.WaitOnReadyEventTime, statisticsAggregation);
+    queryStatistics.GroupedRowCount.Set(statistics.GroupedRowCount, statisticsAggregation);
 
     queryStatistics.IncompleteInput = statistics.IncompleteInput;
     queryStatistics.IncompleteOutput = statistics.IncompleteOutput;
@@ -148,6 +153,12 @@ void TQueryStatistics::Merge(const TQueryStatistics& statistics)
     }
 
     InnerStatistics = {std::move(merged)};
+}
+
+bool TQueryStatistics::IsDepthAggregate(EStatisticsAggregation statisticsAggregation)
+{
+    return statisticsAggregation == EStatisticsAggregation::Depth ||
+        statisticsAggregation == EStatisticsAggregation::DepthOmitNode;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

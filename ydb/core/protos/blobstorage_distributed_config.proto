@@ -78,6 +78,7 @@ message TEvNodeConfigPush {
     repeated TBoundNode BoundNodes = 2; // a list of bound node updates (including itself)
     repeated TNodeIdentifier DeletedBoundNodeIds = 3; // a list of detached nodes
     TCacheUpdate CacheUpdate = 4;
+    TStorageConfig StorageConfig = 5;
 }
 
 // Used to reverse-propagate configuration and to confirm/reject initial TEvNodePushBinding query.
@@ -87,6 +88,7 @@ message TEvNodeConfigReversePush {
     TStorageConfig CommittedStorageConfig = 3; // last known committed storage configuration
     bool RecurseConfigUpdate = 4;
     TCacheUpdate CacheUpdate = 5;
+    optional uint64 RequestStorageConfigGeneration = 6;
 }
 
 // Remove node from bound list.
@@ -223,12 +225,18 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool Recommended = 1;
         optional bool PileupReplicas = 2;
         optional bool NodesState = 3;
+        optional uint32 OverrideReplicasInRingCount = 4;
+        optional uint32 OverrideRingsCount = 5;
+        optional uint32 ReplicasSpecificVolume = 6;
     }
 
     message TSelfHealStateStorage {
         optional uint32 WaitForConfigStep = 1;
         optional bool ForceHeal = 2;
         optional bool PileupReplicas = 3;
+        optional uint32 OverrideReplicasInRingCount = 4;
+        optional uint32 OverrideRingsCount = 5;
+        optional uint32 ReplicasSpecificVolume = 6;
     }
 
     message TSelfHealNodesStateUpdate {
@@ -240,6 +248,9 @@ message TEvNodeConfigInvokeOnRoot {
         optional uint32 WaitForConfigStep = 2;
         repeated TNodeState NodesState = 3;
         optional bool PileupReplicas = 4;
+        optional uint32 OverrideReplicasInRingCount = 5;
+        optional uint32 OverrideRingsCount = 6;
+        optional uint32 ReplicasSpecificVolume = 7;
     }
 
     message TAdvanceGeneration

@@ -74,7 +74,7 @@ def test_func(arg1, arg2):
 ```
 
 And there is some useful wrapper called `lfc` (`lazy_fixture_callable`).
-It can work with any callable and your fixtures, e.g.
+It can work with any callable and your fixtures.
 
 ```python
 import pytest
@@ -109,6 +109,12 @@ def entity_format():
 
     return _entity_format
 
+# Recommended: implicit injection from the callable's parameter names
+@pytest.mark.parametrize("as_text", [lfc(lambda entity: str(entity))])
+def test_lfc_injection_basic(as_text):
+    assert as_text == "1"
+
+# Advanced: manual control over what to inject (explicit values into a callable)
 @pytest.mark.parametrize(
     "message",
     [
@@ -134,6 +140,68 @@ def test_lazy_fixture_callable_with_lf(formatted, entity):
 def test_lazy_fixture_callable_with_attr_lf(result):
     assert result == 3
 ```
+
+### Injecting fixtures from a callable signature
+
+`lfc` automatically injects fixtures based on the callable's parameter names. If a parameter name matches a fixture name, that fixture will be resolved and passed into the callable. This implicit injection is the standard, recommended behavior. You can still override any parameter explicitly using `lf`, either positionally or by name.
+Default values prevent implicit injection for that parameter.
+
+Examples:
+
+```python
+import pytest
+from pytest_lazy_fixtures import lf, lfc
+
+# Some fixtures used in the examples
+@pytest.fixture()
+def alpha():
+    return 10
+
+@pytest.fixture()
+def beta():
+    return 20
+
+@pytest.fixture()
+def gamma():
+    return 30
+
+# Simple implicit injection by parameter name
+@pytest.mark.parametrize("result", [lfc(lambda alpha: alpha + 1)])
+def test_signature_injection_basic(result):
+    assert result == 11
+
+# Override an implicitly matched parameter (positional or keyword)
+@pytest.mark.parametrize(
+    "result",
+    [
+        lfc(lambda alpha: alpha + 1, lf("beta")),      # positional override
+        lfc(lambda alpha: alpha + 1, alpha=lf("beta")),  # keyword override
+    ],
+)
+def test_signature_injection_override(result):
+    assert result == 21
+
+# Mix implicit and explicit params
+@pytest.mark.parametrize(
+    "pair",
+    [
+        lfc(lambda alpha, beta: (alpha, beta), beta=lf("gamma")),  # first implicit, second explicit
+        lfc(lambda alpha, beta: (alpha, beta), lf("gamma")),       # first explicit, second implicit
+    ],
+)
+def test_signature_injection_mixed(pair):
+    assert pair in [(10, 30), (30, 20)]
+
+# 4) Defaults prevent implicit injection for that parameter
+@pytest.mark.parametrize("val", [lfc(lambda alpha=999: alpha)])
+def test_signature_injection_defaults(val):
+    assert val == 999
+```
+
+Notes:
+- Implicit injection only happens for parameters without an explicit value and without a default.
+- Explicit arguments passed to `lfc` (positional or keyword) always take precedence over implicit injection.
+- The mapping of positional explicit arguments follows the callable's parameter order.
 
 ## Contributing
 

@@ -16,6 +16,7 @@ RECURSE(
     federated_topic/impl
     helpers
     impl/endpoints
+    impl/executor
     impl/internal/common
     impl/internal/db_driver_state
     impl/internal/grpc_connections
@@ -24,6 +25,7 @@ RECURSE(
     impl/internal/plain_status
     impl/internal/thread_pool
     impl/internal/value_helpers
+    impl/session
     impl/stats
     import
     operation

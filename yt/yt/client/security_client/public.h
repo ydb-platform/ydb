@@ -44,6 +44,7 @@ extern const std::string TabletBalancerUserName;
 extern const std::string PermissionCacheUserName;
 extern const std::string ReplicatedTableTrackerUserName;
 extern const std::string ChunkReplicaCacheUserName;
+extern const std::string SignatureKeysmithUserName;
 
 extern const std::string EveryoneGroupName;
 extern const std::string UsersGroupName;
@@ -101,7 +102,7 @@ DEFINE_ENUM(EAccessControlObject,
     (CollectCoverage)
 );
 
-DEFINE_ENUM(EInapplicableExpressionMode,
+DEFINE_ENUM(EInapplicableRowAccessPredicateMode,
     // Fail the read action (e.g. scheduler operation / read_table command / SPYT/CHYT query).
     (Fail)
     // Pretend that the RL ACE does not exist for the current read action.

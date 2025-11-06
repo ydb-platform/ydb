@@ -1,5 +1,7 @@
 #pragma once
 #include <util/generic/strbuf.h>
+#include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/system/types.h>
 
 #include <array>
@@ -58,6 +60,7 @@ using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
 bool IsValidLangVersion(TLangVersion ver);
 bool ParseLangVersion(TStringBuf str, TLangVersion& result);
 bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf& result);
+TMaybe<TString> FormatLangVersion(TLangVersion ver);
 void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback);
 
 enum class EBackportCompatibleFeaturesMode {
@@ -67,6 +70,6 @@ enum class EBackportCompatibleFeaturesMode {
 };
 
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
-    EBackportCompatibleFeaturesMode mode);
+                                          EBackportCompatibleFeaturesMode mode);
 
-}
+} // namespace NYql

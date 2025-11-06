@@ -69,12 +69,12 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     {}
 
     explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
-        : DomainKey(GetDomainKey(descr.GetDomainKey()))
+        : DomainKey(TPathId::FromDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
     {
         if (descr.HasResourcesDomainKey()) {
-            ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
+            ResourcesDomainKey = TPathId::FromDomainKey(descr.GetResourcesDomainKey());
         } else {
             ResourcesDomainKey = DomainKey;
         }
@@ -144,11 +144,6 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
 
     TString ToString() const;
 
-private:
-    inline static TPathId GetDomainKey(const NKikimrSubDomains::TDomainKey& protoKey) {
-        return TPathId(protoKey.GetSchemeShard(), protoKey.GetPathId());
-    }
-
 }; // TDomainInfo
 
 enum class ETableKind {
@@ -157,6 +152,7 @@ enum class ETableKind {
     KindSyncIndexTable = 2,
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
+    KindFulltextIndexTable = 5,
 };
 
 struct TSchemeCacheNavigate {

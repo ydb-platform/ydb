@@ -534,7 +534,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NDetail::DumpSigcontext(uc);
 
-    // The easiest way to choose proper overload...
+    // NB: Constructing std::function from this lambda must not lead to allocations.
     DumpBacktrace([] (TStringBuf str) { WriteToStderr(str); }, NDetail::GetPC(uc));
 
     NDetail::DumpUndumpableBlocksInfo();

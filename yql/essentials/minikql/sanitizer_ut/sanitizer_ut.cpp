@@ -16,7 +16,8 @@ enum class EAllocatorType {
 class MemoryTest: public testing::Test {
 protected:
     MemoryTest()
-        : ScopedAlloc_(__LOCATION__) {
+        : ScopedAlloc_(__LOCATION__)
+    {
     }
 
     void AccessMemory(volatile void* memory, ssize_t offset) const {

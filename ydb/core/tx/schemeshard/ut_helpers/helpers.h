@@ -422,14 +422,17 @@ namespace NSchemeShardUT_Private {
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);
+    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const Ydb::Table::TableIndex& index);
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg);
     void AsyncBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString& columnName, const Ydb::TypedValue& literal);
+    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const Ydb::Table::TableIndex& index);
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg);
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
     void AsyncBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
     void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns = {});
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
         const TString &src, const TString& columnName, const Ydb::TypedValue& literal, Ydb::StatusIds::StatusCode expectedStatus);
+    void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const Ydb::Table::TableIndex& index, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     void TestBuildUniqIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TString &name, TVector<TString> columns, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
@@ -715,9 +718,12 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, const TString& path,
         Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
+    NKikimrMiniKQL::TResult ReadSystemTable(TTestActorRuntime& runtime, ui64 tabletId,
+        const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
     NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
         const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
 
+    TVector<TString> ReadShards(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
     ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table);
     ui32 CountRows(TTestActorRuntime& runtime, const TString& table);
 

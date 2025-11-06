@@ -22,14 +22,14 @@ Y_UNIT_TEST_SUITE(HugeCluster) {
 
         void Handle(TEvTestStartPolling::TPtr /*ev*/, const TActorContext& ctx) {
             for (ui32 i = 0; i < Targets.size(); ++i) {
-                ctx.Send(Targets[i], new TEvTest(), IEventHandle::FlagTrackDelivery, i);
+                ctx.Send(Targets[i], new TEvTest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, i);
             }
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {
             const ui32 cookie = ev->Cookie;
             // Cerr << "TEvUndelivered ping from node# " << SelfId().NodeId() << " to node# " << cookie + 1 << Endl;
-            ctx.Send(Targets[cookie], new TEvTest(), IEventHandle::FlagTrackDelivery, cookie);
+            ctx.Send(Targets[cookie], new TEvTest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, cookie);
         }
 
         void Handle(TEvTest::TPtr ev, const TActorContext& /*ctx*/) {

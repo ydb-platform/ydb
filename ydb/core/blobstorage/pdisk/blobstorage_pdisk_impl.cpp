@@ -6,6 +6,7 @@
 #include "blobstorage_pdisk_request_id.h"
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
@@ -65,6 +66,14 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ?  ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
     UseNoopSchedulerSSD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
     UseNoopSchedulerHDD = TControlWrapper(Cfg->UseNoopScheduler, 0, 1);
+    ChunkBaseLimitPerMille = TControlWrapper(0, 0, 130);  // 0 means ChunkBaseLimit isn't configured via ICB
+
+    // Override PDiskConfig.SpaceColorBorder:
+    // 0 - overriding disabled, respect PDiskConfig value
+    // 1 - LightYellowMove
+    // 2 - YellowStop
+    SemiStrictSpaceIsolation = TControlWrapper(0, 0, 2);
+    SemiStrictSpaceIsolationCached = 0;
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -74,6 +83,13 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
             SectorMapFirstSectorWriteRate = TControlWrapper(diskModeParams->FirstSectorWriteRate, 0, 100000ull * 1024 * 1024);
             SectorMapLastSectorWriteRate = TControlWrapper(diskModeParams->LastSectorWriteRate, 0, 100000ull * 1024 * 1024);
             SectorMapSeekSleepMicroSeconds = TControlWrapper(diskModeParams->SeekSleepMicroSeconds, 0, 100ul * 1000 * 1000);
+        }
+        auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
+        if (failureProbs) {
+            SectorMapWriteErrorProbability = TControlWrapper(0, 0, 1000000000);
+            SectorMapReadErrorProbability = TControlWrapper(0, 0, 1000000000);
+            SectorMapSilentWriteFailProbability = TControlWrapper(0, 0, 1000000000);
+            SectorMapReadReplayProbability = TControlWrapper(0, 0, 1000000000);
         }
     }
 
@@ -1571,13 +1587,17 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetPDiskId(PCtx->PDiskId);
         pdiskState.SetPath(Cfg->GetDevicePath());
         pdiskState.SetSerialNumber(Cfg->ExpectedSerial);
-        pdiskState.SetAvailableSize(availableSize);
-        pdiskState.SetTotalSize(totalSize);
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
-        pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
-        pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
-        pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
+        
+        // Only report size information when PDisk is not in error state
+        if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
+            pdiskState.SetAvailableSize(availableSize);
+            pdiskState.SetTotalSize(totalSize);
+            pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
+            pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog, {})));
+            pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
+        }
         pdiskState.SetNumActiveSlots(GetNumActiveSlots());
         pdiskState.SetSlotSizeInUnits(Cfg->SlotSizeInUnits);
         if (ExpectedSlotCount) {
@@ -1837,7 +1857,7 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
     P_LOG(PRI_ERROR, BPD01, error.Str());
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
-    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
     PCtx->ActorSystem->Send(evYardInit.Sender, new NPDisk::TEvYardInitResult(status,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
@@ -1893,7 +1913,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
     ui32 ownerWeight = Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits);
-    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
@@ -2057,7 +2077,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
-    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(
         NKikimrProto::OK,
@@ -2101,6 +2121,23 @@ void TPDisk::YardResize(TYardResize &ev) {
         WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release(), Mon.YardResize.Results),
             TReqId(TReqId::YardResize, 0), {});
     }
+}
+
+void TPDisk::ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request) {
+    TGuard<TMutex> guard(StateMutex);
+    ExpectedSlotCount = request.ExpectedSlotCount;
+    Cfg->ExpectedSlotCount = request.ExpectedSlotCount;
+    Cfg->SlotSizeInUnits = request.SlotSizeInUnits;
+    Keeper.SetExpectedOwnerCount(ExpectedSlotCount);
+    for (TOwner owner = OwnerBeginUser; owner < OwnerEndUser; ++owner) {
+        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
+            Keeper.SetOwnerWeight(owner, Cfg->GetOwnerWeight(OwnerData[owner].GroupSizeInUnits));
+        }
+    }
+
+    auto result = std::make_unique<NPDisk::TEvChangeExpectedSlotCountResult>(NKikimrProto::OK, TString());
+    Mon.ChangeExpectedSlotCount.CountResponse();
+    PCtx->ActorSystem->Send(request.Sender, result.release());
 }
 
 // Scheduler weight configuration
@@ -2758,6 +2795,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestYardResize:
                 YardResize(static_cast<TYardResize&>(*req));
                 break;
+            case ERequestType::RequestChangeExpectedSlotCount:
+                ProcessChangeExpectedSlotCount(static_cast<TChangeExpectedSlotCount&>(*req));
+                break;
             default:
                 Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(*req));
                 break;
@@ -2842,11 +2882,12 @@ void TPDisk::OnDriveStartup() {
 bool TPDisk::Initialize() {
 
 #define REGISTER_LOCAL_CONTROL(control) \
-    icb->RegisterLocalControl(control, \
+    dcb->RegisterLocalControl(control, \
             TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_" << #control)
 
     if (!IsStarted) {
         if (PCtx->ActorSystem && PCtx->ActorSystem->AppData<TAppData>() && PCtx->ActorSystem->AppData<TAppData>()->Icb) {
+            auto& dcb = PCtx->ActorSystem->AppData<TAppData>()->Dcb;
             auto& icb = PCtx->ActorSystem->AppData<TAppData>()->Icb;
 
             REGISTER_LOCAL_CONTROL(SlowdownAddLatencyNs);
@@ -2856,8 +2897,10 @@ bool TPDisk::Initialize() {
             REGISTER_LOCAL_CONTROL(ForsetiMaxLogBatchNs);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeSsd);
             REGISTER_LOCAL_CONTROL(ForsetiOpPieceSizeRot);
-            icb->RegisterSharedControl(UseNoopSchedulerHDD, "PDiskControls.UseNoopSchedulerHDD");
-            icb->RegisterSharedControl(UseNoopSchedulerSSD, "PDiskControls.UseNoopSchedulerSSD");
+            TControlBoard::RegisterSharedControl(UseNoopSchedulerHDD, icb->PDiskControls.UseNoopSchedulerHDD);
+            TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
+            REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
+            TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
 
             if (Cfg->SectorMap) {
                 auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -2870,6 +2913,12 @@ bool TPDisk::Initialize() {
 
                     LastSectorReadRateControlName = TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_SectorMapLastSectorReadRate";
                     LastSectorWriteRateControlName = TStringBuilder() << "PDisk_" << PCtx->PDiskId << "_SectorMapLastSectorWriteRate";
+                }
+                if (Cfg->SectorMap->GetFailureProbabilities()) {
+                    REGISTER_LOCAL_CONTROL(SectorMapWriteErrorProbability);
+                    REGISTER_LOCAL_CONTROL(SectorMapReadErrorProbability);
+                    REGISTER_LOCAL_CONTROL(SectorMapSilentWriteFailProbability);
+                    REGISTER_LOCAL_CONTROL(SectorMapReadReplayProbability);
                 }
             }
         }
@@ -3138,7 +3187,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --state.OperationsInProgress;
                 --inFlight->ChunkReads;
             };
-            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce);
+            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce, PCtx->ActorSystem->GetRcBufAllocator());
 
             static_cast<TChunkRead*>(request)->SelfPointer = std::move(read);
 
@@ -3387,6 +3436,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
         case ERequestType::RequestYardResize:
+        case ERequestType::RequestChangeExpectedSlotCount:
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3841,6 +3891,13 @@ void TPDisk::Update() {
             }
         }
 
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (i64 currentIsolation = SemiStrictSpaceIsolation; currentIsolation != SemiStrictSpaceIsolationCached) {
+            TColor::E colorBorder = GetColorBorderIcb();
+            Keeper.SetColorBorder(colorBorder);
+            SemiStrictSpaceIsolationCached = currentIsolation;
+        }
+
         // Switch the scheduler when possible
         ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);
 
@@ -3947,7 +4004,7 @@ void TPDisk::Update() {
 
             diskModeParams->FirstSectorReadRate.store(SectorMapFirstSectorReadRate);
             if (SectorMapFirstSectorReadRate < SectorMapLastSectorReadRate) {
-                PCtx->ActorSystem->AppData<TAppData>()->Icb->SetValue(LastSectorReadRateControlName, SectorMapFirstSectorReadRate, prevValue);
+                PCtx->ActorSystem->AppData<TAppData>()->Dcb->SetValue(LastSectorReadRateControlName, SectorMapFirstSectorReadRate, prevValue);
                 diskModeParams->LastSectorReadRate.store(SectorMapFirstSectorReadRate);
             } else {
                 diskModeParams->LastSectorReadRate.store(SectorMapLastSectorReadRate);
@@ -3955,13 +4012,26 @@ void TPDisk::Update() {
 
             diskModeParams->FirstSectorWriteRate.store(SectorMapFirstSectorWriteRate);
             if (SectorMapFirstSectorWriteRate < SectorMapLastSectorWriteRate) {
-                PCtx->ActorSystem->AppData<TAppData>()->Icb->SetValue(LastSectorWriteRateControlName, SectorMapFirstSectorWriteRate, prevValue);
+                PCtx->ActorSystem->AppData<TAppData>()->Dcb->SetValue(LastSectorWriteRateControlName, SectorMapFirstSectorWriteRate, prevValue);
                 diskModeParams->LastSectorWriteRate.store(SectorMapFirstSectorWriteRate);
             } else {
                 diskModeParams->LastSectorWriteRate.store(SectorMapLastSectorWriteRate);
             }
 
             diskModeParams->SeekSleepMicroSeconds.store(SectorMapSeekSleepMicroSeconds);
+        }
+        auto failureProbs = Cfg->SectorMap->GetFailureProbabilities();
+        if (failureProbs) {
+            failureProbs->WriteErrorProbability.store(SectorMapWriteErrorProbability / 1000000000.0);
+            failureProbs->ReadErrorProbability.store(SectorMapReadErrorProbability / 1000000000.0);
+            failureProbs->SilentWriteFailProbability.store(SectorMapSilentWriteFailProbability / 1000000000.0);
+            failureProbs->ReadReplayProbability.store(SectorMapReadReplayProbability / 1000000000.0);
+
+            auto& sectorMap = *Cfg->SectorMap;
+            *Mon.EmulatedWriteErrors = sectorMap.EmulatedWriteErrors.load(std::memory_order_relaxed);
+            *Mon.EmulatedReadErrors = sectorMap.EmulatedReadErrors.load(std::memory_order_relaxed);
+            *Mon.EmulatedSilentWriteFails = sectorMap.EmulatedSilentWriteFails.load(std::memory_order_relaxed);
+            *Mon.EmulatedReadReplays = sectorMap.EmulatedReadReplays.load(std::memory_order_relaxed);
         }
     }
 
@@ -4017,6 +4087,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestPushUnformattedMetadataSector:
         case ERequestType::RequestContinueReadMetadata:
         case ERequestType::RequestYardResize:
+        case ERequestType::RequestChangeExpectedSlotCount:
             return false;
 
         // Can't be processed in read-only mode.

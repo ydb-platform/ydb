@@ -72,6 +72,7 @@ struct TIndexDescription {
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
         GlobalSyncVectorKMeansTree = 3,
+        GlobalFulltext = 4,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -91,7 +92,7 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription>;
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrKqp::TFulltextIndexDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -118,10 +119,27 @@ struct TIndexDescription {
         , LocalPathId(index.GetLocalPathId())
         , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul)
     {
-        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
-            *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
-            SpecializedIndexDescription = vectorIndexDescription;
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncUnique:
+                // no specialized index description
+                YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                break;
+            case EType::GlobalSyncVectorKMeansTree: {
+                NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+                *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
+                SpecializedIndexDescription = std::move(vectorIndexDescription);
+                break;
+            }
+            case EType::GlobalFulltext: {
+                NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+                *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
+                SpecializedIndexDescription = std::move(fulltextIndexDescription);
+                break;
+            }
+            default:
+                YQL_ENSURE(false, << InvalidIndexType(Type));
         }
     }
 
@@ -135,8 +153,21 @@ struct TIndexDescription {
         , LocalPathId(message->GetLocalPathId())
         , PathOwnerId(message->GetPathOwnerId())
     {
-        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncUnique:
+                // no specialized index description
+                YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                break;
+            case EType::GlobalSyncVectorKMeansTree:
+                SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
+                break;
+            case EType::GlobalFulltext:
+                SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                break;
+            default:
+                YQL_ENSURE(false, << InvalidIndexType(Type));
         }
     }
 
@@ -150,8 +181,10 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalSyncUnique;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
                 return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
+                return TIndexDescription::EType::GlobalFulltext;
             default:
-                YQL_ENSURE(false, "Unexpected NKikimrSchemeOp::EIndexType::EIndexTypeInvalid");
+                YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
     }
 
@@ -165,7 +198,15 @@ struct TIndexDescription {
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            case NYql::TIndexDescription::EType::GlobalFulltext:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            default:
+                YQL_ENSURE(false, << InvalidIndexType(indexType));
         }
+    }
+
+    static TString InvalidIndexType(TIndexDescription::EType indexType) {
+        return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
     }
 
     void ToMessage(NKikimrKqp::TIndexDescriptionProto* message) const {
@@ -184,10 +225,20 @@ struct TIndexDescription {
             message->AddDataColumns(data);
         }
 
-        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncUnique:
+                // no specialized index description
+                Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+                break;
+            case EType::GlobalSyncVectorKMeansTree:
+                *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+                break;
+            case EType::GlobalFulltext:
+                *message->MutableFulltextIndexDescription() = std::get<NKikimrKqp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                break;
         }
-
     }
 
     bool IsSameIndex(const TIndexDescription& other) const {
@@ -206,6 +257,12 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
+                if (State != EIndexState::Ready) {
+                    // Do not try to update vector indexes until their build is finished
+                    return false;
+                }
+                return true;
+            case EType::GlobalFulltext:
                 return true;
         }
     }

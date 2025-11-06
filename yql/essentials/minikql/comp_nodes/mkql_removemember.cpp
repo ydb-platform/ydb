@@ -1,5 +1,5 @@
 #include "mkql_removemember.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -9,8 +9,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TRemoveMemberWrapper : public TMutableCodegeneratorFallbackNode<TRemoveMemberWrapper> {
+class TRemoveMemberWrapper: public TMutableCodegeneratorFallbackNode<TRemoveMemberWrapper> {
     typedef TMutableCodegeneratorFallbackNode<TRemoveMemberWrapper> TBaseComputation;
+
 public:
     TRemoveMemberWrapper(TComputationMutables& mutables, IComputationNode* structObj, ui32 index, std::vector<EValueRepresentation>&& representations)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -18,7 +19,8 @@ public:
         , Index(index)
         , Representations(std::move(representations))
         , Cache(mutables)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& baseStruct = StructObj->GetValue(ctx);
@@ -51,8 +53,9 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        if (Representations.size() > CodegenArraysFallbackLimit)
+        if (Representations.size() > CodegenArraysFallbackLimit) {
             return TBaseComputation::DoGenerateGetValue(ctx, block);
+        }
 
         auto& context = ctx.Codegen.GetContext();
 
@@ -63,9 +66,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
         const auto type = ArrayType::get(valType, newSize);
         const auto itmsType = PointerType::getUnqual(type);
-        const auto itms = *Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(itmsType, 0U, "itms", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(itmsType, 0U, "itms", block);
+        const auto itms = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itmsType, 0U, "itms", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itmsType, 0U, "itms", block);
         const auto result = Cache.GenNewArray(newSize, itms, ctx, block);
         const auto itemsPtr = new LoadInst(itmsType, itms, "items", block);
 
@@ -121,8 +122,9 @@ public:
             BranchInst::Create(done, block);
         }
         block = done;
-        if (StructObj->IsTemporaryValue())
+        if (StructObj->IsTemporaryValue()) {
             CleanupBoxed(array, ctx, block);
+        }
         return result;
     }
 #endif
@@ -138,7 +140,7 @@ private:
     const TContainerCacheOnContext Cache;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapRemoveMember(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -159,5 +161,5 @@ IComputationNode* WrapRemoveMember(TCallable& callable, const TComputationNodeFa
     return new TRemoveMemberWrapper(ctx.Mutables, structObj, index, std::move(representations));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

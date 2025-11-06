@@ -41,7 +41,6 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandAuth>());
     AddCommand(std::make_unique<TCommandDiscovery>());
     AddCommand(std::make_unique<TCommandScheme>());
-    AddHiddenCommand(std::make_unique<TCommandScripting>());
     AddCommand(std::make_unique<TCommandTable>());
     AddCommand(std::make_unique<TCommandTools>());
     AddCommand(std::make_unique<TCommandExport>(Settings.UseExportToYt.GetRef()));
@@ -51,10 +50,11 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandConfig>());
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandSql>());
-    AddCommand(std::make_unique<TCommandYql>());
     AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
     AddCommand(std::make_unique<TCommandDebug>());
+    AddHiddenCommand(std::make_unique<TCommandScripting>()); // TODO: remove in next major version
+    AddHiddenCommand(std::make_unique<TCommandYql>()); // TODO: remove in next major version
     PropagateFlags(TCommandFlags{.Dangerous = false, .OnlyExplicitProfile = false});
 }
 

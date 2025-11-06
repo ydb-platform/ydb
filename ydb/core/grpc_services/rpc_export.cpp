@@ -294,6 +294,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         // Skip children that we don't want to export
                         if (child.Name.StartsWith("~")
                             || child.Name.StartsWith(".sys")
+                            || child.Name.StartsWith(".tmp")
                             || child.Name.StartsWith(".metadata")
                             || child.Name.StartsWith("export-"))
                         {

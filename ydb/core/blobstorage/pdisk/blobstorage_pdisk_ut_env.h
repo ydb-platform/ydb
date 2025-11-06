@@ -29,11 +29,13 @@ public:
         ui32 ChunkSize = 128 * (1 << 20);
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
-        bool UseSectorMap = true;
+        TString UsePath = {}; // If set, use this path instead of a one in a temp dir
+        bool UseSectorMap = true; // If set, use sector map instead of a file
         TAutoPtr<TLogBackend> LogBackend = nullptr;
         bool ReadOnly = false;
         bool InitiallyZeroed = false; // Only for sector map. Zero first 1MiB on start.
         bool PlainDataChunks = false;
+        bool UseRdmaAllocator = false;
     };
 
 private:
@@ -86,14 +88,15 @@ public:
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
+        pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
         return pDiskConfig;
     }
 
     TActorTestContext(TSettings settings)
-        : Runtime(new TTestActorRuntime(1, true))
-        , TestCtx(settings.UseSectorMap, settings.DiskMode, settings.DiskSize)
+        : Runtime(new TTestActorRuntime(1, 1, true, settings.UseRdmaAllocator))
+        , TestCtx(settings.UseSectorMap, settings.DiskMode, settings.DiskSize, settings.UsePath)
         , Settings(settings)
     {
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
@@ -105,7 +108,7 @@ public:
         } else {
             Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
         }
-        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}});
+        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
@@ -232,7 +235,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(evRes->Status, status.value(), evRes->ToString());
         }
 
-        UNIT_ASSERT(evRes->Status == NKikimrProto::OK || !evRes->ErrorReason.empty());
+        UNIT_ASSERT_C(evRes->Status == NKikimrProto::OK || !evRes->ErrorReason.empty(), "Status: " << NKikimrProto::EReplyStatus_Name(evRes->Status) << " ErrorReason: " << evRes->ErrorReason << " ToString: " << evRes->ToString());
 
         // Test that all ToString methods don't VERIFY
         Cnull << evRes->ToString();
@@ -301,13 +304,14 @@ struct TVDiskMock {
         UNIT_ASSERT_C(commited.empty(), "there are leaked chunks# " << FormatList(commited));
     }
 
-    void ReserveChunk() {
+    void ReserveChunk(ui32 chunkCountToReserve = 1) {
         const auto evReserveRes = TestCtx->TestResponse<NPDisk::TEvChunkReserveResult>(
-                new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, 1),
+                new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound, chunkCountToReserve),
                 NKikimrProto::OK);
-        UNIT_ASSERT(evReserveRes->ChunkIds.size() == 1);
-        const ui32 reservedChunk = evReserveRes->ChunkIds.front();
-        Chunks[EChunkState::RESERVED].emplace(reservedChunk);
+        UNIT_ASSERT(evReserveRes->ChunkIds.size() == chunkCountToReserve);
+        for (const ui32 reservedChunk : evReserveRes->ChunkIds) {
+            Chunks[EChunkState::RESERVED].emplace(reservedChunk);
+        }
     }
 
     void CommitReservedChunks() {

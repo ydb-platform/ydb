@@ -6,10 +6,10 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-namespace NYql{
+namespace NYql {
 template <typename T>
 void AddClusters(const T& mappings, const TString& providerName, THashMap<TString, TString>* clusters) {
-    for (const auto& cluster: mappings) {
+    for (const auto& cluster : mappings) {
         // `USE` statement works with case insensitive name and cluster name is lower-cased inside SQL translator
         auto it = clusters->emplace(cluster.GetName(), providerName);
         YQL_ENSURE(it.second, "duplicate cluster name '" << cluster.GetName() << "'");
@@ -19,4 +19,4 @@ void AddClusters(const T& mappings, const TString& providerName, THashMap<TStrin
 void GetClusterMappingFromGateways(const NYql::TGatewaysConfig& gateways, THashMap<TString, TString>& clusterMapping);
 
 THashSet<TString> ExtractSqlFlags(const TGatewaysConfig& gateways);
-}
+} // namespace NYql

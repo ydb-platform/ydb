@@ -26,6 +26,7 @@ public:
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     const NChaosClient::IReplicationCardCachePtr& GetReplicationCardCache() override;
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
+    const TClientOptions& GetOptions() override;
 
     // Transactions.
     NApi::ITransactionPtr AttachTransaction(
@@ -149,6 +150,11 @@ public:
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options) override;
+
+    // Distributed file client
+    IFileFragmentWriterPtr CreateFileFragmentWriter(
+        const TSignedWriteFileFragmentCookiePtr& cookie,
+        const TFileFragmentWriterOptions& options) override;
 
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
@@ -302,8 +308,9 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;
 
-    TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+    TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> GetJobTrace(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobTraceOptions& options) override;
 
     TFuture<TSharedRef> GetJobFailContext(
@@ -527,6 +534,9 @@ public:
 
     TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(
         const TGetQueryTrackerInfoOptions& options = {}) override;
+
+    TFuture<TGetQueryDeclaredParametersInfoResult> GetQueryDeclaredParametersInfo(
+        const TGetQueryDeclaredParametersInfoOptions& options = {}) override;
 
     // Authentication
 

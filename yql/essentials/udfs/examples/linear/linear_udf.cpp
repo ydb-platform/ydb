@@ -5,13 +5,21 @@ using namespace NUdf;
 
 namespace {
 
-SIMPLE_UDF(TProducer, TLinear<i32>()) {
+SIMPLE_UDF(TProducer, TLinear<i32>(i32)) {
     Y_UNUSED(valueBuilder);
-    Y_UNUSED(args);
-    return TUnboxedValuePod(1);
+    return TUnboxedValuePod(args[0].Get<i32>());
 }
 
-class TUnsafeConsumer : public TBoxedValue {
+using TExchangeRet = TTuple<TLinear<i32>, i32>;
+SIMPLE_UDF(TExchange, TExchangeRet(TLinear<i32>, i32)) {
+    TUnboxedValue* items;
+    TUnboxedValue ret = valueBuilder->NewArray(2, items);
+    items[0] = args[1];
+    items[1] = args[0];
+    return ret;
+}
+
+class TUnsafeConsumer: public TBoxedValue {
 public:
     typedef bool TTypeAwareMarker;
 
@@ -70,15 +78,14 @@ public:
             }
 
             return true;
-        }
-        else {
+        } else {
             return false;
         }
     }
 };
 
-SIMPLE_MODULE(TLinearModule, TProducer, TUnsafeConsumer)
+SIMPLE_MODULE(TLinearModule, TProducer, TUnsafeConsumer, TExchange)
 
-}
+} // namespace
 
 REGISTER_MODULES(TLinearModule)

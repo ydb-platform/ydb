@@ -26,4 +26,6 @@ message TDataShardConfig {
     optional uint64 IncrementalRestoreReadAheadLo = 20 [default = 524288];
     optional uint64 IncrementalRestoreReadAheadHi = 21 [default = 1048576];
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
+    optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
+    optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];
 }

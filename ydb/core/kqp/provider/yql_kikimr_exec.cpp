@@ -1,5 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
@@ -469,6 +470,10 @@ namespace {
                 protoConsumer->set_important(FromString<bool>(
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 ));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "setReadFromTs") {
                 ui64 tsValue = 0;
                 if(setting.Value().Maybe<TCoDatetime>()) {
@@ -514,6 +519,12 @@ namespace {
                 protoConsumer->set_set_important(FromString<bool>(
                         setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 ));
+            } else if (name == "setAvailabilityPeriod"sv) {
+                auto period = TDuration::MicroSeconds(FromString<ui64>(setting.Value().Cast<TCoInterval>().Literal().Value()));
+                protoConsumer->mutable_set_availability_period()->set_seconds(period.Seconds());
+                protoConsumer->mutable_set_availability_period()->set_nanos(period.NanoSecondsOfSecond());
+            } else if (name == "resetAvailabilityPeriod"sv) {
+                protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
                 ui64 tsValue = 0;
                 if(setting.Value().Maybe<TCoDatetime>()) {
@@ -1716,7 +1727,7 @@ public:
                                     return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), 
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                             "Default values are not supported in column tables"));
                                         return SyncError();
                                     }
@@ -2011,8 +2022,14 @@ public:
                                         TStringBuilder() << "Vector index support is disabled"));
                                     return SyncError();
                                 }
-
                                 add_index->mutable_global_vector_kmeans_tree_index();
+                            } else if (type == "globalFulltext") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_fulltext_index();
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
                                     TStringBuilder() << "Unknown index type: " << type));
@@ -2045,37 +2062,83 @@ public:
                                 }
                             }
                         } else if (name == "indexSettings") {
-                            YQL_ENSURE(add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex);
-                            
-                            Ydb::Table::KMeansTreeSettings& settings = *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
-                            TString error;
-                            
+                            if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
+                            }
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
                             for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
                                 YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
                                 const auto& name = indexSetting.Name();
                                 const auto& value = indexSetting.Value().Cast<TCoAtom>();
 
-                                if (!NKikimr::NKMeans::FillSetting(settings, name.StringValue(), value.StringValue(), error))
-                                {
+                                TString error;
+                                switch (add_index->type_case()) {
+                                    case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                                        NKikimr::NKMeans::FillSetting(
+                                            *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                                        NKikimr::NFulltext::FillSetting(
+                                            *add_index->mutable_global_fulltext_index()->mutable_fulltext_settings(),
+                                            name.StringValue(), value.StringValue(), error);
+                                        break;
+                                    }
+                                    default:
+                                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                            << "Unknown index setting: " << name.StringValue()));
+                                        return SyncError();
+                                }
+
+                                if (error) {
                                     ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
                                     return SyncError();
                                 }
                             }
                         }
                         else {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown add vector index setting: " << name));
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));
                             return SyncError();
                         }
                     }
-                    YQL_ENSURE(add_index->name());
-                    YQL_ENSURE(add_index->type_case() != Ydb::Table::TableIndex::TYPE_NOT_SET);
-                    YQL_ENSURE(add_index->index_columns_size());
 
-                    if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex) {
-                        TString error;
-                        if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
-                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                    if (!add_index->name()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index name should be set"));
+                        return SyncError();
+                    }
+                    if (add_index->index_columns().empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index columns should be set"));
+                        return SyncError();
+                    }
+
+                    switch (add_index->type_case()) {
+                        case Ydb::Table::TableIndex::kGlobalIndex:
+                        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                            // no settings validation
+                            break;
+                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
+                            TString error;
+                            if (!NKikimr::NKMeans::ValidateSettings(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::TYPE_NOT_SET: {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "Index type should be set"));
                             return SyncError();
                         }
                     }

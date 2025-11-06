@@ -26,8 +26,8 @@ struct TSerializableAccessControlEntry
     std::optional<TBooleanFormula> SubjectTagFilter;
     std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
-    std::optional<std::string> Expression;
-    std::optional<EInapplicableExpressionMode> InapplicableExpressionMode;
+    std::optional<std::string> RowAccessPredicate;
+    std::optional<EInapplicableRowAccessPredicateMode> InapplicableRowAccessPredicateMode;
 
     TSerializableAccessControlEntry(
         ESecurityAction action,
@@ -43,8 +43,8 @@ struct TSerializableAccessControlEntry
 
     bool operator==(const TSerializableAccessControlEntry& other) const = default;
 
-    static constexpr TStringBuf ExpressionKey = "expression";
-    static constexpr TStringBuf InapplicableExpressionModeKey = "inapplicable_expression_mode";
+    static constexpr TStringBuf RowAccessPredicateKey = "row_access_predicate";
+    static constexpr TStringBuf InapplicableRowAccessPredicateModeKey = "inapplicable_row_access_predicate_mode";
 };
 
 void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer* consumer);
@@ -70,14 +70,14 @@ void Serialize(const TSerializableAccessControlList& acl, NYson::IYsonConsumer* 
 void Deserialize(TSerializableAccessControlList& acl, NYTree::INodePtr node);
 void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCursor* cursor);
 
-//! A small container to allow reader to selectively apply expressions based on
-//! their InapplicableExpressionMode.
+//! A small container to allow reader to selectively apply row access predicates based on
+//! their InapplicableRowAccessPredicateMode.
 //! NB: You may encounter occurences of an "RL ACE" term.
 //! It stands for Row-Level Access Control Entry.
 struct TRowLevelAccessControlEntry
 {
-    std::string Expression;
-    EInapplicableExpressionMode InapplicableExpressionMode = EInapplicableExpressionMode::Fail;
+    std::string RowAccessPredicate;
+    EInapplicableRowAccessPredicateMode InapplicableRowAccessPredicateMode = EInapplicableRowAccessPredicateMode::Fail;
 
     using TLoadContext = NPhoenix::TLoadContext;
     using TSaveContext = NPhoenix::TSaveContext;

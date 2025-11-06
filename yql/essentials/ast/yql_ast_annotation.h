@@ -19,4 +19,4 @@ typedef THashMap<const TAstNode*, TVector<const TAstNode*>> TAnnotationNodeMap;
 // returns nullptr in case of error
 TAstNode* ExtractAnnotations(TAstNode& root, TAnnotationNodeMap& annotations, TMemoryPool& pool);
 
-}
+} // namespace NYql

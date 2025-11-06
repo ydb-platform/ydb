@@ -6,15 +6,12 @@
 #include <util/generic/queue.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.h>
 
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
-
-#include <ydb/core/protos/config.pb.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -79,7 +76,7 @@ private:
         void OnParsedData(ui64 numberRows) override {
             LOG_ROW_DISPATCHER_TRACE("Got parsed data, number rows: " << numberRows);
 
-            Self.ParsedData.assign(ParerSchema.size(), nullptr);
+            Self.ParsedData.assign(ParerSchema.size(), std::span<NYql::NUdf::TUnboxedValue>());
             for (size_t i = 0; i < ParerSchema.size(); ++i) {
                 auto columnStatus = Self.Parser->GetParsedColumn(i);
                 if (Y_LIKELY(columnStatus.IsSuccess())) {
@@ -200,8 +197,8 @@ private:
             return Client->GetNextMessageOffset();
         }
 
-        const TString& GetWhereFilter() const override {
-            return Client->GetWhereFilter();
+        const TString& GetFilterExpr() const override {
+            return Client->GetFilterExpr();
         }
 
         const TString& GetWatermarkExpr() const override {
@@ -221,19 +218,34 @@ private:
             Client->StartClientSession();
         }
 
+    private:
+        void OnWatermark(ui64 offset, TMaybe<ui64> maybeWatermark) {
+            if (!maybeWatermark) {
+                return;
+            }
+            const auto watermark = TInstant::MicroSeconds(*maybeWatermark);
+            if (Watermark < watermark) {
+                Watermark = watermark;
+            }
+            LOG_ROW_DISPATCHER_TRACE("OnWatermark, offset: " << offset << ", watermark: " << watermark);
+        }
+
+    public:
         void OnData(const NYql::NUdf::TUnboxedValue* value) override {
             ui64 rowId;
-            TMaybe<ui64> watermarkUs;
+            bool filter = true;
+            TMaybe<ui64> maybeWatermark = Nothing();
             if (value->IsEmbedded()) {
                 rowId = value->Get<ui64>();
             } else if (value->IsBoxed()) {
-                if (value->GetListLength() == 1) {
-                    rowId = value->GetElement(0).Get<ui64>();
-                } else if (value->GetListLength() == 2) {
-                    rowId = value->GetElement(0).Get<ui64>();
-                    watermarkUs = value->GetElement(1).Get<ui64>();
+                if (value->GetListLength() == 2 || value->GetListLength() == 3) {
+                    filter = value->GetElement(0).Get<bool>();
+                    rowId = value->GetElement(1).Get<ui64>();
+                    if (value->GetListLength() == 3 && value->GetElement(2)) {
+                        maybeWatermark = value->GetElement(2).Get<ui64>();
+                    }
                 } else {
-                    Y_ENSURE(false, "Unexpected output schema size");
+                    Y_ENSURE(false, "Unexpected output schema size (" << value->GetListLength() << " elements)");
                 }
             } else {
                 Y_ENSURE(false, "Expected embedded or list from purecalc");
@@ -245,51 +257,44 @@ private:
                 return;
             }
 
-            FilteredOffsets.insert(Offset);
-            if (watermarkUs) {
-                WatermarksUs.push_back(*watermarkUs);
+            auto newNumberRows = NumberRows;
+            auto newDataPackerSize = DataPackerSize;
+            if (filter) {
+                FilteredOffsets.push_back(Offset);
 
-                const auto watermark = WatermarksUs.empty() ? Nothing() : TMaybe<TInstant>{TInstant::MicroSeconds(WatermarksUs.back())};
-                LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", watermark: " << watermark);
+                Y_DEFER {
+                    // Values allocated on parser allocator and should be released
+                    FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
+                };
 
+                for (size_t i = 0; const ui64 columnId : ColumnsIds) {
+                    auto& parsedData = Self.ParsedData[Self.ParserSchemaIndex[columnId]];
+                    Y_DEBUG_ABORT_UNLESS(parsedData.size() > rowId);
+
+                    // All data was locked in parser, so copy is safe
+                    FilteredRow[i++] = parsedData[rowId];
+                }
+                DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+
+                ++newNumberRows;
+                newDataPackerSize = DataPacker->PackedSizeEstimate();
+            }
+
+            OnWatermark(Offset, maybeWatermark);
+
+            const auto numberRows = newNumberRows - NumberRows;
+            const auto rowSize = newDataPackerSize - DataPackerSize;
+
+            if (!numberRows && !rowSize && !Watermark) {
                 return;
             }
 
-            Y_DEFER {
-                // Values allocated on parser allocator and should be released
-                FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
-            };
+            LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, offset: " << Offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << Watermark);
 
-            for (size_t i = 0; const ui64 columnId : ColumnsIds) {
-                // All data was locked in parser, so copy is safe
-                FilteredRow[i++] = Self.ParsedData[Self.ParserSchemaIndex[columnId]]->at(rowId);
-            }
-            DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+            Client->AddDataToClient(Offset, numberRows, rowSize, Watermark);
 
-            ++NewNumberRows;
-            NewDataPackerSize = DataPacker->PackedSizeEstimate();
-            LOG_ROW_DISPATCHER_TRACE("OnData, row id: " << rowId << ", offset: " << Offset << ", new number rows: " << NewNumberRows << ", new row size: " << NewDataPackerSize);
-        }
-
-        void OnBatchFinish() override {
-            if (NewNumberRows == NumberRows && NewDataPackerSize == DataPackerSize && WatermarksUs.empty()) {
-                return;
-            }
-            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
-                LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
-                return;
-            }
-
-            const auto numberRows = NewNumberRows - NumberRows;
-            const auto rowSize = NewDataPackerSize - DataPackerSize;
-            const auto watermark = WatermarksUs.empty() ? Nothing() : TMaybe<TInstant>{TInstant::MicroSeconds(WatermarksUs.back())};
-
-            LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, offset: " << Offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << watermark);
-
-            Client->AddDataToClient(Offset, numberRows, rowSize, watermark);
-
-            NumberRows = NewNumberRows;
-            DataPackerSize = NewDataPackerSize;
+            NumberRows = newNumberRows;
+            DataPackerSize = newDataPackerSize;
             if (DataPackerSize > MAX_BATCH_SIZE) {
                 FinishPacking();
             }
@@ -315,15 +320,16 @@ private:
         }
 
         void FinishPacking() {
-            if (!DataPacker->IsEmpty() || !WatermarksUs.empty()) {
+            if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
-                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), FilteredOffsets, WatermarksUs);
+                if (FilteredOffsets.empty()) {
+                    FilteredOffsets.push_back(Offset);
+                }
+                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), std::move(FilteredOffsets), Watermark);
                 NumberRows = 0;
-                NewNumberRows = 0;
                 DataPackerSize = 0;
-                NewDataPackerSize = 0;
                 FilteredOffsets.clear();
-                WatermarksUs.clear();
+                Watermark.Clear();
             }
         }
 
@@ -339,13 +345,11 @@ private:
         // Filtered data
         ui64 Offset;
         ui64 NumberRows = 0;
-        ui64 NewNumberRows = 0;
         ui64 DataPackerSize = 0;
-        ui64 NewDataPackerSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
         std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataPacker;
-        TSet<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
-        TVector<ui64> WatermarksUs;
+        TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
+        TMaybe<TInstant> Watermark;
         TQueue<TDataBatch> ClientData;
     };
 
@@ -460,13 +464,8 @@ public:
 
         CreateFilters();
 
-        auto filterProgram = clientHandler->GetWhereFilter() ? CreateFilterProgramHolder(clientHandler) : nullptr;
-        auto programHolders = std::unordered_map<TString, IProgramHolder::TPtr>{{"filter", std::move(filterProgram)}};
-        if (clientHandler->GetWatermarkExpr()) {
-            programHolders.emplace("watermark", CreateWatermarkProgramHolder(clientHandler));
-        }
-
-        if (auto status = Filters->AddPrograms(clientHandler, std::move(programHolders)); status.IsFail()) {
+        auto programHolder = CreateProgramHolder(clientHandler);
+        if (auto status = Filters->AddPrograms(clientHandler, std::move(programHolder)); status.IsFail()) {
             RemoveClient(client->GetClientId());
             return status.AddParentIssue("Failed to create filter for new client");
         }
@@ -653,7 +652,7 @@ private:
 
     // Parsed data
     const TVector<ui64>* Offsets;
-    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> ParsedData;
+    TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedData;
     bool RefreshScheduled = false;
 
     // Metrics
@@ -678,7 +677,7 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
     return {
         .FunctionRegistry = functionRegistry,
         .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry),

@@ -79,12 +79,19 @@ private:
             return *this;
         }
 
+        // skip flush, if quantity is zero
+        FlushParameters& withImplicitZero() {
+            ImplicitZero = true;
+            return *this;
+        }
+
         TString Name;
         TString Schema;
         TString Units;
         ui64 Quantity;
         THashMap<TString, ui64> Tags;
         bool OneFlush = false;
+        bool ImplicitZero = false;
         TString Version = "v1";
     };
 

@@ -36,6 +36,11 @@ jobs:
     - name: Upload olap perfomance data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/perfomance_olap_mart.sql --table_path perfomance/olap/fast_results --store_type column --partition_keys Run_start_timestamp --primary_keys Run_start_timestamp Db Suite Test Branch --ttl_min 43200 --ttl_key Run_start_timestamp
+    - name: Export GitHub issues
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+      run: python3 .github/scripts/analytics/export_issues_to_ydb.py
     - name: Upload GitHub issue mapping table
       continue-on-error: true
       run: python3 .github/scripts/analytics/github_issue_mapping.py
@@ -48,9 +53,6 @@ jobs:
     - name: Upload postcommit retry data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/datamart_postcommit_retry.sql --table_path test_results/test_results/analytics/postcommit_retry --store_type column --partition_keys postcommit_start_run_timestamp --primary_keys postcommit_start_run_timestamp commit --ttl_min 259200 --ttl_key postcommit_start_run_timestamp
-    - name: Upload stability aggregate data mart
+    - name: Upload Nemesis aggregate data mart
       continue-on-error: true
       run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/stability_aggregate_mart.sql --table_path nemesis/aggregated_mart --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite Test --ttl_min 43200 --ttl_key RunTs
-    - name: Upload stability per-run data mart
-      continue-on-error: true
-      run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/stability_per_run_mart.sql --table_path nemesis/detailed_mart --store_type column --partition_keys RunTs --primary_keys RunTs Db Suite Test Iteration RunIndex --ttl_min 43200 --ttl_key RunTs

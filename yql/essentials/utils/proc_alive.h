@@ -6,4 +6,4 @@ namespace NYql {
 
 bool IsProcessAlive(TProcessId pid);
 
-}
+} // namespace NYql

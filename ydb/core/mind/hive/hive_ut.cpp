@@ -1235,6 +1235,68 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(!isNodeEmpty(nodeId));
     }
 
+    Y_UNIT_TEST(TestDrainAndReconnect) {
+        const int NUM_TABLETS = 5;
+        TTestBasicRuntime runtime(2, false);
+        TBlockEvents<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse> blockSystemState(runtime);
+        Setup(runtime, true, 2);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        std::unordered_set<TTabletId> tablets;
+        TActorId senderA = runtime.AllocateEdgeActor(0);
+        for (int i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + tablets.size(), tabletType, BINDED_CHANNELS));
+            runtime.SendToPipe(hiveTablet, senderA, ev.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto createTabletReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(handle);
+            ui64 tabletId = createTabletReply->Record.GetTabletID();
+            tablets.insert(tabletId);
+        }
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        for (TTabletId tabletId : tablets) {
+            MakeSureTabletIsUp(runtime, tabletId, 0, &pipeConfig);
+        }
+
+        ui32 nodeIdx = 0;
+        ui32 nodeId = runtime.GetNodeId(nodeIdx);
+        TBlockEvents<TEvTablet::TEvCommit> blockCommit(runtime);
+
+        runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvDrainNode(nodeId));
+
+        runtime.DispatchEvents({}, TDuration::MilliSeconds(500));
+
+        // This causes local to send TEvStatus
+        for (auto& ev : blockSystemState) {
+            auto& record = ev->Get()->Record;
+            if (record.SystemStateInfoSize() == 0) {
+                record.AddSystemStateInfo();
+            }
+            record.MutableSystemStateInfo(0)->SetMemoryLimit(20'000'000'000ull);
+        }
+        blockSystemState.Stop().Unblock();
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus);
+            runtime.DispatchEvents(options);
+        }
+
+        blockCommit.Stop().Unblock();
+
+        TAutoPtr<IEventHandle> handle;
+        auto drainResponse = runtime.GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(drainResponse->Record.GetStatus(), NKikimrProto::EReplyStatus::OK);
+    }
+
     Y_UNIT_TEST(TestCreateSubHiveCreateTablet) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
@@ -8818,6 +8880,47 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(!distribution[0].empty());
 
     }
+
+    Y_UNIT_TEST(TestBridgeFollowers) {
+        static constexpr ui32 NUM_NODES = 4;
+        TTestBasicRuntime runtime(NUM_NODES, 2u);
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets, runtime.GetNodeCount());
+            runtime.DispatchEvents(options);
+        }
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+
+        THolder<TEvHive::TEvCreateTablet> create(new TEvHive::TEvCreateTablet(testerTablet, 100500, tabletType, BINDED_CHANNELS));
+        create->Record.SetObjectId(1);
+        auto* followerGroup = create->Record.AddFollowerGroups();
+        followerGroup->SetFollowerCount(1);
+        followerGroup->SetFollowerCountPerDataCenter(true);
+        followerGroup->SetRequireAllDataCenters(true);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(create), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.ForceLocal = true;
+        pipeConfig.AllowFollower = true;
+        pipeConfig.ForceFollower = true;
+        ui32 followers = 0;
+        for (ui32 node = 0; node < NUM_NODES; ++node) {
+            bool leader;
+            if (CheckTabletIsUp(runtime, tabletId, node, &pipeConfig, &leader)) {
+                if (!leader) {
+                    followers++;
+                }
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(followers, 2); // followers in both piles
+    }
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {
@@ -9135,9 +9238,20 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
     }
 
-    void AssertScaleRecommencation(TTestBasicRuntime& runtime, ui64 hiveId, TSubDomainKey subdomainKey,
+    void RefreshScaleRecommendation(TTestBasicRuntime& runtime, ui64 hiveId) {
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hiveId, sender, new NHive::TEvPrivate::TEvRefreshScaleRecommendation());
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRefreshScaleRecommendation);
+        runtime.DispatchEvents(options);
+    }
+
+    void AssertScaleRecommendation(TTestBasicRuntime& runtime, ui64 hiveId, TSubDomainKey subdomainKey,
         NKikimrProto::EReplyStatus expectedStatus, ui32 expectedNodes = 0)
     {
+        RefreshScaleRecommendation(runtime, hiveId);
+
         const auto sender = runtime.AllocateEdgeActor();
         runtime.SendToPipe(hiveId, sender, new TEvHive::TEvRequestScaleRecommendation(subdomainKey));
 
@@ -9147,15 +9261,6 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         if (expectedNodes) {
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetRecommendedNodes(), expectedNodes);
         }
-    }
-
-    void RefreshScaleRecommendation(TTestBasicRuntime& runtime, ui64 hiveId) {
-        const auto sender = runtime.AllocateEdgeActor();
-        runtime.SendToPipe(hiveId, sender, new NHive::TEvPrivate::TEvRefreshScaleRecommendation());
-
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(NHive::TEvPrivate::EvRefreshScaleRecommendation);
-        runtime.DispatchEvents(options);
     }
 
     void SendUsage(TTestBasicRuntime& runtime, ui64 hiveId, ui64 nodeIdx, double cpuUsage) {
@@ -9169,12 +9274,7 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         runtime.GrabEdgeEvent<TEvLocal::TEvTabletMetricsAck>(handle);
     }
 
-    constexpr double LOW_CPU_USAGE = 0.2;
-    constexpr double HIGH_CPU_USAGE = 0.95;
-
-    Y_UNIT_TEST(BasicTest) {
-        // Setup test runtime
-        TTestBasicRuntime runtime(1, false);
+    std::pair<ui64,TSubDomainKey> SetupTest(TTestBasicRuntime& runtime, ui32 initialNodeCount) {
         Setup(runtime, true);
 
         // Setup hive
@@ -9215,16 +9315,19 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         createHive->Record.MutableAllowedDomains(0)->SetPathId(subdomainKey.second);
         ui64 subHiveTablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createHive), 0, false);
 
-        TTestActorRuntime::TEventObserver prevObserverFunc;
-        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        runtime.SetObserverFunc([=](TAutoPtr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NSchemeShard::TEvSchemeShard::EvDescribeSchemeResult) {
                 event->Get<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>()->MutableRecord()->
                 MutablePathDescription()->MutableDomainDescription()->MutableProcessingParams()->SetHive(subHiveTablet);
             }
-            return prevObserverFunc(event);
+            return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        SendKillLocal(runtime, 0);
+        for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+            SendKillLocal(runtime, i);
+        }
+
+        // Connect hive node
         CreateLocalForTenant(runtime, 0, "/dc-1/tenant1");
         MakeSureTabletIsUp(runtime, subHiveTablet, 0); // sub hive good
 
@@ -9235,29 +9338,122 @@ Y_UNIT_TEST_SUITE(TScaleRecommenderTest) {
         ui64 tabletId = SendCreateTestTablet(runtime, subHiveTablet, testerTablet, std::move(createTablet), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0); // dummy from sub hive also good
 
+        // Connect all other nodes
+        TBlockEvents<TEvLocal::TEvStatus> block(runtime);
+        for (size_t i = 1; i < initialNodeCount; ++i) {
+            CreateLocalForTenant(runtime, i, "/dc-1/tenant1");
+        }
+        runtime.WaitFor("nodes are connected to root hive", [&]{ return block.size() >= initialNodeCount - 1; });
+        block.Unblock();
+
+        runtime.WaitFor("nodes are connected to sub hive", [&]{ return block.size() >= initialNodeCount - 1; });
+        block.Unblock();
+        block.Stop();
+
+        return {subHiveTablet, subdomainKey};
+    }
+
+    void StartNode(TTestActorRuntime &runtime, ui32 nodeIndex) {
+        CreateLocalForTenant(runtime, nodeIndex, "/dc-1/tenant1");
+    }
+
+    void StopNode(TTestActorRuntime &runtime, ui32 nodeIndex) {
+        SendKillLocal(runtime, nodeIndex);
+    }
+
+    constexpr double LOW_CPU_USAGE = 0.3;
+    constexpr double TARGET_CPU_USAGE = 0.6;
+    constexpr double HIGH_CPU_USAGE = 0.95;
+
+    Y_UNIT_TEST(BasicTest) {
+        // Setup test runtime
+        TTestBasicRuntime runtime(2, false);
+        const auto& [subHiveTablet, subdomainKey] = SetupTest(runtime, 2);
+
         // Configure target CPU usage
         ConfigureScaleRecommender(runtime, subHiveTablet, subdomainKey, 60);
 
-        // No data yet
-        AssertScaleRecommencation(runtime, subHiveTablet, subdomainKey, NKikimrProto::NOTREADY);
-
-        // Set low CPU usage on Node
+        // Set low CPU usage on nodes
         SendUsage(runtime, subHiveTablet, 0, LOW_CPU_USAGE);
+        SendUsage(runtime, subHiveTablet, 1, LOW_CPU_USAGE);
 
-        // Refresh to calculate new scale recommendation
-        RefreshScaleRecommendation(runtime, subHiveTablet);
+        // Check scale in recommendation for low CPU usage
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 1);
 
-        // Check scale recommendation for low CPU usage
-        AssertScaleRecommencation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 1);
+        // Apply scale recommendation - stop one node
+        StopNode(runtime, 1);
 
-        // Set high CPU usage on Node
+        // Set high CPU usage on node
         SendUsage(runtime, subHiveTablet, 0, HIGH_CPU_USAGE);
 
-        // Refresh to calculate new scale recommendation
-        RefreshScaleRecommendation(runtime, subHiveTablet);
+        // Check scale out recommendation for high CPU usage
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 2);
+    }
 
-        // Check scale recommendation for high CPU usage
-        AssertScaleRecommencation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 2);
+    Y_UNIT_TEST(RollingRestart) {
+        // Setup test runtime
+        TTestBasicRuntime runtime(3, false);
+        const auto& [subHiveTablet, subdomainKey] = SetupTest(runtime, 1);
+
+        // Configure target CPU usage
+        ConfigureScaleRecommender(runtime, subHiveTablet, subdomainKey, 60);
+
+        // Set high CPU usage on node
+        SendUsage(runtime, subHiveTablet, 0, HIGH_CPU_USAGE);
+
+        // Recommended scale out: 1 -> 2
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 2);
+
+        // Set target CPU usage on nodes
+        SendUsage(runtime, subHiveTablet, 0, TARGET_CPU_USAGE);
+        SendUsage(runtime, subHiveTablet, 1, TARGET_CPU_USAGE);
+
+        // Start rolling restart node
+        StartNode(runtime, 2);
+        SendUsage(runtime, subHiveTablet, 2, LOW_CPU_USAGE);
+
+        // No new scale recommended: 2 + 1 (rolling restart node) -> 2
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 2);
+
+        // Stop rolling restart node
+        StopNode(runtime, 2);
+
+        // Set target CPU usage on nodes
+        SendUsage(runtime, subHiveTablet, 0, TARGET_CPU_USAGE);
+        SendUsage(runtime, subHiveTablet, 1, TARGET_CPU_USAGE);
+
+        // No new scale recommended: 2 -> 2
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::OK, 2);
+    }
+
+    Y_UNIT_TEST(RollingRestartNoLastRecommendation) {
+        // Setup test runtime
+        TTestBasicRuntime runtime(3, false);
+        const auto& [subHiveTablet, subdomainKey] = SetupTest(runtime, 2);
+
+        // Configure target CPU usage
+        ConfigureScaleRecommender(runtime, subHiveTablet, subdomainKey, 60);
+
+        // Set target CPU usage on nodes
+        SendUsage(runtime, subHiveTablet, 0, TARGET_CPU_USAGE);
+        SendUsage(runtime, subHiveTablet, 1, TARGET_CPU_USAGE);
+
+        // Start rolling restart node
+        StartNode(runtime, 2);
+        SendUsage(runtime, subHiveTablet, 2, LOW_CPU_USAGE);
+
+        // No new scale recommended
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::NOTREADY);
+
+        // Stop rolling restart node
+        StopNode(runtime, 2);
+
+        // Set target CPU usage on nodes
+        SendUsage(runtime, subHiveTablet, 0, TARGET_CPU_USAGE);
+        SendUsage(runtime, subHiveTablet, 1, TARGET_CPU_USAGE);
+
+        // No new scale recommended
+        AssertScaleRecommendation(runtime, subHiveTablet, subdomainKey, NKikimrProto::NOTREADY);
     }
 }
 

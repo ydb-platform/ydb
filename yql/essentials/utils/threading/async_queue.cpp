@@ -15,4 +15,4 @@ TAsyncQueue::TPtr TAsyncQueue::Make(size_t numThreads, const TString& poolName) 
     return new TAsyncQueue(numThreads, poolName);
 }
 
-}
+} // namespace NYql

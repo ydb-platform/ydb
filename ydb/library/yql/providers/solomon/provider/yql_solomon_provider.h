@@ -22,6 +22,7 @@ public:
 
 public:
     bool SupportRtmrMode = true;
+    bool WriteThroughDqIntegration = false;
 
     ISolomonGateway::TPtr Gateway;
     TTypeAnnotationContext* Types = nullptr;

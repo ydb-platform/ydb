@@ -3468,7 +3468,8 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(false));
+        .WatermarkMode<TCoAtom>().Build(ToString(false))
+        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
 
     return Build<TCoPartitionsByKeys>(ctx, pos)
         .Input(aggregate.Input())
@@ -3481,10 +3482,10 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .SortKeySelectorLambda(timeExtractorLambda)
         .ListHandlerLambda()
             .Args(streamArg)
-            .template Body<TCoForwardList>()
+            .Body<TCoForwardList>()
                 .Stream(Build<TCoMap>(ctx, pos)
                     .Input(multiHoppingCoreBuilder
-                        .template Input<TCoIterator>()
+                        .Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())
@@ -4937,7 +4938,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     };
 
     map["Member"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Head().IsCallable("AsStruct")) {
+        if (node->Head().IsCallable("AsStruct") && !(node->Head().HasSideEffects() && node->GetTypeAnn()->HasStaticLinear())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             auto res = ExtractMember(*node);
             res = KeepWorld(res, *node, ctx, *optCtx.Types);
@@ -4988,7 +4989,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["AsStruct"] = std::bind(&OptimizeAsStruct, _1, _2);
 
     map["Nth"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        if (node->Head().Type() == TExprNode::List) {
+        if (node->Head().Type() == TExprNode::List && !(node->Head().HasSideEffects() && node->GetTypeAnn()->HasStaticLinear())) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over tuple literal";
             const auto index = FromString<ui32>(node->Tail().Content());
             auto res = node->Head().ChildPtr(index);
@@ -7094,6 +7095,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgSelect"] = &ExpandPgSelect;
     map["PgIterate"] = &ExpandPgIterate;
     map["PgIterateAll"] = &ExpandPgIterate;
+
+    map["YqlSelect"] = &ExpandPgSelect;
+    map["YqlIterate"] = &ExpandPgIterate;
 
     map["PgLike"] = &ExpandPgLike;
     map["PgILike"] = &ExpandPgLike;

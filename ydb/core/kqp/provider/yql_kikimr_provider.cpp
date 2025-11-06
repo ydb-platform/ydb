@@ -273,7 +273,7 @@ std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& tab
     auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
 
     if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
     }
     return std::nullopt;
 }

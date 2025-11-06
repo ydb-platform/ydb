@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pycparser
-Version: 2.22
+Version: 2.23
 Summary: C parser in Python
 Home-page: https://github.com/eliben/pycparser
 Author: Eli Bendersky
@@ -16,6 +16,7 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Requires-Python: >=3.8
 License-File: LICENSE
 
@@ -25,4 +26,3 @@ License-File: LICENSE
         It parses C code into an AST and can serve as a front-end for
         C compilers or analysis tools.
     
-

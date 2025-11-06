@@ -25,7 +25,7 @@ private:
     virtual TString DoDebugString() const = 0;
     bool InitCursorFlag = false;
     virtual void DoFillReadStats(TReadStats& /*stats*/) const {
-    
+
     }
 
 public:
@@ -81,7 +81,7 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
+    mutable TAtomicCounter BreakLockOnReadFinished = TAtomicCounter();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
     class TWriteIdInfo {
@@ -99,17 +99,17 @@ private:
             return LockId;
         }
 
-        void MarkAsConflictable() const {
+        void MarkAsConflicting() const {
             Conflicts->Inc();
         }
 
-        bool IsConflictable() const {
+        bool IsConflicting() const {
             return Conflicts->Val();
         }
     };
 
     THashMap<ui64, std::shared_ptr<TAtomicCounter>> LockConflictCounters;
-    THashMap<TInsertWriteId, TWriteIdInfo> ConflictedWriteIds;
+    THashMap<TInsertWriteId, TWriteIdInfo> ConflictingWrites;
 
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
@@ -132,49 +132,48 @@ public:
         return std::move(SourcesConstructor);
     }
 
-    bool GetBrokenWithCommitted() const {
-        return BrokenWithCommitted->Val();
+    bool GetBreakLockOnReadFinished() const {
+        return BreakLockOnReadFinished.Val();
     }
-    THashSet<ui64> GetConflictableLockIds() const {
+
+    void SetBreakLockOnReadFinished() const {
+        BreakLockOnReadFinished.Inc();
+    }
+
+    THashSet<ui64> GetConflictingLockIds() const {
         THashSet<ui64> result;
-        for (auto&& i : ConflictedWriteIds) {
-            if (i.second.IsConflictable()) {
-                result.emplace(i.second.GetLockId());
+        for (auto& [_, writeIdInfo] : ConflictingWrites) {
+            if (writeIdInfo.IsConflicting()) {
+                result.emplace(writeIdInfo.GetLockId());
             }
         }
         return result;
     }
 
-    bool IsLockConflictable(const ui64 lockId) const {
-        auto it = LockConflictCounters.find(lockId);
-        AFL_VERIFY(it != LockConflictCounters.end());
-        return it->second->Val();
+    THashSet<ui64> GetMaybeConflictingLockIds() const {
+        THashSet<ui64> result;
+        for (auto& [_, writeInfo] : ConflictingWrites) {
+            result.emplace(writeInfo.GetLockId());
+        }
+        return result;
     }
 
-    bool IsWriteConflictable(const TInsertWriteId writeId) const {
-        auto it = ConflictedWriteIds.find(writeId);
-        AFL_VERIFY(it != ConflictedWriteIds.end());
-        return it->second.IsConflictable();
+    bool MayWriteBeConflicting(const TInsertWriteId writeId) const {
+        return ConflictingWrites.contains(writeId);
     }
 
-    void AddWriteIdToCheck(const TInsertWriteId writeId, const ui64 lockId) {
+    void AddMaybeConflictingWrite(const TInsertWriteId writeId, const ui64 lockId) {
         auto it = LockConflictCounters.find(lockId);
         if (it == LockConflictCounters.end()) {
             it = LockConflictCounters.emplace(lockId, std::make_shared<TAtomicCounter>()).first;
         }
-        AFL_VERIFY(ConflictedWriteIds.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
+        AFL_VERIFY(ConflictingWrites.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
     }
 
-    [[nodiscard]] bool IsMyUncommitted(const TInsertWriteId writeId) const;
-
-    void SetConflictedWriteId(const TInsertWriteId writeId) const {
-        auto it = ConflictedWriteIds.find(writeId);
-        AFL_VERIFY(it != ConflictedWriteIds.end());
-        it->second.MarkAsConflictable();
-    }
-
-    void SetBrokenWithCommitted() const {
-        BrokenWithCommitted->Inc();
+    void SetWriteConflicting(const TInsertWriteId writeId) const {
+        auto it = ConflictingWrites.find(writeId);
+        AFL_VERIFY(it != ConflictingWrites.end());
+        it->second.MarkAsConflicting();
     }
 
     NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TSimpleRow& key) const;
@@ -189,6 +188,13 @@ public:
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
+
+    TReadMetadata(const TReadMetadata&) = delete;
+    TReadMetadata& operator=(const TReadMetadata&) = delete;
+
+    bool OrderByLimitAllowed() const {
+        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+    }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();

@@ -24,11 +24,11 @@ void TStreamingQueryInitializer::DoPrepare(NMetadata::NInitializer::IInitializer
         request.set_path(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath());
         AddColumn(request, TStreamingQueryConfig::TColumns::DatabaseId, Ydb::Type::UTF8, true);
         AddColumn(request, TStreamingQueryConfig::TColumns::QueryPath, Ydb::Type::UTF8, true);
-        AddColumn(request, TStreamingQueryConfig::TColumns::State, Ydb::Type::JSON_DOCUMENT);
+        AddColumn(request, TStreamingQueryConfig::TColumns::State, Ydb::Type::JSON);
         result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
     }
 
-    if (AppData()->QueryServiceConfig.GetStreamingQueries().GetPrivateSystemTables()) {
+    if (AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
         result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetNoAccessModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
     } else {
         result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));

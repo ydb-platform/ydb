@@ -128,10 +128,12 @@ struct TKqpFederatedQuerySetup;
 struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
     std::atomic<bool> EnableRowsDuplicationCheck = false;
     std::atomic<bool> VerboseMemoryLimitException = false;
+    std::atomic<i32> RuntimeParameterSizeLimit = 0;
 
     void ApplyFromTableServiceConfig(const NKikimrConfig::TTableServiceConfig& tableServiceConfig) {
         EnableRowsDuplicationCheck.store(tableServiceConfig.GetEnableRowsDuplicationCheck());
         VerboseMemoryLimitException.store(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException());
+        RuntimeParameterSizeLimit.store(tableServiceConfig.GetExtractPredicateParameterListSizeLimit());
     }
 };
 
@@ -160,7 +162,7 @@ IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
-    bool temporary, bool isCreateTableAs, TString SessionId, TIntrusivePtr<TUserRequestContext> ctx,
+    bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
     const TActorId& kqpTempTablesAgentActor = TActorId());
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(

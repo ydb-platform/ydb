@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -1088,7 +1089,18 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+
+            *index->mutable_global_fulltext_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
         default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
+ 
             break;
         };
 
@@ -1141,7 +1153,6 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         }
 
         // specific fields
-        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector;
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
@@ -1159,17 +1170,23 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
+            
+        case Ydb::Table::TableIndex::kGlobalFulltextIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            break;
 
-        default:
-            // pass through
-            // TODO: maybe return BAD_REQUEST?
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            // FIXME: python sdk can create a table with a secondary index without a type
+            // so it's not possible to return an invalid index type error here for now
             break;
         }
 
-        if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptions;
+        if (!FillIndexTablePartitioning(indexImplTableDescriptions, index, status, error)) {
             return false;
         }
-        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptionsVector.begin(), indexImplTableDescriptionsVector.end()};
+        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptions.begin(), indexImplTableDescriptions.end()};
     }
 
     return true;

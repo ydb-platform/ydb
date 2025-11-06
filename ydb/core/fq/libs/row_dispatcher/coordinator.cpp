@@ -178,7 +178,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         TTopicMetrics Metrics;
     };
 
-    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
+    TRowDispatcherSettings::TCoordinatorSettings Config;
     TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
@@ -189,13 +189,15 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     TCoordinatorMetrics Metrics;
     THashSet<TActorId> InterconnectSessions;
     ui64 NodesCount = 0;
+    NActors::TActorId NodesManagerId;
 
 public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
-        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+        const TRowDispatcherSettings::TCoordinatorSettings& config,
         const TString& tenant,
-        const ::NMonitoring::TDynamicCounterPtr& counters);
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        NActors::TActorId nodesManagerId);
 
     void Bootstrap();
 
@@ -210,6 +212,7 @@ public:
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvListNodes::TPtr&);
     void Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr&);
+    void Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -222,6 +225,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvListNodes, Handle);
         hFunc(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult, Handle);
+        hFunc(NFq::TEvNodesManager::TEvGetNodesResponse, Handle);
     })
 
 private:
@@ -241,14 +245,16 @@ private:
 
 TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId)
     : Config(config)
     , LocalRowDispatcherId(localRowDispatcherId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
     , Metrics(counters)
+    , NodesManagerId(nodesManagerId)
 {
     AddRowDispatcher(localRowDispatcherId, true);
 }
@@ -257,8 +263,8 @@ void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     ScheduleNodeInfoRequest();
-    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
-    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
+    // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());  // Logs (InternalState) is too big
+    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId() << ", NodesManagerId " << NodesManagerId);
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
     Metrics.IsActive = nodeGroup->GetCounter("IsActive");
 }
@@ -360,6 +366,12 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
 
 void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString());
+
+    if (ev->Sender == NodesManagerId) {
+        LOG_ROW_DISPATCHER_INFO("TEvUndelivered, from nodes manager, reason: " << ev->Get()->Reason);
+        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
+        return;
+    }
 
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Sender != actorId) {
@@ -515,7 +527,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 }
 
 void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
-     if (!ev->Get()->Success) {
+    if (!ev->Get()->Success) {
         LOG_ROW_DISPATCHER_ERROR("Failed to get TEvLookupResult, try later...");
         ScheduleNodeInfoRequest();
         return;
@@ -526,7 +538,13 @@ void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult
 }
 
 void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
-    Register(NKikimr::CreateTenantNodeEnumerationLookup(SelfId(), Tenant));
+    if (NodesManagerId) {
+        LOG_ROW_DISPATCHER_DEBUG("Send TEvGetNodesRequest to NodesManager");
+        Send(NodesManagerId, new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery);
+    } else {
+        LOG_ROW_DISPATCHER_DEBUG("Send NodeEnumerationLookup request");
+        Register(NKikimr::CreateTenantNodeEnumerationLookup(SelfId(), Tenant));
+    }
 }
 
 bool TActorCoordinator::IsReady() const {
@@ -550,17 +568,27 @@ void TActorCoordinator::ScheduleNodeInfoRequest() const {
     Schedule(NodesManagerRetryPeriod, new TEvPrivate::TEvListNodes());
 }
 
-} // namespace
+void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
+    NodesCount = ev->Get()->NodeIds.size();
+    LOG_ROW_DISPATCHER_INFO("Updated node info, node count: " << NodesCount);
+    if (!NodesCount) {
+        ScheduleNodeInfoRequest();
+    }
+    UpdatePendingReadActors();
+}
+
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId)
 {
-    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters));
+    return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters, nodesManagerId));
 }
 
 } // namespace NFq

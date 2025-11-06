@@ -22,6 +22,7 @@ class NativeTransform:
         names = []
         col_types = []
         block_num = 0
+        renamer = context.column_renamer
 
         def get_block():
             nonlocal block_num
@@ -35,10 +36,11 @@ class NativeTransform:
                     return None
                 num_rows = source.read_leb128()
                 for col_num in range(num_cols):
-                    name = source.read_leb128_str()
+                    orig_name = source.read_leb128_str()
                     type_name = source.read_leb128_str()
                     if block_num == 0:
-                        names.append(name)
+                        disp_name = renamer(orig_name) if renamer is not None else orig_name
+                        names.append(disp_name)
                         col_type = registry.get_from_name(type_name)
                         col_types.append(col_type)
                     else:
@@ -46,7 +48,7 @@ class NativeTransform:
                     if num_rows == 0:
                         result_block.append(tuple())
                     else:
-                        context.start_column(name)
+                        context.start_column(orig_name)
                         column = col_type.read_column(source, num_rows, context)
                         result_block.append(column)
             except Exception as ex:

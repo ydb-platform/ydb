@@ -11,7 +11,7 @@ Y_UNIT_TEST_SUITE(FileYtServiceTests) {
                                    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n";
 
         TTempFileHandle file{};
-        TYtTableRef ytTable{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = file.Name()};
+        TYtTableRef ytTable{"Cluster", "Path", file.Name()};
 
         auto fileService = MakeFileYtJobSerivce();
         auto writer = fileService->MakeWriter(ytTable, TClusterConnection());

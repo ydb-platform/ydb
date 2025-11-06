@@ -26,10 +26,9 @@ struct TEnvironmentSetup {
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
 
-    using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
+    using TIcbControlKey = std::pair<ui32, TString>; // { nodeId, name }
 
     static const std::initializer_list<ui32> DebugLogComponents;
-
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
     struct TSettings {
@@ -244,7 +243,7 @@ struct TEnvironmentSetup {
         char *end = p + len;
         TReallyFastRng32 rng(RandomNumber<ui64>());
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
-            *reinterpret_cast<ui32*>(p) = rng();
+            WriteUnaligned<ui32>(p, rng());
         }
         for (; p < end; ++p) {
             *p = rng();
@@ -517,34 +516,42 @@ config:
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
-#define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
+                auto& icb = *appData->Icb;
+#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {   \
+                    auto& icbControl = icb.ICB_CONTROL_PATH;                            \
                     TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    appData->Icb->RegisterSharedControl(control, controlName);          \
+                    TControlBoard::RegisterSharedControl(control, icbControl);          \
                     control = currentValue;                                             \
-                    IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
+                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});    \
                 }
 
                 if (Settings.BurstThresholdNs) {
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsHDD", 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsSSD", 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsNVME", 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(VDiskControls.BurstThresholdNsHDD, 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(VDiskControls.BurstThresholdNsSSD, 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(VDiskControls.BurstThresholdNsNVME, 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
                 }
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
 
-                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdHDD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdSSD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplierHDD", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplierSSD", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
-                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
-                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(VDiskControls.DiskTimeAvailableScaleHDD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL(VDiskControls.DiskTimeAvailableScaleSSD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL(VDiskControls.DiskTimeAvailableScaleNVME, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
 
-                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThreshold, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThresholdHDD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThresholdSSD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplier, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplierHDD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplierSSD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
 
+                ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
+                ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
+                ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
+                ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
+                
 #undef ADD_ICB_CONTROL
 
                 {
@@ -1113,7 +1120,7 @@ config:
             std::unique_ptr<typename std::invoke_result_t<TFactory>::element_type> ev(factory());
             Runtime->Send(new IEventHandle(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
-            if (auto *msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
+            if (res->CastAsLocal<TEvents::TEvUndelivered>()) {
                 UNIT_ASSERT(checkUndelivered);
                 Sim(TDuration::Seconds(5));
             } else {
@@ -1131,7 +1138,7 @@ config:
 
     ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
             const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue,
-            TString counter, bool derivative = false) {
+            TString counter, std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1143,14 +1150,17 @@ config:
                 ss.Clear();
                 ss << LeftPad(pdiskLayout[i], 9, '0');
                 TString pdisk = ss.Str();
-                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                auto cntr = GetServiceCounters(appData->Counters, "vdisks")->
                         GetSubgroup("storagePool", storagePool)->
                         GetSubgroup("group", std::to_string(groupId))->
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup(subsgroupName, subgroupValue)->
-                        GetCounter(counter, derivative)->Val();
+                        GetSubgroup(subsgroupName, subgroupValue);
+                for (const auto& [label, value] : labels) {
+                    cntr = cntr->GetSubgroup(label, value);
+                }
+                ctr += cntr->GetCounter(counter, derivative)->Val();
             }
         }
         return ctr;
@@ -1182,15 +1192,15 @@ config:
     }
 
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
         return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
-            "subsystem", subsystem, counter, derivative);
+            "subsystem", subsystem, counter, labels, derivative);
     }
 
     ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
+        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter, std::unordered_map<TString, TString> labels = {}) {
         return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
-            "handleclass", handleclass, counter);
+            "handleclass", handleclass, counter, labels);
     }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {

@@ -14,6 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('--producers', default=100, type=lambda x: int(x), help='Producers of the topic')
     parser.add_argument('--topic_prefix', default='topic', help='Topic name')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
+    parser.add_argument('--limit-memory-usage', action='store_true', help='Try to use less memory for intermediate buffers')
 
     args = parser.parse_args()
 
@@ -26,6 +27,14 @@ if __name__ == '__main__':
             level=logging.INFO
         )
 
-    workload = YdbTopicWorkload(args.endpoint, args.database, duration=args.duration, consumers=args.consumers, producers=args.producers, tables_prefix=args.topic_prefix)
+    workload = YdbTopicWorkload(
+        args.endpoint,
+        args.database,
+        duration=args.duration,
+        consumers=args.consumers,
+        producers=args.producers,
+        tables_prefix=args.topic_prefix,
+        limit_memory_usage=args.limit_memory_usage,
+    )
     workload.start()
     workload.join()

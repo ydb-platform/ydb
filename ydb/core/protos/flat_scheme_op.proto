@@ -457,6 +457,7 @@ message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
     optional string StorageId = 4;
+    optional bool InheritPortionStorage = 5;
 
     optional string ClassName = 39;
     oneof Implementation {
@@ -502,6 +503,7 @@ message TOlapIndexDescription {
     optional TCompressionOptions Compression = 3;
 
     optional string StorageId = 4;
+    optional bool InheritPortionStorage = 5;
 
     optional string ClassName = 40;
     oneof Implementation {
@@ -538,6 +540,7 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountAvailable = 3;
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
+        optional uint64 Concurrency = 6;
     }
 
     message TOneLayer {
@@ -1158,6 +1161,7 @@ enum EIndexType {
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
     EIndexTypeGlobalVectorKmeansTree = 4;
+    EIndexTypeGlobalFulltext = 5;
 }
 
 enum EIndexState {
@@ -1169,6 +1173,10 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message TFulltextIndexDescription {
+    optional Ydb.Table.FulltextIndexSettings Settings = 1;
 }
 
 message TIndexDescription {
@@ -1192,6 +1200,7 @@ message TIndexDescription {
 
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
+        TFulltextIndexDescription FulltextIndexDescription = 12;
     }
 }
 
@@ -1204,6 +1213,7 @@ message TIndexCreationConfig {
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
+        TFulltextIndexDescription FulltextIndexDescription = 8;
     }
 }
 
@@ -1990,6 +2000,7 @@ enum EPathSubType {
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
+    EPathSubTypeFulltextIndexImplTable = 5;
 }
 
 enum EPathState {
@@ -2315,6 +2326,8 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+
+    optional bool OmitIndexes = 9 [default = false];
 }
 
 message TBackupBackupCollection {

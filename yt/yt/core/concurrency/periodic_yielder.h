@@ -19,9 +19,9 @@ public:
     bool TryYield() const;
 
 private:
-    std::optional<TCpuDuration> CpuPeriod_;
+    const std::optional<TCpuDuration> CpuPeriod_;
 
-    TPeriodicYielderGuard(std::optional<TDuration> period = std::nullopt);
+    explicit TPeriodicYielderGuard(std::optional<TDuration> period = std::nullopt);
 
     friend TPeriodicYielderGuard CreatePeriodicYielder(std::optional<TDuration> period);
 };

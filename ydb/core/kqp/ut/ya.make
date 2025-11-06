@@ -1,6 +1,7 @@
 RECURSE_FOR_TESTS(
     arrow
     batch_operations
+    close_with_load
     cost
     data
     data_integrity

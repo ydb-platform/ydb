@@ -45,6 +45,22 @@ using std::size_t;
 #define SIMDJSON_IS_ARM64 1
 #elif defined(__riscv) && __riscv_xlen == 64
 #define SIMDJSON_IS_RISCV64 1
+  #if __riscv_v_intrinsic >= 11000
+    #define SIMDJSON_HAS_RVV_INTRINSICS 1
+  #endif
+
+  #define SIMDJSON_HAS_ZVBB_INTRINSICS                                          \
+    0 // there is currently no way to detect this
+
+  #if SIMDJSON_HAS_RVV_INTRINSICS && __riscv_vector &&                          \
+      __riscv_v_min_vlen >= 128 && __riscv_v_elen >= 64
+    // RISC-V V extension
+    #define SIMDJSON_IS_RVV 1
+    #if SIMDJSON_HAS_ZVBB_INTRINSICS && __riscv_zvbb >= 1000000
+      // RISC-V Vector Basic Bit-manipulation
+      #define SIMDJSON_IS_ZVBB 1
+    #endif
+  #endif
 #elif defined(__loongarch_lp64)
 #define SIMDJSON_IS_LOONGARCH64 1
 #elif defined(__PPC64__) || defined(_M_PPC64)
@@ -191,6 +207,7 @@ using std::size_t;
 #if defined(NDEBUG) || defined(__OPTIMIZE__) || (defined(_MSC_VER) && !defined(_DEBUG))
 // If NDEBUG is set, or __OPTIMIZE__ is set, or we are under MSVC in release mode,
 // then do away with asserts and use __assume.
+// We still recommend that our users set NDEBUG in release mode.
 #if SIMDJSON_VISUAL_STUDIO
 #define SIMDJSON_UNREACHABLE() __assume(0)
 #define SIMDJSON_ASSUME(COND) __assume(COND)

@@ -69,9 +69,9 @@ namespace NActors {
         Initialize();
     }
 
-    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
+    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
         : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
     {
         Initialize();
     }
@@ -215,7 +215,10 @@ namespace NActors {
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
-                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry());
+            }
+            if (nodeIndex < egg.Dcb.size()) {
+                nodeAppData->Dcb = std::move(egg.Dcb[nodeIndex]);
             }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);

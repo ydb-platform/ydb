@@ -50,12 +50,6 @@ public:
 
 TPeepHolePipelineConfigurator PEEPHOLE_CONFIG_INSTANCE;
 
-void FlushYtDebugLogOnSignal() {
-    if (!NMalloc::IsAllocatorCorrupted) {
-        NYql::FlushYtDebugLog();
-    }
-}
-
 } // unnamed
 
 namespace NYql {
@@ -211,7 +205,9 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
     fmrServices.FmrOperationSpecFilePath = FmrOperationSpecFilePath_;
     fmrServices.JobLauncher = MakeIntrusive<NFmr::TFmrUserJobLauncher>(NFmr::TFmrUserJobLauncherOptions{
         .RunInSeparateProcess = true,
-        .FmrJobBinaryPath = FmrJobBin_
+        .FmrJobBinaryPath = FmrJobBin_,
+        .TableDataServiceDiscoveryFilePath = TableDataServiceDiscoveryFilePath_,
+        .GatewayType = "native"
     });
 
     auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));
@@ -235,18 +231,11 @@ int TYtRunTool::DoMain(int argc, const char *argv[]) {
     // Init MR/YT for proper work of embedded agent
     NYT::Initialize(argc, argv);
 
-    NYql::NBacktrace::AddAfterFatalCallback([](int){ FlushYtDebugLogOnSignal(); });
-    NYql::SetYtLoggerGlobalBackend(LOG_DEF_PRIORITY);
-
     if (NYT::TConfig::Get()->Prefix.empty()) {
         NYT::TConfig::Get()->Prefix = "//";
     }
 
-    int res = TFacadeRunner::DoMain(argc, argv);
-    if (0 == res) {
-        NYql::DropYtDebugLog();
-    }
-    return res;
+    return TFacadeRunner::DoMain(argc, argv);
 }
 
 TProgram::TStatus TYtRunTool::DoRunProgram(TProgramPtr program) {

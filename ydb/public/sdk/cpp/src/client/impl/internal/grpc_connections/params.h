@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/types.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
 
 namespace NYdb::inline Dev {
 
@@ -34,6 +35,7 @@ public:
     virtual uint64_t GetMaxInboundMessageSize() const = 0;
     virtual uint64_t GetMaxOutboundMessageSize() const = 0;
     virtual uint64_t GetMaxMessageSize() const = 0;
+    virtual std::shared_ptr<IExecutor> GetExecutor() const = 0;
 };
 
 } // namespace NYdb

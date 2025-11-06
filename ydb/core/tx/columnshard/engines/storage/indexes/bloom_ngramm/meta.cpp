@@ -277,7 +277,8 @@ public:
 };
 }   // namespace
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount, CaseSensitive);
 
@@ -301,8 +302,9 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
                     [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                         builder.FillNGrammHashes(NGrammSize, arr, inserter);
                     },
-                    [&](const std::string_view data, const ui32 /*hashBase*/) {
-                        builder.BuildNGramms(data.data(), data.size(), {}, NGrammSize, inserter);
+                    [&](const NJson::TJsonValue& data, const ui32 /*hashBase*/) {
+                        auto str = data.GetStringRobust();
+                        builder.BuildNGramms(str.data(), str.size(), {}, NGrammSize, inserter);
                     });
             }
             reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());

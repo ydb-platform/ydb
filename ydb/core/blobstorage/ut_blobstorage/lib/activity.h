@@ -166,7 +166,7 @@ public:
             TString buffer = GenerateBuffer();
             const TLogoBlobID id(TabletId, Generation, Step++, 0, buffer.size(), 0);
             LOG_DEBUG_S(*TlsActivationContext, NActorsServices::TEST, Prefix << "sending TEvPut Id# " << id);
-            SendToProxy(Quoter.Take(TActivationContext::Now(), 1), new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
+            SendToProxy(Quoter.Take(TActivationContext::Monotonic(), 1), new TEvBlobStorage::TEvPut(id, buffer, TInstant::Max()));
             Inflight.emplace(id, std::move(buffer));
         }
         if (!NumWritesRemaining && Inflight.empty()) {

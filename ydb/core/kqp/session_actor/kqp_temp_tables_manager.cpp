@@ -59,13 +59,14 @@ public:
     {}
 
     void Bootstrap() {
-        if (TempTablesState.TempTables.empty() && !TempTablesState.HasCreateTableAs) {
+        if (!TempTablesState.NeedCleaning) {
+            AFL_ENSURE(TempTablesState.TempTables.empty());
             Finish();
             return;
         }
 
         PathsToTraverse.push_back(
-            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.SessionId)));
+            NKikimr::SplitPath(GetSessionDirPath(Database, TempTablesState.TempDirName)));
         TraverseNext();
         Become(&TKqpTempTablesManager::PathSearchState);
     }
@@ -99,6 +100,7 @@ private:
     void TraverseNext() {
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
+        schemeCacheRequest->DatabaseName = Database;
         schemeCacheRequest->UserToken = UserToken;
         schemeCacheRequest->ResultSet.resize(PathsToTraverse.size());
 

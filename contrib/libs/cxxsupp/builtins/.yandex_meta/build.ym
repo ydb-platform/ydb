@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}21.1.0{% endblock %}
+{% block current_version %}21.1.3{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
@@ -68,6 +68,14 @@ IF (GCC OR CLANG)
     # "member at xxxxx is not an ELF object" errors from the linker.
     # Just generate native code from the beginning.
     NO_LTO()
+ENDIF()
+
+IF (OS_ANDROID AND ARCH_ARM7)
+    # For some reason, some intrinsincs fail to compile under Thumb mode restrictions
+    # Disable it, since it's not used in upstream NDK anyway
+    CFLAGS(
+        -mno-thumb
+    )
 ENDIF()
 {% endblock %}
 

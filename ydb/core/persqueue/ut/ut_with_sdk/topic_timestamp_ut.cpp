@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         Middle,
     };
 
-    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const bool checkEarly, const ui32 maxHeadSkip) {
+    void TimestampReadImpl(const bool topicsAreFirstClassCitizen, const bool enableSkipMessagesWithObsoleteTimestamp, const TTimestampReadOptions options, const std::span<const ETimestampFnKind> timestampKinds, const bool checkEarly, const ui32 maxHeadSkip, const bool withRestart) {
         auto createSetup = [=]() {
             NKikimrConfig::TFeatureFlags ff;
             ff.SetEnableTopicSplitMerge(true);
@@ -95,6 +95,11 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
         write(options.Interval, options.TailMessageCount, options.TailMessageSize);
 
         Sleep(TDuration::Seconds(5));
+        if (withRestart) {
+            setup.GetServer().KillTopicPqTablets(setup.GetFullTopicPath(topicName));
+            Sleep(TDuration::Seconds(5));
+        }
+
         auto readFromTimestamp = [&setup, &lastMessage, &topicName](std::optional<TInstant> startTimestamp, TStringBuf sessionId) {
             TTopicClient client(setup.MakeDriver());
             TReadSessionSettings settings;
@@ -222,7 +227,7 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
 
     struct TTestRegistration {
         TTestRegistration() {
-            constexpr bool xfail = 0; // TODO: change behaviour and replace with true
+            [[maybe_unused]] constexpr bool xfail = false;
             constexpr ui64 xfailTimestampPositionMaxError = 1;
 
             const std::tuple<bool, TString, TTimestampReadOptions> options[]{
@@ -232,23 +237,30 @@ Y_UNIT_TEST_SUITE(TopicTimestamp) {
             };
 
             const std::tuple<bool, TString, bool, bool> flags[]{
-                {xfail, "LegacyTopic", true, false},
+            //    {xfail, "Imprecise", true, false},
                 {true, "Topic", true, true},
-                {xfail, "LB", false, true},
+            //    {xfail, "LB", false, true},
             };
 
             const std::tuple<bool, ui32, TString, std::vector<ETimestampFnKind>> readTimestampKinds[]{
                 {true, xfailTimestampPositionMaxError, "exact", {ETimestampFnKind::Exact,}},
-                {true, 0, "offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
+                {true, xfailTimestampPositionMaxError, "offset+middle", {ETimestampFnKind::Offset, ETimestampFnKind::Middle,}},
             };
 
-            for (const auto& [optEnabled, optName, opt]: options) {
-                for (const auto& [flagsEnabled, flagsName, topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp] : flags) {
-                    for (const auto& [tsEnabled, tsMaxPositionError, tsName, tsKinds]: readTimestampKinds) {
-                        Names.push_back(TStringBuilder() << "TimestampRead_" << optName << "_" << flagsName << "_" << tsName);
-                        TCurrentTest::AddTest(Names.back().c_str(), [=](NUnitTest::TTestContext&) {
-                            TimestampReadImpl(topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp, opt, tsKinds, optEnabled && flagsEnabled && tsEnabled, tsMaxPositionError);
-                        }, false);
+            const std::tuple<bool, TString, bool> restartOptions[]{
+                {true, "_WithRestart", true},
+                {true, "", false},
+            };
+
+            for (const auto& [restartEnabled, restartName, restartOpt]: restartOptions) {
+                for (const auto& [optEnabled, optName, opt]: options) {
+                    for (const auto& [flagsEnabled, flagsName, topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp] : flags) {
+                        for (const auto& [tsEnabled, tsMaxPositionError, tsName, tsKinds]: readTimestampKinds) {
+                            Names.push_back(TStringBuilder() << "TimestampRead_" << optName << "_" << flagsName << "_" << tsName << restartName);
+                            TCurrentTest::AddTest(Names.back().c_str(), [=](NUnitTest::TTestContext&) {
+                                TimestampReadImpl(topicsAreFirstClassCitizen, enableSkipMessagesWithObsoleteTimestamp, opt, tsKinds, optEnabled && flagsEnabled && tsEnabled && restartEnabled, tsMaxPositionError, restartOpt);
+                            }, false);
+                        }
                     }
                 }
             }

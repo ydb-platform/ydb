@@ -157,13 +157,16 @@ class MockerFixture:
         """
         self._mock_cache.remove(mock)
 
-    def spy(self, obj: object, name: str) -> MockType:
+    def spy(
+        self, obj: object, name: str, duplicate_iterators: bool = False
+    ) -> MockType:
         """
         Create a spy of method. It will run method normally, but it is now
         possible to use `mock` call features with it, like call count.
 
         :param obj: An object.
         :param name: A method in object.
+        :param duplicate_iterators: Whether to keep a copy of the returned iterator in `spy_return_iter`.
         :return: Spy object.
         """
         method = getattr(obj, name)
@@ -177,7 +180,7 @@ class MockerFixture:
                 spy_obj.spy_exception = e
                 raise
             else:
-                if isinstance(r, Iterator):
+                if duplicate_iterators and isinstance(r, Iterator):
                     r, duplicated_iterator = itertools.tee(r, 2)
                     spy_obj.spy_return_iter = duplicated_iterator
                 else:

@@ -11,4 +11,4 @@ const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr ast, TIssues& issues);
 
 const TJsonPathPtr ParseJsonPath(const TStringBuf path, TIssues& issues, size_t maxParseErrors);
 
-}
+} // namespace NYql::NJsonPath

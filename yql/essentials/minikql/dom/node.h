@@ -11,7 +11,7 @@ constexpr char NodeResourceName[] = "Yson2.Node";
 
 using TPair = std::pair<TUnboxedValue, TUnboxedValue>;
 
-enum class ENodeType : ui8 {
+enum class ENodeType: ui8 {
     String = 0,
     Bool = 1,
     Int64 = 2,
@@ -26,14 +26,14 @@ enum class ENodeType : ui8 {
 constexpr ui8 NodeTypeShift = 4;
 constexpr ui8 NodeTypeMask = 0xf0;
 
-template<ENodeType type>
+template <ENodeType type>
 constexpr inline TUnboxedValuePod SetNodeType(TUnboxedValuePod node) {
     const auto buffer = reinterpret_cast<ui8*>(&node);
     buffer[TUnboxedValuePod::InternalBufferSize] = ui8(type) << NodeTypeShift;
     return node;
 }
 
-template<ENodeType type>
+template <ENodeType type>
 constexpr inline bool IsNodeType(const TUnboxedValuePod node) {
     const auto buffer = reinterpret_cast<const ui8*>(&node);
     const auto currentMask = buffer[TUnboxedValuePod::InternalBufferSize] & NodeTypeMask;
@@ -54,7 +54,7 @@ inline bool IsNodeType(const TUnboxedValuePod& node, ENodeType type) {
     return currentMask == expectedMask;
 }
 
-class TMapNode : public TManagedBoxedValue {
+class TMapNode: public TManagedBoxedValue {
 public:
     template <bool NoSwap>
     class TIterator: public TManagedBoxedValue {
@@ -77,6 +77,7 @@ public:
     ~TMapNode();
 
     TUnboxedValue Lookup(const TStringRef& key) const;
+
 private:
     ui64 GetDictLength() const final;
 
@@ -100,10 +101,10 @@ private:
 
     ui32 Count_;
     ui32 UniqueCount_;
-    TPair * Items_;
+    TPair* Items_;
 };
 
-class TAttrNode : public TMapNode {
+class TAttrNode: public TMapNode {
 public:
     TAttrNode(const TUnboxedValue& map, NUdf::TUnboxedValue&& value);
 
@@ -157,13 +158,13 @@ inline TUnboxedValuePod MakeDict(const TPair* items, ui32 count) {
 
 struct TDebugPrinter {
     TDebugPrinter(const TUnboxedValuePod& node);
-    class IOutputStream& Out(class IOutputStream &o) const;
+    class IOutputStream& Out(class IOutputStream& o) const;
     const TUnboxedValuePod& Node;
 };
 
-}
+} // namespace NYql::NDom
 
-template<>
-inline void Out<NYql::NDom::TDebugPrinter>(class IOutputStream &o, const NYql::NDom::TDebugPrinter& p) {
+template <>
+inline void Out<NYql::NDom::TDebugPrinter>(class IOutputStream& o, const NYql::NDom::TDebugPrinter& p) {
     p.Out(o);
 }

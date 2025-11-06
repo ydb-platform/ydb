@@ -31,6 +31,7 @@ public:
         // Handle callables for already parsed/optimized AST
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTable));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTableScheme));
+        AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateTable));
         AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleDropTable));
         AddHandler({TYtPublish::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandlePublish));
         AddHandler({TYtSort::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
@@ -54,7 +55,8 @@ public:
         EYtSettingTypes acceptedSettings = EYtSettingType::View | EYtSettingType::Anonymous
             | EYtSettingType::InferScheme | EYtSettingType::ForceInferScheme
             | EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock
-            | EYtSettingType::UserSchema | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3;
+            | EYtSettingType::UserSchema | EYtSettingType::UserColumns
+            | EYtSettingType::ExtraColumns | EYtSettingType::IgnoreTypeV3;
         for (auto path: read.Arg(2).Cast<TExprList>()) {
             if (auto table = path.Maybe<TYtPath>().Table()) {
                 if (!TYtTableInfo::Validate(table.Cast().Ref(), acceptedSettings, ctx)) {
@@ -111,8 +113,8 @@ public:
                     tableDesc.Intents |= TYtTableIntent::Flush;
                     break;
                 case EYtWriteMode::Create:
-                    ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), "CREATE TABLE is not supported yet."));
-                    return TStatus::Error;
+                    tableDesc.Intents |= TYtTableIntent::Create;
+                    break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
                         << TYtWrite::CallableName() << " mode: " << mode->Child(1)->Content()));
@@ -198,6 +200,24 @@ public:
             return TStatus::Error;
         }
         return TStatus::Ok;
+    }
+
+    TStatus HandleCreateTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        const TYtCreateTable create(input);
+        const TYtTableInfo tableInfo(create.Table(), false);
+        const auto& cluster = create.DataSink().Cluster().StringValue();
+        auto& tableDesc = State_->TablesData->GetOrAddTable(cluster, tableInfo.Name, tableInfo.Epoch);
+
+        if (NYql::HasSetting(tableInfo.Settings.Cast().Ref(), EYtSettingType::Anonymous)) {
+            tableDesc.IsAnonymous = true;
+            RegisterAnonymouseTable(cluster, tableInfo.Name);
+        }
+        tableDesc.Intents |= TYtTableIntent::Create;
+
+        UpdateDescriptorMeta(tableDesc, tableInfo);
+
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
+        return !output ? TStatus::Error : TStatus::Ok;
     }
 
     TStatus HandleDropTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

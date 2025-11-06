@@ -24,8 +24,13 @@ using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
 
 TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
     const auto& externalData = context.GetExternalData();
-    const auto& userToken = externalData.GetUserToken();
-    auto describeFuture = DescribeExternalDataSourceSecrets(externalDataSourceDesc.GetAuth(), userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+    const std::optional<NACLib::TUserToken>& userToken = externalData.GetUserToken();
+    auto describeFuture = DescribeExternalDataSourceSecrets(
+        externalDataSourceDesc.GetAuth(),
+        userToken ? new NACLib::TUserToken(*userToken) : nullptr,
+        externalData.GetDatabase(),
+        externalData.GetActorSystem()
+    );
 
     return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
         if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {

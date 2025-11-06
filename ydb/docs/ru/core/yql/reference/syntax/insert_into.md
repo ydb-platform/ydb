@@ -70,7 +70,6 @@ SELECT key FROM my_table_source;
 
 {% endif %}
 
-
 {% if feature_federated_queries %}
 
 При работе с [внешними файловыми источниками данных](../../../concepts/datamodel/external_data_source.md) можно дополнительно указывать ряд параметров:
@@ -101,4 +100,28 @@ SELECT
 * `test/`— путь внутри бакета, куда будут записаны данные. При записи создаются файлы со случайными именами.
 
 {% endif %}
+
+## INSERT INTO ... RETURNING {insert-into-returning}
+
+Используется для вставки строк и одновременного возврата значений из них. Это позволяет получить информацию о вставленных записях за один запрос, избавляя от необходимости выполнять последующий SELECT.
+
+### Примеры
+
+* Возврат всех значений вставленной строки
+
+```yql
+INSERT INTO some_table (id, year, color, price)
+VALUES (1103, 2023, 'blue', 400)
+RETURNING *;
+```
+
+* Возврат конкретных столбцов
+
+```yql
+INSERT INTO some_table (id, color, price)
+VALUES
+    (1101, 'red', 200),
+    (1102, 'green', 300)
+RETURNING id, price;
+```
 

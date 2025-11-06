@@ -1,6 +1,6 @@
 #include "mkql_skip.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,12 +8,16 @@ namespace NMiniKQL {
 
 namespace {
 
-class TSkipFlowWrapper : public TStatefulFlowCodegeneratorNode<TSkipFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TSkipFlowWrapper>;
+class TSkipFlowWrapper: public TStatefulFlowCodegeneratorNode<TSkipFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TSkipFlowWrapper>;
+
 public:
-     TSkipFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationNode* count)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded), Flow(flow), Count(count)
-    {}
+    TSkipFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationNode* count)
+        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Count(count)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
@@ -109,33 +113,38 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow))
+        if (const auto flow = FlowDependsOn(Flow)) {
             DependsOn(flow, Count);
+        }
     }
 
     IComputationNode* const Flow;
     IComputationNode* const Count;
 };
 
-class TWideSkipWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper>;
+class TWideSkipWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper>;
+
 public:
-     TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
+    TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , Flow(flow)
         , Count(count)
         , StubsIndex(mutables.IncrementWideFieldsIndex(size))
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = Count->GetValue(ctx);
         }
 
         if (auto count = state.Get<ui64>()) {
-            do if (const auto result = Flow->FetchValues(ctx, ctx.WideFields.data() + StubsIndex); EFetchResult::One != result) {
-                state = NUdf::TUnboxedValuePod(count);
-                return result;
+            do {
+                if (const auto result = Flow->FetchValues(ctx, ctx.WideFields.data() + StubsIndex); EFetchResult::One != result) {
+                    state = NUdf::TUnboxedValuePod(count);
+                    return result;
+                }
             } while (--count);
 
             state = NUdf::TUnboxedValuePod::Zero();
@@ -218,8 +227,9 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow))
+        if (const auto flow = FlowDependsOn(Flow)) {
             DependsOn(flow, Count);
+        }
     }
 
     IComputationWideFlowNode* const Flow;
@@ -227,10 +237,11 @@ private:
     const ui32 StubsIndex;
 };
 
-class TSkipStreamWrapper : public TMutableComputationNode<TSkipStreamWrapper> {
+class TSkipStreamWrapper: public TMutableComputationNode<TSkipStreamWrapper> {
     typedef TMutableComputationNode<TSkipStreamWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -239,7 +250,8 @@ public:
             , Input_(std::move(input))
             , Count_(count)
             , Index_(0)
-        {}
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -283,8 +295,9 @@ private:
     IComputationNode* const Count;
 };
 
-class TSkipWrapper : public TMutableCodegeneratorNode<TSkipWrapper> {
+class TSkipWrapper: public TMutableCodegeneratorNode<TSkipWrapper> {
     typedef TMutableCodegeneratorNode<TSkipWrapper> TBaseComputation;
+
 public:
     TSkipWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
@@ -327,7 +340,7 @@ private:
     IComputationNode* const Count;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -335,10 +348,11 @@ IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryCon
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (type->IsFlow()) {
-        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))
+        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
             return new TWideSkipWrapper(ctx.Mutables, wide, count, GetWideComponentsCount(AS_TYPE(TFlowType, type)));
-        else
+        } else {
             return new TSkipFlowWrapper(ctx.Mutables, GetValueRepresentation(type), flow, count);
+        }
     } else if (type->IsStream()) {
         return new TSkipStreamWrapper(ctx.Mutables, flow, count);
     } else if (type->IsList()) {
@@ -348,5 +362,5 @@ IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryCon
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

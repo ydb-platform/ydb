@@ -17,7 +17,8 @@
 
 #include "parquet/xxhasher.h"
 
-#include <xxhash.h>
+
+#include "contrib/libs/xxhash/xxhash.h"
 
 namespace parquet20 {
 

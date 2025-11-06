@@ -68,8 +68,7 @@ void TJsonPathTestBase::RunParseErrorTestCase(const TString& rawJsonPath) {
     } catch (...) {
         UNIT_FAIL(
             "Exception: " << CurrentExceptionMessage() << Endl
-            << "Jsonpath: " << rawJsonPath << Endl
-        );
+                          << "Jsonpath: " << rawJsonPath << Endl);
     }
 }
 
@@ -93,11 +92,10 @@ void TJsonPathTestBase::RunRuntimeErrorTestCase(const TString& rawJson, const TS
     } catch (...) {
         UNIT_FAIL(
             TStringBuilder()
-                 << "Exception: " << CurrentExceptionMessage() << Endl
-                << "Input JSON: " << rawJson << Endl
-                << "Jsonpath: " << rawJsonPath << Endl
-                << "Expected error: " << error << Endl
-        );
+            << "Exception: " << CurrentExceptionMessage() << Endl
+            << "Input JSON: " << rawJson << Endl
+            << "Jsonpath: " << rawJsonPath << Endl
+            << "Expected error: " << error << Endl);
     }
 }
 
@@ -164,4 +162,3 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
         UNIT_FAIL(message);
     }
 }
-

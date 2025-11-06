@@ -1241,7 +1241,7 @@ public:
 
         const auto memberPos = Args_[0]->GetPos();
         TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
-        if (auto literal = Args_[1]->GetLiteral("String")) {
+        if (/*auto literal =*/ Args_[1]->GetLiteral("String")) {
             TString targetType;
             if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
                 return false;

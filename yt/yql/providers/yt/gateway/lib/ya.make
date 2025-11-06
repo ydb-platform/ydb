@@ -17,6 +17,8 @@ SRCS(
     qb2.h
     user_files.cpp
     user_files.h
+    yt_attrs.h
+    yt_attrs.cpp
     yt_helpers.cpp
     yt_helpers.h
 )

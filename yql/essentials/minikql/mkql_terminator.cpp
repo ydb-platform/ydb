@@ -11,7 +11,8 @@ namespace NMiniKQL {
 
 TTerminateException::TTerminateException()
     : TErrorException(NYql::EYqlIssueCode::TIssuesIds_EIssueCode_CORE_RUNTIME_ERROR)
-{}
+{
+}
 
 thread_local ITerminator* TBindTerminator::Terminator = nullptr;
 
@@ -33,8 +34,7 @@ TThrowingBindTerminator::TThrowingBindTerminator()
 
 void TThrowingBindTerminator::Terminate(const char* message) const {
     TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
-    TString fullMessage = TStringBuilder() <<
-        "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
+    TString fullMessage = TStringBuilder() << "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
     ythrow TTerminateException() << fullMessage;
 }
 
@@ -47,16 +47,17 @@ void TOnlyThrowingBindTerminator::Terminate(const char* message) const {
     ythrow TTerminateException() << message;
 }
 
-
 [[noreturn]] void MKQLTerminate(const char* message) {
-    if (const auto t = TBindTerminator::Terminator)
+    if (const auto t = TBindTerminator::Terminator) {
         t->Terminate(message);
+    }
 
-    if (message)
+    if (message) {
         Cerr << message << Endl;
+    }
     ::abort();
 }
 
-}
+} // namespace NMiniKQL
 
-}
+} // namespace NKikimr

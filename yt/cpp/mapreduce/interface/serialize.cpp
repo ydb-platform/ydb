@@ -482,6 +482,9 @@ void Serialize(const TRichYPath& path, NYson::IYsonConsumer* consumer)
         .DoIf(path.Create_.Defined(), [&] (TFluentAttributes fluent) {
             fluent.Item("create").Value(*path.Create_);
         })
+        .DoIf(path.InputQuery_.Defined(), [&] (TFluentAttributes fluent) {
+            fluent.Item("input_query").Value(*path.InputQuery_);
+        })
     .EndAttributes()
     .Value(path.Path_);
 }
@@ -515,6 +518,7 @@ void Deserialize(TRichYPath& path, const TNode& node)
     DESERIALIZE_ATTR("bypass_artifact_cache", path.BypassArtifactCache_);
     DESERIALIZE_ATTR("cluster", path.Cluster_);
     DESERIALIZE_ATTR("create", path.Create_);
+    DESERIALIZE_ATTR("input_query", path.InputQuery_);
     Deserialize(path.Path_, node);
 }
 
@@ -570,40 +574,6 @@ void Deserialize(TTabletInfo& value, const TNode& node)
     DESERIALIZE_ITEM("total_row_count", value.TotalRowCount)
     DESERIALIZE_ITEM("trimmed_row_count", value.TrimmedRowCount)
     DESERIALIZE_ITEM("barrier_timestamp", value.BarrierTimestamp)
-}
-
-void Deserialize(TDuration& value, const TNode& node)
-{
-    switch (node.GetType()) {
-        case TNode::EType::Int64: {
-            auto ms = node.AsInt64();
-            if (ms < 0) {
-                ythrow yexception() << "Duration cannot be negative";
-            }
-            value = TDuration::MilliSeconds(static_cast<ui64>(ms));
-            break;
-        }
-
-        case TNode::EType::Uint64:
-            value = TDuration::MilliSeconds(node.AsUint64());
-            break;
-
-        case TNode::EType::Double: {
-            auto ms = node.AsDouble();
-            if (ms < 0) {
-                ythrow yexception() << "Duration cannot be negative";
-            }
-            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1'000.0));
-            break;
-        }
-
-        case TNode::EType::String:
-            value = TDuration::Parse(node.AsString());
-            break;
-
-        default:
-            ythrow yexception() << "Cannot parse duration from " << node.GetType();
-    }
 }
 
 void Serialize(const NTi::TTypePtr& type, NYson::IYsonConsumer* consumer)

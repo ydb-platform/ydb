@@ -23,14 +23,17 @@ public:
         TypeData = 'd',
         TypeTmpData = 'x',
         TypeMeta = 'i',
-        TypeTxMeta = 'I'
+        TypeTxMeta = 'I',
+        TypeMLPConsumerData = 'c',
     };
 
     enum EMark : char {
         MarkUser = 'c',
         MarkProtoSourceId = 'p',
         MarkSourceId = 's',
-        MarkUserDeprecated = 'u'
+        MarkUserDeprecated = 'u',
+        MarkMLPSnapshot = 'S',
+        MarkMLPWAL = 'w',
     };
 
     enum EServiceType : char {
@@ -276,6 +279,7 @@ public:
     }
 
     void SetFastWrite();
+    void SetBody();
 
 private:
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)

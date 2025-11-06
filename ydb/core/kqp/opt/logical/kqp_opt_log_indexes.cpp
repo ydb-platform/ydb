@@ -642,7 +642,6 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::LevelTable));
     YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
 
-    // TODO(mbkkt) It's kind of strange that almost everything here have same position
     const auto pos = match.Pos();
 
     const auto levelTable = BuildTableMeta(*levelTableDesc->Metadata, pos, ctx);
@@ -717,6 +716,33 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     return TExprBase{read};
 }
 
+template<typename T>
+TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHandle pos) {
+    auto leafFlag = Build<TCoUint64>(ctx, pos)
+        .Literal()
+            .Value(std::to_string(NTableIndex::NKMeans::PostingParentFlag)) // "9223372036854775808"
+            .Build()
+        .Done();
+    auto prefixRowArg = ctx.NewArgument(pos, "prefixRow");
+    auto prefixCluster = Build<TCoMember>(ctx, pos)
+        .Struct(prefixRowArg)
+        .Name().Build(NTableIndex::NKMeans::ParentColumn)
+        .Done();
+    return Build<TCoFlatMap>(ctx, pos)
+        .Input(read)
+        .Lambda()
+            .Args({prefixRowArg})
+            .Body<TCoOptionalIf>()
+                .Predicate<T>()
+                    .Left(prefixCluster)
+                    .Right(leafFlag)
+                    .Build()
+                .Value(prefixRowArg)
+                .Build()
+            .Build()
+        .Done();
+}
+
 TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
@@ -732,7 +758,6 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PostingTable));
     YQL_ENSURE(prefixTableDesc->Metadata->Name.EndsWith(NTableIndex::NKMeans::PrefixTable));
 
-    // TODO(mbkkt) It's kind of strange that almost everything here have same position
     const auto pos = match.Pos();
 
     const auto levelTable = BuildTableMeta(*levelTableDesc->Metadata, pos, ctx);
@@ -776,18 +801,29 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
         .Lambda(prefixLambda)
     .Done().Ptr();
 
+    read = Build<TDqPrecompute>(ctx, pos)
+        .Input(read)
+    .Done().Ptr();
+
     RemapIdToParent(ctx, pos, read);
+
+    auto prefixLeafRows = FilterLeafRows<TCoCmpGreaterOrEqual>(TExprBase(read), ctx, pos);
+    auto prefixRootRows = FilterLeafRows<TCoCmpLess>(TExprBase(read), ctx, pos);
 
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    read = Build<TKqlStreamLookupTable>(ctx, pos)
+    auto levelRows = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
-        .LookupKeys(read)
+        .LookupKeys(prefixRootRows)
         .Columns(levelColumns)
         .Settings(settings.BuildNode(ctx, pos))
-    .Done().Ptr();
+        .Done().Ptr();
+    VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, levelRows);
 
-    VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, read);
+    read = Build<TCoUnionAll>(ctx, pos)
+        .Add(levelRows)
+        .Add(prefixLeafRows)
+        .Done().Ptr();
 
     VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, read);
 
@@ -855,41 +891,12 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
         .Settings(streamLookupIndex.Settings())
         .Done();
 
-    TMaybeNode<TExprBase> lookupKeys;
-    if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
-        // Result type of lookupIndexTable: list<tuple<left_row, optional<main_table_pk>, rowMeta>>,
-        // expected input type for main table stream join: list<tuple<optional<main_table_pk>, left_row, rowMeta>>,
-        // so we should transform list<tuple<left_row, optional<main_table_pk>>> to list<tuple<optional<main_table_pk>, left_row, rowMeta>>
-        lookupKeys = Build<TCoMap>(ctx, node.Pos())
-            .Input(lookupIndexTable)
-            .Lambda()
-                .Args({"tuple"})
-                .Body<TExprList>()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("1").Build()
-                        .Build()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("0").Build()
-                        .Build()
-                    .Add<TCoNth>()
-                        .Tuple("tuple")
-                        .Index().Value("2").Build()
-                        .Build()
-                    .Build()
-                .Build()
-            .Done();
-    } else {
-        lookupKeys = lookupIndexTable;
-    }
-
     // We should allow lookup by null keys here,
     // because main table pk can contain nulls and we don't want to lose these rows
     settings.AllowNullKeysPrefixSize = keyColumnsList.Size();
     return Build<TKqlStreamLookupTable>(ctx, node.Pos())
         .Table(streamLookupIndex.Table())
-        .LookupKeys(lookupKeys.Cast())
+        .LookupKeys(lookupIndexTable)
         .Columns(streamLookupIndex.Columns())
         .Settings(settings.BuildNode(ctx, node.Pos()))
         .Done();

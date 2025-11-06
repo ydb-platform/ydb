@@ -571,8 +571,8 @@ private:
             } else if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
                 planNode.TypeName = "TableLookupJoin";
                 const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-                YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
-                const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+                YQL_ENSURE(inputTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
+                const auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
                 YQL_ENSURE(joinKeyType->GetKind() == ETypeAnnotationKind::Struct);
                 lookupKeyColumnsStruct = joinKeyType->Cast<TStructExprType>();
             }
@@ -3179,6 +3179,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto input : (*stat)->GetInput()) {
                         auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
                         auto stageGuid = stageIdToGuid.at(input.first);
+                        AFL_ENSURE(guidToPlaneId.contains(stageGuid));
                         auto planNodeId = guidToPlaneId.at(stageGuid);
                         inputInfo["Name"] = ToString(planNodeId);
                         if (input.second.HasPush()) {
@@ -3197,6 +3198,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             outputInfo["Name"] = "RESULT";
                         } else {
                             auto stageGuid = stageIdToGuid.at(output.first);
+                            AFL_ENSURE(guidToPlaneId.contains(stageGuid));
                             auto planNodeId = guidToPlaneId.at(stageGuid);
                             outputInfo["Name"] = ToString(planNodeId);
                         }

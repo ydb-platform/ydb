@@ -7,6 +7,7 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -1883,13 +1884,17 @@ namespace NSchemeShardUT_Private {
         return { step, txId };
     }
 
-    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
+    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const Ydb::Table::TableIndex& index) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
         settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
+        *settings.mutable_index() = index;
+        return new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
+    }
 
-        Ydb::Table::TableIndex& index = *settings.mutable_index();
+    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
+        Ydb::Table::TableIndex index;
         index.set_name(cfg.IndexName);
         *index.mutable_index_columns() = {cfg.IndexColumns.begin(), cfg.IndexColumns.end()};
         *index.mutable_data_columns() = {cfg.DataColumns.begin(), cfg.DataColumns.end()};
@@ -1943,7 +1948,7 @@ namespace NSchemeShardUT_Private {
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
 
-        return new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
+        return CreateBuildIndexRequest(id, dbName, src, index);
     }
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
@@ -1957,6 +1962,13 @@ namespace NSchemeShardUT_Private {
         col->mutable_default_from_literal()->CopyFrom(literal);
 
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
+    }
+
+    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const Ydb::Table::TableIndex& index) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildIndexRequest(id, dbName, src, index);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
     }
 
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
@@ -2007,6 +2019,23 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
+                            "status mismatch"
+                                << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
+                                << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
+                                << " issues was " << event->Record.GetIssues());
+    }
+
+    void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                       const TString &src, const Ydb::Table::TableIndex& index, Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, index);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
@@ -2842,7 +2871,7 @@ namespace NSchemeShardUT_Private {
         return WaitNextValResult(runtime, sender, expectedStatus);
     }
 
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+    NKikimrMiniKQL::TResult ReadSystemTable(TTestActorRuntime& runtime, ui64 tabletId,
             const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
             const TString& rangeFlags)
     {
@@ -2857,13 +2886,43 @@ namespace NSchemeShardUT_Private {
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
             (let range '(%s%s))
             (let columns '(%s))
-            (let result (SelectRange '__user__%s range columns '()))
+            (let result (SelectRange '%s range columns '()))
             (return (AsList (SetResult 'Result result) ))
         ))", rangeFlags.data(), keyFmt.data(), columnsFmt.data(), table.data()), result, error);
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         return result;
+    }
+
+    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
+            const TString& rangeFlags)
+    {
+        return ReadSystemTable(runtime, tabletId, "__user__"+table, pk, columns, rangeFlags);
+    }
+
+    TVector<TString> ReadShards(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {
+        auto pathDesc = DescribePath(runtime, schemeshardId, table, true, false, true);
+        auto tableDesc = pathDesc.GetPathDescription().GetTable();
+        TVector<TString> columns;
+        for (const auto& c : tableDesc.GetColumns()) {
+            columns.push_back(c.GetName());
+        }
+        TVector<TString> shardRows;
+        for (const auto& partition : pathDesc.GetPathDescription().GetTablePartitions()) {
+            auto result = ReadTable(runtime, partition.GetDatashardId(), tableDesc.GetName(),
+                {tableDesc.GetKeyColumnNames().begin(), tableDesc.GetKeyColumnNames().end()}, {columns.begin(), columns.end()});
+
+            TStringStream ysonStream;
+            NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
+            NYql::IDataProvider::TFillSettings fillSettings;
+            bool truncated;
+            KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+            UNIT_ASSERT(!truncated);
+            shardRows.push_back(ysonStream.Str());
+        }
+        return shardRows;
     }
 
     ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {

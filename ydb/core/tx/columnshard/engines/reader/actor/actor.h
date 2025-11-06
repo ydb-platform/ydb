@@ -32,7 +32,7 @@ private:
 public:
     virtual void PassAway() override;
 
-    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
+    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const TActorId& scanDiagnosticsActorId,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const TComputeShardingPolicy& computeShardingPolicy,
@@ -124,6 +124,7 @@ private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
     const TActorId ScanComputeActorId;
+    const TActorId ScanDiagnosticsActorId;
     std::optional<TMonotonic> AckReceivedInstant;
     TActorId ScanActorId;
     TActorId BlobCacheActorId;

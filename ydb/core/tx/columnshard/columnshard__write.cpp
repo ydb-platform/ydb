@@ -46,6 +46,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::ShardWritesSizeInFly:
             Counters.OnWriteOverloadShardWritesSize(writeSize);
             break;
+        case EOverloadStatus::RejectProbability:
+            Counters.OnWriteOverloadRejectProbability(writeSize);
+            break;
         case EOverloadStatus::None:
             Y_ABORT("invalid function usage");
     }
@@ -345,7 +348,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const auto source = ev->Sender;
     const auto cookie = ev->Cookie;
 
-
     std::optional<TDuration> writeTimeout;
     if (record.HasTimeoutSeconds()) {
         writeTimeout = TDuration::Seconds(record.GetTimeoutSeconds());
@@ -384,6 +386,28 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), record.GetTxId(), status, message);
         ctx.Send(source, result.release(), 0, cookie);
     };
+
+    if (behaviour == EOperationBehaviour::WriteWithLock) {
+        if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock && lock->IsDeleted()) {
+            sendError("lock is already deleted", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+            return;
+        }
+    }
+
+    const auto inFlightLocksRangesBytes = NOlap::TPKRangesFilter::GetFiltersTotalMemorySize();
+    const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
+    if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
+        if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock) {
+            lock->SetDeleted();
+            MaybeCleanupLock(record.GetLockTxId());
+        }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "In flight locks ranges bytes limit exceeded")
+            ("inFlightLocksRangesBytes", inFlightLocksRangesBytes)
+            ("inFlightLocksRangesBytesLimit", inFlightLocksRangesBytesLimit);
+        sendError("overloaded by in flight locks ranges memory limit", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        return;
+    }
+
     if (behaviour == EOperationBehaviour::CommitWriteLock) {
         auto commitOperation = std::make_shared<TCommitOperation>(TabletID());
         auto conclusionParse = commitOperation->Parse(*ev->Get());
@@ -545,9 +569,38 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const auto& mvccSnapshot = record.HasMvccSnapshot() ? NOlap::TSnapshot{record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId()} : NOlap::TSnapshot::Zero();
 
+    if (mvccSnapshot != NOlap::TSnapshot::Zero()) {
+        auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
+        if (snapshotSchema->GetVersion() != schema->GetVersion()) {
+            const TString errorMessage = TStringBuilder() << "schema version mismatch with snapshot: "
+                << "tx_id=" << record.GetTxId()
+                << ", snapshot=" << mvccSnapshot
+                << ", snapshot_schema_version=" << snapshotSchema->GetVersion()
+                << ", request_schema_version=" << schema->GetVersion()
+                << ", table_id=" << schemeShardLocalPathId
+                << ", lock_id=" << lockId;
+
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
+                ("tx_id", record.GetTxId())
+                ("snapshot", TStringBuilder() << mvccSnapshot)
+                ("snapshot_schema_version", snapshotSchema->GetVersion())
+                ("request_schema_version", schema->GetVersion())
+                ("table_id", schemeShardLocalPathId)
+                ("lock_id", lockId)
+                ("path_id", pathId)
+                ("source", source.ToString())
+                ("cookie", cookie);
+
+            LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
+                operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), errorMessage);
+            sendError(errorMessage, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            return;
+        }
+    }
+
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, *mType, behaviour, writeTimeout, record.GetTxId(),
+    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, record.GetLockNodeId(), *mType, behaviour, writeTimeout, record.GetTxId(),
         isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);
 }

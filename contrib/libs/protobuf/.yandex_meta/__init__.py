@@ -165,22 +165,18 @@ def post_install(self):
             "ORIGINAL_SOURCE",
             """
             IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
-
-            OPENSOURCE_EXPORT_REPLACEMENT(
-                CMAKE Protobuf
-                CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
-                CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-                CONAN_ADDITIONAL_SEMS
-                    "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
-                    "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
-            )
-
+                OPENSOURCE_EXPORT_REPLACEMENT(
+                    CMAKE Protobuf
+                    CMAKE_TARGET protobuf::libprotobuf protobuf::libprotoc
+                    CONAN protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                    CONAN_ADDITIONAL_SEMS
+                        "&& conan_require_tool" protobuf/${OPENSOURCE_REPLACE_PROTOBUF} "&& conan-tool_requires" protobuf/${OPENSOURCE_REPLACE_PROTOBUF}
+                        "&& conan_import \\"bin, protoc* -> ./bin\\" && conan-imports 'bin, protoc* -> ./bin' && vanilla_protobuf"
+                )
             ELSE()
-
                 ADDINCL(
                     GLOBAL contrib/libs/protoc/src
                 )
-
             ENDIF()
             """,
         )
@@ -256,6 +252,7 @@ protobuf = CMakeNinjaNixProject(
     # ],
     disable_includes=[
         "sys/isa_defs.h",
+        "third_party/absl",
     ],
     keep_paths=[
         # ya.make generation for legacy PACKAGE at protobuf/python/ya.make is not configure by yamaker.

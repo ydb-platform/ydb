@@ -21,18 +21,18 @@ const TStatKey Hop_LateThrownEventsCount("MultiHop_LateThrownEventsCount", true)
 const TStatKey Hop_EmptyTimeCount("MultiHop_EmptyTimeCount", true);
 const TStatKey Hop_KeysCount("MultiHop_KeysCount", true);
 
-
 constexpr ui32 StateVersion = 1;
 
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
 using THashFunc = std::function<NYql::NUdf::THashType(NUdf::TUnboxedValuePod)>;
 
-class TMultiHoppingCoreWrapper : public TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true> {
+class TMultiHoppingCoreWrapper: public TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true> {
     using TBaseComputation = TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true>;
+
 public:
     using TSelf = TMultiHoppingCoreWrapper;
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -77,17 +77,19 @@ public:
 
         struct TKeyState {
             std::vector<TBucket, TMKQLAllocator<TBucket>> Buckets; // circular buffer
-            ui64 HopIndex; // Start index of current window
+            ui64 HopIndex;                                         // Start index of current window
 
             TKeyState(ui64 bucketsCount, ui64 hopIndex)
                 : Buckets(bucketsCount)
                 , HopIndex(hopIndex)
-            {}
+            {
+            }
 
             TKeyState(TKeyState&& state)
                 : Buckets(std::move(state.Buckets))
                 , HopIndex(state.HopIndex)
-            {}
+            {
+            }
         };
 
         ui32 GetTraverseCount() const override {
@@ -114,7 +116,7 @@ public:
                         Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                         if (Self->StateType) {
                             out.WriteUnboxedValue(Self->StatePacker.RefMutableObject(Ctx, false, Self->StateType),
-                                          Self->OutSave->GetValue(Ctx));
+                                                  Self->OutSave->GetValue(Ctx));
                         }
                     }
                 }
@@ -295,8 +297,7 @@ public:
             const auto iter = StatesMap.try_emplace(
                 key,
                 IntervalHopCount + DelayHopCount,
-                keyHopIndex
-            );
+                keyHopIndex);
             if (iter.second) {
                 key.Ref();
             }
@@ -401,7 +402,7 @@ public:
         }
 
         const NUdf::TUnboxedValue Stream;
-        const TSelf *const Self;
+        const TSelf* const Self;
 
         const ui64 HopTime;
         const ui64 IntervalHopCount;
@@ -415,7 +416,7 @@ public:
             THashFunc, TEqualsFunc,
             TMKQLAllocator<std::pair<const NUdf::TUnboxedValuePod, TKeyState>>>;
 
-        TStatesMap StatesMap; // Map of states for each key
+        TStatesMap StatesMap;                  // Map of states for each key
         std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results
         bool Finished = false;
 
@@ -508,8 +509,7 @@ public:
             ctx,
             TValueHasher(KeyTypes, IsTuple, Hash.Get()),
             TValueEqual(KeyTypes, IsTuple, Equate.Get()),
-            Watermark
-        );
+            Watermark);
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
@@ -595,7 +595,7 @@ private:
     NUdf::IHash::TPtr Hash;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark) {
     MKQL_ENSURE(callable.GetInputsCount() == 21, "Expected 21 args");
@@ -644,10 +644,10 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
     auto stateType = hasSaveLoad ? callable.GetInput(12).GetStaticType() : nullptr;
 
     return new TMultiHoppingCoreWrapper(ctx.Mutables,
-        stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
-        outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
-        hop, interval, delay, dataWatermarks, watermarkMode, keyType, stateType, watermark);
+                                        stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
+                                        outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
+                                        hop, interval, delay, dataWatermarks, watermarkMode, keyType, stateType, watermark);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

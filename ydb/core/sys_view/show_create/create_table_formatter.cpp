@@ -514,6 +514,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+    std::optional<FulltextIndexSettings> fulltextIndexSettings;
     switch (index.type_case()) {
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
@@ -530,6 +531,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
             Stream << " GLOBAL USING vector_kmeans_tree ON ";
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+            Stream << " GLOBAL USING fulltext ON ";
+            fulltextIndexSettings = index.global_fulltext_index().fulltext_settings();
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -622,6 +628,70 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         Stream << ")";
     }
+
+    if (fulltextIndexSettings) {
+        Stream << " WITH (";
+
+        Y_ENSURE(fulltextIndexSettings->has_layout());
+        Stream << "layout=";
+        switch (fulltextIndexSettings->layout()) {
+            case Ydb::Table::FulltextIndexSettings_Layout_FLAT:
+                Stream << "flat";
+                break;
+            default:
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Layout");
+        }
+
+        Y_ENSURE(fulltextIndexSettings->columns().size() == 1);
+        auto analyzers = fulltextIndexSettings->columns().at(0).analyzers();
+        Y_ENSURE(analyzers.has_tokenizer());
+        Stream << ", tokenizer=";
+        switch (analyzers.tokenizer()) {
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_WHITESPACE:
+                Stream << "whitespace";
+                break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_STANDARD:
+                Stream << "standard";
+                break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_KEYWORD:
+                Stream << "keyword";
+                break;
+            default:
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
+        }
+        if (analyzers.has_language()) {
+            Stream << ", language=" << analyzers.language();
+        }
+        if (analyzers.has_use_filter_lowercase()) {
+            Stream << ", use_filter_lowercase=" << (analyzers.use_filter_lowercase() ? "true" : "false");
+        }
+        if (analyzers.has_use_filter_stopwords()) {
+            Stream << ", use_filter_stopwords=" << (analyzers.use_filter_stopwords() ? "true" : "false");
+        }
+        if (analyzers.has_use_filter_ngram()) {
+            Stream << ", use_filter_ngram=" << (analyzers.use_filter_ngram() ? "true" : "false");
+        }
+        if (analyzers.has_use_filter_edge_ngram()) {
+            Stream << ", use_filter_edge_ngram=" << (analyzers.use_filter_edge_ngram() ? "true" : "false");
+        }
+        if (analyzers.has_filter_ngram_min_length()) {
+            Stream << ", filter_ngram_min_length=" << analyzers.filter_ngram_min_length();
+        }
+        if (analyzers.has_filter_ngram_max_length()) {
+            Stream << ", filter_ngram_max_length=" << analyzers.filter_ngram_max_length();
+        }
+        if (analyzers.has_use_filter_length()) {
+            Stream << ", use_filter_length=" << (analyzers.use_filter_length() ? "true" : "false");
+        }
+        if (analyzers.has_filter_length_min()) {
+            Stream << ", filter_length_min=" << analyzers.filter_length_min();
+        }
+        if (analyzers.has_filter_length_max()) {
+            Stream << ", filter_length_max=" << analyzers.filter_length_max();
+        }
+
+        Stream << ")";
+    }
 }
 
 bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
@@ -665,8 +735,20 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         }
     }
 
+    TString cacheMode;
+    if (familyDesc.HasColumnCacheMode()) {
+        switch (familyDesc.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                cacheMode = "regular";
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                cacheMode = "in_memory";
+                break;
+        }
+    }
+
     if (familyName == "default") {
-        if (!dataName && !compression) {
+        if (!dataName && !compression && !cacheMode) {
             return false;
         }
     }
@@ -685,6 +767,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (cacheMode) {
+        Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
 
     Stream << ")";

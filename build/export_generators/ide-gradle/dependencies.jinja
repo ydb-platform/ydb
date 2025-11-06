@@ -30,7 +30,7 @@
 
 {%- macro AddFileJars(file_jars) -%}
 {%-     for file_jar in file_jars %}
-        "$output_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
+        "$output_root/{{ file_jar }}",
 {%-     endfor -%}
 {%- endmacro -%}
 
@@ -127,10 +127,11 @@ dependencies {
 {%- endif %}
 
 {%- if proto_template -%}
-{%-     if target.proto_namespace %}
-    protobuf(files(File(mainProtosDir, "{{ target.proto_namespace }}")))
-{%-     else %}
-    protobuf(files(mainProtosDir))
-{%-     endif -%}
+{%-     if prepareProtosTask %}
+    protobuf(files(prepareMainProtos))
+{%-     endif %}
+{%-     if extractLibrariesProtosTask %}
+    implementation(files(prepareMainIncludeProtos))
+{%-     endif %}
 {%- endif %}
 }

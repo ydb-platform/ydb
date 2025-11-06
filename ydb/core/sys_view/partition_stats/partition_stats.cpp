@@ -596,9 +596,9 @@ public:
     }
 
     TPartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         auto extractKey = [] (NKikimrSysView::TPartitionStatsKey& key, const TConstArrayRef<TCell>& cells) {
             if (cells.size() > 0 && !cells[0].IsNull()) {
@@ -862,10 +862,10 @@ private:
 };
 
 THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NSysView

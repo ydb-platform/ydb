@@ -12,6 +12,9 @@
 
 #include <library/cpp/yson/json/yson2json_adapter.h>
 
+#include <library/cpp/yt/misc/cast.h>
+
+#include <util/datetime/base.h>
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
 #include <util/generic/singleton.h>
@@ -77,8 +80,8 @@ EUploadDeduplicationMode TConfig::GetUploadingDeduplicationMode(
         const char* var,
         EUploadDeduplicationMode defaultValue)
 {
-    const TString deduplicationMode = GetEnv(var, ::ToString(defaultValue));
-    return ::FromString(deduplicationMode);
+    const TString deduplicationMode = GetEnv(var, TEnumTraits<EUploadDeduplicationMode>::ToString(defaultValue));
+    return TEnumTraits<EUploadDeduplicationMode>::FromString(deduplicationMode);
 }
 
 void TConfig::ValidateToken(const TString& token)
@@ -302,6 +305,85 @@ TConfigPtr TConfig::Get()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <std::integral T>
+void Deserialize(T& value, const TNode& node)
+{
+    if (node.GetType() == TNode::EType::Int64) {
+        value = CheckedIntegralCast<T>(node.AsInt64());
+    } else if (node.GetType() == TNode::EType::Uint64) {
+        value = CheckedIntegralCast<T>(node.AsUint64());
+    } else {
+        throw yexception() << "Cannot parse integral value from node of type " << node.GetType();
+    }
+}
+
+template <typename T>
+void Deserialize(THashSet<T>& hs, const TNode& node)
+{
+    if (node.GetType() != TNode::EType::List) {
+        throw yexception() << "Cannot parse hashset from node of type " << node.GetType();
+    }
+    for (const auto& value : node.AsList()) {
+        T deserialized;
+        Deserialize(deserialized, value);
+        hs.insert(deserialized);
+    }
+}
+
+template <typename T>
+requires TEnumTraits<T>::IsEnum
+void Deserialize(T& value, const TNode& node)
+{
+    if (auto nodeType = node.GetType(); nodeType != TNode::EType::String) {
+        throw yexception() << "Enum deserialization expects EType::String, got " << node.GetType();
+    }
+    value = TEnumTraits<T>::FromString(node.AsString());
+}
+
+template <typename T>
+requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
+void Deserialize(T& value, const TNode& node)
+{
+    if (auto nodeType = node.GetType(); nodeType != TNode::EType::String) {
+        throw yexception() << "Enum deserialization expects EType::String, got " << node.GetType();
+    }
+    value = ::FromString<T>(node.AsString());
+}
+
+void Deserialize(TDuration& value, const TNode& node)
+{
+    switch (node.GetType()) {
+        case TNode::EType::Int64: {
+            auto ms = node.AsInt64();
+            if (ms < 0) {
+                ythrow yexception() << "Duration cannot be negative";
+            }
+            value = TDuration::MilliSeconds(static_cast<ui64>(ms));
+            break;
+        }
+
+        case TNode::EType::Uint64:
+            value = TDuration::MilliSeconds(node.AsUint64());
+            break;
+
+        case TNode::EType::Double: {
+            auto ms = node.AsDouble();
+            if (ms < 0) {
+                ythrow yexception() << "Duration cannot be negative";
+            }
+            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1'000.0));
+            break;
+        }
+
+        case TNode::EType::String:
+            value = TDuration::Parse(node.AsString());
+            break;
+
+        default:
+            ythrow yexception() << "Cannot parse duration from " << node.GetType();
+    }
+}
+
 // const auto& nodeMap = node.AsMap();
 #define DESERIALIZE_ITEM(NAME, MEMBER) \
     if (const auto* item = nodeMap.FindPtr(NAME)) { \
@@ -313,7 +395,6 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
     BuildYsonFluently(consumer).BeginMap()
         .Item("hosts").Value(config.Hosts)
         .Item("pool").Value(config.Pool)
-        .Item("token").Value(config.Token)
         .Item("prefix").Value(config.Prefix)
         .Item("api_version").Value(config.ApiVersion)
         .Item("log_level").Value(config.LogLevel)
@@ -370,7 +451,8 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("connection_pool_size").Value(config.ConnectionPoolSize)
         .Item("file_cache_replication_factor").Value(config.FileCacheReplicationFactor)
         .Item("cache_lock_timeout_per_gb").Value(config.CacheLockTimeoutPerGb.ToString())
-        .Item("cache_upload_deduplication_mode").Value(::ToString(config.CacheUploadDeduplicationMode))
+        .Item("cache_upload_deduplication_mode")
+            .Value(TEnumTraits<EUploadDeduplicationMode>::ToString(config.CacheUploadDeduplicationMode))
         .Item("cache_upload_deduplication_threshold").Value(config.CacheUploadDeduplicationThreshold)
         .Item("mount_sandbox_in_tmpfs").Value(config.MountSandboxInTmpfs)
         .Item("api_file_path_options").Value(config.ApiFilePathOptions)
@@ -392,6 +474,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("table_writer_version").Value(::ToString(config.TableWriterVersion))
         .Item("redirect_stdout_to_stderr").Value(config.RedirectStdoutToStderr)
         .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
+        .Item("config_remote_patch_path").Value(config.ConfigRemotePatchPath)
     .EndMap();
 }
 
@@ -400,7 +483,6 @@ void Deserialize(TConfig& config, const TNode& node)
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("hosts", config.Hosts);
     DESERIALIZE_ITEM("pool", config.Pool);
-    DESERIALIZE_ITEM("token", config.Token);
     DESERIALIZE_ITEM("prefix", config.Prefix);
     DESERIALIZE_ITEM("api_version", config.ApiVersion);
     DESERIALIZE_ITEM("log_level", config.LogLevel);
@@ -462,6 +544,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("table_writer_version", config.TableWriterVersion);
     DESERIALIZE_ITEM("redirect_stdout_to_stderr", config.RedirectStdoutToStderr);
     DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
+    DESERIALIZE_ITEM("config_remote_patch_path", config.ConfigRemotePatchPath);
 }
 
 #undef DESERIALIZE_ITEM

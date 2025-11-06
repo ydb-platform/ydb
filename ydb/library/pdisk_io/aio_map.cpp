@@ -25,6 +25,7 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
     TInstant Deadline;
 
     bool PrevAsyncIoOperationIsInProgress = false;
+    bool IsFailed = false;
 
     TAsyncIoOperationMap(IAsyncIoContext &asyncIoContext, TSectorMap &sectorMap,
             TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> &completeQueue,
@@ -72,12 +73,12 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
         switch (Type) {
             case IAsyncIoOperation::EType::PRead:
                 {
-                    SectorMap.Read((ui8*)Data, Size, Offset, PrevAsyncIoOperationIsInProgress);
+                    IsFailed = !SectorMap.Read((ui8*)Data, Size, Offset, PrevAsyncIoOperationIsInProgress);
                     break;
                 }
             case IAsyncIoOperation::EType::PWrite:
                 {
-                    SectorMap.Write((ui8*)Data, Size, Offset, PrevAsyncIoOperationIsInProgress);
+                    IsFailed = !SectorMap.Write((ui8*)Data, Size, Offset, PrevAsyncIoOperationIsInProgress);
                     break;
                 }
             default:
@@ -280,7 +281,11 @@ public:
                     TAsyncIoOperationMap *op = static_cast<TAsyncIoOperationMap*>(CompleteQueue.Pop());
                     events[outputIdx].Operation = op;
 
-                    events[outputIdx].Result = GenerateResultForOperaion(op->GetType());
+                    if (op->IsFailed) {
+                        events[outputIdx].Result = EIoResult::FakeError;
+                    } else {
+                        events[outputIdx].Result = GenerateResultForOperaion(op->GetType());
+                    }
                     events[outputIdx].Operation->ExecCallback(&events[outputIdx]);
                     ++outputIdx;
                     if (outputIdx == maxEvents) {

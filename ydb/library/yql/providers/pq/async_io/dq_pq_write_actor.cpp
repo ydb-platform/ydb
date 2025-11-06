@@ -1,27 +1,27 @@
 #include "dq_pq_write_actor.h"
 #include "probes.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-
-#include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
-#include <yql/essentials/minikql/mkql_alloc.h>
-#include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
-#include <yql/essentials/utils/yql_panic.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
+
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>
@@ -78,6 +78,7 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
 
         EvPqEventsReady = EvBegin,
+        EvExecuteTopicEvent,
 
         EvEnd
     };
@@ -87,15 +88,19 @@ struct TEvPrivate {
     // Events
 
     struct TEvPqEventsReady : public TEventLocal<TEvPqEventsReady, EvPqEventsReady> {};
+
+    struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
+        using TTopicEventBase::TTopicEventBase;
+    };
 };
 
 TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
     return TStringBuilder() << "[Checkpoint " << checkpoint.GetGeneration() << "." << checkpoint.GetId() << "] ";
 }
 
-} // namespace
+} // anonymous namespace
 
-class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput {
+class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     struct TMetrics {
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
@@ -282,6 +287,7 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
     )
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
@@ -329,8 +335,13 @@ private:
         return *FederatedTopicClient;
     }
 
-    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const {
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() {
         NYdb::NFederatedTopic::TFederatedTopicClientSettings opts = PqGateway->GetFederatedTopicClientSettings();
+
+        if (SinkParams.GetUseActorSystemThreadsInTopicClient()) {
+            SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+        }
+
         opts.Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))

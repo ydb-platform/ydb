@@ -1,6 +1,6 @@
 #pragma once
 #include "context.h"
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
@@ -80,7 +80,7 @@ TString Id(const TRule_an_id_hint& node, TTranslation& ctx);
 
 TString Id(const TRule_an_id_pure& node, TTranslation& ctx);
 
-template<typename TRule>
+template <typename TRule>
 inline TIdentifier IdEx(const TRule& node, TTranslation& ctx) {
     const TString name(Id(node, ctx));
     const TPosition pos(ctx.Context().Pos());
@@ -105,7 +105,7 @@ std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>
 
 std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
 
-TMaybe<TColumnConstraints> ColumnConstraints(const TRule_column_schema& node, TTranslation& ctx);
+TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
 
 /// \return optional prefix
 TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id);
@@ -135,13 +135,19 @@ protected:
         GroupBy,
         SqlLambdaParams,
     };
+
+    TNodePtr NamedExpr(
+        const TRule_expr& exprTree,
+        const TRule_an_id_or_type* nameTree,
+        EExpr exprMode = EExpr::Regular);
+
     TNodePtr NamedExpr(const TRule_named_expr& node, EExpr exprMode = EExpr::Regular);
     bool NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
     bool BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames);
     bool ActionOrSubqueryArgs(const TRule_action_or_subquery_args& node, TVector<TSymbolNameWithPos>& bindNames, ui32& optionalArgsCount);
     bool ModulePath(const TRule_module_path& node, TVector<TString>& path);
     bool NamedBindList(const TRule_named_bind_parameter_list& node, TVector<TSymbolNameWithPos>& names,
-        TVector<TSymbolNameWithPos>& aliases);
+                       TVector<TSymbolNameWithPos>& aliases);
     bool NamedBindParam(const TRule_named_bind_parameter& node, TSymbolNameWithPos& name, TSymbolNameWithPos& alias);
     TNodePtr NamedNode(const TRule_named_nodes_stmt& rule, TVector<TSymbolNameWithPos>& names);
 
@@ -165,11 +171,11 @@ protected:
     bool FillFamilySettings(const TRule_family_settings& settingsNode, TFamilyEntry& family);
     bool CreateTableSettings(const TRule_with_table_settings& settingsNode, TCreateTableParameters& params);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
-        ETableType tableType, bool alter, bool reset);
+                                 ETableType tableType, bool alter, bool reset);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
-        bool alter, bool reset);
+                                 bool alter, bool reset);
     bool StoreExternalTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, TTableSettings& settings,
-        bool alter, bool reset);
+                                         bool alter, bool reset);
     bool StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value, TTableSettings& settings, ETableType tableType, bool alter = false);
     bool StoreDataSourceSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result);
     bool StoreDataSourceSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result);
@@ -186,7 +192,7 @@ protected:
     bool FillIndexSettings(const TRule_with_index_settings& settingsNode, TIndexDescription::TIndexSettings& indexSettings);
     bool AddIndexSetting(const TIdentifier& id, const TRule_index_setting_value& value, TIndexDescription::TIndexSettings& indexSettings);
     TString GetIndexSettingStringValue(const TRule_index_setting_value& node);
-    template<typename T>
+    template <typename T>
     std::tuple<bool, T, TString> GetIndexSettingValue(const TRule_index_setting_value& node);
 
     TIdentifier GetTopicConsumerId(const TRule_topic_consumer_ref& node);
@@ -202,9 +208,7 @@ protected:
     bool AlterTopicConsumerEntry(const TRule_alter_topic_alter_consumer_entry& node,
                                  TTopicConsumerDescription& alterConsumer);
 
-
     bool AlterTopicAction(const TRule_alter_topic_action& node, TAlterTopicParameters& params);
-
 
     TNodePtr TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed);
     TNodePtr TypeDecimal(const TRule_type_name_decimal& node);
@@ -243,6 +247,12 @@ protected:
     [[nodiscard]] bool ParseSecretId(const TRule_id_or_at& node, TString& objectId);
     bool ParseViewOptions(std::map<TString, TDeferredAtom>& features, const TRule_with_table_settings& options);
     bool ParseViewQuery(std::map<TString, TDeferredAtom>& features, const TRule_select_stmt& query);
+    bool ParseViewQuery(std::map<TString, TDeferredAtom>& features,
+                        const TRule_define_action_or_subquery_body& body,
+                        const NSQLv1Generated::TToken& beforeToken,
+                        const NSQLv1Generated::TToken& afterToken,
+                        const TString& service,
+                        const TDeferredAtom& cluster);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
     bool ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction);
     bool ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settings);
@@ -284,8 +294,10 @@ protected:
 
     bool ValidateAuthMethod(const std::map<TString, TDeferredAtom>& result);
     bool ValidateExternalTable(const TCreateTableParameters& params);
+    bool ValidateSubqueryOrViewBody(const TBlocks& blocks);
 
     TNodePtr ReturningList(const ::NSQLv1Generated::TRule_returning_columns_list& columns);
+
 private:
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
     static bool IsValidFrameSettings(TContext& ctx, const TFrameSpecification& frameSpec, size_t sortSpecSize);
@@ -308,54 +320,54 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);
 bool StoreString(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 bool StoreInt(const TRule_family_setting_value& from, TNodePtr& to, TContext& ctx);
 
-template<typename TChar>
+template <typename TChar>
 struct TPatternComponent {
-        TBasicString<TChar> Prefix;
-        TBasicString<TChar> Suffix;
-        bool IsSimple = true;
+    TBasicString<TChar> Prefix;
+    TBasicString<TChar> Suffix;
+    bool IsSimple = true;
 
-        void AppendPlain(TChar c) {
-            if (IsSimple) {
-                Prefix.push_back(c);
-            }
-            Suffix.push_back(c);
+    void AppendPlain(TChar c) {
+        if (IsSimple) {
+            Prefix.push_back(c);
         }
+        Suffix.push_back(c);
+    }
 
-        void AppendAnyChar() {
-            IsSimple = false;
-            Suffix.clear();
-        }
+    void AppendAnyChar() {
+        IsSimple = false;
+        Suffix.clear();
+    }
 };
 
-template<typename TChar>
+template <typename TChar>
 TVector<TPatternComponent<TChar>> SplitPattern(const TBasicString<TChar>& pattern, TMaybe<char> escape, bool& inEscape) {
-        inEscape = false;
-        TVector<TPatternComponent<TChar>> result;
-        TPatternComponent<TChar> current;
-        bool prevIsPercentChar = false;
-        for (const TChar c : pattern) {
-            if (inEscape) {
-                current.AppendPlain(c);
-                inEscape = false;
-                prevIsPercentChar = false;
-            } else if (escape && c == static_cast<TChar>(*escape)) {
-                inEscape = true;
-            } else if (c == '%') {
-                if (!prevIsPercentChar) {
-                    result.push_back(std::move(current));
-                }
-                current = {};
-                prevIsPercentChar = true;
-            } else if (c == '_') {
-                current.AppendAnyChar();
-                prevIsPercentChar = false;
-            } else {
-                current.AppendPlain(c);
-                prevIsPercentChar = false;
+    inEscape = false;
+    TVector<TPatternComponent<TChar>> result;
+    TPatternComponent<TChar> current;
+    bool prevIsPercentChar = false;
+    for (const TChar c : pattern) {
+        if (inEscape) {
+            current.AppendPlain(c);
+            inEscape = false;
+            prevIsPercentChar = false;
+        } else if (escape && c == static_cast<TChar>(*escape)) {
+            inEscape = true;
+        } else if (c == '%') {
+            if (!prevIsPercentChar) {
+                result.push_back(std::move(current));
             }
+            current = {};
+            prevIsPercentChar = true;
+        } else if (c == '_') {
+            current.AppendAnyChar();
+            prevIsPercentChar = false;
+        } else {
+            current.AppendPlain(c);
+            prevIsPercentChar = false;
         }
-        result.push_back(std::move(current));
-        return result;
+    }
+    result.push_back(std::move(current));
+    return result;
 }
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix);

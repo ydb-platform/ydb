@@ -21,6 +21,7 @@ constexpr i64 DefaultMaxJoinBatchSize = 512 * DefaultRowsetProcessingBatchSize;
 DEFINE_ENUM(EStatisticsAggregation,
     (None)
     (Depth)
+    (DepthOmitNode)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

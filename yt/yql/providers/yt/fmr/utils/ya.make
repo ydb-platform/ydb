@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/http/io
     library/cpp/yson_pull
     yt/cpp/mapreduce/client
+    yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     yt/yql/providers/yt/fmr/request_options
     yt/yql/providers/yt/fmr/yt_job_service/interface

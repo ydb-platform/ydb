@@ -32,4 +32,4 @@ TMaybe<TString> ParseDyNumberString(TStringBuf str);
  */
 TMaybe<TString> DyNumberToString(TStringBuf buffer);
 
-}
+} // namespace NKikimr::NDyNumber

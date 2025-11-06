@@ -6,7 +6,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 DEPENDS(
     ydb/public/tools/ydb_recipe
-    ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/pire
     yql/essentials/udfs/common/re2

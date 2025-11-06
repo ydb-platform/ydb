@@ -30,6 +30,7 @@ struct TEvCommonProgress {
 
 struct TEvCommonResult {
     TMaybe<TString> Error = Nothing();
+    TMaybe<TString> Warning = Nothing();
 
     TEvCommonResult() = default;
 
@@ -37,6 +38,11 @@ struct TEvCommonResult {
         : Error(std::move(error))
     {
     }
+
+    TEvCommonResult(TMaybe<TString> error, TMaybe<TString> warning)
+        : Error(std::move(error))
+        , Warning(std::move(warning))
+    {}
 
     TString ToString(const TString& header) const {
         return TStringBuilder() << header << " {"

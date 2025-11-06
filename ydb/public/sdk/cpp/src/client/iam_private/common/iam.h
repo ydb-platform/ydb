@@ -18,7 +18,9 @@ private:
                     req.set_resource_type(params.ResourceType);
                     req.set_target_service_account_id(params.TargetServiceAccountId);
                 },
-                &TService::Stub::async_interface::CreateForService,
+                [](typename TService::Stub* stub, grpc::ClientContext* context, const TRequest* request, TResponse* response, std::function<void(grpc::Status)> cb) {
+                    stub->async()->CreateForService(context, request, response, std::move(cb));
+                },
                 params.SystemServiceAccountCredentials->CreateProvider()) {}
     };
 

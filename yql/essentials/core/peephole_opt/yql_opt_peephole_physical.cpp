@@ -586,27 +586,27 @@ std::vector<std::tuple<TExprNode::TPtr, bool, TExprNode::TPtr>> GetRenames(const
         if (const auto it = renames.find(name); renames.cend() != it) {
             const auto& source = it->second.front()->Content();
             if (const auto& part = CutAlias(lAlias, source)) {
-                if (const auto itemType = lType->FindItemType(*part))
+                if (/* const auto itemType = */ lType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), true, std::move(it->second.back()));
             } else if (const auto& part = CutAlias(rAlias, source)) {
-                if (const auto itemType = rType->FindItemType(*part))
+                if (/* const auto itemType = */ rType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), false, std::move(it->second.back()));
-            } else if (const auto itemType = lType->FindItemType(source)) {
+            } else if (/* const auto itemType = */ lType->FindItemType(source)) {
                 result.emplace_back(std::move(it->second.front()), true, std::move(it->second.back()));
-            } else if (const auto itemType = rType->FindItemType(source)) {
+            } else if (/* const auto itemType = */ rType->FindItemType(source)) {
                 result.emplace_back(std::move(it->second.front()), false, std::move(it->second.back()));
             }
         } else {
             auto pass = ctx.NewAtom(join.Pos(), name);
             if (const auto& part = CutAlias(lAlias, name)) {
-                if (const auto itemType = lType->FindItemType(*part))
+                if (/* const auto itemType = */ lType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), true, std::move(pass));
             } else if (const auto& part = CutAlias(rAlias, name)) {
-                if (const auto itemType = rType->FindItemType(*part))
+                if (/* const auto itemType = */ rType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), false, std::move(pass));
-            } else if (const auto itemType = lType->FindItemType(name)) {
+            } else if (/* const auto itemType = */ lType->FindItemType(name)) {
                 result.emplace_back(pass, true, pass);
-            } else if (const auto itemType = rType->FindItemType(name)) {
+            } else if (/* const auto itemType = */ rType->FindItemType(name)) {
                 result.emplace_back(pass, false, pass);
             }
         }

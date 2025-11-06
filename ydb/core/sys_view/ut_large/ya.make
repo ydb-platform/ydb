@@ -7,6 +7,7 @@ TAG(ya:fat)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/base
     ydb/core/kqp/ut/common
     ydb/core/persqueue/ut/common
     ydb/core/testlib/pg

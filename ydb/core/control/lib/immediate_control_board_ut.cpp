@@ -1,5 +1,7 @@
 #include "immediate_control_board_impl.h"
 #include "immediate_control_board_wrapper.h"
+#include "dynamic_control_board_impl.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/mersenne64.h>
 #include <util/random/entropy.h>
@@ -89,42 +91,42 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
     }
 
     Y_UNIT_TEST(TestRegisterLocalControl) {
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+        TIntrusivePtr<TDynamicControlBoard> controlBoard(new TDynamicControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control2(2, 2, 2);
-        UNIT_ASSERT(Icb->RegisterLocalControl(control1, "localControl"));
-        UNIT_ASSERT(!Icb->RegisterLocalControl(control2, "localControl"));
+        UNIT_ASSERT(controlBoard->RegisterLocalControl(control1, "localControl"));
+        UNIT_ASSERT(!controlBoard->RegisterLocalControl(control2, "localControl"));
         UNIT_ASSERT_EQUAL(1, 1);
     }
 
     Y_UNIT_TEST(TestRegisterSharedControl) {
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+        TIntrusivePtr<TDynamicControlBoard> controlBoard(new TDynamicControlBoard);
         TControlWrapper control1(1, 1, 1);
         TControlWrapper control1_origin(control1);
         TControlWrapper control2(2, 2, 2);
         TControlWrapper control2_origin(control2);
-        Icb->RegisterSharedControl(control1, "sharedControl");
+        controlBoard->RegisterSharedControl(control1, "sharedControl");
         UNIT_ASSERT(control1.IsTheSame(control1_origin));
-        Icb->RegisterSharedControl(control2, "sharedControl");
+        controlBoard->RegisterSharedControl(control2, "sharedControl");
         UNIT_ASSERT(control2.IsTheSame(control1_origin));
     }
 
     Y_UNIT_TEST(TestParallelRegisterSharedControl) {
         void* (*parallelJob)(void*) = [](void *controlBoard) -> void *{
             for (ui64 i = 0; i < 10000; ++i) {
-                TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
+                TDynamicControlBoard *dcb = reinterpret_cast<TDynamicControlBoard *>(controlBoard);
                 TControlWrapper control1(1, 1, 1);
-                Icb->RegisterSharedControl(control1, "sharedControl");
+                dcb->RegisterSharedControl(control1, "sharedControl");
                 // Useless because running this test with --sanitize=thread cannot reveal
-                // race condition in Icb->RegisterLocalControl(...) without mutex
+                // race condition in dcb->RegisterLocalControl(...) without mutex
                 TControlWrapper control2(2, 2, 2);
                 TControlWrapper control2_origin(control2);
-                Icb->RegisterLocalControl(control2, "localControl");
+                dcb->RegisterLocalControl(control2, "localControl");
                 UNIT_ASSERT_EQUAL(control2, control2_origin);
             }
             return nullptr;
         };
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+        TIntrusivePtr<TDynamicControlBoard> Icb(new TDynamicControlBoard);
         TVector<THolder<TThread>> threads;
         threads.reserve(TEST_THREADS_CNT);
         for (ui64 i = 0; i < TEST_THREADS_CNT; ++i) {

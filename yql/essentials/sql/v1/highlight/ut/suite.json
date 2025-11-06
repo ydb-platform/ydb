@@ -23,6 +23,18 @@
     ["-123", "P#LLL"],
     ["SELECT 123l AS `Int64`, 0b01u AS `Uint32`, 0xFFul AS `Uint64`, 0o7ut AS `Uint8`, 456s AS `Int16`, 1.2345f AS `Float`;", "KKKKKK#_#LLLL#_#KK#_#QQQQQQQ#P#_#LLLLL#_#KK#_#QQQQQQQQ#P#_#LLLLLL#_#KK#_#QQQQQQQQ#P#_#LLLLL#_#KK#_#QQQQQQQ#P#_#LLLL#_#KK#_#QQQQQQQ#P#_#LLLLLLL#_#KK#_#QQQQQQQ#P"]
   ],
+  "Boolean": [
+    ["true", "LLLL"],
+    ["fAlSe", "LLLLL"]
+  ],
+  "Pragma": [
+    ["PRAGMA Debug", "KKKKKK#_#OOOOO"],
+    ["PRAGMA yt.Pool", "KKKKKK#_#OOOOOOO"],
+    ["PRAGMA Warning('*')", "KKKKKK#_#OOOOOOO#P#SSS#P"]
+  ],
+  "Hint": [
+    ["INSERT INTO t WITH TRUNCATE", "KKKKKK#_#KKKK#_#I#_#KKKK#_#KKKKKKKK"]
+  ],
   "Comment": [
     ["- select", "P#_#KKKKKK"],
     ["select -- select", "KKKKKK#_#CCCCCCCCC"],
@@ -47,11 +59,11 @@
     ["SELECT id, alias from users", "KKKKKK#_#II#P#_#IIIII#_#KKKK#_#IIIII"],
     ["INSERT INTO users (id, alias) VALUES (12, \"tester\")", "KKKKKK#_#KKKK#_#IIIII#_#P#II#P#_#IIIII#P#_#KKKKKK#_#P#LL#P#_#SSSSSSSS#P"],
     ["SELECT 123467, \"HeLLo, {name}!\", (1 + (5 * 1 / 0)), MIN(identifier) FROM `local/test/space/table` JOIN test;", "KKKKKK#_#LLLLLL#P#_#SSSSSSSSSSSSSSSS#P#_#P#L#_#P#_#P#L#_#P#_#L#_#P#_#L#P#P#P#_#FFF#P#IIIIIIIIII#P#_#KKKK#_#QQQQQQQQQQQQQQQQQQQQQQQQ#_#KKKK#_#IIII#P"],
-    ["SELECT Bool(phone) FROM customer", "KKKKKK#_#FFFF#P#IIIII#P#_#KKKK#_#IIIIIIII"]
+    ["SELECT Bool(phone) FROM customer", "KKKKKK#_#TTTT#P#IIIII#P#_#KKKK#_#IIIIIIII"]
   ],
   "TypeIdentifier": [
     ["Bool", "TTTT"],
-    ["Bool(value)", "FFFF#P#IIIII#P"]
+    ["Bool(value)", "TTTT#P#IIIII#P"]
   ],
   "Identifier": [
     ["test", "IIII"]
@@ -91,6 +103,7 @@
     ["`/cluster/database`", "QQQQQQQQQQQQQQQQQQQ"],
     ["`test`select", "QQQQQQ#KKKKKK"],
     ["`/cluster", "E#P#IIIIIII"],
-    ["`\uD83D\uDE00`", "QQQQQQ"]
+    ["`\uD83D\uDE00`", "QQQQQQ"],
+    ["@tmp", "QQQQ"]
   ]
 }

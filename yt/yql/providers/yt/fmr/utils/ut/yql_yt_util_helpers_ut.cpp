@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(UtilHelperTests) {
         TString inputYsonContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                                    "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n";
         auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
-        TYtTableRef testYtTable{.RichPath = richPath};
+        TYtTableRef testYtTable(richPath);
         std::unordered_map<TString, TString> inputTables{{NYT::NodeToCanonicalYsonString(NYT::PathToNode(richPath)), inputYsonContent}};
         std::unordered_map<TString, TString> outputTables;
 
@@ -37,17 +37,18 @@ Y_UNIT_TEST_SUITE(UtilHelperTests) {
         TString columnGroupsStr = "{\"a\"=[\"key\";\"fir_value\"];\"b\"=#}";
         auto parsedColumnGroupsSpec = GetColumnGroupsFromSpec(columnGroupsStr);
 
-        auto gottenSplittedYson = SplitYsonByColumnGroups(binaryYsonStr, parsedColumnGroupsSpec);
+        auto splittedYsonByColumnGroups = SplitYsonByColumnGroups(binaryYsonStr, parsedColumnGroupsSpec);
 
         std::unordered_map<TString, TString> expected = {
             {"a", "{\"key\"=\"075\";\"fir_value\"=\"abc\"};\n"},
             {"b", "{\"subkey\"=[\"1\"];\"sec_value\"={\"a\"=1;\"b\"=2}};\n"}
         };
+        auto gottenSplittedYson = splittedYsonByColumnGroups.SplittedYsonByColumnGroups;
         for (auto& [key, val]: expected) {
             UNIT_ASSERT(gottenSplittedYson.contains(key));
             UNIT_ASSERT_NO_DIFF(val, GetTextYson(gottenSplittedYson[key]));
         }
-
+        UNIT_ASSERT_VALUES_EQUAL(splittedYsonByColumnGroups.RecordsCount, 1);
     }
     Y_UNIT_TEST(SeveralYsonUnion) {
         TString firstYson = "{\"key\"=\"075\"};";
@@ -57,8 +58,14 @@ Y_UNIT_TEST_SUITE(UtilHelperTests) {
         std::for_each(ysonInputs.begin(), ysonInputs.end(), [] (TString& yson) {
             yson = GetBinaryYson(yson);
         });
-        auto gottenUnionBinaryYson = GetYsonUnion(ysonInputs);
-        TString expected = "{\"key\"=\"075\";\"subkey\"=[\"1\"];\"fir_value\"=\"abc\";\"sec_value\"={\"a\"=1;\"b\"=2}};\n";
-        UNIT_ASSERT_NO_DIFF(GetTextYson(gottenUnionBinaryYson), expected);
+
+        auto gottenFullUnionBinaryYson = GetYsonUnion(ysonInputs, {});
+        auto gottenUnionBinaryYsonWithColumns = GetYsonUnion(ysonInputs, {"key", "sec_value"});
+
+        TString expectedFullUnion = "{\"key\"=\"075\";\"subkey\"=[\"1\"];\"fir_value\"=\"abc\";\"sec_value\"={\"a\"=1;\"b\"=2}};\n";
+        TString expectedNeededColsUnion = "{\"key\"=\"075\";\"sec_value\"={\"a\"=1;\"b\"=2}};\n";
+
+        UNIT_ASSERT_NO_DIFF(GetTextYson(gottenFullUnionBinaryYson), expectedFullUnion);
+        UNIT_ASSERT_NO_DIFF(GetTextYson(gottenUnionBinaryYsonWithColumns), expectedNeededColsUnion);
     }
 }

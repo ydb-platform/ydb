@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.85.2)
+VERSION(1.0.0)
 
 LICENSE(MIT)
 
@@ -18,6 +18,7 @@ NO_LINT()
 NO_CHECK_IMPORTS(
     textual.__main__
     textual.demo.__main__
+    textual.demo._project_stargazer_updater
     textual.demo.demo_app
     textual.demo.home
     textual.drivers.win32
@@ -93,6 +94,7 @@ PY_SRCS(
     textual/command.py
     textual/constants.py
     textual/containers.py
+    textual/content.py
     textual/coordinate.py
     textual/css/__init__.py
     textual/css/_error_tools.py
@@ -117,6 +119,7 @@ PY_SRCS(
     textual/demo/__main__.py
     textual/demo/data.py
     textual/demo/demo_app.py
+    textual/demo/game.py
     textual/demo/home.py
     textual/demo/page.py
     textual/demo/projects.py
@@ -127,7 +130,6 @@ PY_SRCS(
     textual/document/_document_navigator.py
     textual/document/_edit.py
     textual/document/_history.py
-    textual/document/_languages.py
     textual/document/_syntax_aware_document.py
     textual/document/_wrapped_document.py
     textual/dom.py
@@ -191,9 +193,11 @@ PY_SRCS(
     textual/suggester.py
     textual/suggestions.py
     textual/system_commands.py
+    textual/theme.py
     textual/timer.py
     textual/types.py
     textual/validation.py
+    textual/visual.py
     textual/walk.py
     textual/widget.py
     textual/widgets/__init__.py
@@ -269,13 +273,13 @@ RESOURCE_FILES(
     textual/tree-sitter/highlights/java.scm
     textual/tree-sitter/highlights/javascript.scm
     textual/tree-sitter/highlights/json.scm
-    textual/tree-sitter/highlights/kotlin.scm
     textual/tree-sitter/highlights/markdown.scm
     textual/tree-sitter/highlights/python.scm
     textual/tree-sitter/highlights/regex.scm
     textual/tree-sitter/highlights/rust.scm
     textual/tree-sitter/highlights/sql.scm
     textual/tree-sitter/highlights/toml.scm
+    textual/tree-sitter/highlights/xml.scm
     textual/tree-sitter/highlights/yaml.scm
 )
 

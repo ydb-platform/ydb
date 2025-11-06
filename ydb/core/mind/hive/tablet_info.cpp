@@ -545,7 +545,7 @@ bool TTabletInfo::RestartsOften() const {
     return Statistics.RestartTimestampSize() >= Hive.GetTabletRestartsMaxCount();
 }
 
-void TTabletInfo::NotifyOnRestart(TString status, TSideEffects& sideEffects) {
+void TTabletInfo::NotifyOnRestart(const TString& status, TSideEffects& sideEffects) {
     for (auto actorId : ActorsToNotifyOnRestart) {
         sideEffects.Send(actorId, new TEvPrivate::TEvRestartComplete(GetFullTabletId(), status));
     }

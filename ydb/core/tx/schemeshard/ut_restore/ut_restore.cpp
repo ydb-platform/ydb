@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
@@ -22,6 +23,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
 
+#include <library/cpp/streams/zstd/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/hook/hook.h>
 
@@ -297,7 +299,8 @@ namespace {
         const TTypedScheme& typedScheme,
         const TVector<std::pair<TString, ui64>>& shardsConfig = {{"a", 1}},
         const TString& permissions = "",
-        const TString& metadata = R"({"version": 0})"
+        const TString& metadata = R"({"version": 1})",
+        ECompressionCodec codec = ECompressionCodec::None
     ) {
         TTestDataWithScheme result;
         result.Type = typedScheme.Type;
@@ -308,7 +311,7 @@ namespace {
         case EPathTypeTable:
             result.Scheme = typedScheme.Scheme;
             for (const auto& [keyPrefix, count] : shardsConfig) {
-                result.Data.emplace_back(GenerateTestData(keyPrefix, count));
+                result.Data.emplace_back(GenerateTestData(codec, keyPrefix, count));
             }
             break;
         case EPathTypeView:
@@ -2375,7 +2378,7 @@ value {
         env.TestWaitNotification(runtime, txId);
 
         const ui32 expected = data.Data.size() / batchSize + ui32(bool(data.Data.size() % batchSize));
-        UNIT_ASSERT(requests > expected);
+        UNIT_ASSERT_C(requests > expected, TStringBuilder() << "Expected to get more than " << expected << " requests, but got only " << requests);
         UNIT_ASSERT_VALUES_EQUAL(responses, expected);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
@@ -2656,6 +2659,199 @@ value {
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    size_t MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
+        const TStringBuf exportPrefix = "/test_bucket/Export123/";
+        NBackup::TEncryptionKey encryptionKey(key);
+
+        // Encode data lines
+        NBackup::TEncryptedFileSerializer serializer("ChaCha20-Poly1305", encryptionKey, NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::TableData, 0, 0));
+        TString resultEncryptedData;
+        size_t unencryptedDataSize = 0;
+        auto addToResult = [&](TStringBuf data, bool last) {
+            unencryptedDataSize += data.size();
+            TBuffer block = serializer.AddBlock(data, last);
+            resultEncryptedData.append(block.Data(), block.Size());
+        };
+
+        TString resultData;
+        size_t previousSerializePos = 0;
+        TStringOutput output(resultData);
+        IOutputStream* outputStream = &output;
+        std::optional<TZstdCompress> zstd;
+        if (compressed) {
+            zstd.emplace(&output);
+            outputStream = &*zstd;
+        }
+        size_t line = 0;
+        const TString path = compressed ? "001/data_00.csv.zst.enc" : "001/data_00.csv.enc";
+
+        TString bigStr = "X"; // in order not to import too many lines
+        bigStr *= 80;
+
+        Cerr << "Make import file. EncryptedBlockSize: " << encryptedBlockSize
+            << ", ResultFileSize: " << resultFileSize
+            << ", Compressed: " << compressed
+            << ", Path: " << path << Endl;
+
+        auto getNextResultBlock = [&]() {
+            zstd.reset(); // finalize zstd frame (if any)
+
+            TStringBuf block(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos);
+            previousSerializePos = resultData.size();
+
+            // Init new zstd frame
+            if (compressed) {
+                zstd.emplace(&output);
+                outputStream = &*zstd;
+            }
+
+            return block;
+        };
+
+        while (resultData.size() < resultFileSize) {
+            outputStream->Write(TStringBuilder() << ++line << ",\"Encrypted+hello+world+line+" << bigStr << line << "\"\n");
+
+            if (resultData.size() - previousSerializePos >= encryptedBlockSize) {
+                addToResult(getNextResultBlock(), false);
+            }
+        }
+        addToResult(getNextResultBlock(), !compressed /* last */);
+
+        // Handle also theoretical case: add zstd block with empty payload but not empty encoded data
+        if (compressed) {
+            addToResult(getNextResultBlock(), true);
+        }
+
+        Cerr << "Patched file with lines: " << line << Endl;
+        Cerr << "Patched file with size " << unencryptedDataSize << Endl;
+        Cerr << "Patched encrypted file with size " << resultEncryptedData.size() << Endl;
+        s3Mock.GetData()[TStringBuilder() << exportPrefix << path] = resultEncryptedData;
+
+        constexpr bool additionalCheck = true;
+        if (additionalCheck) {
+            // Check that we encoded correctly
+            auto [decodedData, decodedIV] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                encryptionKey,
+                TBuffer(resultEncryptedData.data(), resultEncryptedData.size()));
+
+            TBufferInput input(decodedData);
+            IInputStream* inputStream = &input;
+            std::optional<TZstdDecompress> zstdDecompressor;
+            if (compressed) {
+                zstdDecompressor.emplace(&input);
+                inputStream = &*zstdDecompressor;
+            }
+            size_t decodedLines = 0;
+            try {
+                while (true) {
+                    inputStream->ReadLine();
+                    ++decodedLines;
+                }
+            } catch (const std::exception&) { // end of line
+            }
+            UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
+        }
+        UNIT_ASSERT(line > 0);
+        return line;
+    }
+
+    TString PrintInProtoText(const NBackup::TEncryptionIV& iv) {
+        TString hex = iv.GetHexString();
+        TStringBuilder result;
+        UNIT_ASSERT_C(hex.size() % 2 == 0, hex.size());
+        for (size_t i = 0; i < hex.size(); i += 2) {
+            result << "\\x";
+            result << hex[i];
+            result << hex[i + 1];
+        }
+        return std::move(result);
+    }
+
+    // Test that checks different combinations of:
+    // - downloaded blocks size
+    // - decrypted blocks size
+    // - compression blocks size
+    void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed) {
+        TString key = "Cool very very secret rand key!!";
+        NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
+
+        TPortManager portManager;
+        const ui16 s3Port = portManager.GetPort();
+        TS3Mock::TSettings s3Settings(s3Port);
+        TS3Mock s3Mock(s3Settings);
+        s3Mock.Start();
+
+        const size_t lines = MakeBigEncryptedExport(s3Mock, key, iv, encryptedBlockSize, resultFileSize, compressed);
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(false));
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        ui64 txId = 100;
+
+        TString creationScheme = R"(
+            Name: "TestTable"
+            Columns { Name: "Key" Type: "Uint64" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["Key"]
+        )";
+        TestCreateTable(runtime, ++txId, "/MyRoot", creationScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = DescribePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+
+        NKikimrScheme::EStatus status = (NKikimrScheme::EStatus)TestRestore(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "TestTable"
+            TableDescription {
+                %s
+            }
+            S3Settings {
+                Endpoint: "localhost:%d"
+                Scheme: HTTP
+                Bucket: "test_bucket"
+                ObjectKeyPattern: "Export123/001"
+                UseVirtualAddressing: false
+                Limits {
+                    ReadBatchSize: %d
+                }
+            }
+            EncryptionSettings {
+                IV: "%s"
+                SymmetricKey {
+                    key: "%s"
+                }
+            }
+        )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
+        UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rows = CountRows(runtime, "/MyRoot/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(rows, lines);
+    }
+
+    Y_UNIT_TEST(ImportBigEncryptedFile) {
+        // Read big parts (8 KB), decode small parts
+        ImportBigEncryptedFile(315_B, 10_KB, 8_KB, false);
+
+        // Read big parts (8 KB), decode bigger parts
+        ImportBigEncryptedFile(9_KB, 20_KB, 8_KB, false);
+
+        // Read the whole file at a time
+        ImportBigEncryptedFile(1_KB, 5_KB, 8_KB, false);
+
+        // Read big parts (8 KB), decode small parts
+        ImportBigEncryptedFile(555_B, 10_KB, 8_KB, true);
+
+        // Read big parts (8 KB), decode bigger parts
+        ImportBigEncryptedFile(9_KB, 20_KB, 8_KB, true);
+
+        // Read the whole file at a time
+        ImportBigEncryptedFile(1_KB, 5_KB, 8_KB, true);
     }
 }
 
@@ -5238,9 +5434,19 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         std::function<void(TTestBasicRuntime&)> Checker;
     };
 
-    TGeneratedChangefeed GenChangefeed(ui64 num = 1) {
+    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&, const TString&, const TString&)>;
+
+    struct TTableWithChangefeeds {
+        TString TableName;
+        TString PkType;
+        ui64 ChangefeedCount;
+        SchemeFunction AddedScheme;
+        int MaxPartitions;
+    };
+
+    TGeneratedChangefeed GenChangefeed(ui64 num = 1, bool isPartitioningAvailable = true, const TString& tableName = "Table", int maxPartitions = 3) {
         const TString changefeedName = TStringBuilder() << "updates_feed" << num;
-        const auto changefeedPath = TStringBuilder() << "/" << changefeedName;
+        const TString changefeedPath = TStringBuilder() << "/" << tableName << "/" << changefeedName;
 
         const auto changefeedDesc = Sprintf(R"(
             name: "%s"
@@ -5249,12 +5455,12 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             state: STATE_ENABLED
         )", changefeedName.c_str());
 
-        const auto topicDesc = R"(
+        const auto topicDesc = Sprintf(R"(
             partitioning_settings {
-                min_active_partitions: 1
-                max_active_partitions: 1
+                min_active_partitions: 2
+                max_active_partitions: %d
                 auto_partitioning_settings {
-                    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+                    strategy: AUTO_PARTITIONING_STRATEGY_SCALE_UP
                     partition_write_speed {
                         stabilization_window {
                             seconds: 300
@@ -5297,60 +5503,79 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                     value: "data-streams"
                 }
             }
-        )";
+        )", maxPartitions);
 
         NAttr::TAttributes attr;
         attr.emplace(NAttr::EKeys::TOPIC_DESCRIPTION, topicDesc);
         return {
             {changefeedPath, GenerateTestData({EPathTypeCdcStream, changefeedDesc, std::move(attr)})},
-            [changefeedPath = TString(changefeedPath)](TTestBasicRuntime& runtime) {
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath, false, false, true), {
+            [changefeedPath = TString(changefeedPath), isPartitioningAvailable, maxPartitions](TTestBasicRuntime& runtime) {
+                TestDescribeResult(DescribePath(runtime, "/MyRoot" + changefeedPath, false, false, true), {
                     NLs::PathExist,
                 });
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table" + changefeedPath + "/streamImpl", false, false, true), {
-                    NLs::ConsumerExist("my_consumer")
+                TestDescribeResult(DescribePath(runtime, "/MyRoot" + changefeedPath + "/streamImpl", false, false, true), {
+                    NLs::ConsumerExist("my_consumer"),
+                    NLs::MinTopicPartitionsCountEqual(isPartitioningAvailable ? 2 : 1),
+                    NLs::MaxTopicPartitionsCountEqual(maxPartitions),
                 });
             }
         };
     }
 
-    TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(THashMap<TString, TTestDataWithScheme>& bucketContent, ui64 count = 1) {
+    TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
+        THashMap<TString, TTestDataWithScheme>& bucketContent,
+        const TTableWithChangefeeds& table)
+    {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
-        checkers.reserve(count);
-        for (ui64 i = 1; i <= count; ++i) {
-            auto genChangefeed = GenChangefeed(i);
+        checkers.reserve(table.ChangefeedCount);
+        bool isPartitioningAvailable = table.PkType == "UINT32" || table.PkType == "UINT64";
+        for (ui64 i = 1; i <= table.ChangefeedCount; ++i) {
+            const auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
             bucketContent.emplace(genChangefeed.Changefeed);
             checkers.push_back(genChangefeed.Checker);
         }
         return checkers;
     }
 
-    std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(THashMap<TString, TTestDataWithScheme>& bucketContent, const TString& permissions) {
-        const auto data = GenerateTestData(R"(
+    std::function<void(TTestBasicRuntime&)> AddedSchemeCommon(
+        THashMap<TString, TTestDataWithScheme>& bucketContent,
+        const TString& permissions,
+        const TString& pkType,
+        const TString& tableName = "Table")
+    {
+        const auto data = GenerateTestData(Sprintf(R"(
             columns {
               name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
+              type { optional_type { item { type_id: %s } } }
             }
             columns {
               name: "value"
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "key"
-        )", {{"a", 1}}, permissions);
+        )", pkType.c_str()), {{pkType == "UTF8" ? "a" : "", 1}}, permissions);
 
-        bucketContent.emplace("", data);
-        return [](TTestBasicRuntime& runtime) {
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+        bucketContent.emplace("/" + tableName, data);
+        return [&tableName](TTestBasicRuntime& runtime) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/" + tableName), {
                 NLs::PathExist
             });
         };
     }
 
-    std::function<void(TTestBasicRuntime&)> AddedScheme(THashMap<TString, TTestDataWithScheme>& bucketContent) {
-        return AddedSchemeCommon(bucketContent, "");
+    std::function<void(TTestBasicRuntime&)> AddedScheme(
+        THashMap<TString, TTestDataWithScheme>& bucketContent,
+        const TString& pkType,
+        const TString& tableName = "Table")
+    {
+        return AddedSchemeCommon(bucketContent, "", pkType, tableName);
     }
 
-    std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(THashMap<TString, TTestDataWithScheme>& bucketContent) {
+    std::function<void(TTestBasicRuntime&)> AddedSchemeWithPermissions(
+        THashMap<TString, TTestDataWithScheme>& bucketContent,
+        const TString& pkType,
+        const TString& tableName = "Table")
+    {
         const auto permissions = R"(
             actions {
               change_owner: "eve"
@@ -5374,34 +5599,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )";
-        return AddedSchemeCommon(bucketContent, permissions);
+        return AddedSchemeCommon(bucketContent, permissions, pkType, tableName);
     }
 
-    using SchemeFunction = std::function<std::function<void(TTestBasicRuntime&)>(THashMap<TString, TTestDataWithScheme>&)>;
-
-    void TestImportChangefeeds(ui64 countChangefeed, SchemeFunction addedScheme) {
+    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
 
-        const auto data = GenerateTestData(R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "key"
-        )");
+        THashMap<TString, TTestDataWithScheme> bucketContent;
+        TVector<std::function<void(TTestBasicRuntime&)>> allCheckers;
 
-        THashMap<TString, TTestDataWithScheme> bucketContent(countChangefeed + 1);
+        for (const auto& table : tables) {
+            auto checkerTable = table.AddedScheme(bucketContent, table.PkType, table.TableName);
+            allCheckers.push_back(checkerTable);
 
-        auto checkerTable = addedScheme(bucketContent);
-        auto checkersChangefeeds = GenChangefeeds(bucketContent, countChangefeed);
+            if (table.ChangefeedCount > 0) {
+                auto checkersChangefeeds = GenChangefeeds(bucketContent, table);
+                allCheckers.insert(allCheckers.end(), checkersChangefeeds.begin(), checkersChangefeeds.end());
+            }
+        }
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -5409,26 +5628,42 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
-        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )", port));
-        env.TestWaitNotification(runtime, txId);
+        for (const auto& table : tables) {
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                ImportFromS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_prefix: "%s"
+                    destination_path: "/MyRoot/%s"
+                  }
+                }
+            )", port, table.TableName.c_str(), table.TableName.c_str()));
+            env.TestWaitNotification(runtime, txId);
+        }
 
-        checkerTable(runtime);
-        for (const auto& checker : checkersChangefeeds) {
+        for (const auto& checker : allCheckers) {
             checker(runtime);
         }
     }
 
+    void TestImportChangefeeds(ui64 countChangefeed = 1, SchemeFunction addedScheme = AddedScheme, const TString& pkType = "UTF8", int maxPartitions = 3) {
+        TestImportChangefeeds({{"Table", pkType, countChangefeed, addedScheme, maxPartitions}});
+    }
+
     Y_UNIT_TEST(Changefeed) {
         TestImportChangefeeds(1, AddedScheme);
+    }
+
+    // Explicit specification of the number of partitions when creating CDC
+    // is possible only if the first component of the primary key
+    // of the source table is Uint32 or Uint64
+    Y_UNIT_TEST(ChangefeedWithPartitioning) {
+        TestImportChangefeeds(1, AddedScheme, "UINT32");
+    }
+
+    Y_UNIT_TEST(ChangefeedsWithPartitioning) {
+        TestImportChangefeeds(3, AddedScheme, "UINT64");
     }
 
     Y_UNIT_TEST(Changefeeds) {
@@ -5441,6 +5676,30 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(ChangefeedsWithTablePermissions) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
+    }
+
+    // Test for tables with similar prefixes
+    Y_UNIT_TEST(ChangefeedTablePrefixConflict) {
+        TestImportChangefeeds({
+            {"table", "UTF8", 0, AddedScheme, 3},         // table without changefeed
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // table_prefix with changefeed
+        });
+    }
+
+    // Test that identical changefeeds are correctly applied to their respective tables with common prefix
+    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffTableDesc) {
+        TestImportChangefeeds({
+            {"table", "UINT32", 1, AddedScheme, 3},       // partitioning available (table property)
+            {"table_prefix", "UTF8", 1, AddedScheme, 3}   // partitioning unavailable (table property)
+        });
+    }
+
+    // Test that changefeeds with different properties are created under their respective tables
+    Y_UNIT_TEST(ChangefeedTablePrefixConflictDiffChangefeedDesc) {
+        TestImportChangefeeds({
+            {"table", "UINT32", 1, AddedScheme, 3},       // max partitions 3 (changefeed property)
+            {"table_prefix", "UTF8", 1, AddedScheme, 4}   // max partitions 4 (changefeed property)
+        });
     }
 
     void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString& dbName, ui64 count, bool isShouldSuccess) {
@@ -5960,6 +6219,48 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
             primary_key: "key"
         )" , {{"a", 1}}, "", R"({"version": 1})");
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", Sprintf(DefaultImportSettings.data(), port));
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnBigCompressedTable) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )" , {{TString(1'000'000, 'a'), 10}}, "", R"({"version": 1})", ECompressionCodec::Zstd);
 
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());

@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-class TPKRangeFilter {
+class TPKRangeFilter: public TMoveOnly {
 private:
     TPredicateContainer PredicateFrom;
     TPredicateContainer PredicateTo;
@@ -16,11 +16,29 @@ private:
     }
 
 public:
+    TPKRangeFilter& operator=(TPKRangeFilter&& rhs) {
+        PredicateFrom = std::move(rhs.PredicateFrom);
+        PredicateTo = std::move(rhs.PredicateTo);
+        return *this;
+    }
+
+    TPKRangeFilter(TPKRangeFilter&& rhs)
+        : PredicateFrom([&]() {
+            return std::move(rhs.PredicateFrom);
+        }())
+        , PredicateTo([&]() {
+            return std::move(rhs.PredicateTo);
+        }()) {
+    }
+
     bool IsEmpty() const {
-        return PredicateFrom.IsEmpty() && PredicateTo.IsEmpty();
+        return PredicateFrom.IsAll() && PredicateTo.IsAll();
     }
 
     bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        if (PredicateFrom.IsAll() || PredicateTo.IsAll()) {
+            return false;
+        }
         return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
                PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
                PredicateFrom.IsSchemaEqualTo(pkSchema);
@@ -36,10 +54,8 @@ public:
 
     static TConclusion<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
 
-    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
-
     bool IsUsed(const TPortionInfo& info) const;
-    bool CheckPoint(const NArrow::TSimpleRow& point) const;
+    bool CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const;
 
     enum class EUsageClass {
         NoUsage,
@@ -47,7 +63,7 @@ public:
         FullUsage
     };
 
-    EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
+    EUsageClass GetUsageClass(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

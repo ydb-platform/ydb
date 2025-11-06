@@ -492,6 +492,13 @@ namespace NKikimr {
             ui32 hugeBlobOverhead = Config->HugeBlobOverhead;
             MetadataEntryPoint.SetHugeBlobOverhead(hugeBlobOverhead);
 
+            ui32 stepsBetweenPowersOf2 = Config->HugeBlobStepsBetweenPowersOf2;
+            if (IsTinyDisk) {
+                stepsBetweenPowersOf2 = TVDiskConfig::TinyDiskHugeBlobStepsBetweenPowersOf2;
+            }
+
+            bool enableTinyDisks = AppData(ctx)->FeatureFlags.GetEnableTinyDisks();
+
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
             };
@@ -508,7 +515,10 @@ namespace NKikimr {
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             hugeBlobOverhead,
+                            stepsBetweenPowersOf2,
+                            enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
+                            Config->GarbageThresholdToRunFullCompactionPerMille,
                             logFunc);
             } else {
                 // read existing one
@@ -529,8 +539,13 @@ namespace NKikimr {
                             Config->MilestoneHugeBlobInBytes,
                             Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             hugeBlobOverhead,
+                            stepsBetweenPowersOf2,
+                            enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
-                            lsn, entryPoint, logFunc);
+                            lsn,
+                            entryPoint,
+                            Config->GarbageThresholdToRunFullCompactionPerMille,
+                            logFunc);
             }
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
                 LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode);

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: fonttools
-Version: 4.59.2
+Version: 4.60.1
 Summary: Tools to manipulate font files
 Home-page: http://github.com/fonttools/fonttools
 Author: Just van Rossum
@@ -211,7 +211,11 @@ are required to unlock the extra features named "ufo", etc.
     for Python, which internally uses `NumPy <https://pypi.python.org/pypi/numpy>`__
     arrays and hence is very fast;
   * `munkres <https://pypi.python.org/pypi/munkres>`__: a pure-Python
-    module that implements the Hungarian or Kuhn-Munkres algorithm.
+    module that implements the Hungarian or Kuhn-Munkres algorithm. Slower than
+    SciPy, but useful for minimalistic systems where adding SciPy is undesirable.
+
+  This ensures both performance (via SciPy) and minimal footprint (via Munkres)
+  are possible.
 
   To plot the results to a PDF or HTML format, you also need to install:
 
@@ -387,6 +391,41 @@ Have fun!
 
 Changelog
 ~~~~~~~~~
+
+4.60.1 (released 2025-09-29)
+----------------------------
+
+- [ufoLib] Reverted accidental method name change in ``UFOReader.getKerningGroupConversionRenameMaps``
+  that broke compatibility with downstream projects like defcon (#3948, #3947, robotools/defcon#478).
+- [ufoLib] Added test coverage for ``getKerningGroupConversionRenameMaps`` method (#3950).
+- [subset] Don't try to subset BASE table; pass it through by default instead (#3949).
+- [subset] Remove empty BaseRecord entries in MarkBasePos lookups (#3897, #3892).
+- [subset] Add pruning for MarkLigPos and MarkMarkPos lookups (#3946).
+- [subset] Remove duplicate features when subsetting (#3945).
+- [Docs] Added documentation for the visitor module (#3944).
+
+4.60.0 (released 2025-09-17)
+----------------------------
+
+- [pointPen] Allow ``reverseFlipped`` parameter of ``DecomposingPointPen`` to take a ``ReverseFlipped``
+  enum value to control whether/how to reverse contour direction of flipped components, in addition to
+  the existing True/False. This allows to set ``ReverseFlipped.ON_CURVE_FIRST`` to ensure that
+  the decomposed outline starts with an on-curve point before being reversed, for better consistency
+  with other segment-oriented contour transformations. The change is backward compatible, and the
+  default behavior hasn't changed (#3934).
+- [filterPen] Added ``ContourFilterPointPen``, base pen for buffered contour operations, and
+  ``OnCurveStartPointPen`` filter to ensure contours start with an on-curve point (#3934).
+- [cu2qu] Fixed difference in cython vs pure-python complex division by real number (#3930).
+- [varLib.avar] Refactored and added some new sub-modules and scripts (#3926).
+  * ``varLib.avar.build`` module to build avar (and a missing fvar) binaries into a possibly empty TTFont,
+  * ``varLib.avar.unbuild`` module to print a .designspace snippet that would generate the same avar binary,
+  * ``varLib.avar.map`` module to take TTFont and do the mapping, in user/normalized space,
+  * ``varLib.avar.plan`` module moved from ``varLib.avarPlanner``.
+  The bare ``fonttools varLib.avar`` script is deprecated, in favour of ``fonttools varLib.avar.build`` (or ``unbuild``).
+- [interpolatable] Clarify ``linear_sum_assignment`` backend options and minimal dependency
+  usage (#3927).
+- [post] Speed up ``build_psNameMapping`` (#3923).
+- [ufoLib] Added typing annotations to fontTools.ufoLib (#3875).
 
 4.59.2 (released 2025-08-27)
 ----------------------------

@@ -2,6 +2,18 @@
 
 ## Version 24.4 {#24-4}
 
+### Version 24.4.4.15 {#24-4-4-15}
+
+Release date: September 19, 2025.
+
+#### Performance
+
+* Columns in `ORDER BY` statement are now considered by the optimizer when automatically selecting a secondary index. This optimization is limited to queries that reference only one table and do not include any `JOIN` operations with other tables.
+
+#### Bug Fixes
+
+* When receiving an `OperationAborted` error from S3, the export operation does not terminate with an error, but retries writing to S3.
+
 ### Version 24.4.4.13 {#24-4-4-13}
 
 Release date: July 29, 2025.
@@ -352,7 +364,7 @@ Release date: October 12, 2023.
 * Excluded unused messages and methods from `QueryService`.
 * Added sorting by `Rack` in /nodes in the `viewer backend`.
 * Fixed an error where sorting queries returned an error in descending order.
-* Improved interaction between `KQP` and `NodeWhiteboard`.
+* Improved interaction between `QP` and `NodeWhiteboard`.
 * Removed support for old parameter formats.
 * Fixed an error where `DefineBox` was not being applied to disks with a static group.
 * Fixed a `SIGSEGV` error in the dinnode during `CSV` import via `YDB CLI`.

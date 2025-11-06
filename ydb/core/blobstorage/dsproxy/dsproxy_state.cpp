@@ -187,7 +187,7 @@ namespace NKikimr {
         }
 
         TString details = TStringBuilder() << " GroupId# " << GroupId
-                << "UnconfiguredStateTs# " << UnconfiguredStateTs
+                << " UnconfiguredStateTs# " << UnconfiguredStateTs
                 << " UnconfiguredStateReason# " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
 
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
@@ -217,7 +217,7 @@ namespace NKikimr {
             return;
         }
         TString details = TStringBuilder() << " GroupId# " << GroupId
-                << "EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
+                << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs
                 << " NumUnconnectedDisks# " << NumUnconnectedDisks;
         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_PROXY,
                 "StateEstablishingSessions Wakeup TIMEOUT Marker# DSP12 " << details);

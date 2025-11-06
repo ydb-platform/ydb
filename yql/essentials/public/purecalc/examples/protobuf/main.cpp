@@ -97,10 +97,10 @@ void PrecompileExample(IProgramFactoryPtr factory) {
     }
 
     auto program = factory->MakePullStreamProgram(
-                TProtobufInputSpec<TInput>(),
-                TProtobufOutputSpec<TOutput>(),
-                prg,
-                ETranslationMode::Mkql);
+        TProtobufInputSpec<TInput>(),
+        TProtobufOutputSpec<TOutput>(),
+        prg,
+        ETranslationMode::Mkql);
 
     auto result = program->Apply(MakeInput());
 

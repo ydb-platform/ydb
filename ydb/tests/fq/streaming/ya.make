@@ -7,7 +7,7 @@ TEST_SRCS(
 )
 
 PY_SRCS(
-    base.py
+    conftest.py
 )
 
 SIZE(MEDIUM)

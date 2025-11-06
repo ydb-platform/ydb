@@ -3,6 +3,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/library/aclib/aclib.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
@@ -45,12 +46,14 @@ struct TEventWithDatabaseId : public TEventLocal<TEv, TEventType> {
 };
 
 struct TEvForgetScriptExecutionOperation : public TEventWithDatabaseId<TEvForgetScriptExecutionOperation, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperation> {
-    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    TEvForgetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , OperationId(id)
+        , UserSID(userSID)
     {}
 
     const NOperationId::TOperationId OperationId;
+    const std::optional<TString> UserSID;
 };
 
 struct TEvForgetScriptExecutionOperationResponse : public TEventLocal<TEvForgetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvForgetScriptExecutionOperationResponse> {
@@ -65,12 +68,15 @@ struct TEvForgetScriptExecutionOperationResponse : public TEventLocal<TEvForgetS
 };
 
 struct TEvGetScriptExecutionOperation : public TEventWithDatabaseId<TEvGetScriptExecutionOperation, TKqpScriptExecutionEvents::EvGetScriptExecutionOperation> {
-    TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    TEvGetScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , OperationId(id)
+        , UserSID(userSID)
     {}
 
-    NOperationId::TOperationId OperationId;
+    const NOperationId::TOperationId OperationId;
+    const std::optional<TString> UserSID;
+    bool CheckLeaseState = true;
 };
 
 struct TEvGetScriptExecutionOperationQueryResponse : public TEventLocal<TEvGetScriptExecutionOperationQueryResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationQueryResponse> {
@@ -80,15 +86,17 @@ struct TEvGetScriptExecutionOperationQueryResponse : public TEventLocal<TEvGetSc
 
     bool Ready = false;
     bool LeaseExpired = false;
+    TInstant LeaseDeadline;
     std::optional<EFinalizationStatus> FinalizationStatus;
     TActorId RunScriptActorId;
     TString ExecutionId;
     Ydb::StatusIds::StatusCode Status;
     NYql::TIssues Issues;
     Ydb::Query::ExecuteScriptMetadata Metadata;
-    bool RetryRequired = false;
+    bool WaitRetry = false;
     i64 LeaseGeneration = 0;
     bool StateSaved = false;
+    NKikimrKqp::TScriptExecutionRetryState RetryState;
 };
 
 struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptExecutionOperationResponse, TKqpScriptExecutionEvents::EvGetScriptExecutionOperationResponse> {
@@ -96,6 +104,9 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
         TMaybe<google::protobuf::Any> Metadata;
         bool Ready = false;
         bool StateSaved = false;
+        ui64 RetryCount = 0;
+        TInstant LastFailAt;
+        TInstant SuspendedUntil;
     };
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues)
@@ -104,6 +115,9 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
         , Issues(std::move(issues))
         , Metadata(std::move(info.Metadata))
         , StateSaved(info.StateSaved)
+        , RetryCount(info.RetryCount)
+        , LastFailAt(info.LastFailAt)
+        , SuspendedUntil(info.SuspendedUntil)
     {}
 
     TEvGetScriptExecutionOperationResponse(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
@@ -116,17 +130,22 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
     NYql::TIssues Issues;
     TMaybe<google::protobuf::Any> Metadata;
     bool StateSaved = false;
+    ui64 RetryCount = 0;
+    TInstant LastFailAt;
+    TInstant SuspendedUntil;
 };
 
 struct TEvListScriptExecutionOperations : public TEventWithDatabaseId<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {
-    TEvListScriptExecutionOperations(const TString& database, const ui64 pageSize, const TString& pageToken)
+    TEvListScriptExecutionOperations(const TString& database, const ui64 pageSize, const TString& pageToken, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , PageSize(pageSize)
         , PageToken(pageToken)
+        , UserSID(userSID)
     {}
 
-    ui64 PageSize;
-    TString PageToken;
+    const ui64 PageSize;
+    const TString PageToken;
+    const std::optional<TString> UserSID;
 };
 
 struct TEvListScriptExecutionOperationsResponse : public TEventLocal<TEvListScriptExecutionOperationsResponse, TKqpScriptExecutionEvents::EvListScriptExecutionOperationsResponse> {
@@ -172,12 +191,14 @@ struct TEvCheckAliveResponse : public TEventPB<TEvCheckAliveResponse, NKikimrKqp
 };
 
 struct TEvCancelScriptExecutionOperation : public TEventWithDatabaseId<TEvCancelScriptExecutionOperation, TKqpScriptExecutionEvents::EvCancelScriptExecutionOperation> {
-    TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id)
+    TEvCancelScriptExecutionOperation(const TString& database, const NOperationId::TOperationId& id, const std::optional<TString>& userSID)
         : TEventWithDatabaseId(database)
         , OperationId(id)
+        , UserSID(userSID)
     {}
 
-    NOperationId::TOperationId OperationId;
+    const NOperationId::TOperationId OperationId;
+    const std::optional<TString> UserSID;
 };
 
 struct TEvResetScriptExecutionRetriesResponse : public TEventLocal<TEvResetScriptExecutionRetriesResponse, TKqpScriptExecutionEvents::EvResetScriptExecutionRetriesResponse> {
@@ -281,7 +302,7 @@ struct TEvSaveScriptExternalEffectRequest : public TEventLocal<TEvSaveScriptExte
         TString Database;
 
         TString CustomerSuppliedId;
-        TString UserToken;
+        TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         std::vector<NKqpProto::TKqpExternalSink> Sinks;
         std::vector<TString> SecretNames;
     };
@@ -304,7 +325,7 @@ struct TEvSaveScriptExternalEffectResponse : public TEventLocal<TEvSaveScriptExt
 };
 
 struct TEvSaveScriptPhysicalGraphRequest : public TEventLocal<TEvSaveScriptPhysicalGraphRequest, TKqpScriptExecutionEvents::EvSaveScriptPhysicalGraphRequest> {
-    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph&& physicalGraph)
+    explicit TEvSaveScriptPhysicalGraphRequest(NKikimrKqp::TQueryPhysicalGraph physicalGraph)
         : PhysicalGraph(std::move(physicalGraph))
     {}
 
@@ -322,14 +343,16 @@ struct TEvSaveScriptPhysicalGraphResponse : public TEventLocal<TEvSaveScriptPhys
 };
 
 struct TEvGetScriptPhysicalGraphResponse : public TEventLocal<TEvGetScriptPhysicalGraphResponse, TKqpScriptExecutionEvents::EvGetScriptPhysicalGraphResponse> {
-    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, NYql::TIssues issues)
+    TEvGetScriptPhysicalGraphResponse(Ydb::StatusIds::StatusCode status, NKikimrKqp::TQueryPhysicalGraph&& physicalGraph, i64 generation, NYql::TIssues issues)
         : Status(status)
         , PhysicalGraph(std::move(physicalGraph))
+        , Generation(generation)
         , Issues(std::move(issues))
     {}
 
     Ydb::StatusIds::StatusCode Status;
     NKikimrKqp::TQueryPhysicalGraph PhysicalGraph;
+    i64 Generation = 0;
     NYql::TIssues Issues;
 };
 
@@ -386,7 +409,7 @@ struct TEvSaveScriptFinalStatusResponse : public TEventLocal<TEvSaveScriptFinalS
     bool OperationAlreadyFinalized = false;
     bool WaitRetry = false;
     TString CustomerSuppliedId;
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
     std::vector<TString> SecretNames;
     Ydb::StatusIds::StatusCode Status;

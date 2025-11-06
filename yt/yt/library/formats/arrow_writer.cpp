@@ -1,4 +1,5 @@
 #include "arrow_writer.h"
+#include "arrow_metadata_constants.h"
 
 #include "schemaless_writer_adapter.h"
 
@@ -23,6 +24,8 @@
 
 #include <library/cpp/yt/memory/range.h>
 
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h>
+
 #include <contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/generated/Schema.fbs.h>
 
@@ -34,6 +37,7 @@ using namespace NColumnConverters;
 using namespace NComplexTypes;
 using namespace NTableClient;
 using namespace NTzTypes;
+using namespace NYson;
 
 using namespace org::apache::arrow20;
 
@@ -52,6 +56,50 @@ struct TTypedBatchColumn
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TArrowSchemaType
+{
+public:
+    flatbuf::Type Type;
+    flatbuffers::Offset<void> Offset;
+    std::vector<flatbuffers::Offset<flatbuf::Field>> ChildrenFields;
+    std::vector<flatbuffers::Offset<flatbuf::KeyValue>> CustomMetadata;
+
+    TArrowSchemaType(
+        flatbuf::Type type,
+        flatbuffers::Offset<void> offset,
+        std::vector<flatbuffers::Offset<flatbuf::Field>> childrenFields = {},
+        std::vector<flatbuffers::Offset<flatbuf::KeyValue>> customMetadata = {})
+        : Type(type)
+        , Offset(offset)
+        , ChildrenFields(std::move(childrenFields))
+        , CustomMetadata(std::move(customMetadata))
+    { }
+};
+
+// Create non-dictionary field from |TArrowSchemaType|.
+flatbuffers::Offset<flatbuf::Field> CreateRegularField(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TArrowSchemaType& schemaType,
+    flatbuffers::Offset<flatbuffers::String> name,
+    bool nullable)
+{
+    return flatbuf::CreateField(
+        *flatbufBuilder,
+        name,
+        nullable,
+        schemaType.Type,
+        schemaType.Offset,
+        /*dictionary*/ 0,
+        schemaType.ChildrenFields.empty()
+            ? 0
+            : flatbufBuilder->CreateVector(schemaType.ChildrenFields.data(), schemaType.ChildrenFields.size()),
+        schemaType.CustomMetadata.empty()
+            ? 0
+            : flatbufBuilder->CreateVector(schemaType.CustomMetadata.data(), schemaType.CustomMetadata.size()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 constexpr i64 ArrowAlignment = 8;
 const TString AlignmentString(ArrowAlignment, 0);
 
@@ -62,7 +110,7 @@ flatbuffers::Offset<flatbuffers::String> SerializeString(
     return flatbufBuilder->CreateString(str.data(), str.length());
 }
 
-std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Offset<flatbuf::Field>>> SerializeTzType(
+TArrowSchemaType SerializeTzType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
     ESimpleLogicalValueType type,
     const TArrowFormatConfigPtr& arrowConfig)
@@ -114,26 +162,27 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         childrenOffset.push_back(std::move(tzNameField));
     }
 
-    return std::tuple(
+    return {
         flatbuf::Type_Struct_,
         flatbuf::CreateStruct_(*flatbufBuilder).Union(),
-        std::move(childrenOffset));
+        std::move(childrenOffset)
+    };
 }
 
-std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Offset<flatbuf::Field>>> SerializeColumnType(
+TArrowSchemaType SerializeLeafColumnType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TColumnSchema& schema,
+    ESimpleLogicalValueType simpleType,
     const TArrowFormatConfigPtr& arrowConfig)
 {
-    auto simpleType = CastToV1Type(schema.LogicalType()).first;
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
-            return std::tuple(
+            return {
                 flatbuf::Type_Null,
                 flatbuf::CreateNull(*flatbufBuilder)
                     .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                std::vector<flatbuffers::Offset<flatbuf::Field>>()
+            };
 
         case ESimpleLogicalValueType::Int64:
         case ESimpleLogicalValueType::Uint64:
@@ -143,84 +192,84 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
         case ESimpleLogicalValueType::Uint16:
         case ESimpleLogicalValueType::Int32:
         case ESimpleLogicalValueType::Uint32:
-            return std::tuple(
+            return {
                 flatbuf::Type_Int,
                 flatbuf::CreateInt(
                     *flatbufBuilder,
                     GetIntegralTypeBitWidth(simpleType),
                     IsIntegralTypeSigned(simpleType))
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Interval:
-            return std::tuple(
+            return {
                 flatbuf::Type_Int,
                 flatbuf::CreateInt(
                     *flatbufBuilder,
                     /*bitWidth*/ 64,
                     /*is_signed*/ true)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Date:
-            return std::tuple(
+            return {
                 flatbuf::Type_Date,
                 flatbuf::CreateDate(
                     *flatbufBuilder,
                     flatbuf::DateUnit_DAY)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Datetime:
-            return std::tuple(
+            return {
                 flatbuf::Type_Timestamp,
                 flatbuf::CreateTimestamp(
                     *flatbufBuilder,
                     flatbuf::TimeUnit_SECOND)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Timestamp:
-            return std::tuple(
+            return {
                 flatbuf::Type_Timestamp,
                 flatbuf::CreateTimestamp(
                     *flatbufBuilder,
                     flatbuf::TimeUnit_MICROSECOND)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Double:
-            return std::tuple(
+            return {
                 flatbuf::Type_FloatingPoint,
                 flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
                     flatbuf::Precision_DOUBLE)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Float:
-            return std::tuple(
+            return {
                 flatbuf::Type_FloatingPoint,
                 flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
                     flatbuf::Precision_SINGLE)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::Boolean:
-            return std::tuple(
+            return {
                 flatbuf::Type_Bool,
                 flatbuf::CreateBool(*flatbufBuilder)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Any:
-            return std::tuple(
+            return {
                 flatbuf::Type_Binary,
                 flatbuf::CreateBinary(*flatbufBuilder)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         case ESimpleLogicalValueType::TzDate:
         case ESimpleLogicalValueType::TzDatetime:
@@ -232,16 +281,200 @@ std::tuple<flatbuf::Type, flatbuffers::Offset<void>, std::vector<flatbuffers::Of
 
         case ESimpleLogicalValueType::Utf8:
         case ESimpleLogicalValueType::Json:
-            return std::tuple(
+            return {
                 flatbuf::Type_Utf8,
                 flatbuf::CreateUtf8(*flatbufBuilder)
-                    .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>());
+                    .Union()
+            };
 
         default:
-            THROW_ERROR_EXCEPTION("Column %v has type %Qlv that is not currently supported by Arrow encoder",
-                schema.GetDiagnosticNameString(),
+            THROW_ERROR_EXCEPTION("Type %Qlv is not currently supported by Arrow encoder",
                 simpleType);
+    }
+}
+
+TArrowSchemaType SerializeColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& arrowConfig);
+
+TArrowSchemaType SerializeStructColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TStructLogicalType& type,
+    const TArrowFormatConfigPtr& arrowConfig)
+{
+    const auto& fields = type.GetFields();
+
+    std::vector<flatbuffers::Offset<flatbuf::Field>> fieldOffsets;
+    fieldOffsets.reserve(fields.size());
+
+    for (const auto& [fieldName, fieldType] : fields) {
+        auto fieldOffset = CreateRegularField(
+            flatbufBuilder,
+            /*schemaType*/ SerializeColumnType(flatbufBuilder, fieldType, arrowConfig),
+            /*name*/ SerializeString(flatbufBuilder, fieldName),
+            fieldType->IsNullable());
+
+        fieldOffsets.push_back(fieldOffset);
+    }
+
+    std::vector<flatbuffers::Offset<flatbuf::KeyValue>> customFieldMetadata;
+
+    // Arrow struct cannot have zero fields, so we add a dummy field with null (NA) type and custom metadata.
+    if (fields.empty()) {
+        customFieldMetadata.push_back(flatbuf::CreateKeyValue(
+            *flatbufBuilder,
+            SerializeString(flatbufBuilder, YtTypeMetadataKey),
+            SerializeString(flatbufBuilder, YtTypeMetadataValueEmptyStruct)));
+
+        auto fieldOffset = flatbuf::CreateField(
+            *flatbufBuilder,
+            /*name*/ 0,
+            /*nullable*/ true,
+            flatbuf::Type_Null,
+            flatbuf::CreateNull(*flatbufBuilder).Union(),
+            /*dictionary*/ 0,
+            /*children*/ 0,
+            flatbufBuilder->CreateVector(customFieldMetadata.data(), customFieldMetadata.size()));
+
+        fieldOffsets.push_back(fieldOffset);
+    }
+
+    return {
+        flatbuf::Type_Struct_,
+        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        std::move(fieldOffsets),
+        std::move(customFieldMetadata)
+    };
+}
+
+TArrowSchemaType SerializeListColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TListLogicalType& type,
+    const TArrowFormatConfigPtr& arrowConfig)
+{
+    const auto& elementType = type.GetElement();
+
+    auto childOffset = CreateRegularField(
+        flatbufBuilder,
+        /*schemaType*/ SerializeColumnType(flatbufBuilder, elementType, arrowConfig),
+        /*name*/ 0,
+        elementType->IsNullable());
+
+    return {
+        flatbuf::Type_List,
+        flatbuf::CreateList(*flatbufBuilder).Union(),
+        {childOffset}
+    };
+}
+
+TArrowSchemaType SerializeDictColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TDictLogicalType& type,
+    const TArrowFormatConfigPtr& arrowConfig)
+{
+    const auto& keyType = type.GetKey();
+    const auto& valueType = type.GetValue();
+
+    std::vector<flatbuffers::Offset<flatbuf::Field>> pairElementsOffsets;
+    pairElementsOffsets.reserve(2);
+
+    for (const auto& subtype : {keyType, valueType}) {
+        auto elementOffset = CreateRegularField(
+            flatbufBuilder,
+            /*schemaType*/ SerializeColumnType(flatbufBuilder, subtype, arrowConfig),
+            /*name*/ 0,
+            subtype->IsNullable());
+
+        pairElementsOffsets.push_back(elementOffset);
+    }
+
+    // Arrow Map is stored as list of structs.
+    auto pairOffset = flatbuf::CreateField(
+        *flatbufBuilder,
+        /*name*/ 0,
+        /*nullable*/ false,
+        flatbuf::Type_Struct_,
+        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        /*dictionary*/ 0,
+        flatbufBuilder->CreateVector(pairElementsOffsets.data(), pairElementsOffsets.size()));
+
+    return {
+        flatbuf::Type_Map,
+        flatbuf::CreateMap(*flatbufBuilder).Union(),
+        {pairOffset}
+    };
+}
+
+// Since Arrow doesn't have optional<optional<T>>, we represent outer optional
+// as struct with a single element, similar to how YSON encodes these types.
+TArrowSchemaType SerializeOptionalColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TOptionalLogicalType& type,
+    const TArrowFormatConfigPtr& arrowConfig)
+{
+    const auto& elementType = type.GetElement();
+
+    // Add custom metadata to nested optional for parser.
+    std::vector<flatbuffers::Offset<flatbuf::KeyValue>> customFieldMetadata;
+    customFieldMetadata.push_back(flatbuf::CreateKeyValue(
+        *flatbufBuilder,
+        SerializeString(flatbufBuilder, YtTypeMetadataKey),
+        SerializeString(flatbufBuilder, YtTypeMetadataValueNestedOptional)));
+
+
+    auto elementOffset = CreateRegularField(
+        flatbufBuilder,
+        /*schemaType*/ SerializeColumnType(flatbufBuilder, elementType, arrowConfig),
+        /*name*/ 0,
+        elementType->IsNullable());
+
+    return {
+        flatbuf::Type_Struct_,
+        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        {elementOffset},
+        std::move(customFieldMetadata)
+    };
+}
+
+TArrowSchemaType SerializeColumnType(
+    flatbuffers::FlatBufferBuilder* flatbufBuilder,
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& arrowConfig)
+{
+    if (!arrowConfig->EnableComplexTypes) {
+        auto simpleType = CastToV1Type(type).first;
+        return SerializeLeafColumnType(flatbufBuilder, simpleType, arrowConfig);
+    }
+
+    auto denullifiedType = DenullifyLogicalType(type);
+
+    switch (denullifiedType->GetMetatype()) {
+        case ELogicalMetatype::Simple: {
+            auto simpleType = CastToV1Type(type).first;
+            return SerializeLeafColumnType(flatbufBuilder, simpleType, arrowConfig);
+        }
+
+        case ELogicalMetatype::Struct:
+            return SerializeStructColumnType(flatbufBuilder, denullifiedType->AsStructTypeRef(), arrowConfig);
+
+        case ELogicalMetatype::Optional:
+            // The underlying type is also optional.
+            return SerializeOptionalColumnType(flatbufBuilder, denullifiedType->AsOptionalTypeRef(), arrowConfig);
+
+        case ELogicalMetatype::List:
+            return SerializeListColumnType(flatbufBuilder, denullifiedType->AsListTypeRef(), arrowConfig);
+
+        case ELogicalMetatype::Dict:
+            return SerializeDictColumnType(flatbufBuilder, denullifiedType->AsDictTypeRef(), arrowConfig);
+
+        case ELogicalMetatype::Tagged:
+            // Denullified type should not contain tagged type.
+            YT_ABORT();
+
+        default:
+            THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
+                denullifiedType->GetMetatype());
     }
 }
 
@@ -432,10 +665,10 @@ void SerializeColumnPrologue(
     } else {
         context->AddFieldNode(
             column->ValueCount,
-            0);
+            /*nullCount*/ 0);
 
         context->AddBuffer(
-            0,
+            /*size*/ 0,
             [=] (TMutableRef /*dstRef*/) {
             });
     }
@@ -967,10 +1200,10 @@ void SerializeTzColumnImpl(
     auto addEmptyBitmap = [=] () {
         context->AddFieldNode(
             column->ValueCount,
-            0);
+            /*nullCount*/ 0);
 
         context->AddBuffer(
-            0,
+            /*size*/ 0,
             [=] (TMutableRef /*dstRef*/) {
             });
     };
@@ -1112,17 +1345,1033 @@ void SerializeBooleanColumn(
         });
 }
 
+void WriteNullBuffer(
+    TRecordBatchSerializationContext* context,
+    int length)
+{
+    context->AddFieldNode(
+        length,
+        /*nullCount*/ length);
+}
+
 void SerializeNullColumn(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context)
 {
+    WriteNullBuffer(context, typedColumn.Column->ValueCount);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTypedBlob
+    : public TBlob
+{
+public:
+    template <typename T>
+    void AppendValue(T value)
+    {
+        Append(&value, sizeof(T));
+    }
+
+    template <typename T>
+    T LastValue() const
+    {
+        T result;
+        ::memcpy(&result, End() - sizeof(T), sizeof(T));
+        return result;
+    }
+
+    template <typename T>
+    int ValueCount() const
+    {
+        return Size() / sizeof(T);
+    }
+};
+
+using TArrowWriterBuffer = std::variant<TTypedBlob, TBitmapOutput>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void CreateBuffersForSimpleType(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers)
+{
+    auto simpleType = CastToV1Type(type).first;
+
+    if (IsStringLikeType(simpleType)) {
+        // Buffer for offsets.
+        buffers.emplace_back(TTypedBlob());
+        auto& offsetsBuffer = std::get<TTypedBlob>(buffers.back());
+        offsetsBuffer.AppendValue<ui32>(0);
+
+        // Buffer for data.
+        buffers.emplace_back(TTypedBlob());
+
+        return;
+    }
+
+    if (IsTzType(type)) {
+        // Buffer for timestamp data.
+        buffers.emplace_back(TTypedBlob());
+        if (config->EnableTzIndex) {
+            // Buffer for timezone indices.
+            buffers.emplace_back(TTypedBlob());
+        } else {
+            // Buffer for timezone name offsets.
+            buffers.emplace_back(TTypedBlob());
+            auto& offsetsBuffer = std::get<TTypedBlob>(buffers.back());
+            offsetsBuffer.AppendValue<ui32>(0);
+            // Buffer for timezone name binary data.
+            buffers.emplace_back(TTypedBlob());
+        }
+        return;
+    }
+
+    switch (simpleType) {
+        case ESimpleLogicalValueType::Null:
+        case ESimpleLogicalValueType::Void:
+            // Do not append buffers for Arrow NA type.
+            break;
+
+        case ESimpleLogicalValueType::Boolean:
+            buffers.emplace_back(TBitmapOutput());
+            break;
+
+        default:
+            buffers.emplace_back(TTypedBlob());
+    }
+}
+
+void CreateBuffersForComplexType(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers)
+{
+    switch (type->GetMetatype()) {
+        case ELogicalMetatype::Simple:
+            CreateBuffersForSimpleType(type, config, buffers);
+            break;
+
+        case ELogicalMetatype::Optional:
+            // Buffer for validity bitmap.
+            buffers.emplace_back(TBitmapOutput());
+            CreateBuffersForComplexType(type->GetElement(), config, buffers);
+            break;
+
+        case ELogicalMetatype::List: {
+            // Buffer for offsets.
+            buffers.emplace_back(TTypedBlob());
+            auto& offsetsBuffer = std::get<TTypedBlob>(buffers.back());
+            offsetsBuffer.AppendValue<ui32>(0);
+
+            // Buffers for list elements.
+            CreateBuffersForComplexType(type->GetElement(), config, buffers);
+            break;
+        }
+
+        case ELogicalMetatype::Struct:
+            for (const auto& [fieldName, fieldType] : type->GetFields()) {
+                CreateBuffersForComplexType(fieldType, config, buffers);
+            }
+            break;
+
+        case ELogicalMetatype::Dict: {
+            // Buffer for offsets.
+            buffers.emplace_back(TTypedBlob());
+            auto& offsetsBuffer = std::get<TTypedBlob>(buffers.back());
+            offsetsBuffer.AppendValue<ui32>(0);
+
+            // Buffers for keys (part of struct).
+            CreateBuffersForComplexType(type->AsDictTypeRef().GetKey(), config, buffers);
+            // Buffers for values (part of struct).
+            CreateBuffersForComplexType(type->AsDictTypeRef().GetValue(), config, buffers);
+            break;
+        }
+
+        case ELogicalMetatype::Tagged:
+            CreateBuffersForComplexType(type->GetElement(), config, buffers);
+            break;
+
+        default:
+            THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
+                type->GetMetatype());
+    }
+}
+
+int CalculateSimpleTypeBufferIndexIncrement(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config)
+{
+    auto simpleType = CastToV1Type(type).first;
+
+    if (IsStringLikeType(simpleType)) {
+        // Offsets buffer and binary data buffer.
+        return 2;
+    }
+
+    if (IsTzType(type)) {
+        if (config->EnableTzIndex) {
+            // Timestamp values and timezone indices.
+            return 2;
+        } else {
+            // Timestamp values, timezone names offsets and timezone names binary data.
+            return 3;
+        }
+    }
+
+    switch (simpleType) {
+        case ESimpleLogicalValueType::Null:
+        case ESimpleLogicalValueType::Void:
+            // Null type has no physical storage.
+            return 0;
+
+        default:
+            // Value buffer.
+            return 1;
+    }
+}
+
+int CalculateBufferIndexIncrement(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config)
+{
+    switch (type->GetMetatype()) {
+        case ELogicalMetatype::Simple:
+            return CalculateSimpleTypeBufferIndexIncrement(type, config);
+
+        case ELogicalMetatype::Optional:
+            // Validity bitmap.
+            return 1 + CalculateBufferIndexIncrement(type->GetElement(), config);
+
+        case ELogicalMetatype::List:
+            // Offsets buffer.
+            return 1 + CalculateBufferIndexIncrement(type->GetElement(), config);
+
+        case ELogicalMetatype::Struct: {
+            int total = 0;
+            for (const auto& [fieldName, fieldType] : type->GetFields()) {
+                total += CalculateBufferIndexIncrement(fieldType, config);
+            }
+            return total;
+        }
+
+        case ELogicalMetatype::Dict: {
+            // Offsets buffer for list of pairs.
+            int total = 1;
+            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetKey(), config);
+            total += CalculateBufferIndexIncrement(type->AsDictTypeRef().GetValue(), config);
+            return total;
+        }
+
+        case ELogicalMetatype::Tagged:
+            return CalculateBufferIndexIncrement(type->GetElement(), config);
+
+        default:
+            THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
+                type->GetMetatype());
+    }
+}
+
+void AppendSimpleTypeToBuffer(
+    const TLogicalTypePtr& logicalType,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers,
+    int& currentBufferIndex,
+    TYsonPullParserCursor& cursor)
+{
+    auto simpleType = CastToV1Type(logicalType).first;
+
+    if (IsStringLikeType(simpleType)) {
+        auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+        auto& valueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+        auto string = cursor->UncheckedAsString();
+
+        valueBuffer.Append(string.Data(), string.Size());
+        offsetsBuffer.AppendValue<ui32>(valueBuffer.Size());
+
+        return;
+    }
+
+    if (IsTzType(logicalType)) {
+        auto stringData = cursor->UncheckedAsString();
+
+        auto writeTzType = [&]<ESimpleLogicalValueType TzType> {
+            constexpr ESimpleLogicalValueType UnderlyingDateType = GetUnderlyingDateType<TzType>();
+            using TInt = TUnderlyingTimestampIntegerType<UnderlyingDateType>;
+
+            auto [timestampValue, tzName] = ParseTzValue<TInt>(stringData);
+
+            auto& timestampValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+            timestampValueBuffer.AppendValue<TInt>(timestampValue);
+
+            if (config->EnableTzIndex) {
+                auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+                tzIndexValueBuffer.AppendValue<ui16>(GetTzIndex(tzName));
+            } else {
+                auto& tzNameOffsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+                auto& tzNameValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+                tzNameValueBuffer.Append(tzName.data(), tzName.size());
+                tzNameOffsetsBuffer.AppendValue<ui32>(tzNameValueBuffer.Size());
+            }
+        };
+
+        switch (simpleType) {
+#define TIMEZONE_CASE(ytType)                                                         \
+            case ESimpleLogicalValueType::ytType:                                     \
+                writeTzType.template operator()<ESimpleLogicalValueType::ytType>();   \
+                break;
+
+            TIMEZONE_CASE(TzDate)
+            TIMEZONE_CASE(TzDatetime)
+            TIMEZONE_CASE(TzTimestamp)
+            TIMEZONE_CASE(TzDate32)
+            TIMEZONE_CASE(TzDatetime64)
+            TIMEZONE_CASE(TzTimestamp64)
+#undef TIMEZONE_CASE
+
+            default:
+                // Not a timezone type.
+                YT_ABORT();
+        }
+
+        return;
+    }
+
+    if (simpleType == ESimpleLogicalValueType::Null || simpleType == ESimpleLogicalValueType::Void) {
+        return;
+    }
+
+    auto& buffer = buffers[currentBufferIndex++];
+
+    switch (simpleType) {
+#define NUMERIC_CASE(cppType, ysonType, ytType)                 \
+        case ESimpleLogicalValueType::ytType: {                 \
+            auto value = cursor->UncheckedAs<ysonType>();       \
+            auto& valueBuffer = std::get<TTypedBlob>(buffer);   \
+            valueBuffer.AppendValue<cppType>(value);            \
+            break;                                              \
+        }
+
+        NUMERIC_CASE(i8, i64, Int8)
+        NUMERIC_CASE(i16, i64, Int16)
+        NUMERIC_CASE(i32, i64, Int32)
+        NUMERIC_CASE(i64, i64, Int64)
+        NUMERIC_CASE(ui8, ui64, Uint8)
+        NUMERIC_CASE(ui16, ui64, Uint16)
+        NUMERIC_CASE(ui32, ui64, Uint32)
+        NUMERIC_CASE(ui64, ui64, Uint64)
+        NUMERIC_CASE(i64, i64, Interval)
+        NUMERIC_CASE(double, double, Double)
+        NUMERIC_CASE(float, double, Float)
+#undef NUMERIC_CASE
+
+#define DATETIME_CASE(cppType, ytType)                                                              \
+        case ESimpleLogicalValueType::ytType: {                                                     \
+            auto value = cursor->UncheckedAsUint64();                                               \
+            if (value > std::numeric_limits<cppType>::max()) {                                      \
+                THROW_ERROR_EXCEPTION(                                                              \
+                    "Date value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)",   \
+                    value,                                                                          \
+                    std::numeric_limits<cppType>::max());                                           \
+            }                                                                                       \
+            auto& valueBuffer = std::get<TTypedBlob>(buffer);                                       \
+            valueBuffer.AppendValue<cppType>(value);                                                \
+            break;                                                                                  \
+        }
+
+        DATETIME_CASE(i32, Date)
+        DATETIME_CASE(i64, Datetime)
+        DATETIME_CASE(i64, Timestamp)
+#undef DATETIME_CASE
+
+        case ESimpleLogicalValueType::Boolean: {
+            auto& bitmapBuffer = std::get<TBitmapOutput>(buffer);
+            bitmapBuffer.Append(cursor->UncheckedAsBoolean());
+            break;
+        }
+
+        default:
+            THROW_ERROR_EXCEPTION("Column has unexpected nested type %Qlv", simpleType);
+    }
+}
+
+void AppendNullSimpleTypeToBuffer(
+    const TLogicalTypePtr& logicalType,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers,
+    int& currentBufferIndex)
+{
+    auto simpleType = CastToV1Type(logicalType).first;
+
+    if (IsStringLikeType(simpleType)) {
+        auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+        auto& valueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+        offsetsBuffer.AppendValue<ui32>(valueBuffer.Size());
+
+        return;
+    }
+
+    if (IsTzType(logicalType)) {
+        auto writeTzType = [&]<ESimpleLogicalValueType TzType> {
+            constexpr ESimpleLogicalValueType UnderlyingDateType = GetUnderlyingDateType<TzType>();
+            using TInt = TUnderlyingTimestampIntegerType<UnderlyingDateType>;
+
+            auto& timestampValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+            timestampValueBuffer.AppendValue<TInt>(0);
+
+            if (config->EnableTzIndex) {
+                auto& tzIndexValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+                tzIndexValueBuffer.AppendValue<ui16>(0);
+            } else {
+                auto& tzNameOffsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+                auto& tzNameValueBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+                tzNameOffsetsBuffer.AppendValue<ui32>(tzNameValueBuffer.Size());
+            }
+        };
+
+        switch (simpleType) {
+#define TIMEZONE_CASE(ytType)                                                         \
+            case ESimpleLogicalValueType::ytType:                                     \
+                writeTzType.template operator()<ESimpleLogicalValueType::ytType>();   \
+                break;
+
+            TIMEZONE_CASE(TzDate)
+            TIMEZONE_CASE(TzDatetime)
+            TIMEZONE_CASE(TzTimestamp)
+            TIMEZONE_CASE(TzDate32)
+            TIMEZONE_CASE(TzDatetime64)
+            TIMEZONE_CASE(TzTimestamp64)
+#undef TIMEZONE_CASE
+
+            default:
+                // Not a timezone type.
+                YT_ABORT();
+        }
+
+        return;
+    }
+
+    if (simpleType == ESimpleLogicalValueType::Null || simpleType == ESimpleLogicalValueType::Void) {
+        return;
+    }
+
+    auto& buffer = buffers[currentBufferIndex++];
+
+    switch (simpleType) {
+#define NUMERIC_CASE(cppType, ytType)                           \
+        case ESimpleLogicalValueType::ytType: {                 \
+            auto& valueBuffer = std::get<TTypedBlob>(buffer);   \
+            valueBuffer.AppendValue<cppType>(0);                \
+            break;                                              \
+        }
+
+        NUMERIC_CASE(i8, Int8)
+        NUMERIC_CASE(i16, Int16)
+        NUMERIC_CASE(i32, Int32)
+        NUMERIC_CASE(i64, Int64)
+        NUMERIC_CASE(ui8, Uint8)
+        NUMERIC_CASE(ui16, Uint16)
+        NUMERIC_CASE(ui32, Uint32)
+        NUMERIC_CASE(ui64, Uint64)
+        NUMERIC_CASE(i64, Interval)
+        NUMERIC_CASE(double, Double)
+        NUMERIC_CASE(float, Float)
+        NUMERIC_CASE(i32, Date)
+        NUMERIC_CASE(i64, Datetime)
+        NUMERIC_CASE(i64, Timestamp)
+#undef NUMERIC_CASE
+
+        case ESimpleLogicalValueType::Boolean: {
+            auto& bitmapBuffer = std::get<TBitmapOutput>(buffer);
+            bitmapBuffer.Append(false);
+            break;
+        }
+
+        default:
+            THROW_ERROR_EXCEPTION("Column has unexpected nested type %Qlv", simpleType);
+    }
+}
+
+void FillBuffersForComplexTypeWithNulls(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers,
+    int& currentBufferIndex)
+{
+    switch (type->GetMetatype()) {
+        case ELogicalMetatype::Simple:
+            AppendNullSimpleTypeToBuffer(type, config, buffers, currentBufferIndex);
+            break;
+
+        case ELogicalMetatype::Optional: {
+            auto& validityBitmapBuffer = std::get<TBitmapOutput>(buffers[currentBufferIndex++]);
+            // The value of this bit should be irrelevant.
+            validityBitmapBuffer.Append(false);
+
+            FillBuffersForComplexTypeWithNulls(
+                type->GetElement(),
+                config,
+                buffers,
+                currentBufferIndex);
+            break;
+        }
+
+        case ELogicalMetatype::List:
+        case ELogicalMetatype::Dict: {
+            auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+
+            ui32 previousOffset = offsetsBuffer.LastValue<ui32>();
+            offsetsBuffer.AppendValue<ui32>(previousOffset);
+
+            currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
+            break;
+        }
+
+        case ELogicalMetatype::Struct:
+            for (const auto& field : type->GetFields()) {
+                FillBuffersForComplexTypeWithNulls(
+                    field.Type,
+                    config,
+                    buffers,
+                    currentBufferIndex);
+            }
+            break;
+
+        case ELogicalMetatype::Tagged:
+            FillBuffersForComplexTypeWithNulls(
+                type->GetElement(),
+                config,
+                buffers,
+                currentBufferIndex);
+            break;
+
+        default:
+            THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
+                type->GetMetatype());
+    }
+}
+
+void FillBuffersForComplexType(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers,
+    int& currentBufferIndex,
+    TYsonPullParserCursor& cursor)
+{
+    switch (type->GetMetatype()) {
+        case ELogicalMetatype::Simple: {
+            AppendSimpleTypeToBuffer(type, config, buffers, currentBufferIndex, cursor);
+            cursor.Next();
+
+            break;
+        }
+
+        case ELogicalMetatype::Optional: {
+            // See https://ytsaurus.tech/docs/user-guide/storage/data-types#yson_optional
+            // for specifics of how optional<T> is encoded in YSON.
+
+            auto& validityBitmapBuffer = std::get<TBitmapOutput>(buffers[currentBufferIndex++]);
+            const auto& subtype = type->GetElement();
+
+            if (cursor.GetCurrent().GetType() == EYsonItemType::EntityValue) {
+                // Type is optional<T>.
+                // YSON is "#".
+                validityBitmapBuffer.Append(false);
+                cursor.Next();
+                FillBuffersForComplexTypeWithNulls(
+                    subtype,
+                    config,
+                    buffers,
+                    currentBufferIndex);
+            } else if (subtype->IsNullable()) {
+                // Type is optional<optional<T>>.
+                // YSON is "[...]" (possibly "[#]").
+                validityBitmapBuffer.Append(true);
+                cursor.ParseList([&](TYsonPullParserCursor* cursor) {
+                    FillBuffersForComplexType(
+                        subtype,
+                        config,
+                        buffers,
+                        currentBufferIndex,
+                        *cursor);
+                });
+            } else {
+                // Type is optional<T>, T is required.
+                // YSON is "...".
+                validityBitmapBuffer.Append(true);
+                FillBuffersForComplexType(
+                    subtype,
+                    config,
+                    buffers,
+                    currentBufferIndex,
+                    cursor);
+            }
+            break;
+        }
+
+        case ELogicalMetatype::List:
+        case ELogicalMetatype::Dict: {
+            auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
+            int elementCount = 0;
+
+            // For list-like types, we may traverse corresponding buffers
+            // more than once (|elementCount > 1|) or never (|elementCount == 0|).
+
+            // Save the starting index.
+            int initialBufferIndex = currentBufferIndex;
+
+            if (type->GetMetatype() == ELogicalMetatype::List) {
+                const auto& listType = type->GetElement();
+                cursor.ParseList([&](TYsonPullParserCursor* cursor) {
+                    // Restore the starting index.
+                    currentBufferIndex = initialBufferIndex;
+
+                    FillBuffersForComplexType(
+                        listType,
+                        config,
+                        buffers,
+                        currentBufferIndex,
+                        *cursor);
+
+                    elementCount++;
+                    // If this point is reached, |currentBufferIndex| now contains correct final value.
+                    // Otherwise |elementCount == 0| and we need to manually advance it later.
+                });
+            } else {
+                const auto& keyType = type->AsDictTypeRef().GetKey();
+                const auto& valueType = type->AsDictTypeRef().GetValue();
+                cursor.ParseList([&](TYsonPullParserCursor* cursor) {
+                    // Same as for List, but now underlying list element is a struct.
+                    currentBufferIndex = initialBufferIndex;
+
+                    bool consumedKey = false;
+                    cursor->ParseList([&](TYsonPullParserCursor* cursor) {
+                        FillBuffersForComplexType(
+                            consumedKey ? valueType : keyType,
+                            config,
+                            buffers,
+                            currentBufferIndex,
+                            *cursor);
+                        consumedKey = true;
+                    });
+
+                    elementCount++;
+                });
+            }
+
+            if (elementCount == 0) {
+                // |currentBufferIndex| is unchanged, manually advance it.
+                currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
+            }
+
+            ui32 previousOffset = offsetsBuffer.LastValue<ui32>();
+            offsetsBuffer.AppendValue<ui32>(previousOffset + elementCount);
+
+            break;
+        }
+
+        case ELogicalMetatype::Struct: {
+            const auto& fields = type->GetFields();
+            int fieldIndex = 0;
+
+            cursor.ParseList([&](TYsonPullParserCursor* cursor) {
+                // Assume positional struct version
+                // (https://ytsaurus.tech/docs/ru/user-guide/storage/data-types#yson_struct).
+                const auto& field = fields[fieldIndex++];
+                FillBuffersForComplexType(
+                    field.Type,
+                    config,
+                    buffers,
+                    currentBufferIndex,
+                    *cursor);
+            });
+
+            break;
+        }
+
+        case ELogicalMetatype::Tagged:
+            FillBuffersForComplexType(
+                type->GetElement(),
+                config,
+                buffers,
+                currentBufferIndex,
+                cursor);
+            break;
+
+        default:
+            THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
+                type->GetMetatype());
+    }
+}
+
+void WriteEmptyValidityBitmap(
+    TRecordBatchSerializationContext* context,
+    int length)
+{
+    context->AddFieldNode(
+        length,
+        /*nullCount*/ 0);
+
+    context->AddBuffer(
+        /*size*/ 0,
+        [] (TMutableRef /*dstRef*/) {
+        });
+}
+
+void WriteBufferFromTypedBlob(
+    TRecordBatchSerializationContext* context,
+    const std::vector<TArrowWriterBuffer>& buffers,
+    int bufferIndex)
+{
+    const auto& buffer = std::get<TTypedBlob>(buffers[bufferIndex]);
+
+    context->AddBuffer(
+        buffer.Size(),
+        [=] (TMutableRef dstRef) {
+            // |TTypedBlob| may use small object optimization, thus |buffer.Begin()|
+            // may become invalid due to vector reallocation.
+            const auto& buffer = std::get<TTypedBlob>(buffers[bufferIndex]);
+            ::memcpy(
+                dstRef.Begin(),
+                buffer.Begin(),
+                buffer.Size());
+        });
+}
+
+void WriteBufferFromBitmapOutput(
+    TRecordBatchSerializationContext* context,
+    const std::vector<TArrowWriterBuffer>& buffers,
+    int bufferIndex)
+{
+    const auto& buffer = std::get<TBitmapOutput>(buffers[bufferIndex]);
+    int byteCount = GetBitmapByteSize(buffer.GetBitSize());
+
+    context->AddBuffer(
+        byteCount,
+        [=] (TMutableRef dstRef) {
+            // |TBitmapOutput| may use small object optimization, thus |buffer.GetData()|
+            // may become invalid due to vector reallocation.
+            const auto& buffer = std::get<TBitmapOutput>(buffers[bufferIndex]);
+            ::memcpy(
+                dstRef.Begin(),
+                buffer.GetData(),
+                byteCount);
+        });
+}
+
+void WriteValidityBitmapFromBitmapOutput(
+    TRecordBatchSerializationContext* context,
+    const std::vector<TArrowWriterBuffer>& buffers,
+    int bufferIndex)
+{
+    const auto& buffer = std::get<TBitmapOutput>(buffers[bufferIndex]);
+    int length = buffer.GetBitSize();
+    int byteCount = GetBitmapByteSize(length);
+
+    TRef bitmap(buffer.GetData(), byteCount);
+    int nullCount = length - CountOnesInBitmap(bitmap, /*startIndex*/ 0, /*endIndex*/ length);
+
+    if (nullCount == 0) {
+        WriteEmptyValidityBitmap(context, length);
+        return;
+    }
+
+    context->AddFieldNode(
+        length,
+        nullCount);
+
+    context->AddBuffer(
+        byteCount,
+        [=] (TMutableRef dstRef) {
+            // |TBitmapOutput| may use small object optimization, thus |buffer.GetData()|
+            // may become invalid due to vector reallocation.
+            const auto& buffer = std::get<TBitmapOutput>(buffers[bufferIndex]);
+            ::memcpy(
+                dstRef.Begin(),
+                buffer.GetData(),
+                byteCount);
+        });
+}
+
+void WriteBuffersForComplexType(
+    const TLogicalTypePtr& type,
+    TRecordBatchSerializationContext* context,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers,
+    int& currentBufferIndex,
+    bool shouldWriteValidityBitmap,
+    int elementCount)
+{
+    if (shouldWriteValidityBitmap && type->GetMetatype() != ELogicalMetatype::Tagged) {
+        if (type->GetMetatype() == ELogicalMetatype::Optional) {
+            WriteValidityBitmapFromBitmapOutput(context, buffers, currentBufferIndex);
+        } else {
+            if (type->GetMetatype() == ELogicalMetatype::Simple && CastToV1Type(type).first == ESimpleLogicalValueType::Null) {
+                // Null count in validity bitmap for type Null should be equal to |elementCount|.
+                WriteNullBuffer(context, elementCount);
+            } else {
+                WriteEmptyValidityBitmap(context, elementCount);
+            }
+        }
+    }
+
+    switch (type->GetMetatype()) {
+        case ELogicalMetatype::Simple: {
+            auto simpleType = CastToV1Type(type).first;
+            if (IsStringLikeType(simpleType)) {
+                const auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex]);
+
+                YT_VERIFY(elementCount + 1 == offsetsBuffer.ValueCount<ui32>());
+
+                // Write offsets buffer.
+                WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+                // Write value buffer.
+                WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+                break;
+            }
+
+            if (IsTzType(type)) {
+                WriteEmptyValidityBitmap(context, elementCount);
+
+                // Write timestamp values buffer.
+                WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+
+                WriteEmptyValidityBitmap(context, elementCount);
+
+                if (config->EnableTzIndex) {
+                    // Write timezone indices buffer.
+                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+                } else {
+                    // Write timezone name offsets buffer.
+                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+                    // Write timezone name binary data buffer.
+                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+                }
+
+                break;
+            }
+
+            switch (simpleType) {
+                case ESimpleLogicalValueType::Null:
+                case ESimpleLogicalValueType::Void:
+                    // Physical buffer is not needed for type Null.
+                    break;
+
+                case ESimpleLogicalValueType::Boolean:
+                    // Write value bitmap.
+                    WriteBufferFromBitmapOutput(context, buffers, currentBufferIndex++);
+                    break;
+
+                default:
+                    // Write value buffer.
+                    WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+            }
+            break;
+        }
+
+        case ELogicalMetatype::Optional:
+            currentBufferIndex++;
+            WriteBuffersForComplexType(
+                type->GetElement(),
+                context,
+                config,
+                buffers,
+                currentBufferIndex,
+                /*shouldWriteValidityBitmap*/ type->GetElement()->IsNullable(),
+                elementCount);
+            break;
+
+        case ELogicalMetatype::List: {
+            const auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex]);
+
+            YT_VERIFY(elementCount + 1 == offsetsBuffer.ValueCount<ui32>());
+
+            // Write offsets buffer.
+            WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+
+            WriteBuffersForComplexType(
+                type->GetElement(),
+                context,
+                config,
+                buffers,
+                currentBufferIndex,
+                /*shouldWriteValidityBitmap*/ true,
+                offsetsBuffer.LastValue<ui32>());
+            break;
+        }
+
+        case ELogicalMetatype::Struct:
+            for (const auto& [fieldName, fieldType] : type->GetFields()) {
+                WriteBuffersForComplexType(
+                    fieldType,
+                    context,
+                    config,
+                    buffers,
+                    currentBufferIndex,
+                    /*shouldWriteValidityBitmap*/ true,
+                    elementCount);
+            }
+
+            if (type->GetFields().empty()) {
+                // Write empty validity bitmap for a dummy null field (value buffer is omitted).
+                WriteNullBuffer(context, elementCount);
+            }
+
+            break;
+
+        case ELogicalMetatype::Dict: {
+            const auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex]);
+
+            YT_VERIFY(elementCount + 1 == offsetsBuffer.ValueCount<ui32>());
+
+            // Write offsets buffer.
+            WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
+
+            int flattenedElementCount = offsetsBuffer.LastValue<ui32>();
+
+            WriteEmptyValidityBitmap(context, flattenedElementCount);
+
+            const auto& keyType = type->AsDictTypeRef().GetKey();
+            const auto& valueType = type->AsDictTypeRef().GetValue();
+
+            for (const auto& subtype : {keyType, valueType}) {
+                WriteBuffersForComplexType(
+                    subtype,
+                    context,
+                    config,
+                    buffers,
+                    currentBufferIndex,
+                    /*shouldWriteValidityBitmap*/ true,
+                    flattenedElementCount);
+            }
+            break;
+        }
+
+        case ELogicalMetatype::Tagged:
+            WriteBuffersForComplexType(
+                type->GetElement(),
+                context,
+                config,
+                buffers,
+                currentBufferIndex,
+                shouldWriteValidityBitmap,
+                elementCount);
+            break;
+
+        default:
+            THROW_ERROR_EXCEPTION("Complex type %Qlv is not yet supported with Arrow complex types enabled",
+                type->GetMetatype());
+    }
+}
+
+void SerializeComplexTypeColumn(
+    const TTypedBatchColumn& typedColumn,
+    TRecordBatchSerializationContext* context,
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers)
+{
+    int initialBufferIndex = buffers.size();
+    CreateBuffersForComplexType(typedColumn.Type, config, buffers);
+
+    const auto* column = typedColumn.Column;
+    YT_VERIFY(column->Values);
+    YT_VERIFY(column->Values->BaseValue == 0);
+    YT_VERIFY(column->Values->BitWidth == 32);
+    YT_VERIFY(column->Values->ZigZagEncoded);
+    YT_VERIFY(column->Strings);
+    YT_VERIFY(column->Strings->AvgLength);
+    YT_VERIFY(!column->Rle);
+
+    auto startIndex = column->StartIndex;
+    auto endIndex = startIndex + column->ValueCount;
+    auto stringData = column->Strings->Data;
+    auto avgLength = *column->Strings->AvgLength;
+
+    auto encodedOffsets = column->GetTypedValues<ui32>();
+    std::vector<ui32> offsets(column->ValueCount + 1);
+
+    DecodeStringOffsets(
+        encodedOffsets,
+        avgLength,
+        startIndex,
+        endIndex,
+        TMutableRange(offsets));
+
+    auto currentStringData = stringData.Data();
+
+    for (int rowOffset = 0; rowOffset < column->ValueCount; ++rowOffset) {
+        int currentBufferIndex = initialBufferIndex;
+
+        if (offsets[rowOffset] != offsets[rowOffset + 1]) {
+            TString ysonString(
+                currentStringData + offsets[rowOffset],
+                currentStringData + offsets[rowOffset + 1]);
+
+            TStringInput input(ysonString);
+            TYsonPullParser parser(&input, EYsonType::Node);
+            TYsonPullParserCursor cursor = &parser;
+
+            FillBuffersForComplexType(
+                typedColumn.Type,
+                config,
+                buffers,
+                currentBufferIndex,
+                cursor);
+        } else {
+            FillBuffersForComplexTypeWithNulls(
+                typedColumn.Type,
+                config,
+                buffers,
+                currentBufferIndex);
+        }
+    }
+
+    // If column metatype is Optional, saved validity bitmap,
+    // which should be all set, is overwritten by column null bitmap.
     SerializeColumnPrologue(typedColumn, context);
+
+    WriteBuffersForComplexType(
+        typedColumn.Type,
+        context,
+        config,
+        buffers,
+        initialBufferIndex,
+        /*shouldWriteValidityBitmap*/ false,
+        column->ValueCount);
+}
+
+bool IsComplexTypeColumn(
+    const TLogicalTypePtr& type,
+    const TArrowFormatConfigPtr& config)
+{
+    if (!config->EnableComplexTypes) {
+        return false;
+    }
+    if (CastToV1Type(type).first != ESimpleLogicalValueType::Any) {
+        return false;
+    }
+    auto denullifiedType = DenullifyLogicalType(type);
+    if (denullifiedType->GetMetatype() == ELogicalMetatype::Simple) {
+        // Plain or nullable Any column.
+        return false;
+    }
+    return true;
 }
 
 void SerializeColumn(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context,
-    const TArrowFormatConfigPtr& config)
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers)
 {
     const auto* column = typedColumn.Column;
 
@@ -1144,7 +2393,10 @@ void SerializeColumn(
     }
 
     auto simpleType = CastToV1Type(typedColumn.Type).first;
-    if (IsIntegralType(simpleType)) {
+
+    if (IsComplexTypeColumn(typedColumn.Type, config)) {
+        SerializeComplexTypeColumn(typedColumn, context, config, buffers);
+    } else if (IsIntegralType(simpleType)) {
         SerializeIntegerColumn(typedColumn, simpleType, context);
     } else if (IsTzType(typedColumn.Type)) {
         SerializeTzColumn(typedColumn, simpleType, context, config);
@@ -1179,12 +2431,13 @@ auto SerializeRecordBatch(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
     int length,
     TRange<TTypedBatchColumn> typedColumns,
-    const TArrowFormatConfigPtr& config)
+    const TArrowFormatConfigPtr& config,
+    std::vector<TArrowWriterBuffer>& buffers)
 {
     auto context = New<TRecordBatchSerializationContext>(flatbufBuilder);
 
     for (const auto& typedColumn : typedColumns) {
-        SerializeColumn(typedColumn, context.Get(), config);
+        SerializeColumn(typedColumn, context.Get(), config, buffers);
     }
 
     auto fieldNodesOffset = flatbufBuilder->CreateVectorOfStructs(context->FieldNodes);
@@ -1298,7 +2551,7 @@ private:
         Reset();
         auto convertedColumns = ColumnConverters_[tableIndex].ConvertRowsToColumns(rows, ColumnSchemas_[tableIndex]);
         std::vector<const TBatchColumn*> rootColumns;
-        rootColumns.reserve( std::ssize(convertedColumns));
+        rootColumns.reserve(std::ssize(convertedColumns));
         for (ssize_t columnIndex = 0; columnIndex < std::ssize(convertedColumns); columnIndex++) {
             rootColumns.push_back(convertedColumns[columnIndex].RootColumn);
         }
@@ -1412,6 +2665,8 @@ private:
     std::vector<THashMap<int, int>> TableIdToIndex_;
     std::vector<bool> IsFirstBatchForSpecificTable_;
     TConvertedColumnRange MissingColumns_;
+
+    std::vector<TArrowWriterBuffer> Buffers_;
 
     i64 EncodedRowBatchCount_ = 0;
     i64 EncodedColumnarBatchCount_ = 0;
@@ -1573,10 +2828,17 @@ private:
             auto columnSchema = iterSchema->second;
             auto nameOffset = SerializeString(&flatbufBuilder, columnSchema.Name());
 
-            auto [typeType, typeOffset, childrenFields] = SerializeColumnType(&flatbufBuilder, columnSchema, ArrowConfig_);
+            auto [typeType, typeOffset, childrenFields, customMetadata] = SerializeColumnType(&flatbufBuilder, columnSchema.LogicalType(), ArrowConfig_);
+
+            if (CastToV1Type(columnSchema.LogicalType()).first == ESimpleLogicalValueType::Any) {
+                customMetadata.push_back(flatbuf::CreateKeyValue(
+                    flatbufBuilder,
+                    flatbufBuilder.CreateString(YtTypeMetadataKey),
+                    flatbufBuilder.CreateString(YtTypeMetadataValueYson)));
+            }
 
             flatbuffers::Offset<flatbuf::DictionaryEncoding> dictionaryEncodingOffset;
-            auto indexTypeOffset = flatbuf::CreateInt(flatbufBuilder, /*bitWidth*/ 32,  /*is_signed*/ false);
+            auto indexTypeOffset = flatbuf::CreateInt(flatbufBuilder, /*bitWidth*/ 32, /*is_signed*/ false);
 
             if (IsDictionaryEncodedColumn(*typedColumn.Column)) {
                 dictionaryEncodingOffset = flatbuf::CreateDictionaryEncoding(
@@ -1592,7 +2854,8 @@ private:
                 typeType,
                 typeOffset,
                 dictionaryEncodingOffset,
-                flatbufBuilder.CreateVector(childrenFields.data(), childrenFields.size()));
+                flatbufBuilder.CreateVector(childrenFields.data(), childrenFields.size()),
+                flatbufBuilder.CreateVector(customMetadata.data(), customMetadata.size()));
 
             fieldOffsets.push_back(fieldOffset);
         }
@@ -1695,7 +2958,8 @@ private:
             &flatbufBuilder,
             typedColumn.Column->ValueCount,
             TRange({typedColumn}),
-            ArrowConfig_);
+            ArrowConfig_,
+            Buffers_);
 
         auto dictionaryBatchOffset = flatbuf::CreateDictionaryBatch(
             flatbufBuilder,
@@ -1726,7 +2990,8 @@ private:
             &flatbufBuilder,
             RowCount_,
             TypedColumns_,
-            ArrowConfig_);
+            ArrowConfig_,
+            Buffers_);
 
         auto messageOffset = flatbuf::CreateMessage(
             flatbufBuilder,
@@ -1792,6 +3057,8 @@ private:
                 output->Write(&zero, sizeof(ui32));
             }
         }
+
+        Buffers_.clear();
 
         YT_LOG_DEBUG("Finished writing payload");
     }

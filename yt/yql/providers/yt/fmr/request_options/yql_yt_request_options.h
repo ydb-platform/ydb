@@ -66,10 +66,14 @@ struct TError {
 
 struct TYtTableRef {
     NYT::TRichYPath RichPath; // Path to yt table
-    TMaybe<TString> FilePath = Nothing(); // Path to file corresponding to yt table, filled for file gateway
+    TMaybe<TString> FilePath; // Path to file corresponding to yt table, filled for file gateway
 
     TString GetPath() const;
     TString GetCluster() const;
+
+    TYtTableRef();
+    TYtTableRef(const NYT::TRichYPath& richPath, const TMaybe<TString>& filePath = Nothing());
+    TYtTableRef(const TString& cluster, const TString& path, const TMaybe<TString>& filePath = Nothing());
 
     bool operator == (const TYtTableRef&) const = default;
 };
@@ -277,7 +281,7 @@ struct TTask: public TThrRefBase {
 
     ETaskType TaskType;
     TString TaskId;
-    TTaskParams TaskParams = {};
+    TTaskParams TaskParams;
     TString SessionId;
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> JobSettings = {};

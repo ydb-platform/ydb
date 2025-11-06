@@ -2,7 +2,7 @@
 
 #include <optional>
 #include <util/network/sock.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include "sock_settings.h"
 #include "sock_ssl.h"
 

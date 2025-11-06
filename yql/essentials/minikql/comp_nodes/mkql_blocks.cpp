@@ -3,12 +3,12 @@
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_block_impl_codegen.h> // Y_IGNORE
 
 #include <yql/essentials/minikql/arrow/arrow_defs.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -25,7 +25,7 @@ namespace NMiniKQL {
 
 namespace {
 
-class TToBlocksWrapper : public TStatelessFlowComputationNode<TToBlocksWrapper> {
+class TToBlocksWrapper: public TStatelessFlowComputationNode<TToBlocksWrapper> {
 public:
     explicit TToBlocksWrapper(IComputationNode* flow, TType* itemType)
         : TStatelessFlowComputationNode(flow, EValueRepresentation::Boxed)
@@ -51,16 +51,18 @@ public:
 
         return ctx.HolderFactory.CreateArrowBlock(builder->Build(true));
     }
+
 private:
     void RegisterDependencies() const final {
         FlowDependsOn(Flow_);
     }
+
 private:
     IComputationNode* const Flow_;
     TType* ItemType_;
 };
 
-struct TWideToBlocksState : public TBlockState {
+struct TWideToBlocksState: public TBlockState {
     size_t Rows_ = 0;
     bool IsFinished_ = false;
     size_t BuilderAllocatedSize_ = 0;
@@ -97,48 +99,53 @@ struct TWideToBlocksState : public TBlockState {
     }
 };
 
-class TWideToBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper>;
-using TState = TWideToBlocksState;
+class TWideToBlocksFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideToBlocksFlowWrapper>;
+    using TState = TWideToBlocksState;
+
 public:
     TWideToBlocksFlowWrapper(TComputationMutables& mutables,
-        IComputationWideFlowNode* flow,
-        TVector<TType*>&& types)
+                             IComputationWideFlowNode* flow,
+                             TVector<TType*>&& types)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , Types_(std::move(types))
-        , MaxLength_(CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type){ return std::max(max, CalcMaxBlockItemSize(type)); })))
+        , MaxLength_(CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type) { return std::max(max, CalcMaxBlockItemSize(type)); })))
         , Width_(Types_.size())
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Width_))
     {
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
-        TComputationContext& ctx,
-        NUdf::TUnboxedValue*const* output) const {
+                             TComputationContext& ctx,
+                             NUdf::TUnboxedValue* const* output) const {
         auto& s = GetState(state, ctx);
         const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
 
         if (!s.Count) {
-            if (!s.IsFinished_) do {
-                switch (Flow_->FetchValues(ctx, fields)) {
-                    case EFetchResult::One:
-                        for (size_t i = 0; i < Types_.size(); ++i)
-                            s.Add(s.Values[i], i);
-                        continue;
-                    case EFetchResult::Yield:
-                        return EFetchResult::Yield;
-                    case EFetchResult::Finish:
-                        s.IsFinished_ = true;
-                        break;
-                }
-                break;
-            } while (++s.Rows_ < MaxLength_ && s.BuilderAllocatedSize_ <= s.MaxBuilderAllocatedSize_);
+            if (!s.IsFinished_) {
+                do {
+                    switch (Flow_->FetchValues(ctx, fields)) {
+                        case EFetchResult::One:
+                            for (size_t i = 0; i < Types_.size(); ++i) {
+                                s.Add(s.Values[i], i);
+                            }
+                            continue;
+                        case EFetchResult::Yield:
+                            return EFetchResult::Yield;
+                        case EFetchResult::Finish:
+                            s.IsFinished_ = true;
+                            break;
+                    }
+                    break;
+                } while (++s.Rows_ < MaxLength_ && s.BuilderAllocatedSize_ <= s.MaxBuilderAllocatedSize_);
+            }
 
-            if (s.Rows_)
+            if (s.Rows_) {
                 s.MakeBlocks(ctx.HolderFactory);
-            else
+            } else {
                 return EFetchResult::Finish;
+            }
         }
 
         const auto sliceSize = s.Slice();
@@ -205,7 +212,7 @@ public:
         const auto state = new LoadInst(valueType, statePtr, "state", block);
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
-        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetCount()}, "count_ptr", block);
         const auto count = new LoadInst(indexType, countPtr, "count", block);
         const auto none = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "none", block);
 
@@ -213,10 +220,10 @@ public:
 
         block = more;
 
-        const auto rowsPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetRows() }, "rows_ptr", block);
-        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIsFinished() }, "is_finished_ptr", block);
-        const auto allocatedSizePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetBuilderAllocatedSize() }, "allocated_size_ptr", block);
-        const auto maxAllocatedSizePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetMaxBuilderAllocatedSize() }, "max_allocated_size_ptr", block);
+        const auto rowsPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetRows()}, "rows_ptr", block);
+        const auto finishedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIsFinished()}, "is_finished_ptr", block);
+        const auto allocatedSizePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetBuilderAllocatedSize()}, "allocated_size_ptr", block);
+        const auto maxAllocatedSizePtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetMaxBuilderAllocatedSize()}, "max_allocated_size_ptr", block);
         const auto finished = new LoadInst(Type::getInt1Ty(context), finishedPtr, "finished", block);
 
         BranchInst::Create(skip, read, finished, block);
@@ -308,12 +315,14 @@ private:
     class TLLVMFieldsStructureState: public TLLVMFieldsStructureBlockState {
     private:
         using TBase = TLLVMFieldsStructureBlockState;
-        llvm::IntegerType*const RowsType;
-        llvm::IntegerType*const IsFinishedType;
-        llvm::IntegerType*const BuilderAllocatedSizeType;
-        llvm::IntegerType*const MaxBuilderAllocatedSizeType;
+        llvm::IntegerType* const RowsType;
+        llvm::IntegerType* const IsFinishedType;
+        llvm::IntegerType* const BuilderAllocatedSizeType;
+        llvm::IntegerType* const MaxBuilderAllocatedSizeType;
+
     protected:
         using TBase::Context;
+
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFieldsArray();
@@ -346,7 +355,8 @@ private:
             , IsFinishedType(Type::getInt1Ty(Context))
             , BuilderAllocatedSizeType(Type::getInt64Ty(Context))
             , MaxBuilderAllocatedSizeType(Type::getInt64Ty(Context))
-        {}
+        {
+        }
     };
 #endif
     void RegisterDependencies() const final {
@@ -362,8 +372,9 @@ private:
             MakeState(ctx, state);
             auto& s = *static_cast<TState*>(state.AsBoxed().Get());
             const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
-            for (size_t i = 0; i < Width_; ++i)
+            for (size_t i = 0; i < Width_; ++i) {
                 fields[i] = &s.Values[i];
+            }
             return s;
         }
         return *static_cast<TState*>(state.AsBoxed().Get());
@@ -377,22 +388,22 @@ private:
     const size_t WideFieldsIndex_;
 };
 
-class TWideToBlocksStreamWrapper : public TMutableComputationNode<TWideToBlocksStreamWrapper>
-{
-using TBaseComputation = TMutableComputationNode<TWideToBlocksStreamWrapper>;
-using TState = TWideToBlocksState;
+class TWideToBlocksStreamWrapper: public TMutableComputationNode<TWideToBlocksStreamWrapper> {
+    using TBaseComputation = TMutableComputationNode<TWideToBlocksStreamWrapper>;
+    using TState = TWideToBlocksState;
+
 public:
     TWideToBlocksStreamWrapper(TComputationMutables& mutables,
-        IComputationNode* stream,
-        TVector<TType*>&& types)
+                               IComputationNode* stream,
+                               TVector<TType*>&& types)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Stream_(stream)
         , Types_(std::move(types))
-        , MaxLength_(CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type){ return std::max(max, CalcMaxBlockItemSize(type)); })))
-    {}
-
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
+        , MaxLength_(CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type) { return std::max(max, CalcMaxBlockItemSize(type)); })))
     {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(state),
@@ -401,8 +412,9 @@ public:
     }
 
 private:
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TComputationValue<TStreamValue> {
+        using TBase = TComputationValue<TStreamValue>;
+
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream,
@@ -412,7 +424,8 @@ private:
             , Stream_(stream)
             , MaxLength_(maxLength)
             , HolderFactory_(holderFactory)
-        {}
+        {
+        }
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
@@ -421,24 +434,28 @@ private:
             const size_t inputWidth = blockState.Values.size() - 1;
 
             if (!blockState.Count) {
-                if (!blockState.IsFinished_) do {
-                    switch (Stream_.WideFetch(inputFields, inputWidth)) {
-                        case NUdf::EFetchStatus::Ok:
-                            for (size_t i = 0; i < inputWidth; i++)
-                                blockState.Add(blockState.Values[i], i);
-                            continue;
-                        case NUdf::EFetchStatus::Yield:
-                            return NUdf::EFetchStatus::Yield;
-                        case NUdf::EFetchStatus::Finish:
-                            blockState.IsFinished_ = true;
-                            break;
-                    }
-                    break;
-                } while (++blockState.Rows_ < MaxLength_ && blockState.BuilderAllocatedSize_ <= blockState.MaxBuilderAllocatedSize_);
-            if (blockState.Rows_)
-                blockState.MakeBlocks(HolderFactory_);
-            else
-                return NUdf::EFetchStatus::Finish;
+                if (!blockState.IsFinished_) {
+                    do {
+                        switch (Stream_.WideFetch(inputFields, inputWidth)) {
+                            case NUdf::EFetchStatus::Ok:
+                                for (size_t i = 0; i < inputWidth; i++) {
+                                    blockState.Add(blockState.Values[i], i);
+                                }
+                                continue;
+                            case NUdf::EFetchStatus::Yield:
+                                return NUdf::EFetchStatus::Yield;
+                            case NUdf::EFetchStatus::Finish:
+                                blockState.IsFinished_ = true;
+                                break;
+                        }
+                        break;
+                    } while (++blockState.Rows_ < MaxLength_ && blockState.BuilderAllocatedSize_ <= blockState.MaxBuilderAllocatedSize_);
+                }
+                if (blockState.Rows_) {
+                    blockState.MakeBlocks(HolderFactory_);
+                } else {
+                    return NUdf::EFetchStatus::Finish;
+                }
             }
 
             const auto sliceSize = blockState.Slice();
@@ -463,7 +480,7 @@ private:
     const size_t MaxLength_;
 };
 
-class TListToBlocksState : public TBlockState {
+class TListToBlocksState: public TBlockState {
 public:
     TListToBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t blockLengthIndex, size_t maxLength)
         : TBlockState(memInfo, types.size(), blockLengthIndex)
@@ -540,15 +557,13 @@ private:
     static const size_t MaxAllocatedFactor_ = 4;
 };
 
-class TListToBlocksWrapper : public TMutableComputationNode<TListToBlocksWrapper>
-{
+class TListToBlocksWrapper: public TMutableComputationNode<TListToBlocksWrapper> {
     using TBaseComputation = TMutableComputationNode<TListToBlocksWrapper>;
 
 public:
     TListToBlocksWrapper(TComputationMutables& mutables,
-        IComputationNode* list,
-        TStructType* structType
-    )
+                         IComputationNode* list,
+                         TStructType* structType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , List_(list)
     {
@@ -561,7 +576,7 @@ public:
             Types_.push_back(AS_TYPE(TBlockType, structType->GetMemberType(i))->GetItemType());
         }
 
-        MaxLength_ = CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type){
+        MaxLength_ = CalcBlockLen(std::accumulate(Types_.cbegin(), Types_.cend(), 0ULL, [](size_t max, const TType* type) {
             if (!type) {
                 return max;
             }
@@ -569,30 +584,29 @@ public:
         }));
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
-    {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TListToBlocksValue>(
             ctx,
             Types_,
             BlockLengthIndex_,
             List_->GetValue(ctx),
-            MaxLength_
-        );
+            MaxLength_);
     }
 
 private:
-    class TListToBlocksValue : public TCustomListValue {
+    class TListToBlocksValue: public TCustomListValue {
         using TState = TListToBlocksState;
 
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter)
                 : TComputationValue<TIterator>(memInfo)
                 , HolderFactory_(holderFactory)
                 , BlockState_(std::move(blockState))
                 , Iter_(std::move(iter))
-            {}
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
@@ -634,15 +648,15 @@ private:
         };
 
         TListToBlocksValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
-            const TVector<TType*>& types, ui32 blockLengthIndex, NUdf::TUnboxedValue&& list, size_t maxLength
-        )
+                           const TVector<TType*>& types, ui32 blockLengthIndex, NUdf::TUnboxedValue&& list, size_t maxLength)
             : TCustomListValue(memInfo)
             , CompCtx_(ctx)
             , Types_(types)
             , BlockLengthIndex_(blockLengthIndex)
             , List_(std::move(list))
             , MaxLength_(maxLength)
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
@@ -680,8 +694,9 @@ private:
     size_t MaxLength_ = 0;
 };
 
-class TFromBlocksWrapper : public TStatefulFlowCodegeneratorNode<TFromBlocksWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TFromBlocksWrapper>;
+class TFromBlocksWrapper: public TStatefulFlowCodegeneratorNode<TFromBlocksWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TFromBlocksWrapper>;
+
 public:
     TFromBlocksWrapper(TComputationMutables& mutables, IComputationNode* flow, TType* itemType)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
@@ -692,13 +707,15 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         for (auto& s = GetState(state, ctx);;) {
-            if (auto item = s.GetValue(ctx.HolderFactory); !item.IsInvalid())
+            if (auto item = s.GetValue(ctx.HolderFactory); !item.IsInvalid()) {
                 return item;
+            }
 
-            if (const auto input = Flow_->GetValue(ctx); input.IsSpecial())
+            if (const auto input = Flow_->GetValue(ctx); input.IsSpecial()) {
                 return input;
-            else
+            } else {
                 s.Reset(input);
+            }
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
@@ -734,7 +751,7 @@ public:
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::GetValue>());
         const auto getType = FunctionType::get(valueType, {statePtrType, ctx.GetFactory()->getType()}, false);
         const auto getPtr = CastInst::Create(Instruction::IntToPtr, getFunc, PointerType::getUnqual(getType), "get", block);
-        const auto value = CallInst::Create(getType, getPtr, {stateArg, ctx.GetFactory() }, "value", block);
+        const auto value = CallInst::Create(getType, getPtr, {stateArg, ctx.GetFactory()}, "value", block);
 
         const auto result = PHINode::Create(valueType, 2U, "result", done);
         result->addIncoming(value, block);
@@ -753,7 +770,7 @@ public:
         const auto setFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Reset>());
         const auto setType = FunctionType::get(valueType, {statePtrType, valueType}, false);
         const auto setPtr = CastInst::Create(Instruction::IntToPtr, setFunc, PointerType::getUnqual(setType), "set", block);
-        CallInst::Create(setType, setPtr, {stateArg, input }, "", block);
+        CallInst::Create(setType, setPtr, {stateArg, input}, "", block);
 
         ValueCleanup(EValueRepresentation::Any, input, ctx, block);
 
@@ -764,7 +781,7 @@ public:
     }
 #endif
 private:
-    struct TState : public TComputationValue<TState> {
+    struct TState: public TComputationValue<TState> {
         using TComputationValue::TComputationValue;
 
         TState(TMemoryUsageInfo* memInfo, TType* itemType, const NUdf::IPgBuilder& pgBuilder)
@@ -819,8 +836,9 @@ private:
     }
 
     TState& GetState(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid())
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
+        }
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
@@ -829,7 +847,7 @@ private:
     TType* ItemType_;
 };
 
-struct TWideFromBlocksState : public TComputationValue<TWideFromBlocksState> {
+struct TWideFromBlocksState: public TComputationValue<TWideFromBlocksState> {
     size_t Count_ = 0;
     size_t Index_ = 0;
     size_t Current_ = 0;
@@ -872,38 +890,44 @@ struct TWideFromBlocksState : public TComputationValue<TWideFromBlocksState> {
     }
 };
 
-class TWideFromBlocksFlowWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFromBlocksFlowWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFromBlocksFlowWrapper>;
-using TState = TWideFromBlocksState;
+class TWideFromBlocksFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TWideFromBlocksFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFromBlocksFlowWrapper>;
+    using TState = TWideFromBlocksState;
+
 public:
     TWideFromBlocksFlowWrapper(TComputationMutables& mutables,
-        IComputationWideFlowNode* flow,
-        TVector<TType*>&& types)
+                               IComputationWideFlowNode* flow,
+                               TVector<TType*>&& types)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
         , Flow_(flow)
         , Types_(std::move(types))
         , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Types_.size() + 1U))
-    {}
+    {
+    }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state,
-        TComputationContext& ctx,
-        NUdf::TUnboxedValue*const* output) const
-    {
+                             TComputationContext& ctx,
+                             NUdf::TUnboxedValue* const* output) const {
         auto& s = GetState(state, ctx);
         const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
-        if (s.Index_ == s.Count_) do {
-            if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One)
-                return result;
+        if (s.Index_ == s.Count_) {
+            do {
+                if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One) {
+                    return result;
+                }
 
-            s.Index_ = 0;
-            s.Count_ = GetBlockCount(s.Values_.back());
-        } while (!s.Count_);
+                s.Index_ = 0;
+                s.Count_ = GetBlockCount(s.Values_.back());
+            } while (!s.Count_);
+        }
 
         s.Current_ = s.Index_;
         ++s.Index_;
-        for (size_t i = 0; i < Types_.size(); ++i)
-            if (const auto out = output[i])
+        for (size_t i = 0; i < Types_.size(); ++i) {
+            if (const auto out = output[i]) {
                 *out = s.Get(ctx.HolderFactory, i);
+            }
+        }
 
         return EFetchResult::One;
     }
@@ -930,7 +954,7 @@ public:
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
+        const auto getCountType = FunctionType::get(indexType, {valueType}, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto make = BasicBlock::Create(context, "make", ctx.Func);
@@ -957,8 +981,8 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
-        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetIndex() }, "index_ptr", block);
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetCount()}, "count_ptr", block);
+        const auto indexPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetIndex()}, "index_ptr", block);
 
         const auto count = new LoadInst(indexType, countPtr, "count", block);
         const auto index = new LoadInst(indexType, indexPtr, "index", block);
@@ -986,7 +1010,7 @@ public:
         block = good;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
+        const auto height = CallInst::Create(getCount, {countValue}, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -1000,7 +1024,7 @@ public:
         block = work;
 
         const auto current = new LoadInst(indexType, indexPtr, "current", block);
-        const auto currentPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCurrent() }, "current_ptr", block);
+        const auto currentPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetCurrent()}, "current_ptr", block);
         new StoreInst(current, currentPtr, block);
         const auto increment = BinaryOperator::CreateAdd(current, ConstantInt::get(indexType, 1), "increment", block);
         new StoreInst(increment, indexPtr, block);
@@ -1022,10 +1046,10 @@ public:
                 TLLVMFieldsStructureState stateFields(context, width);
 
                 const auto stateArg = new LoadInst(statePtrType, stateOnStack, "state", block);
-                const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+                const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetPointer()}, "values_ptr", block);
                 const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
                 const auto index = ConstantInt::get(indexType, idx);
-                const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {  ConstantInt::get(indexType, 0), index }, "pointer", block);
+                const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), index}, "pointer", block);
 
                 BranchInst::Create(call, init, HasValue(pointer, block, context), block);
 
@@ -1050,12 +1074,14 @@ private:
     class TLLVMFieldsStructureState: public TLLVMFieldsStructure<TComputationValue<TState>> {
     private:
         using TBase = TLLVMFieldsStructure<TComputationValue<TState>>;
-        llvm::IntegerType*const CountType;
-        llvm::IntegerType*const IndexType;
-        llvm::IntegerType*const CurrentType;
-        llvm::PointerType*const PointerType;
+        llvm::IntegerType* const CountType;
+        llvm::IntegerType* const IndexType;
+        llvm::IntegerType* const CurrentType;
+        llvm::PointerType* const PointerType;
+
     protected:
         using TBase::Context;
+
     public:
         std::vector<llvm::Type*> GetFieldsArray() {
             std::vector<llvm::Type*> result = TBase::GetFields();
@@ -1088,7 +1114,8 @@ private:
             , IndexType(Type::getInt64Ty(Context))
             , CurrentType(Type::getInt64Ty(Context))
             , PointerType(PointerType::getUnqual(ArrayType::get(Type::getInt128Ty(Context), width)))
-        {}
+        {
+        }
     };
 #endif
     void RegisterDependencies() const final {
@@ -1104,7 +1131,7 @@ private:
             MakeState(ctx, state);
 
             const auto s = static_cast<TState*>(state.AsBoxed().Get());
-            auto**const fields = ctx.WideFields.data() + WideFieldsIndex_;
+            auto** const fields = ctx.WideFields.data() + WideFieldsIndex_;
             for (size_t i = 0; i <= Types_.size(); ++i) {
                 fields[i] = &s->Values_[i];
             }
@@ -1118,21 +1145,21 @@ private:
     const size_t WideFieldsIndex_;
 };
 
-class TWideFromBlocksStreamWrapper : public TMutableComputationNode<TWideFromBlocksStreamWrapper>
-{
-using TBaseComputation = TMutableComputationNode<TWideFromBlocksStreamWrapper>;
-using TState = TWideFromBlocksState;
+class TWideFromBlocksStreamWrapper: public TMutableComputationNode<TWideFromBlocksStreamWrapper> {
+    using TBaseComputation = TMutableComputationNode<TWideFromBlocksStreamWrapper>;
+    using TState = TWideFromBlocksState;
+
 public:
     TWideFromBlocksStreamWrapper(TComputationMutables& mutables,
-        IComputationNode* stream,
-        TVector<TType*>&& types)
+                                 IComputationNode* stream,
+                                 TVector<TType*>&& types)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Stream_(stream)
         , Types_(std::move(types))
-    {}
-
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
     {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       std::move(state),
@@ -1140,8 +1167,9 @@ public:
     }
 
 private:
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    using TBase = TComputationValue<TStreamValue>;
+    class TStreamValue: public TComputationValue<TStreamValue> {
+        using TBase = TComputationValue<TStreamValue>;
+
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory,
                      NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& stream)
@@ -1149,7 +1177,8 @@ private:
             , BlockState_(blockState)
             , Stream_(stream)
             , HolderFactory_(holderFactory)
-        {}
+        {
+        }
 
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
@@ -1157,13 +1186,16 @@ private:
             auto* inputFields = blockState.Pointer_;
             const size_t inputWidth = blockState.Values_.size();
 
-            if (blockState.Index_ == blockState.Count_) do {
-                if (const auto result = Stream_.WideFetch(inputFields, inputWidth); result != NUdf::EFetchStatus::Ok)
-                    return result;
+            if (blockState.Index_ == blockState.Count_) {
+                do {
+                    if (const auto result = Stream_.WideFetch(inputFields, inputWidth); result != NUdf::EFetchStatus::Ok) {
+                        return result;
+                    }
 
-                blockState.Index_ = 0;
-                blockState.Count_ = GetBlockCount(blockState.Values_.back());
-            } while (!blockState.Count_);
+                    blockState.Index_ = 0;
+                    blockState.Count_ = GetBlockCount(blockState.Values_.back());
+                } while (!blockState.Count_);
+            }
 
             blockState.Current_ = blockState.Index_++;
             for (size_t i = 0; i < width; i++) {
@@ -1186,7 +1218,7 @@ private:
     const TVector<TType*> Types_;
 };
 
-struct TListFromBlocksState : public TComputationValue<TListFromBlocksState> {
+struct TListFromBlocksState: public TComputationValue<TListFromBlocksState> {
 public:
     TListFromBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TVector<TType*>& types, size_t blockLengthIndex)
         : TComputationValue(memInfo)
@@ -1265,15 +1297,13 @@ private:
     const std::vector<arrow::ValueDescr> ValuesDescr_;
 };
 
-class TListFromBlocksWrapper : public TMutableComputationNode<TListFromBlocksWrapper>
-{
+class TListFromBlocksWrapper: public TMutableComputationNode<TListFromBlocksWrapper> {
     using TBaseComputation = TMutableComputationNode<TListFromBlocksWrapper>;
 
 public:
     TListFromBlocksWrapper(TComputationMutables& mutables,
-        IComputationNode* list,
-        TStructType* structType
-    )
+                           IComputationNode* list,
+                           TStructType* structType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , List_(list)
     {
@@ -1287,28 +1317,27 @@ public:
         }
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const
-    {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TListFromBlocksValue>(
             ctx,
             Types_,
             BlockLengthIndex_,
-            List_->GetValue(ctx)
-        );
+            List_->GetValue(ctx));
     }
 
 private:
-    class TListFromBlocksValue : public TCustomListValue {
+    class TListFromBlocksValue: public TCustomListValue {
         using TState = TListFromBlocksState;
 
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& blockState, NUdf::TUnboxedValue&& iter)
                 : TComputationValue<TIterator>(memInfo)
                 , BlockState_(std::move(blockState))
                 , Iter_(std::move(iter))
-            {}
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
@@ -1331,14 +1360,14 @@ private:
         };
 
         TListFromBlocksValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
-            const TVector<TType*>& types, ui32 blockLengthIndex, NUdf::TUnboxedValue&& list
-        )
+                             const TVector<TType*>& types, ui32 blockLengthIndex, NUdf::TUnboxedValue&& list)
             : TCustomListValue(memInfo)
             , CompCtx_(ctx)
             , Types_(types)
             , BlockLengthIndex_(blockLengthIndex)
             , List_(std::move(list))
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
@@ -1388,7 +1417,7 @@ private:
     IComputationNode* const List_;
 };
 
-class TPrecomputedArrowNode : public IArrowKernelComputationNode {
+class TPrecomputedArrowNode: public IArrowKernelComputationNode {
 public:
     TPrecomputedArrowNode(const arrow::Datum& datum, TStringBuf kernelName)
         : Kernel_({}, datum.type(), [datum](arrow::compute::KernelContext*, const arrow::compute::ExecBatch&, arrow::Datum* res) {
@@ -1417,14 +1446,16 @@ public:
         Y_UNUSED(index);
         ythrow yexception() << "No input arguments";
     }
+
 private:
     arrow::compute::ScalarKernel Kernel_;
     const TStringBuf KernelName_;
     const std::vector<arrow::ValueDescr> EmptyDesc_;
 };
 
-class TAsScalarWrapper : public TMutableCodegeneratorNode<TAsScalarWrapper> {
-using TBaseComputation = TMutableCodegeneratorNode<TAsScalarWrapper>;
+class TAsScalarWrapper: public TMutableCodegeneratorNode<TAsScalarWrapper> {
+    using TBaseComputation = TMutableCodegeneratorNode<TAsScalarWrapper>;
+
 public:
     TAsScalarWrapper(TComputationMutables& mutables, IComputationNode* arg, TType* type)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -1475,8 +1506,9 @@ private:
     TType* Type_;
 };
 
-class TReplicateScalarWrapper : public TMutableCodegeneratorNode<TReplicateScalarWrapper> {
-using TBaseComputation = TMutableCodegeneratorNode<TReplicateScalarWrapper>;
+class TReplicateScalarWrapper: public TMutableCodegeneratorNode<TReplicateScalarWrapper> {
+    using TBaseComputation = TMutableCodegeneratorNode<TReplicateScalarWrapper>;
+
 public:
     TReplicateScalarWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* count, TType* type)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -1542,8 +1574,9 @@ private:
     TType* Type_;
 };
 
-class TBlockExpandChunkedWrapper : public TStatefulWideFlowCodegeneratorNode<TBlockExpandChunkedWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TBlockExpandChunkedWrapper>;
+class TBlockExpandChunkedWrapper: public TStatefulWideFlowCodegeneratorNode<TBlockExpandChunkedWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TBlockExpandChunkedWrapper>;
+
 public:
     TBlockExpandChunkedWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, size_t width)
         : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
@@ -1553,13 +1586,14 @@ public:
     {
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto& s = GetState(state, ctx);
         if (!s.Count) {
             const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
             s.ClearValues();
-            if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One)
+            if (const auto result = Flow_->FetchValues(ctx, fields); result != EFetchResult::One) {
                 return result;
+            }
             s.FillArrays();
         }
 
@@ -1621,7 +1655,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetCount() }, "count_ptr", block);
+        const auto countPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetCount()}, "count_ptr", block);
         const auto count = new LoadInst(indexType, countPtr, "count", block);
 
         const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, count, ConstantInt::get(indexType, 0), "next", block);
@@ -1646,7 +1680,7 @@ public:
 
         block = work;
 
-        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetPointer() }, "values_ptr", block);
+        const auto valuesPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetPointer()}, "values_ptr", block);
         const auto values = new LoadInst(ptrValuesType, valuesPtr, "values", block);
         Value* array = UndefValue::get(arrayType);
         for (auto idx = 0U; idx < getres.second.size(); ++idx) {
@@ -1700,8 +1734,9 @@ private:
 
             auto& s = *static_cast<TBlockState*>(state.AsBoxed().Get());
             const auto fields = ctx.WideFields.data() + WideFieldsIndex_;
-            for (size_t i = 0; i < Width_; ++i)
+            for (size_t i = 0; i < Width_; ++i) {
                 fields[i] = &s.Values[i];
+            }
             return s;
         }
         return *static_cast<TBlockState*>(state.AsBoxed().Get());
@@ -1716,42 +1751,51 @@ private:
     const size_t WideFieldsIndex_;
 };
 
-class TBlockExpandChunkedStreamWrapper : public TMutableComputationNode<TBlockExpandChunkedStreamWrapper> {
-using TBaseComputation =  TMutableComputationNode<TBlockExpandChunkedStreamWrapper>;
-class TExpanderState : public TComputationValue<TExpanderState> {
-using TBase = TComputationValue<TExpanderState>;
-public:
-    TExpanderState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream, size_t width)
-        : TBase(memInfo), HolderFactory_(ctx.HolderFactory), State_(ctx.HolderFactory.Create<TBlockState>(width)), Stream_(stream) {}
+class TBlockExpandChunkedStreamWrapper: public TMutableComputationNode<TBlockExpandChunkedStreamWrapper> {
+    using TBaseComputation = TMutableComputationNode<TBlockExpandChunkedStreamWrapper>;
+    class TExpanderState: public TComputationValue<TExpanderState> {
+        using TBase = TComputationValue<TExpanderState>;
 
-    NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
-        auto& s = *static_cast<TBlockState*>(State_.AsBoxed().Get());
-        if (!s.Count) {
-            s.ClearValues();
-            auto result = Stream_.WideFetch(s.Values.data(), width);
-            if (NUdf::EFetchStatus::Ok != result) {
-                return result;
+    public:
+        TExpanderState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue&& stream, size_t width)
+            : TBase(memInfo)
+            , HolderFactory_(ctx.HolderFactory)
+            , State_(ctx.HolderFactory.Create<TBlockState>(width))
+            , Stream_(stream)
+        {
+        }
+
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            auto& s = *static_cast<TBlockState*>(State_.AsBoxed().Get());
+            if (!s.Count) {
+                s.ClearValues();
+                auto result = Stream_.WideFetch(s.Values.data(), width);
+                if (NUdf::EFetchStatus::Ok != result) {
+                    return result;
+                }
+                s.FillArrays();
             }
-            s.FillArrays();
+
+            const auto sliceSize = s.Slice();
+            for (size_t i = 0; i < width; ++i) {
+                output[i] = s.Get(sliceSize, HolderFactory_, i);
+            }
+            return NUdf::EFetchStatus::Ok;
         }
 
-        const auto sliceSize = s.Slice();
-        for (size_t i = 0; i < width; ++i) {
-            output[i] = s.Get(sliceSize, HolderFactory_, i);
-        }
-        return NUdf::EFetchStatus::Ok;
-    }
+    private:
+        const THolderFactory& HolderFactory_;
+        NUdf::TUnboxedValue State_;
+        NUdf::TUnboxedValue Stream_;
+    };
 
-private:
-    const THolderFactory& HolderFactory_;
-    NUdf::TUnboxedValue State_;
-    NUdf::TUnboxedValue Stream_;
-};
 public:
     TBlockExpandChunkedStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, size_t width)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Stream_(stream)
-        , Width_(width) {}
+        , Width_(width)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TExpanderState>(ctx, std::move(Stream_->GetValue(ctx)), Width_);
@@ -1759,6 +1803,7 @@ public:
     void RegisterDependencies() const override {
         DependsOn(Stream_);
     }
+
 private:
     IComputationNode* const Stream_;
     const size_t Width_;
@@ -1777,7 +1822,7 @@ IComputationNode* WrapWideToBlocks(TCallable& callable, const TComputationNodeFa
 
     const auto inputType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(inputType->IsStream() || inputType->IsFlow(),
-               "Expected either WideStream or WideFlow as an input");
+                "Expected either WideStream or WideFlow as an input");
     const auto yieldsStream = callable.GetType()->GetReturnType()->IsStream();
     MKQL_ENSURE(yieldsStream == inputType->IsStream(),
                 "Expected both input and output have to be either WideStream or WideFlow");
@@ -1902,5 +1947,5 @@ IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputation
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

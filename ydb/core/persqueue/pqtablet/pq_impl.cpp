@@ -193,11 +193,14 @@ public:
 
     bool HandleError(TEvPQ::TEvError *ev, const TActorContext& ctx)
     {
-        PQ_LOG_ERROR("Answer error topic: '" << TopicName << "'" <<
+        const auto errorCode = ev->ErrorCode;
+        const auto priority = errorCode == NPersQueue::NErrorCode::OVERLOAD ? NActors::NLog::EPriority::PRI_INFO : NActors::NLog::EPriority::PRI_ERROR;
+        PQ_LOG(priority, "Answer error topic: '" << TopicName << "'" <<
                  " partition: " << Partition <<
                  " messageNo: " << MessageNo <<
                  " requestId: " << ReqId <<
                  " error: " << ev->Error);
+
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
         Response->Record.SetErrorCode(ev->ErrorCode);
         Response->Record.SetErrorReason(ev->Error);
@@ -232,21 +235,21 @@ TAutoPtr<TResponseBuilder> CreateResponseProxy(const TActorId& sender, const TAc
 /******************************************************* OffsetsBuilderProxy *********************************************************/
 
 template <typename T, typename T2, typename T3>
-class TBuilderProxy : public TBaseActor<TBuilderProxy<T,T2,T3>> {
+class TBuilderProxy : public TBaseTabletActor<TBuilderProxy<T,T2,T3>> {
     typedef TBuilderProxy<T,T2,T3> TThis;
 
     friend class TActorBootstrapped<TThis>;
     typedef T TEvent;
     typedef typename TEvent::TPtr TTPtr;
 
-    using TBase = TBaseActor<TThis>;
+    using TBase = TBaseTabletActor<TThis>;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_ANS_ACTOR;
     }
 
     TBuilderProxy(const ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const ui32 count, const ui64 cookie)
-    : TBaseActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor<TBuilderProxy<T,T2,T3>>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , Sender(sender)
     , Waiting(count)
     , Result()
@@ -625,7 +628,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                          bool newPartition,
                                          const TActorContext& ctx)
 {
-    TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
+    TActorId actorId = ctx.RegisterWithSameMailbox(CreatePartitionActor(partitionId,
                                                          topicConverter,
                                                          config,
                                                          newPartition,
@@ -689,7 +692,7 @@ void TPersQueue::CreateSupportivePartitionActor(const TPartitionId& partitionId,
     PQ_ENSURE(Partitions.contains(partitionId));
 
     TPartitionInfo& partition = Partitions.at(partitionId);
-    partition.Actor = ctx.Register(CreatePartitionActor(partitionId,
+    partition.Actor = ctx.RegisterWithSameMailbox(CreatePartitionActor(partitionId,
                                                         TopicConverter,
                                                         MakeSupportivePartitionConfig(),
                                                         false,
@@ -807,6 +810,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
             NKikimrPQ::TTransaction tx;
             PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
+
+            PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
 
             PQ_LOG_TX_I("Restore Tx. " <<
                      "TxId: " << tx.GetTxId() <<
@@ -1224,6 +1229,8 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
     if (allInitialized) {
         ProcessStatusRequests(ctx);
     }
+
+    ProcessMLPQueue();
 }
 
 void TPersQueue::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
@@ -1320,26 +1327,23 @@ void TPersQueue::CreateTopicConverter(const NKikimrPQ::TPQTabletConfig& config,
     AFL_ENSURE(topicConverter->IsValid())("reason", topicConverter->GetReason());
 }
 
-void TPersQueue::UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const
+void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
 {
     PQ_ENSURE(cfg.HasVersion());
     const int curConfigVersion = cfg.GetVersion();
 
-    // set rr generation for provided read rules
-    THashMap<TString, std::pair<ui64, ui64>> existed; // map name -> rrVersion, rrGeneration
+    THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existedConsumers;
     for (const auto& c : Config.GetConsumers()) {
-        existed[c.GetName()] = std::make_pair(c.GetVersion(), c.GetGeneration());
+        existedConsumers[c.GetName()] = c;
     }
 
     for (auto& c : *cfg.MutableConsumers()) {
-        auto it = existed.find(c.GetName());
-        ui64 generation = 0;
-        if (it != existed.end() && it->second.first == c.GetVersion()) {
-            generation = it->second.second;
+        auto it = existedConsumers.find(c.GetName());
+        if (it != existedConsumers.end() && it->second.GetVersion() == c.GetVersion()) {
+            c.SetGeneration(it->second.GetGeneration());
         } else {
-            generation = curConfigVersion;
+            c.SetGeneration(curConfigVersion);
         }
-        c.SetGeneration(generation);
     }
 }
 
@@ -1448,7 +1452,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
 
     Migrate(cfg);
 
-    UpdateReadRuleGenerations(cfg);
+    UpdateConsumers(cfg);
 
     PQ_LOG_TX_D("Config update version " << cfg.GetVersion() << "(current " << Config.GetVersion() << ") received from actor " << sender
                 << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
@@ -2594,8 +2598,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TStringBuilder log; log << "PQ - create read proxy" << Endl;
-        TActorId rr = ctx.Register(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
+        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
@@ -2871,7 +2874,6 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
     , OriginalPartitionsCount(0)
     , NewConfigShouldBeApplied(false)
     , TabletState(NKikimrPQ::ENormal)
-    , Counters(nullptr)
     , NextResponseCookie(0)
     , ResourceMetrics(nullptr)
 {
@@ -2890,8 +2892,9 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
         ECumulativeCounters_descriptor,
         EPercentileCounters_descriptor> TPersQueueCounters;
     typedef TProtobufTabletCountersPair<TKeyValueCounters, TPersQueueCounters> TCounters;
+
     TAutoPtr<TCounters> counters(new TCounters());
-    Counters = (counters->GetSecondTabletCounters()).Release();
+    Counters.reset(counters->GetSecondTabletCounters().Release());
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
@@ -2900,7 +2903,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
-    CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -3637,7 +3640,7 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
             PQ_LOG_TX_I("Propose TxId " << tx.TxId << ", WriteId " << tx.WriteId);
 
             if (tx.Kind == NKikimrPQ::TTransaction::KIND_CONFIG) {
-                UpdateReadRuleGenerations(tx.TabletConfig);
+                UpdateConsumers(tx.TabletConfig);
             }
 
             if (tx.WriteId.Defined()) {
@@ -4751,14 +4754,14 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
 
     auto& quoterId = PartitionWriteQuoters[partition.OriginalPartitionId];
     if (!quoterId) {
-        quoterId = Register(new TWriteQuoter(
+        quoterId = RegisterWithSameMailbox(new TWriteQuoter(
             TopicConverter,
             Config,
             AppData()->PQConfig,
             partition,
             SelfId(),
             TabletID(),
-            *Counters
+            Counters
         ));
     }
     return quoterId;
@@ -4782,7 +4785,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           DCId,
                           IsServerless,
                           config,
-                          *Counters,
+                          Counters,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
@@ -5238,6 +5241,76 @@ void TPersQueue::ProcessPendingEvents()
     }
 }
 
+void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx)
+{
+    PQ_LOG_D("TPersQueue::Handle(TEvPQ::TEvForceCompaction)");
+
+    const auto& event = *ev->Get();
+    const TPartitionId partitionId(event.PartitionId);
+
+    if (!Partitions.contains(partitionId)) {
+        PQ_LOG_D("Unknown partition id " << event.PartitionId);
+        return;
+    }
+
+    auto p = Partitions.find(partitionId);
+    ctx.Send(p->second.Actor,
+             new TEvPQ::TEvForceCompaction(event.PartitionId));
+}
+
+void TPersQueue::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+void TPersQueue::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
+template<typename TEventHandle>
+bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
+            TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
+        return true;
+    }
+
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        MLPRequests.emplace_back(std::move(ev));
+        return false;
+    }
+    Forward(ev, partitionInfo.Actor);
+    return true;
+}
+
+void TPersQueue::ProcessMLPQueue() {
+    auto queue = std::exchange(MLPRequests, {});
+    while(!queue.empty()) {
+        auto ev = std::move(queue.front());
+        queue.pop_front();
+
+        auto result = std::visit([&, this](auto& ev) {
+            return ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+        }, ev);
+        if (!result) {
+            return;
+        }
+    }
+}
+
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -5285,6 +5358,12 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
+        HFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+        hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         default:
             return false;
     }

@@ -13,12 +13,11 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast/collect_issues
-    yql/essentials/parser/proto_ast/gen/v1_proto_split
+    yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
     yql/essentials/parser/pg_catalog
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/proto_parser
     # for lexer tokens
-    yql/essentials/parser/proto_ast/gen/v1
     yql/essentials/parser/proto_ast/gen/v1_antlr4
 )
 
@@ -31,6 +30,7 @@ SRCS(
     list_builtin.cpp
     match_recognize.cpp
     node.cpp
+    select_yql.cpp
     select.cpp
     source.cpp
     sql.cpp
@@ -40,6 +40,7 @@ SRCS(
     sql_match_recognize.cpp
     sql_into_tables.cpp
     sql_query.cpp
+    sql_select_yql.cpp
     sql_select.cpp
     sql_translation.cpp
     sql_values.cpp
@@ -66,6 +67,5 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
-    ut
     ut_antlr4
 )

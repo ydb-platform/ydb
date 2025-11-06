@@ -27,6 +27,7 @@ using namespace NSchemeShard;
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Resolve(const TPathId& pathId) {
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.TableId = pathId;
@@ -76,7 +77,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             }
 
             DomainKey = entry.DomainInfo->DomainKey;
-            Resolve(DomainKey);
+            if (!Database) {
+                Resolve(DomainKey);
+            } else {
+                DescribeSrcPath(true);
+            }
         } else {
             Database = CanonizePath(entry.Path);
             DescribeSrcPath(true);
@@ -645,11 +650,7 @@ public:
     void Bootstrap() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
-            if (Database) {
-                return DescribeSrcPath(true);
-            } else {
-                return Resolve(PathId);
-            }
+            return Resolve(PathId);
         case TReplication::ETargetKind::IndexTable:
         case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
@@ -756,14 +757,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
 
-    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(), replication->GetPathId(),
+    return CreateDstCreator(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
-        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()), replication->GetDatabase());
+        EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()));
 }
 
-IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy, const TPathId& pathId,
+IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
+        const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
-        EReplicationMode mode, EConsistencyLevel consistency, const TString& database)
+        EReplicationMode mode, EConsistencyLevel consistency)
 {
     return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database);
 }

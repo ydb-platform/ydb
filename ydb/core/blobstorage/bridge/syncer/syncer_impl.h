@@ -24,10 +24,13 @@ namespace NKikimr::NBridge {
         bool Finished = false;
         ui32 Step = 0;
         std::deque<TLogoBlobID> RestoreQueue;
+        TReplQuoter::TPtr SyncRateQuoter;
+        const TBlobStorageGroupType SourceGroupType;
 
     public:
         TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats);
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
+            TBlobStorageGroupType sourceGroupType);
 
         void Bootstrap();
         void BeginNextStep();
@@ -50,7 +53,7 @@ namespace NKikimr::NBridge {
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
-        std::deque<std::unique_ptr<IEventHandle>> PendingQueries;
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, TMonotonic>> PendingQueries;
         ui64 NextCookie = 1;
 
         bool Errors = false;
@@ -63,7 +66,8 @@ namespace NKikimr::NBridge {
         bool DoMergeEntities(std::deque<T>& source, std::deque<T>& target, bool sourceFinished, bool targetFinished,
             TCallback&& merge, std::optional<TKey>& lastMerged);
 
-        void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {});
+        void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
+            ui64 quoterBytes = 0);
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);

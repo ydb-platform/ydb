@@ -2104,6 +2104,20 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         }
         return node;
     };
+
+    map["ToMutDict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        Y_UNUSED(ctx);
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+
+        if (node->Head().IsCallable("FromMutDict")) {
+            YQL_CLOG(DEBUG, Core) << "Skip " << node->Content() << " over " << node->Head().Content();
+            return node->Head().HeadPtr();
+        }
+
+        return node;
+    };
 }
 
 }

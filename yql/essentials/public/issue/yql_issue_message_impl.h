@@ -10,7 +10,7 @@ namespace NYql {
 
 using namespace NIssue::NProto;
 
-template<typename TIssueMessage>
+template <typename TIssueMessage>
 TIssue IssueFromMessage(const TIssueMessage& issueMessage) {
     TIssue topIssue;
     TDeque<std::pair<TIssue*, const TIssueMessage*>> queue;
@@ -42,17 +42,18 @@ TIssue IssueFromMessage(const TIssueMessage& issueMessage) {
     return topIssue;
 }
 
-template<typename TIssueMessage>
-void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<TIssueMessage> &message, TIssues &issues) {
+template <typename TIssueMessage>
+void IssuesFromMessage(const ::google::protobuf::RepeatedPtrField<TIssueMessage>& message, TIssues& issues) {
     issues.Clear();
     if (message.size()) {
         issues.Reserve(message.size());
-        for (auto &x : message)
+        for (auto& x : message) {
             issues.AddIssue(IssueFromMessage(x));
+        }
     }
 }
 
-template<typename TIssueMessage>
+template <typename TIssueMessage>
 void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
     TDeque<std::pair<const TIssue*, TIssueMessage*>> queue;
     queue.push_front(std::make_pair(&topIssue, issueMessage));
@@ -82,15 +83,16 @@ void IssueToMessage(const TIssue& topIssue, TIssueMessage* issueMessage) {
     }
 }
 
-template<typename TIssueMessage>
-void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<TIssueMessage> *message) {
+template <typename TIssueMessage>
+void IssuesToMessage(const TIssues& issues, ::google::protobuf::RepeatedPtrField<TIssueMessage>* message) {
     message->Clear();
-    if (!issues)
+    if (!issues) {
         return;
+    }
     message->Reserve(issues.Size());
-    for (const auto &issue : issues) {
+    for (const auto& issue : issues) {
         IssueToMessage(issue, message->Add());
     }
 }
 
-}
+} // namespace NYql

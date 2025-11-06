@@ -594,6 +594,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
@@ -622,6 +623,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
+
+    if (!app.ColumnShardConfig.HasStatistics()) {
+        app.ColumnShardConfig.MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+        app.ColumnShardConfig.MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+    }
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
@@ -654,6 +660,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
+    }
+
+    if (opts.DataShardStatsReportIntervalSeconds_) {
+        app.DataShardConfig.SetStatsReportIntervalSeconds(
+            *opts.DataShardStatsReportIntervalSeconds_);
     }
 
     AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot, opts.NStoragePools_);

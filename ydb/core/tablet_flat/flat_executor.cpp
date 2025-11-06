@@ -18,7 +18,6 @@
 #include "flat_boot_oven.h"
 #include "flat_executor_tx_env.h"
 #include "flat_executor_counters.h"
-#include "flat_executor_backup.h"
 #include "logic_snap_main.h"
 #include "logic_alter_main.h"
 #include "flat_abi_evol.h"
@@ -26,11 +25,13 @@
 #include "shared_sausagecache.h"
 #include "util_fmt_abort.h"
 #include "util_fmt_desc.h"
+#include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -45,10 +46,10 @@
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
 
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-static constexpr ui64 MaxTxInFly = 10000;
 
 LWTRACE_USING(TABLET_FLAT_PROVIDER)
 
@@ -137,10 +138,10 @@ TExecutor::TExecutor(
     , Stats(new TExecutorStatsImpl())
     , LogFlushDelayOverrideUsec(-1, -1, 60*1000*1000)
     , MaxCommitRedoMB(256, 1, 4096)
+    , MaxTxInFly(10000, 0, 1000000)
 {}
 
 TExecutor::~TExecutor() {
-
 }
 
 bool TExecutor::OnUnhandledException(const std::exception& e) {
@@ -177,9 +178,12 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
-    TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
-    AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
-    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+    auto& icb = *AppData()->Icb;
+    if (static_cast<size_t>(Owner->TabletType()) < icb.LogFlushDelayOverrideUsec.size()) {
+        TControlBoard::RegisterSharedControl(LogFlushDelayOverrideUsec, icb.LogFlushDelayOverrideUsec[static_cast<size_t>(Owner->TabletType())]);
+    }
+    TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
+    TControlBoard::RegisterSharedControl(MaxTxInFly, icb.TabletControls.MaxTxInFly);
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -188,6 +192,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_broken", true);
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_exception", true);
 }
 
 void TExecutor::PassAway() {
@@ -202,6 +207,10 @@ void TExecutor::PassAway() {
         CompactionLogic->Stop();
     }
 
+    if (CommitManager) {
+        CommitManager->Stop();
+    }
+
     if (Broker || Scans || Memory) {
         Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvNotifyActorDied);
     }
@@ -210,8 +219,6 @@ void TExecutor::PassAway() {
     Owner = nullptr;
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister());
-
-    Send(BackupWriter, new TEvents::TEvPoisonPill());
 
     return TActor::PassAway();
 }
@@ -317,19 +324,13 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
     Stats->IsAnyChannelYellowStop = !Stats->YellowStopChannels.empty();
 
     if (newMoveCount > oldMoveCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels:";
-            for (ui32 channel : Stats->YellowMoveChannels) {
-                line << ' ' << channel;
-            }
+        if (auto line = Logger->Log(ELnLev::Notice)) {
+            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels: " << Stats->YellowMoveChannels;
         }
     }
     if (newStopCount > oldStopCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels:";
-            for (ui32 channel : Stats->YellowStopChannels) {
-                line << ' ' << channel;
-            }
+        if (auto line = Logger->Log(ELnLev::Notice)) {
+            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels: " << Stats->YellowStopChannels;
         }
     }
 
@@ -347,9 +348,14 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
+    Y_ASSERT(yellowChannels);
     if (Owner->ReassignChannelsEnabled()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
+            if (auto logl = Logger->Log(ELnLev::Notice)) {
+                logl << NFmt::Do(*this) << " CheckYellow reassign channels: " << yellowChannels
+                    << " tablet# " << info->TabletID << " hive# " << info->HiveId;
+            }
             Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
@@ -3758,7 +3764,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         UtilizeSubset(*ops->Subset, *ops->Trace, std::move(reusedBundles), commit.Get());
 
         for (auto &gone: ops->Subset->Flatten) {
-            if (auto *found = updatedSlices.FindPtr(gone->Label)) {
+            if (updatedSlices.FindPtr(gone->Label)) {
                 auto *deltaProto = proto.AddBundleDeltas();
                 LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
                 deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));
@@ -4071,8 +4077,7 @@ void TExecutor::ForceSendCounters() {
 
 float TExecutor::GetRejectProbability() const {
     // Limit number of in-flight TXs
-    // TODO: make configurable
-    if (Stats->TxInFly > MaxTxInFly) {
+    if (Stats->TxInFly > ui64(MaxTxInFly)) {
         HadRejectProbabilityByTxInFly = true;
         return 1.0;
     }
@@ -4108,7 +4113,7 @@ float TExecutor::GetRejectProbability() const {
 }
 
 void TExecutor::MaybeRelaxRejectProbability() {
-    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= MaxTxInFly ||
+    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= ui64(MaxTxInFly) ||
         HadRejectProbabilityByOverload)
     {
         HadRejectProbabilityByTxInFly = false;
@@ -4350,6 +4355,8 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NMemory::TEvMemTableRegistered, Handle);
         hFunc(NMemory::TEvMemTableCompact, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
+        hFunc(NBackup::TEvSnapshotCompleted, Handle);
+        hFunc(NBackup::TEvChangelogFailed, Handle);
     default:
         break;
     }
@@ -5119,13 +5126,48 @@ void TExecutor::StartBackup() {
         return;
     }
 
+    if (!CommitManager) {
+        return;
+    }
+
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
     TTabletTypes::EType tabletType = Owner->TabletType();
     ui64 tabletId = Owner->TabletID();
-    if (auto* writer = CreateBackupWriter(backupConfig, tabletType, tabletId, Generation0); writer != nullptr) {
-        BackupWriter = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    const auto& scheme = Database->GetScheme();
+    const auto& tables = scheme.Tables;
+
+    auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
+        tabletId, Generation0, scheme.GetSnapshot());
+    auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
+        tabletId, Generation0, scheme);
+
+    if (snapshotWriter && changelogWriter) {
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+
+        auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        for (const auto& [tableId, table] : tables) {
+           auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
+           QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
+        }
     }
 }
 
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
+    Owner->BackupSnapshotComplete(OwnerCtx());
 }
+
+void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
+    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
+}
+
+}
+}
+
+template<> inline
+void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x << ' ';
+    o << "]";
 }

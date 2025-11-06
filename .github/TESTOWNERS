@@ -112,6 +112,9 @@
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
 /ydb/core/transfer @ydb-platform/Topics
 /ydb/tests/stress/kafka @ydb-platform/Topics
+/ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
+/ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
+/ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

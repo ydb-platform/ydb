@@ -8,15 +8,15 @@ namespace NPython {
 extern PyTypeObject PyCallableType;
 
 TPyObjectPtr ToPyCallable(
-        const TPyCastContext::TPtr& castCtx,
-        const NKikimr::NUdf::TType* type,
-        const NKikimr::NUdf::TUnboxedValuePod& value);
+    const TPyCastContext::TPtr& castCtx,
+    const NKikimr::NUdf::TType* type,
+    const NKikimr::NUdf::TUnboxedValuePod& value);
 
 NKikimr::NUdf::TUnboxedValue FromPyCallable(
-        const TPyCastContext::TPtr& castCtx,
-        const NKikimr::NUdf::TType* type,
-        PyObject* value);
+    const TPyCastContext::TPtr& castCtx,
+    const NKikimr::NUdf::TType* type,
+    PyObject* value);
 
 void SetupCallableSettings(const TPyCastContext::TPtr& castCtx, PyObject* value);
 
-} // namspace NPython
+} // namespace NPython

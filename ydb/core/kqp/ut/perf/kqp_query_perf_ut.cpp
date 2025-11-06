@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         )"), params);
 
         AssertTableStats(stats, "/Root/EightShard", {
-            .ExpectedReads = UseSink ? 0 : 1, // Non-existing keys don't count in reads
+            .ExpectedReads = 1, // Non-existing keys don't count in reads
             .ExpectedUpdates = 1,
         });
 
@@ -691,7 +691,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         CompareYson(R"([[["Anna"];[3800u]]])", FormatResultSetYson(results[0]));
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 
     Y_UNIT_TEST_QUAD(MultiDeleteFromTable, QueryService, UseSink) {

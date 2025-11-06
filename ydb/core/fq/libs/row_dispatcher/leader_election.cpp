@@ -9,9 +9,11 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/protos/actors.pb.h>
+#include <ydb/library/logger/actor.h>
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/config.pb.h>
+
+#include <memory>
 
 namespace NFq {
 
@@ -83,7 +85,11 @@ struct TLeaderElectionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
 };
 
-class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
+struct TActorSystemPtrMixin {
+    NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
+};
+
+class TLeaderElection: public TActorBootstrapped<TLeaderElection>, public TActorSystemPtrMixin {
 
     enum class EState {
         Init,
@@ -92,9 +98,9 @@ class TLeaderElection: public TActorBootstrapped<TLeaderElection> {
         WaitSemaphoreCreated,
         Started
     };
-    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
-    const NKikimr::TYdbCredentialsProviderFactory& CredentialsProviderFactory;
-    NYdb::TDriver Driver;
+    TRowDispatcherSettings::TCoordinatorSettings Config;
+    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
+    std::unique_ptr<NYdb::TDriver> Driver;
     TYdbConnectionPtr YdbConnection;
     TString TablePathPrefix;
     const TString TenantId;
@@ -122,7 +128,7 @@ public:
     TLeaderElection(
         NActors::TActorId parentId,
         NActors::TActorId coordinatorId,
-        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+        const TRowDispatcherSettings::TCoordinatorSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         NYdb::TDriver driver,
         const TString& tenant,
@@ -165,20 +171,19 @@ private:
     void ProcessState();
     void ResetState();
     void SetTimeout();
+    NYdb::TDriverConfig GetYdbDriverConfig() const;
 };
 
 TLeaderElection::TLeaderElection(
     NActors::TActorId parentId,
     NActors::TActorId coordinatorId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    NYdb::TDriver driver,
+    NYdb::TDriver /*driver*/,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , Driver(driver)
-    , YdbConnection(config.GetLocalMode() ? nullptr : NewYdbConnection(config.GetDatabase(), credentialsProviderFactory, Driver))
     , TablePathPrefix(JoinPath(config.GetDatabase().GetDatabase(), config.GetCoordinationNodePath()))
     , TenantId(JoinSeq(":", NKikimr::SplitPath(tenant)))
     , CoordinationNodePath(JoinPath(TablePathPrefix, TenantId))
@@ -218,13 +223,20 @@ TYdbSdkRetryPolicy::TPtr MakeSchemaRetryPolicy() {
 
 void TLeaderElection::Bootstrap() {
     Become(&TLeaderElection::StateFunc);
+    Y_ABORT_UNLESS(!ActorSystemPtr->load(std::memory_order_relaxed), "Double ActorSystemPtr init");
+    ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_relaxed);
+
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
-         << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath);
+         << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath
+         << ", endpoint " << Config.GetDatabase().GetEndpoint());
     if (Config.GetLocalMode()) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;
     }
+
+    Driver = std::make_unique<NYdb::TDriver>(GetYdbDriverConfig());
+    YdbConnection = NewYdbConnection(Config.GetDatabase(), CredentialsProviderFactory, *Driver);
     ProcessState();
 }
 
@@ -469,6 +481,13 @@ void TLeaderElection::HandleException(const std::exception& e) {
     ResetState();
 }
 
+NYdb::TDriverConfig TLeaderElection::GetYdbDriverConfig() const {
+    NYdb::TDriverConfig cfg;
+    cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+    cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
+    return cfg;
+}
+
 } // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -476,7 +495,7 @@ void TLeaderElection::HandleException(const std::exception& e) {
 std::unique_ptr<NActors::IActor> NewLeaderElection(
     NActors::TActorId rowDispatcherId,
     NActors::TActorId coordinatorId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYdb::TDriver driver,
     const TString& tenant,

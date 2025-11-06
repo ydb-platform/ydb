@@ -200,6 +200,7 @@ private:
     void HandleRefreshTimeout(TEvents::TEvWakeup::TPtr&) {
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
+        req->Record.SetDatabaseName(Database);
         auto* refreshSnapshot = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
         for (const TString& tablePath : Tables) {
             refreshSnapshot->AddTables()->SetTablePath(tablePath);
@@ -249,6 +250,7 @@ private:
     void SendDiscard() {
         auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
+        req->Record.SetDatabaseName(Database);
         auto* discardSnapshot = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
         for (const TString& tablePath : Tables) {
             discardSnapshot->AddTables()->SetTablePath(tablePath);

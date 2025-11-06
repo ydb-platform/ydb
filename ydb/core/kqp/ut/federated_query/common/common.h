@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
@@ -12,7 +13,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
 
     NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(
         const NYdb::TOperation::TOperationId& operationId,
-        const NYdb::TDriver& ydbDriver);
+        const NYdb::TDriver& ydbDriver,
+        const TString& userSID = "");
 
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
     void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
@@ -24,6 +26,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
         TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+        TTestLogSettings LogSettings;
+        bool UseLocalCheckpointsInStreamingQueries = false;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
@@ -33,5 +37,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
         const TKikimrRunnerOptions& options = {});
+
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialsFactory(
+        const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
 
 } // namespace NKikimr::NKqp::NFederatedQueryTest

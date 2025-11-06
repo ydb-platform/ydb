@@ -35,6 +35,20 @@ struct TTypeError {
     TString Error = "unsupported type";
 };
 
+std::optional<TTypeError> ValidateIoDataType(const TDataExprType* type, std::vector<EDataSlot> extraTypes = {}) {
+    const auto dataSlot = type->GetSlot();
+    if (IsDataTypeBigDate(dataSlot)) {
+        return TTypeError{type, "big dates is not supported"};
+    }
+    if (IsDataTypeNumeric(dataSlot) || IsDataTypeDateOrTzDate(dataSlot)) {
+        return std::nullopt;
+    }
+    if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::Uuid}, dataSlot) || IsIn(extraTypes, dataSlot)) {
+        return std::nullopt;
+    }
+    return TTypeError{type};
+}
+
 std::optional<TTypeError> ValidateJsonListIoType(const TTypeAnnotationNode* type, std::function<std::optional<TTypeError>(const TTypeAnnotationNode*)> defaultHandler) {
     switch (type->GetKind()) {
         case ETypeAnnotationKind::Null:
@@ -103,6 +117,51 @@ std::optional<TTypeError> ValidateJsonListInputType(const TTypeAnnotationNode* t
     });
 }
 
+std::optional<TTypeError> ValidateParquetIoType(const TTypeAnnotationNode* type, bool underOptional = false) {
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::Data: {
+            const auto dataSlot = type->Cast<TDataExprType>()->GetSlot();
+            if (IsDataTypeNumeric(dataSlot) || IsDataTypeDateOrTzDate(dataSlot) || IsDataTypeDecimal(dataSlot) || IsDataTypeBigDate(dataSlot)) {
+                return std::nullopt;
+            }
+            if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::Uuid}, dataSlot)) {
+                return std::nullopt;
+            }
+            return TTypeError{type};
+        }
+        case ETypeAnnotationKind::Optional: {
+            if (underOptional) {
+                return TTypeError{type, "double optional is not supported"};
+            }
+            return ValidateParquetIoType(type->Cast<TOptionalExprType>()->GetItemType(), true);
+        }
+        case ETypeAnnotationKind::List: {
+            if (underOptional) {
+                return TTypeError{type, "list under optional is not supported"};
+            }
+            return ValidateIoDataType(type->Cast<TDataExprType>());
+        }
+        case ETypeAnnotationKind::Tuple: {
+            if (underOptional) {
+                return TTypeError{type, "tuple under optional is not supported"};
+            }
+            for (const auto* item : type->Cast<TTupleExprType>()->GetItems()) {
+                if (const auto error = ValidateIoDataType(item->Cast<TDataExprType>())) {
+                    return error;
+                }
+            }
+            return std::nullopt;
+        }
+        case ETypeAnnotationKind::Pg: {
+            return std::nullopt;
+        }
+        default: {
+            break;
+        }
+    }
+    return TTypeError{type};
+}
+
 // Type compatible with Yson2.From udf
 std::optional<TTypeError> DefaultJsonListOutputTypeHandler(const TTypeAnnotationNode* type) {
     if (type->GetKind() == ETypeAnnotationKind::Variant) {
@@ -115,18 +174,8 @@ std::optional<TTypeError> ValidateJsonListOutputType(const TTypeAnnotationNode* 
     return ValidateJsonListIoType(type, &DefaultJsonListOutputTypeHandler);
 }
 
-std::optional<TTypeError> ValidateIoDataType(const TDataExprType* type, std::vector<EDataSlot> extraTypes = {}) {
-    const auto dataSlot = type->GetSlot();
-    if (IsDataTypeBigDate(dataSlot)) {
-        return TTypeError{type, "big dates is not supported"};
-    }
-    if (IsDataTypeNumeric(dataSlot) || IsDataTypeDateOrTzDate(dataSlot)) {
-        return std::nullopt;
-    }
-    if (IsIn({EDataSlot::Bool, EDataSlot::String, EDataSlot::Utf8, EDataSlot::Json, EDataSlot::Uuid}, dataSlot) || IsIn(extraTypes, dataSlot)) {
-        return std::nullopt;
-    }
-    return TTypeError{type};
+std::optional<TTypeError> ValidateParquetOutputType(const TTypeAnnotationNode* type) {
+    return ValidateParquetIoType(type);
 }
 
 // Data type compatible with ClickHouseClient.ParseBlocks udf and S3 coro read actor
@@ -245,6 +294,10 @@ bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const T
 
     if (format == "json_list"sv) {
         return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list output format", ctx, &ValidateJsonListOutputType);
+    }
+
+    if (format == "parquet"sv) {
+        return ValidateIoSchema(pos, schemaStructRowType, "S3 parquet output format", ctx, &ValidateParquetOutputType);
     }
 
     return ValidateIoSchema(pos, schemaStructRowType, TStringBuilder() << "S3 " << format << " output format", ctx, [](const TTypeAnnotationNode* type) {

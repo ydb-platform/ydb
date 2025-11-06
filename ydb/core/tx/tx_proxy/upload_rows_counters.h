@@ -76,6 +76,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FailedBytes;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsBytes;
 
+    NMonitoring::TDynamicCounters::TCounterPtr MissingDefaultColumnsCount;
+
     THashMap<TUploadStatus, NMonitoring::TDynamicCounters::TCounterPtr, TUploadStatus::THasher> CodesCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr GetCodeCounter(const TUploadStatus& status);
@@ -141,6 +143,10 @@ public:
         PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
         PackageSizeCountByRecords->Collect(rowsCount);
         RequestsBytes->Add(requestBytes);
+    }
+
+    void OnMissingDefaultColumns() {
+        MissingDefaultColumnsCount->Inc();
     }
 };
 

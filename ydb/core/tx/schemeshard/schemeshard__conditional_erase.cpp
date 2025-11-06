@@ -1,6 +1,8 @@
 #include "schemeshard_impl.h"
 
 #include <util/string/join.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -153,6 +155,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         const TInstant wallClock = ctx.Now() - *expireAfter;
 
         NKikimrTxDataShard::TEvConditionalEraseRowsRequest request;
+        request.SetDatabaseName(CanonizePath(Self->RootPathElements));
         request.SetTableId(shardInfo.PathId.LocalPathId);
         request.SetSchemaVersion(tableInfo->AlterVersion);
 
@@ -206,7 +209,6 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             auto ev = MakeHolder<TEvDataShard::TEvConditionalEraseRowsRequest>();
             ev->Record = std::move(request);
-
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Run conditional erase"
                 << ", tabletId: " << tabletId
                 << ", request: " << ev->Record.ShortDebugString()
@@ -239,7 +241,7 @@ private:
 
             auto index = GetIndex(childPath);
             if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
-                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                || !DoesIndexSupportTTL(index->Type)) {
                 continue;
             }
 
@@ -276,7 +278,7 @@ private:
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
-        Y_ABORT_UNLESS(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+        Y_ABORT_UNLESS(DoesIndexSupportTTL(index->Type));
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 

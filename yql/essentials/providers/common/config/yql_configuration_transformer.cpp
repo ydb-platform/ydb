@@ -14,7 +14,7 @@ namespace NCommon {
 using namespace NNodes;
 
 TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,
-    const TTypeAnnotationContext& types, const TString& provider, const THashSet<TStringBuf>& configureCallables)
+                                                                     const TTypeAnnotationContext& types, const TString& provider, const THashSet<TStringBuf>& configureCallables)
     : Dispatcher(dispatcher)
     , Types_(types)
     , Provider_(provider)
@@ -26,7 +26,7 @@ TProviderConfigurationTransformer::TProviderConfigurationTransformer(TSettingDis
 }
 
 IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprNode::TPtr input,
-    TExprNode::TPtr& output, TExprContext& ctx)
+                                                                          TExprNode::TPtr& output, TExprContext& ctx)
 {
     output = input;
     if (ctx.Step.IsDone(TExprStep::Configure)) {
@@ -80,7 +80,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                 auto name = TString(node->Child(3)->Content());
                 if (name.StartsWith('_')) {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Child(3)->Pos()),
-                        TStringBuilder() << "Failed to override system setting: " << name));
+                                        TStringBuilder() << "Failed to override system setting: " << name));
                     return nullptr;
                 }
 
@@ -115,7 +115,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
                 }
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), TStringBuilder()
-                    << "Unsupported configuration option: " << atom));
+                                                                                << "Unsupported configuration option: " << atom));
                 return nullptr;
             }
         }
@@ -127,7 +127,7 @@ IGraphTransformer::TStatus TProviderConfigurationTransformer::DoTransform(TExprN
 }
 
 bool TProviderConfigurationTransformer::HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name,
-    const TMaybe<TString>& value, TExprContext& ctx)
+                                                   const TMaybe<TString>& value, TExprContext& ctx)
 {
     Y_UNUSED(pos);
     Y_UNUSED(ctx);
@@ -139,7 +139,7 @@ TSettingDispatcher::TPtr TProviderConfigurationTransformer::GetDispatcher() cons
 }
 
 bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias,
-    TExprContext& ctx)
+                                                   TExprContext& ctx)
 {
     auto cred = Types_.Credentials->FindCredential(alias);
     if (!cred) {
@@ -149,8 +149,8 @@ bool TProviderConfigurationTransformer::HandleAuth(TPositionHandle pos, const TS
 
     if (cred->Category != Provider_) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-            << "Mismatch credential category, expected: "
-            << Provider_ << ", but found: " << cred->Category));
+                                                      << "Mismatch credential category, expected: "
+                                                      << Provider_ << ", but found: " << cred->Category));
         return false;
     }
 

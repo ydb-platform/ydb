@@ -60,8 +60,8 @@ void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketRes
 
 void TKafkaSaslAuthActor::Handle(TEvPrivate::TEvTokenReady::TPtr& ev, const NActors::TActorContext& /*ctx*/) {
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-        .Database = ev->Get()->Database,
         .Ticket = "Login " + ev->Get()->LoginResult.token(),
+        .Database = CanonizePath(ev->Get()->Database),
         .PeerName = TStringBuilder() << Address,
     }));
 }
@@ -169,8 +169,8 @@ void TKafkaSaslAuthActor::SendApiKeyRequest() {
         ticket = ClientAuthData.Password;
     }
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-        .Database = DatabasePath,
         .Ticket = ticket,
+        .Database = DatabasePath,
         .PeerName = TStringBuilder() << Address,
         .Entries = entries
     }));
@@ -183,7 +183,7 @@ void TKafkaSaslAuthActor::SendDescribeRequest(const TActorContext& ctx) {
     entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.SyncVersion = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
-    schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
+    schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
@@ -196,6 +196,7 @@ void TKafkaSaslAuthActor::GetPathByPathId(const TPathId& pathId, const TActorCon
     entry.SyncVersion = false;
     entry.RedirectRequired = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
+    schemeCacheRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 

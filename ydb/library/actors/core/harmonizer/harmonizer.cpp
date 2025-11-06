@@ -294,12 +294,15 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
     Budget.store(CpuConsumption.Budget, std::memory_order_relaxed);
     SharedFreeCpu.store(SharedInfo.FreeCpu, std::memory_order_relaxed);
 
+    std::vector<float> currentThreadCounts(Pools.size());
+
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         TPoolInfo &pool = *Pools[poolIdx];
         pool.SharedCpuQuota.store(SharedInfo.CpuConsumption[poolIdx].CpuQuota, std::memory_order_relaxed);
         if (pool.BasicPool) {
             pool.BasicPool->SetSharedCpuQuota(SharedInfo.CpuConsumption[poolIdx].CpuQuota);
         }
+        currentThreadCounts[poolIdx] = pool.GetThreadCount();
     }
 
     ProcessWaitingStats();
@@ -351,7 +354,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
         if (!Shared) {
             potentialMaxThreadCountWithoutSharedCpu = std::floor(potentialMaxThreadCountWithoutSharedCpu);
         }
-        float potentialMaxThreadCount = Max<float>(pool.MinFullThreadCount, std::min<float>(pool.MaxThreadCount, potentialMaxThreadCountWithoutSharedCpu + possibleMaxSharedQuota));
+        float potentialMaxThreadCount = Max<float>(currentThreadCounts[poolIdx], std::min<float>(pool.MaxThreadCount, potentialMaxThreadCountWithoutSharedCpu + possibleMaxSharedQuota));
         pool.PotentialMaxThreadCount.store(potentialMaxThreadCount, std::memory_order_relaxed);
 
         float ownElapsed = CpuConsumption.PoolConsumption[poolIdx].Elapsed - CpuConsumption.PoolForeignConsumption[poolIdx].Elapsed;

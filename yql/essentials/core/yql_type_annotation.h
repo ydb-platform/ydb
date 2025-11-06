@@ -15,6 +15,7 @@
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/sql/sql.h>
 
@@ -117,6 +118,10 @@ public:
         ModuleChecker_ = moduleChecker;
     }
 
+    void SetUseCanonicalLibrarySuffix(bool use) {
+        UseCanonicalLibrarySuffix_ = use;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -137,6 +142,7 @@ private:
     THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
     static TString ExtractPackageNameFromModule(TStringBuf moduleName);
     TString SubstParameters(const TString& str);
+    bool IsSExpr(bool isYql, bool isYqls, const TString& body) const;
 
 private:
     const NSQLTranslation::TTranslators Translators_;
@@ -158,6 +164,7 @@ private:
     const bool OptimizeLibraries_;
     THolder<TExprContext::TFreezeGuard> FreezeGuard_;
     TString FileAliasPrefix_;
+    bool UseCanonicalLibrarySuffix_ = false;
     TSet<TString> UsedSuffixes_;
 };
 
@@ -453,6 +460,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TFileStoragePtr FileStorage;
     TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
+    ui32 CostBasedOptimizerVersion = 0;
     bool MatchRecognize = false;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
@@ -471,6 +479,13 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 AndOverOrExpansionLimit = 100;
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
+    bool EnableLineage = false;
+    bool EnableStandaloneLineage = false;
+    bool CorrectLineage = true;
+    TMaybe<bool> CorrectStandaloneLineage;
+
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
+    NLayers::ILayersRegistryPtr LayersRegistry;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -551,6 +566,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
             DataSinkMap[name] = provider;
         }
         DataSinks.push_back(std::move(provider));
+    }
+
+    void AddRemoteLayersProvider(const TString& name, NLayers::IRemoteLayerProviderPtr provider) {
+        RemoteLayerProviderByName[name] = provider;
     }
 
     bool Initialize(TExprContext& ctx);

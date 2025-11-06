@@ -973,7 +973,7 @@ void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
     ui32 blockCount = 0;
     ui32 emptyPops = 0;
 
-    for (ui32 i = 0; i < 10000000; ++i) {
+    for (ui32 i = 0; i < 100000; ++i) {
         auto row = ctx.CreateRow(i);
         ConsumeRow(ctx, std::move(row), consumer);
         if (consumer->GetFillLevel() != NoLimit) {
@@ -1000,6 +1000,7 @@ void TestBackPressureWithSpillingLoad(TTestContext& ctx) {
             }
         }
     }
+    UNIT_ASSERT(blockCount > 0);
     Cerr << "Blocked " << blockCount << " time(s) emptyPops " << emptyPops << Endl;
 }
 

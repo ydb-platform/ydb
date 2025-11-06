@@ -13,14 +13,13 @@ struct TDelete {
         delete ptr;
     }
 };
-}
+} // namespace NDetails
 
 ///////////////////////////////////////////////////////////////////////////////
 // TUniquePtr
 ///////////////////////////////////////////////////////////////////////////////
 template <typename T, typename D = NDetails::TDelete>
-class TUniquePtr
-{
+class TUniquePtr {
 public:
     inline TUniquePtr(T* ptr = nullptr)
         : Ptr_(ptr)
@@ -66,15 +65,24 @@ public:
         rhs.Ptr_ = tmp;
     }
 
-    inline T* Get() const { return Ptr_; }
-    inline T& operator*() const { return *Ptr_; }
-    inline T* operator->() const { return Ptr_; }
-    inline explicit operator bool() const { return Ptr_ != nullptr; }
+    inline T* Get() const {
+        return Ptr_;
+    }
+    inline T& operator*() const {
+        return *Ptr_;
+    }
+    inline T* operator->() const {
+        return Ptr_;
+    }
+    inline explicit operator bool() const {
+        return Ptr_ != nullptr;
+    }
 
 private:
     inline void DoDestroy() {
-        if (Ptr_)
+        if (Ptr_) {
             D::DoDelete(Ptr_);
+        }
     }
 
 private:
@@ -85,8 +93,7 @@ private:
 // TRefCountedPtr
 ///////////////////////////////////////////////////////////////////////////////
 template <class T>
-class TDefaultRefCountedPtrOps
-{
+class TDefaultRefCountedPtrOps {
 public:
     static inline void Ref(T* t) {
         Y_ASSERT(t);
@@ -105,11 +112,14 @@ public:
 };
 
 template <typename T, typename Ops = TDefaultRefCountedPtrOps<T>>
-class TRefCountedPtr
-{
+class TRefCountedPtr {
 public:
-    enum AddRef { ADD_REF };
-    enum StealRef { STEAL_REF };
+    enum AddRef {
+        ADD_REF
+    };
+    enum StealRef {
+        STEAL_REF
+    };
 
 public:
     inline TRefCountedPtr(T* ptr = nullptr)
@@ -188,10 +198,18 @@ public:
         return tmp;
     }
 
-    inline T* Get() const { return Ptr_; }
-    inline T& operator*() const { return *Ptr_; }
-    inline T* operator->() const { return Ptr_; }
-    inline explicit operator bool() const { return Ptr_ != nullptr; }
+    inline T* Get() const {
+        return Ptr_;
+    }
+    inline T& operator*() const {
+        return *Ptr_;
+    }
+    inline T* operator->() const {
+        return Ptr_;
+    }
+    inline explicit operator bool() const {
+        return Ptr_ != nullptr;
+    }
 
     inline ui32 RefCount() const {
         return Ptr_ ? Ops::RefCount(Ptr_) : 0;
@@ -199,7 +217,7 @@ public:
 
 private:
     inline void Ref() {
-        if (Ptr_){
+        if (Ptr_) {
             Ops::Ref(Ptr_);
         }
     }
@@ -244,5 +262,5 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

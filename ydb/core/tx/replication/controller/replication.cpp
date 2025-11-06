@@ -42,7 +42,15 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
 
-        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie));
+        SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie, Database));
+    }
+
+    void ResolveDatabase(const TActorContext& ctx) {
+        if (TenantResolver) {
+            return;
+        }
+
+        TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
     ui64 GetExpectedSecretResolverCookie() const {
@@ -159,6 +167,8 @@ public:
 
             if (endpoint.empty()) {
                 ydbProxy.Reset(CreateLocalYdbProxy(Database));
+            } else if (database.empty()) {
+                ErrorState("Database is not specified.");
             } else {
                 switch (params.GetCredentialsCase()) {
                 case NKikimrReplication::TConnectionParams::kStaticCredentials:
@@ -194,8 +204,8 @@ public:
             }
         }
 
-        if (!Tenant && !TenantResolver) {
-            TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
+        if (!Database) {
+            ResolveDatabase(ctx);
         }
 
         switch (State) {
@@ -263,7 +273,6 @@ public:
 private:
     const ui64 ReplicationId;
     const TPathId PathId;
-    TString Tenant;
 
     NKikimrReplication::TReplicationConfig Config;
     TString Database;
@@ -278,7 +287,7 @@ private:
     ui64 SecretResolverCookie = 0;
     TActorId ResourceIdResolver;
     TActorId YdbProxy;
-    TActorId TenantResolver;
+    TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
 
 }; // TImpl
@@ -365,8 +374,17 @@ const NKikimrReplication::TReplicationConfig& TReplication::GetConfig() const {
     return Impl->Config;
 }
 
+void TReplication::SetDatabase(const TString& value) {
+    Impl->Database = value;
+    Impl->TenantResolver = {};
+}
+
 const TString& TReplication::GetDatabase() const {
     return Impl->Database;
+}
+
+void TReplication::ResolveDatabase(const TActorContext& ctx) {
+    Impl->ResolveDatabase(ctx);
 }
 
 void TReplication::SetState(EState state, TString issue) {
@@ -427,15 +445,6 @@ void TReplication::UpdateResourceId(const TString& value) {
     default:
         Y_ABORT("unreachable");
     }
-}
-
-void TReplication::SetTenant(const TString& value) {
-    Impl->Tenant = value;
-    Impl->TenantResolver = {};
-}
-
-const TString& TReplication::GetTenant() const {
-    return Impl->Tenant;
 }
 
 void TReplication::SetDropOp(const TActorId& sender, const std::pair<ui64, ui32>& opId) {

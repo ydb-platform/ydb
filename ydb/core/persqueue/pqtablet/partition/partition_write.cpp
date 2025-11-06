@@ -1026,17 +1026,30 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     return EProcessResult::Continue;
 }
 
+struct TPartitionsPrivateAddCmdWriteTag {};
+
 void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
-                             ui64 creationUnixTime,
+                             TInstant creationUnixTime,
                              const TActorContext& ctx,
-                             bool includeToWriteCycle)
+                             bool includeToWriteCycle) {
+    // Y_ASSERT(creationUnixTime > 0);  // TODO: remove test cases from the 1970s and return check
+    AddCmdWriteImpl(newWrite, request, creationUnixTime, ctx, includeToWriteCycle, {});
+}
+
+void TPartition::AddCmdWriteImpl(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+                             TEvKeyValue::TEvRequest* request,
+                             TInstant creationUnixTime,
+                             const TActorContext& ctx,
+                             bool includeToWriteCycle,
+                             TPartitionsPrivateAddCmdWriteTag)
 {
     auto write = request->Record.AddCmdWrite();
     write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
     write->SetValue(newWrite->Value);
-    if (creationUnixTime) {
-        write->SetCreationUnixTime(creationUnixTime);
+    if (creationUnixTime != TInstant::Zero()) {
+        // note: The time is rounded to second precision.
+        write->SetCreationUnixTime(creationUnixTime.Seconds());
     }
     //PQ_ENSURE(newWrite->Key.IsFastWrite());
     auto channel = GetChannel(NextChannel(newWrite->Key.HasSuffix(), newWrite->Value.size()));
@@ -1049,12 +1062,12 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
         WriteCycleSize += newWrite->Value.size();
 }
 
-void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
+void TPartition::AddCmdWriteWithDeferredTimestamp(const std::optional<TPartitionedBlob::TFormedBlobInfo>& newWrite,
                              TEvKeyValue::TEvRequest* request,
                              const TActorContext& ctx,
                              bool includeToWriteCycle)
 {
-    AddCmdWrite(newWrite, request, 0, ctx, includeToWriteCycle);
+    AddCmdWriteImpl(newWrite, request, TInstant::Zero(), ctx, includeToWriteCycle, {});
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
@@ -1070,6 +1083,9 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             auto rename = request->Record.AddCmdRename();
             rename->SetOldKey(x.OldKey.ToString());
             rename->SetNewKey(x.NewKey.ToString());
+            if (x.CreationUnixTime != TInstant::Zero()) {
+                rename->SetCreationUnixTime(x.CreationUnixTime.Seconds());
+            }
         }
         if (!zone.DataKeysBody.empty() && zone.CompactedKeys.empty()) {
             PQ_ENSURE(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset())
@@ -1187,7 +1203,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo) || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
     ) {
         if (poffset >= curOffset) {
-            LOG_W("Already written message. Topic: '" << TopicName()
+            LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)
                     << "'. Message seqNo: " << p.Msg.SeqNo
                     << ". Committed seqNo: " << sourceId.CommittedSeqNo()
@@ -1353,7 +1369,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     if (newWrite && !newWrite->Value.empty()) {
         newWrite->Key.SetFastWrite();
-        AddCmdWrite(newWrite, request, ctx);
+        AddCmdWriteWithDeferredTimestamp(newWrite, request, ctx);
 
         LOG_D("Topic '" << TopicName() <<
                 "' partition " << Partition <<

@@ -6,7 +6,7 @@
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/base/appdata.h>
@@ -29,6 +29,17 @@ namespace NKikimr {
 using TGRpcServers = TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>>;
 using TGRpcServersFactory = std::function<TGRpcServers()>;
 
+struct TGRpcServersWrapper {
+    TGRpcServers Servers;
+    TGRpcServersFactory GrpcServersFactory;
+    TMutex Mutex;
+    std::atomic<bool> IsDisabled = false;
+
+    TGuard<TMutex> Guard() {
+        return TGuard<TMutex>(Mutex);
+    }
+};
+
 class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
     static TProgramShouldContinue KikimrShouldContinue;
@@ -48,6 +59,7 @@ protected:
     bool GracefulShutdownSupported = false;
     TDuration MinDelayBeforeShutdown;
     TDuration DrainTimeout;
+    TDuration CheckForStopInterval;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;
@@ -69,7 +81,7 @@ protected:
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
 
-    TGRpcServersFactory GRpcServersFactory;
+    std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TActorId GRpcServersManager;
 
     virtual ~TKikimrRunner();

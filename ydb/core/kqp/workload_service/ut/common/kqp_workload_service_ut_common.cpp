@@ -250,15 +250,20 @@ class TWorkloadServiceYdbSetup : public IYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
-        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
-        appConfig.MutableFeatureFlags()->SetEnableStreamingQueries(true);
-        appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
         *appConfig.MutableWorkloadManagerConfig() = Settings_.WorkloadManagerConfig_;
+
+        auto& featureFlags = *appConfig.MutableFeatureFlags();
+        featureFlags.SetEnableResourcePools(Settings_.EnableResourcePools_);
+        featureFlags.SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
+        featureFlags.SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        featureFlags.SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableResourcePoolsCounters(true);
+        featureFlags.SetEnableStreamingQueries(true);
+
+        auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
+        queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);
+        queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
         appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         return appConfig;

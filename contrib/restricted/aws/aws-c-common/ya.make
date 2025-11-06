@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.12.4)
+VERSION(0.12.5)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.12.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.12.5.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/aws/aws-c-common/generated/include
@@ -107,7 +107,6 @@ SRCS(
     source/json.c
     source/lifo_cache.c
     source/linked_hash_table.c
-    source/linux/system_info.c
     source/log_channel.c
     source/log_formatter.c
     source/log_writer.c
@@ -144,6 +143,8 @@ ENDIF()
 
 IF (NOT OS_WINDOWS)
     SRCS(
+        source/linux/file_direct_io.c
+        source/linux/system_info.c
         source/posix/clock.c
         source/posix/condition_variable.c
         source/posix/cross_process_lock.c

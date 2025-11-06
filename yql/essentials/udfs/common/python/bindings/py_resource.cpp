@@ -21,11 +21,11 @@ void DestroyResourceCapsule(PyObject* obj) {
 /////////////////////////////////////////////////////////////////////////////
 // TResource
 /////////////////////////////////////////////////////////////////////////////
-class TResource final: public NUdf::TBoxedValue
-{
+class TResource final: public NUdf::TBoxedValue {
 public:
     TResource(PyObject* value, const NUdf::TStringRef& tag)
-        : Value_(value, TPyObjectPtr::ADD_REF), Tag_(tag)
+        : Value_(value, TPyObjectPtr::ADD_REF)
+        , Tag_(tag)
     {
     }
 
@@ -52,11 +52,10 @@ private:
 const char ResourceCapsuleName[] = "YqlResourceCapsule";
 
 TPyObjectPtr ToPyResource(
-        const TPyCastContext::TPtr& ctx,
-        const NUdf::TType* type,
-        const NUdf::TUnboxedValuePod& value)
+    const TPyCastContext::TPtr& ctx,
+    const NUdf::TType* type,
+    const NUdf::TUnboxedValuePod& value)
 {
-
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
     NUdf::TResourceTypeInspector inpector(*ctx->PyCtx->TypeInfoHelper, type);
     auto tag = inpector.GetTag();
@@ -77,10 +76,9 @@ TPyObjectPtr ToPyResource(
 }
 
 NUdf::TUnboxedValue FromPyResource(
-        const TPyCastContext::TPtr& ctx,
-        const NUdf::TType* type, PyObject* value)
+    const TPyCastContext::TPtr& ctx,
+    const NUdf::TType* type, PyObject* value)
 {
-
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
     NUdf::TResourceTypeInspector inpector(*ctx->PyCtx->TypeInfoHelper, type);
     auto tag = inpector.GetTag();
@@ -93,14 +91,14 @@ NUdf::TUnboxedValue FromPyResource(
         auto valueTag = resource->GetResourceTag();
         if (valueTag != tag) {
             throw yexception() << "Mismatch of resource tag, expected: "
-                << tag << ", got: " << valueTag;
+                               << tag << ", got: " << valueTag;
         }
 
         return *resource;
     }
 
-    throw yexception() << "Python object " << PyObjectRepr(value) \
-        << " is not a valid resource with tag " << tag;
+    throw yexception() << "Python object " << PyObjectRepr(value)
+                       << " is not a valid resource with tag " << tag;
 #else
     Y_UNUSED(type);
     if (PyCapsule_CheckExact(value)) {
@@ -113,4 +111,4 @@ NUdf::TUnboxedValue FromPyResource(
 #endif
 }
 
-} // namspace NPython
+} // namespace NPython

@@ -43,12 +43,16 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             const TActorId& requester,
             std::shared_ptr<TSet<ui32>> partitions,
             const TString& originalTopicName,
-            const TString& userSID)
+            const TString& userSID,
+            const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+            bool requireAuthentication = false)
         : TBase(request, requester)
         , TDescribeTopicActorImpl(ConsumerOffsetSettings(consumers, partitions))
         , Requester(requester)
         , OriginalTopicName(originalTopicName)
         , UserSID(userSID)
+        , UserToken(userToken)
+        , RequireAuthentication(requireAuthentication)
         {
         };
 
@@ -148,7 +152,22 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
             TActorBootstrapped::PassAway();
             return;
         }
-
+        auto path = CanonizePath(NKikimr::JoinPath(response.Path));
+        bool hasRights = true;
+        if (UserToken && UserToken->GetSerializedToken()) {
+            hasRights = response.SecurityObject->CheckAccess(NACLib::EAccessRights::SelectRow, *UserToken);
+        } else if (RequireAuthentication) {
+            hasRights = false;
+        }
+        if (!hasRights) {
+            RaiseError(
+                "unauthenticated access is forbidden",
+                Ydb::PersQueue::ErrorCode::ACCESS_DENIED,
+                Ydb::StatusIds::StatusCode::StatusIds_StatusCode_UNAUTHORIZED,
+                ActorContext()
+            );
+            return;
+        }
         const auto& pqDescr = response.PQGroupInfo->Description;
         ProcessTablets(pqDescr, ActorContext());
     }
@@ -169,6 +188,8 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         const TActorId Requester;
         const TString OriginalTopicName;
         const TString UserSID;
+        const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+        bool RequireAuthentication;
         std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>>();
 };
 
@@ -224,7 +245,9 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
                 SelfId(),
                 topicToEntities.second.Partitions,
                 topicToEntities.first,
-                GetUsernameOrAnonymous(Context)
+                GetUsernameOrAnonymous(Context),
+                Context->UserToken,
+                Context->RequireAuthentication
             ));
             InflyTopics++;
         }
@@ -252,8 +275,7 @@ void TKafkaOffsetFetchActor::Handle(TEvKafka::TEvCommitedOffsetsResponse::TPtr& 
             TString topicName = GetTopicNameWithoutDb(DatabasePath, *topicRequest.Name);
             TString topicPath = NormalizePath(DatabasePath, topicName);
             if (topicPartition.ErrorCode == EKafkaErrors::RESOURCE_NOT_FOUND &&
-                    (Context->Config.GetAutoCreateConsumersEnable() ||
-                     Context->Config.GetAutoCreateTopicsEnable())) {
+                Context->Config.GetAutoCreateConsumersEnable()) {
                 // consumer is not assigned to the topic case
                 TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(topicName,
                                                                         topicPath,
@@ -303,13 +325,19 @@ void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const
         SelfId(),
         TopicToEntities[createdTopicName].Partitions,
         createdTopicName,
-        GetUsernameOrAnonymous(Context)
+        GetUsernameOrAnonymous(Context),
+        Context->UserToken,
+        Context->RequireAuthentication
     ));
 }
 
 void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse::TPtr& ev, const TActorContext& ctx) {
     NYdb::TStatus& result = ev->Get()->Result;
-    KAFKA_LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+    if (result.GetStatus() == NYdb::EStatus::SUCCESS) {
+        KAFKA_LOG_D("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+    } else {
+        KAFKA_LOG_I("Handling TEvAlterTopicResponse. Status: " << result.GetStatus() << "\n");
+    }
     if (result.GetStatus() != NYdb::EStatus::SUCCESS) {
         InflyTopics--;
         if (InflyTopics == 0) {
@@ -333,7 +361,9 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
         actorId,
         TopicToEntities[alteredTopicName].Partitions,
         alteredTopicName,
-        GetUsernameOrAnonymous(Context)
+        GetUsernameOrAnonymous(Context),
+        Context->UserToken,
+        Context->RequireAuthentication
     ));
 
 }
@@ -391,7 +421,9 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
             SelfId(),
             topicToEntities.second.Partitions,
             topicToEntities.first,
-            GetUsernameOrAnonymous(Context)
+            GetUsernameOrAnonymous(Context),
+            Context->UserToken,
+            Context->RequireAuthentication
         ));
         InflyTopics++;
     }
@@ -452,14 +484,10 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
     }
     InflyTopics++;
 
-    auto topicSettings = NYdb::NTopic::TAlterTopicSettings();
-    topicSettings.BeginAddConsumer(groupId).EndAddConsumer();
     auto request = std::make_unique<Ydb::Topic::AlterTopicRequest>();
     request.get()->set_path(topicPath);
-    for (auto& c : topicSettings.AddConsumers_) {
-        auto* consumer = request.get()->add_add_consumers();
-        consumer->set_name(c.ConsumerName_);
-    }
+    auto* consumer = request->add_add_consumers();
+    consumer->set_name(groupId);
     AlterTopicCookie++;
     AlterTopicCookieToName[AlterTopicCookie] = originalTopicName;
     auto callback = [replyTo = SelfId(), cookie = AlterTopicCookie, path = topicName, this]
@@ -473,7 +501,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, DatabasePath, std::move(request), callback),
+        topicName, DatabasePath, std::move(request), callback, Context->UserToken),
         NKikimr::NReplication::TLocalProxyActor(DatabasePath));
 
 }
@@ -494,11 +522,12 @@ void TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
     message->Topics.push_back(topicToCreate);
 
     TContext::TPtr ContextForTopicCreation;
-    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+    ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
     ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
+    ContextForTopicCreation->RequireAuthentication = Context->RequireAuthentication;
 
     TActorId actorId = ctx.Register(new TKafkaCreateTopicsActor(ContextForTopicCreation,
         1,

@@ -704,6 +704,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             Filters.emplace_back([=](auto&& location) { return location.storage().pool().group().pile().name() == name || location.compute().pile().name() == name; });
             return *this;
         }
+
+        TLocationFilter& TabletType(const TString& type) {
+            Filters.emplace_back([=](auto&& location) { return location.compute().tablet().type() == type; });
+            return *this;
+        }
     };
 
     void CheckHcResultHasIssuesWithStatus(const Ydb::Monitoring::SelfCheckResult& result, const TString& type,
@@ -2287,6 +2292,51 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("pile0"));
     }
 
+    Y_UNIT_TEST(TestNoSchemeShardResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        TBlockEvents<TEvSchemeShard::TEvDescribeScheme> blockSS(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+        CheckHcResultHasIssuesWithStatus(result, "SYSTEM_TABLET", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().TabletType("SchemeShard"));
+
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+        const auto &database_status = result.database_status(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREY);
+    }
+
     Y_UNIT_TEST(ShardsLimit999) {
         ShardsQuotaTest(999, 1000, 1, Ydb::Monitoring::StatusFlag::RED);
     }
@@ -2860,7 +2910,76 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(500));
         block.Stop().Unblock();
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
+
+    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
+        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, 9, {}, {}});
+        info->RingGroups.back().Rings.resize(9);
+        info->RingGroups.back().NToSelect = 9;
+        for (ui32 i = 0; i < 9; ++i) {
+            info->RingGroups.back().Rings[i].Replicas.emplace_back(runtime.GetNodeId(i), "FAKE");
+        }
+
+        auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto sbObserver = runtime.AddObserver<TEvStateStorage::TEvListSchemeBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto bObserver = runtime.AddObserver<TEvStateStorage::TEvListBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+
+        auto disconnectObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([&](auto&& ev) {
+            auto actor = ev->Recipient;
+            auto nodeId = ev->Sender.NodeId();
+            auto nodeIdx = nodeId - runtime.GetNodeId(0);
+            if (nodeIdx < deadNodes) {
+                runtime.Send(new IEventHandle(actor, actor, new TEvInterconnect::TEvNodeDisconnected(nodeId)), actor.NodeId() - runtime.GetNodeId(0));
+                ev.Reset();
+            }
+        });
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest();
+        request->Request.set_merge_records(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString() << Endl;
+        if (expectedStatus) {
+            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+        }
+    }
+
+    Y_UNIT_TEST(TestStateStorageOk) {
+        TestStateStorage(0, std::nullopt);
+    }
+
+    Y_UNIT_TEST(TestStateStorageBlue) {
+        TestStateStorage(1, Ydb::Monitoring::StatusFlag::BLUE);
+    }
+
+    Y_UNIT_TEST(TestStateStorageYellow) {
+        TestStateStorage(3, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(TestStateStorageRed) {
+        TestStateStorage(6, Ydb::Monitoring::StatusFlag::RED);
     }
 
     Y_UNIT_TEST(CLusterNotBootstrapped) {

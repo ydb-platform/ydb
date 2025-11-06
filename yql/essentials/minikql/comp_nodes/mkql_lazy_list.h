@@ -6,6 +6,5 @@ namespace NMiniKQL {
 
 IComputationNode* WrapLazyList(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
-
+} // namespace NMiniKQL
+} // namespace NKikimr

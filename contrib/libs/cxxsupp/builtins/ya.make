@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(21.1.0)
+VERSION(21.1.3)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.0/compiler-rt-21.1.0.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.3/compiler-rt-21.1.3.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -58,6 +58,14 @@ IF (GCC OR CLANG)
     # "member at xxxxx is not an ELF object" errors from the linker.
     # Just generate native code from the beginning.
     NO_LTO()
+ENDIF()
+
+IF (OS_ANDROID AND ARCH_ARM7)
+    # For some reason, some intrinsincs fail to compile under Thumb mode restrictions
+    # Disable it, since it's not used in upstream NDK anyway
+    CFLAGS(
+        -mno-thumb
+    )
 ENDIF()
 
 IF (OS_DARWIN OR OS_IOS)

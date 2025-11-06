@@ -41,6 +41,7 @@ TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap,
                     bool allowDependsOn = true);
+bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType);
 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,

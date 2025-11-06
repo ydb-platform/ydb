@@ -8,6 +8,8 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
+#include <util/generic/yexception.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -17,6 +19,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
@@ -90,18 +93,18 @@ struct TSplitSettings {
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
-        icb->RegisterSharedControl(SplitMergePartCountLimit,        "SchemeShard_SplitMergePartCountLimit");
-        icb->RegisterSharedControl(FastSplitSizeThreshold,          "SchemeShard_FastSplitSizeThreshold");
-        icb->RegisterSharedControl(FastSplitRowCountThreshold,      "SchemeShard_FastSplitRowCountThreshold");
-        icb->RegisterSharedControl(FastSplitCpuPercentageThreshold, "SchemeShard_FastSplitCpuPercentageThreshold");
+        TControlBoard::RegisterSharedControl(SplitMergePartCountLimit,         icb->SchemeShardControls.SplitMergePartCountLimit);
+        TControlBoard::RegisterSharedControl(FastSplitSizeThreshold,           icb->SchemeShardControls.FastSplitSizeThreshold);
+        TControlBoard::RegisterSharedControl(FastSplitRowCountThreshold,       icb->SchemeShardControls.FastSplitRowCountThreshold);
+        TControlBoard::RegisterSharedControl(FastSplitCpuPercentageThreshold,  icb->SchemeShardControls.FastSplitCpuPercentageThreshold);
 
-        icb->RegisterSharedControl(SplitByLoadEnabled,              "SchemeShard_SplitByLoadEnabled");
-        icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShard_SplitByLoadMaxShardsDefault");
-        icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShard_MergeByLoadMinUptimeSec");
-        icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShard_MergeByLoadMinLowLoadDurationSec");
+        TControlBoard::RegisterSharedControl(SplitByLoadEnabled,               icb->SchemeShardControls.SplitByLoadEnabled);
+        TControlBoard::RegisterSharedControl(SplitByLoadMaxShardsDefault,      icb->SchemeShardControls.SplitByLoadMaxShardsDefault);
+        TControlBoard::RegisterSharedControl(MergeByLoadMinUptimeSec,          icb->SchemeShardControls.MergeByLoadMinUptimeSec);
+        TControlBoard::RegisterSharedControl(MergeByLoadMinLowLoadDurationSec, icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
 
-        icb->RegisterSharedControl(ForceShardSplitDataSize,         "SchemeShardControls.ForceShardSplitDataSize");
-        icb->RegisterSharedControl(DisableForceShardSplit,          "SchemeShardControls.DisableForceShardSplit");
+        TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
+        TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
@@ -175,12 +178,12 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
-        const TAppData* appData, TString& errDescr);
+        const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
-        TString& errDescr);
+        const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
     static THashMap<ui32, size_t> DeduplicateStorageRoomsById(NKikimrSchemeOp::TPartitionConfig& config);
@@ -212,21 +215,104 @@ struct TPartitionConfigMerger {
 };
 
 struct TPartitionStats {
-    // Latest timestamps when CPU usage exceeded 2%, 5%, 10%, 20%, 30%
-    struct TTopUsage {
-        TInstant Last2PercentLoad;
-        TInstant Last5PercentLoad;
-        TInstant Last10PercentLoad;
-        TInstant Last20PercentLoad;
-        TInstant Last30PercentLoad;
+    /**
+     * The container for the latest time stamps when the CPU usage exceeded
+     * specific thresholds: 2%, 5%, 10%, 20%, 30%.
+     */
+    struct TTopCpuUsage {
+        /**
+         * Describes the boundaries for a CPU usage bucket.
+         */
+        struct TBucket {
+            /**
+             * The low boundary for this bucket.
+             *
+             * @note If the current CPU usage exceeds this value, this bucket is updated.
+             */
+            const ui32 LowBoundary;
 
-        const TTopUsage& Update(const TTopUsage& usage) {
-            Last2PercentLoad  = std::max(Last2PercentLoad,  usage.Last2PercentLoad);
-            Last5PercentLoad  = std::max(Last5PercentLoad,  usage.Last5PercentLoad);
-            Last10PercentLoad = std::max(Last10PercentLoad, usage.Last10PercentLoad);
-            Last20PercentLoad = std::max(Last20PercentLoad, usage.Last20PercentLoad);
-            Last30PercentLoad = std::max(Last30PercentLoad, usage.Last30PercentLoad);
-            return *this;
+            /**
+             * The effective CPU usage value for this bucket.
+             *
+             * @note If this bucket falls within the given time period,
+             *       this value is used as the assumed CPU usage percentage.
+             */
+            const ui32 EffectiveValue;
+        };
+
+        /**
+         * The boundaries for all CPU usage buckets tracked by this class.
+         *
+         * @warning This list must be sorted by the threshold value (in the ascending order).
+         */
+        static constexpr std::array<TBucket, 5> Buckets = {{
+            {2, 5},   // >=  2% -->  5% CPU usage
+            {5, 10},  // >=  5% --> 10% CPU usage
+            {10, 20}, // >= 10% --> 20% CPU usage
+            {20, 30}, // >= 20% --> 30% CPU usage
+            {30, 40}, // >= 30% --> 40% CPU usage
+        }};
+
+        /**
+         * The time when each usage bucket was updated.
+         */
+        std::array<TInstant, Buckets.size()> BucketUpdateTimes;
+
+        /**
+         * Update the CPU usage data using values from another container.
+         *
+         * @param[in] usage The container to update the usage data from
+         */
+        void Update(const TTopCpuUsage& usage) {
+            // Keep only the latest time for each bucket
+            for (ui64 i = 0; i < Buckets.size(); ++i) {
+                BucketUpdateTimes[i] = std::max(BucketUpdateTimes[i], usage.BucketUpdateTimes[i]);
+            }
+        }
+
+        /**
+         * Update the historical CPU usage.
+         *
+         * @param[in] rawCpuUsage The current CPU usage
+         * @param[in] now The current time
+         */
+        void UpdateCpuUsage(ui64 rawCpuUsage, TInstant now) {
+            ui32 percent = static_cast<ui32>(rawCpuUsage * 0.000001 * 100);
+
+            // Update all buckets, which have low boundaries below the given CPU usage
+            for (ui64 i = 0; i < Buckets.size(); ++i) {
+                if (percent < Buckets[i].LowBoundary) {
+                    return;
+                }
+
+                BucketUpdateTimes[i] = now;
+            }
+        }
+
+        /**
+         * Get the peak CPU usage percentage that has been observed since the given time.
+         *
+         * @note This function does not return the actual peak CPU usage value.
+         *       The return value is one of the preset thresholds, which this class
+         *       tracks (2%, 5%, 10%, 20%, 30% and 40%).
+         *
+         * @todo Fix the case when stats were not collected yet
+         *
+         * @param[in] since The time from which to calculate the peak CPU usage
+         *
+         * @return The peak CPU usage (as a percentage) since the given time
+         */
+        ui32 GetLatestMaxCpuUsagePercent(TInstant since) const {
+            // Find the highest bucket (from the end of the list),
+            // which was updated after the given time
+            for (i64 i = Buckets.size() - 1; i >= 0; --i) {
+                if (BucketUpdateTimes[i] > since) {
+                    return Buckets[i].EffectiveValue;
+                }
+            }
+
+            // No bucket was found, return at least some minimum CPU usage percentage
+            return 2;
         }
     };
 
@@ -289,47 +375,30 @@ struct TPartitionStats {
     // Tablet actor started at
     TInstant StartTime;
 
-    TTopUsage TopUsage;
+    TTopCpuUsage TopCpuUsage;
 
     void SetCurrentRawCpuUsage(ui64 rawCpuUsage, TInstant now) {
         CPU = rawCpuUsage;
-        float percent = rawCpuUsage * 0.000001 * 100;
-        if (percent >= 2)
-            TopUsage.Last2PercentLoad = now;
-        if (percent >= 5)
-            TopUsage.Last5PercentLoad = now;
-        if (percent >= 10)
-            TopUsage.Last10PercentLoad = now;
-        if (percent >= 20)
-            TopUsage.Last20PercentLoad = now;
-        if (percent >= 30)
-            TopUsage.Last30PercentLoad = now;
+        TopCpuUsage.UpdateCpuUsage(rawCpuUsage, now);
     }
 
     ui64 GetCurrentRawCpuUsage() const {
         return CPU;
     }
 
-    float GetLatestMaxCpuUsagePercent(TInstant since) const {
-        // TODO: fix the case when stats were not collected yet
-
-        if (TopUsage.Last30PercentLoad > since)
-            return 40;
-        if (TopUsage.Last20PercentLoad > since)
-            return 30;
-        if (TopUsage.Last10PercentLoad > since)
-            return 20;
-        if (TopUsage.Last5PercentLoad > since)
-            return 10;
-        if (TopUsage.Last2PercentLoad > since)
-            return 5;
-
-        return 2;
+    ui32 GetLatestMaxCpuUsagePercent(TInstant since) const {
+        return TopCpuUsage.GetLatestMaxCpuUsagePercent(since);
     }
 
 private:
     ui64 CPU = 0;
 };
+
+struct TStoragePoolStatsDelta {
+    i64 DataSize = 0;
+    i64 IndexSize = 0;
+};
+using TDiskSpaceUsageDelta = TVector<std::pair<TString, TStoragePoolStatsDelta>>;
 
 struct TTableAggregatedStats {
     TPartitionStats Aggregated;
@@ -342,13 +411,13 @@ struct TTableAggregatedStats {
         return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TAggregatedStats : public TTableAggregatedStats {
     THashMap<TPathId, TTableAggregatedStats> TableStats;
 
-    void UpdateTableStats(TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats);
+    void UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now);
 };
 
 struct TSubDomainInfo;
@@ -467,6 +536,8 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
+    bool IsExternalBlobsEnabled = false;
+
     const NKikimrSchemeOp::TPartitionConfig& PartitionConfig() const { return TableDescription.GetPartitionConfig(); }
     NKikimrSchemeOp::TPartitionConfig& MutablePartitionConfig() { return *TableDescription.MutablePartitionConfig(); }
 
@@ -575,6 +646,7 @@ public:
         , IsRestore(alterData.IsRestore)
     {
         TableDescription.Swap(alterData.TableDescriptionFull.Get());
+        IsExternalBlobsEnabled = PartitionConfigHasExternalBlobsEnabled(TableDescription.GetPartitionConfig());
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
@@ -668,7 +740,7 @@ public:
         ShardsStatsDetached = true;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 
@@ -692,12 +764,12 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TString& reason) const;
+                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
                                  TShardIdx shardIdx, const TTabletId& tabletId, TVector<TShardIdx>& shardsToMerge,
-                                 const TTableInfo* mainTableForIndex, TString& reason) const;
+                                 const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
 
     bool CheckSplitByLoad(
             const TSplitSettings& splitSettings, TShardIdx shardIdx,
@@ -710,7 +782,7 @@ public:
             return false;
         }
         // Auto split is always enabled, unless table is using external blobs
-        return !PartitionConfigHasExternalBlobsEnabled(PartitionConfig());
+        return (IsExternalBlobsEnabled == false);
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
@@ -756,7 +828,7 @@ public:
 
     bool IsSplitByLoadEnabled(const TTableInfo* mainTableForIndex) const {
         // We cannot split when external blobs are enabled
-        if (PartitionConfigHasExternalBlobsEnabled(PartitionConfig())) {
+        if (IsExternalBlobsEnabled) {
             return false;
         }
 
@@ -1964,6 +2036,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     }
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
@@ -2443,9 +2516,30 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         , Type(type)
         , State(state)
     {
-        if (type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            Y_ENSURE(SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
-                               .ParseFromString(description));
+        switch (type) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                Y_ASSERT(description.empty());
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
+                auto success = SpecializedIndexDescription
+                    .emplace<NKikimrSchemeOp::TFulltextIndexDescription>()
+                    .ParseFromString(description);
+                Y_ENSURE(success, description);
+                break;
+            }
+            default:
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(type));
+                break;
         }
     }
 
@@ -2494,8 +2588,21 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;
 
-        if (config.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+        switch (GetIndexType(config)) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                // no specialized index description
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                alterData->SpecializedIndexDescription = config.GetFulltextIndexDescription();
+                break;
+            default:
+                errMsg += InvalidIndexType(config.GetType());
+                return nullptr;
         }
 
         return result;
@@ -2510,7 +2617,9 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
     TTableIndexInfo::TPtr AlterData = nullptr;
 
-    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+    std::variant<std::monostate,
+        NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 };
 
 struct TCdcStreamSettings {
@@ -3069,6 +3178,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
+        AlterSequence = 61,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -3127,6 +3237,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         BuildPrefixedVectorIndex = 12,
         BuildSecondaryUniqueIndex = 13,
         BuildColumns = 20,
+        BuildFulltext = 30,
     };
 
     TActorId CreateSender;
@@ -3155,7 +3266,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
 
-    std::variant<std::monostate, NKikimrSchemeOp::TVectorIndexKmeansTreeDescription> SpecializedIndexDescription;
+    std::variant<std::monostate,
+        NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
+        NKikimrSchemeOp::TFulltextIndexDescription> SpecializedIndexDescription;
 
     struct TKMeans {
         // TODO(mbkkt) move to TVectorIndexKmeansTreeDescription
@@ -3175,6 +3288,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         bool IsEmpty = false;
 
         EState State = Sample;
+
+        bool AlterPrefixSequenceDone = false;
 
         NTableIndex::NKMeans::TClusterId ParentBegin = 0;  // included
         NTableIndex::NKMeans::TClusterId Parent = ParentBegin;
@@ -3391,21 +3506,26 @@ public:
     std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
 
     TString DebugString() const {
-        auto result = TStringBuilder() << BuildKind;
+        auto result = TStringBuilder() << BuildKind << " " << State << "/" << SubState << " ";
 
         if (IsBuildVectorIndex()) {
-            result << " "
-                << KMeans.DebugString() << ", "
+            result << KMeans.DebugString() << ", "
                 << "{ Rows = " << Sample.Rows.size()
                 << ", Sample = " << Sample.State
-                << ", Clusters = " << Clusters->GetClusters().size() << " }, "
-                << "{ Done = " << DoneShards.size()
-                << ", ToUpload = " << ToUploadShards.size()
-                << ", InProgress = " << InProgressShards.size() << " }";
+                << ", Clusters = " << Clusters->GetClusters().size() << " }, ";
         }
+
+        result
+            << "{ Done = " << DoneShards.size()
+            << ", ToUpload = " << ToUploadShards.size()
+            << ", InProgress = " << InProgressShards.size() << " }";
 
         return result;
     }
+
+    static bool IsValidState(EState value);
+    static bool IsValidSubState(ESubState value);
+    static bool IsValidBuildKind(EBuildKind value);
 
     struct TClusterShards {
         NTableIndex::NKMeans::TClusterId From = std::numeric_limits<NTableIndex::NKMeans::TClusterId>::max();
@@ -3464,18 +3584,34 @@ public:
         indexInfo->Id = id;
         indexInfo->Uid = uid;
 
-        indexInfo->State = TIndexBuildInfo::EState(
-            row.template GetValue<Schema::IndexBuild::State>());
-        indexInfo->SubState = TIndexBuildInfo::ESubState(
-            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
         indexInfo->Issue =
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
+
+        indexInfo->State = TIndexBuildInfo::EState(
+            row.template GetValue<Schema::IndexBuild::State>());
+        if (!IsValidState(indexInfo->State)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build state: " << ui32(indexInfo->State));
+            indexInfo->State = TIndexBuildInfo::EState::Invalid;
+        }
+        indexInfo->SubState = TIndexBuildInfo::ESubState(
+            row.template GetValueOrDefault<Schema::IndexBuild::SubState>(ui32(TIndexBuildInfo::ESubState::None)));
+        if (!IsValidSubState(indexInfo->SubState)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build sub-state: " << ui32(indexInfo->SubState));
+            indexInfo->SubState = TIndexBuildInfo::ESubState::None;
+        }
 
         // note: please note that here we specify BuildSecondaryIndex as operation default,
         // because previously this table was dedicated for build secondary index operations only.
         indexInfo->BuildKind = TIndexBuildInfo::EBuildKind(
             row.template GetValueOrDefault<Schema::IndexBuild::BuildKind>(
                 ui32(TIndexBuildInfo::EBuildKind::BuildSecondaryIndex)));
+        if (!IsValidBuildKind(indexInfo->BuildKind)) {
+            indexInfo->IsBroken = true;
+            indexInfo->AddIssue(TStringBuilder() << "Unknown build kind: " << ui32(indexInfo->BuildKind));
+            indexInfo->BuildKind = TIndexBuildInfo::EBuildKind::BuildKindUnspecified;
+        }
 
         indexInfo->DomainPathId =
             TPathId(row.template GetValue<Schema::IndexBuild::DomainOwnerId>(),
@@ -3571,18 +3707,12 @@ public:
         indexInfo->Billed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0));
         indexInfo->Billed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0));
         indexInfo->Billed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsBilled>(0));
-        if (indexInfo->IsFillBuildIndex()) {
-            TMeteringStatsHelper::TryFixOldFormat(indexInfo->Billed);
-        }
 
         indexInfo->Processed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0));
         indexInfo->Processed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0));
         indexInfo->Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0));
         indexInfo->Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0));
         indexInfo->Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuild::CpuTimeUsProcessed>(0));
-        if (indexInfo->IsFillBuildIndex()) {
-            TMeteringStatsHelper::TryFixOldFormat(indexInfo->Processed);
-        }
 
         // Restore the operation details: ImplTableDescriptions and SpecializedIndexDescription.
         if (row.template HaveValue<Schema::IndexBuild::CreationConfig>()) {
@@ -3606,11 +3736,17 @@ public:
                     indexInfo->Clusters = NKikimr::NKMeans::CreateClusters(desc.settings().settings(), indexInfo->KMeans.Rounds, createError);
                     Y_ENSURE(indexInfo->Clusters, createError);
                     indexInfo->SpecializedIndexDescription = std::move(desc);
-                } break;
+                    break;
+                }
+                case NKikimrSchemeOp::TIndexCreationConfig::kFulltextIndexDescription: {
+                    auto& desc = *creationConfig.MutableFulltextIndexDescription();
+                    indexInfo->SpecializedIndexDescription = std::move(desc);
+                    break;
+                }
                 case NKikimrSchemeOp::TIndexCreationConfig::SPECIALIZEDINDEXDESCRIPTION_NOT_SET:
                     /* do nothing */
                     break;
-            }
+                }
         }
 
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
@@ -3654,9 +3790,6 @@ public:
         shardStatus.Processed.SetReadRows(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0));
         shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
         shardStatus.Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(0));
-        if (IsFillBuildIndex()) {
-            TMeteringStatsHelper::TryFixOldFormat(shardStatus.Processed);
-        }
         Processed += shardStatus.Processed;
     }
 
@@ -3664,8 +3797,9 @@ public:
         return CancelRequested;
     }
 
-    bool IsFillBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildColumns();
+    TString InvalidBuildKind() {
+        return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
+            << " for index type " << static_cast<int>(IndexType);
     }
 
     bool IsBuildSecondaryIndex() const {
@@ -3684,8 +3818,12 @@ public:
         return BuildKind == EBuildKind::BuildVectorIndex || IsBuildPrefixedVectorIndex();
     }
 
+    bool IsBuildFulltextIndex() const {
+        return BuildKind == EBuildKind::BuildFulltext;
+    }
+
     bool IsBuildIndex() const {
-        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex();
+        return IsBuildSecondaryIndex() || IsBuildSecondaryUniqueIndex() || IsBuildVectorIndex() || IsBuildFulltextIndex();
     }
 
     bool IsBuildColumns() const {

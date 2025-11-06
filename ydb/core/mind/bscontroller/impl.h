@@ -917,6 +917,7 @@ public:
         THashSet<TGroupId> WaitingForGroups;
         THashSet<TGroupId> GroupsRequested;
         bool DeclarativePDiskManagement = false;
+        bool Registered = false;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1543,6 +1544,8 @@ private:
     NKikimrBlobStorage::TPDiskSpaceColor::E PDiskSpaceColorBorder
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    TSelfHealSettings SelfHealSettings;
+    
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;
@@ -2028,6 +2031,11 @@ private:
     std::set<std::tuple<TNodeId, TSyncerState*>> NodeToSyncerState;
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
 
+    bool CheckingUnsyncedBridgePiles = false;
+    bool NotifyBridgeSyncFinishedErrors = false;
+    bool RecheckUnsyncedBridgePiles = false;
+    ui32 NumPendingBridgeSyncFinishedResponses = 0;
+
     void CheckUnsyncedBridgePiles();
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
@@ -2035,7 +2043,7 @@ private:
 
     void CheckSyncerDisconnectedNodes();
 
-    bool ProcessSyncers(TNodeId nodeId = 0);
+    void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
         TSet<ui32>& groupIdsToRead);
@@ -2420,7 +2428,7 @@ public:
         TGroupInfo::TGroupStatus Status;
         bool LayoutCorrect = true;
 
-        TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, std::map<TGroupId, TStaticGroupInfo>& prev) {
+        TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, const std::map<TGroupId, TStaticGroupInfo>& prev) {
             TStringStream err;
             Info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
             Y_VERIFY_DEBUG_S(Info, "failed to parse static group, error# " << err.Str());
@@ -2428,7 +2436,7 @@ public:
                 return;
             }
             if (const auto it = prev.find(Info->GroupID); it != prev.end()) {
-                TStaticGroupInfo& item = it->second;
+                const TStaticGroupInfo& item = it->second;
                 Status = item.Status;
                 LayoutCorrect = item.LayoutCorrect;
             }
@@ -2456,15 +2464,15 @@ public:
         bool MetricsDirty = false;
 
         TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
-                std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
+                const std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
         {
             const auto& loc = vdisk.GetVDiskLocation();
             const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());
             if (const auto it = prev.find(vslotId); it != prev.end()) {
-                TStaticVSlotInfo& item = it->second;
-                VDiskMetrics = std::move(item.VDiskMetrics);
+                const TStaticVSlotInfo& item = it->second;
+                VDiskMetrics = item.VDiskMetrics;
                 VDiskStatus = item.VDiskStatus;
                 VDiskStatusTimestamp = item.VDiskStatusTimestamp;
                 ReadySince = item.ReadySince;
@@ -2493,7 +2501,7 @@ public:
         std::optional<NKikimrBlobStorage::TPDiskMetrics> PDiskMetrics;
 
         TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
-                std::map<TPDiskId, TStaticPDiskInfo>& prev)
+                const std::map<TPDiskId, TStaticPDiskInfo>& prev)
             : NodeId(pdisk.GetNodeID())
             , PDiskId(pdisk.GetPDiskID())
             , Path(pdisk.GetPath())
@@ -2511,8 +2519,8 @@ public:
 
             const TPDiskId pdiskId(NodeId, PDiskId);
             if (const auto it = prev.find(pdiskId); it != prev.end()) {
-                TStaticPDiskInfo& item = it->second;
-                PDiskMetrics = std::move(item.PDiskMetrics);
+                const TStaticPDiskInfo& item = it->second;
+                PDiskMetrics = item.PDiskMetrics;
             }
         }
 

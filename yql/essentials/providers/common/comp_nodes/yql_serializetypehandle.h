@@ -6,5 +6,5 @@ namespace NMiniKQL {
 
 IComputationNode* WrapSerializeTypeHandle(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

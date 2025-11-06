@@ -1,31 +1,30 @@
 #pragma once
 
-#include "defs.h"
 #include "immediate_control_board_wrapper.h"
+#include "immediate_control_board_html_renderer.h"
 
-#include <ydb/core/util/concurrent_rw_hash.h>
+#include <ydb/core/control/lib/generated/control_board_proto.h>
+
+#include <library/cpp/threading/hot_swap/hot_swap.h>
+
+#include <util/generic/serialized_enum.h>
+
 
 namespace NKikimr {
 
-class TControlBoard : public TThrRefBase {
+class TImmediateControlActor;
+
+class TControlBoard: public TControlBoardBase {
+    friend class TImmediateControlActor;
 private:
-    TConcurrentRWHashMap<TString, TIntrusivePtr<TControl>, 16> Board;
-
+    TIntrusivePtr<TControl> GetControlByName(const TString& name) const;
 public:
-    bool RegisterLocalControl(TControlWrapper control, TString name);
-
-    bool RegisterSharedControl(TControlWrapper& control, TString name);
-
     void RestoreDefaults();
+    void RenderAsHtml(TControlBoardTableHtmlRenderer& renderer) const;
 
-    void RestoreDefault(TString name);
-
-    bool SetValue(TString name, TAtomic value, TAtomic &outPrevValue);
-
-    // Only for tests
-    void GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const;
-
-    TString RenderAsHtml() const;
+    static void RegisterSharedControl(TControlWrapper& control, THotSwap<TControl>& icbControl);
+    static void RegisterLocalControl(TControlWrapper control, THotSwap<TControl>& icbControl);
+    static void SetValue(TAtomicBase value, THotSwap<TControl>& icbControl);
 };
 
 }

@@ -22,17 +22,17 @@ struct TExprContext;
 namespace NCommon {
 
 // empty return value means "remove member"
-using TStructMemberMapper = std::function<TMaybe<TStringBuf> (TStringBuf member)>;
+using TStructMemberMapper = std::function<TMaybe<TStringBuf>(TStringBuf member)>;
 
 void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type, bool extendedForm = false);
 
 // saves in columns order
 void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type,
-    const TMaybe<TColumnOrder>& columns = {}, const TStructMemberMapper& mapper = {}, bool extendedForm = false);
+                          const TMaybe<TColumnOrder>& columns = {}, const TStructMemberMapper& mapper = {}, bool extendedForm = false);
 
 NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type, bool extendedForm = false);
 TString WriteTypeToYson(const TTypeAnnotationNode* type, NYT::NYson::EYsonFormat format = NYT::NYson::EYsonFormat::Binary,
-    bool extendedForm = false);
+                        bool extendedForm = false);
 
 const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos = TPosition());
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
@@ -40,7 +40,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContex
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 
 void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type,
-    const TColumnOrder& columns);
+                        const TColumnOrder& columns);
 
 } // namespace NCommon
 } // namespace NYql

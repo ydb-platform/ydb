@@ -17,461 +17,460 @@ using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
-    using TOptions = ui32;
-    class THyperscanUdfBase: public TBoxedValue {
-    protected:
-        constexpr static const char* IGNORE_CASE_PREFIX = "(?i)";
-        static void SetCommonOptions(TString& regex, TOptions& options) {
-            options |= HS_FLAG_ALLOWEMPTY;
-            if (regex.StartsWith(IGNORE_CASE_PREFIX)) {
-                options |= HS_FLAG_CASELESS;
-                regex = regex.substr(4);
-            }
-            if (UTF8Detect(regex) == UTF8) {
-                options |= HS_FLAG_UTF8;
-            }
-            if (NX86::HaveAVX2()) {
-                options |= HS_CPU_FEATURES_AVX2;
-            }
+using TOptions = ui32;
+class THyperscanUdfBase: public TBoxedValue {
+protected:
+    constexpr static const char* IGNORE_CASE_PREFIX = "(?i)";
+    static void SetCommonOptions(TString& regex, TOptions& options) {
+        options |= HS_FLAG_ALLOWEMPTY;
+        if (regex.StartsWith(IGNORE_CASE_PREFIX)) {
+            options |= HS_FLAG_CASELESS;
+            regex = regex.substr(4);
         }
+        if (UTF8Detect(regex) == UTF8) {
+            options |= HS_FLAG_UTF8;
+        }
+        if (NX86::HaveAVX2()) {
+            options |= HS_CPU_FEATURES_AVX2;
+        }
+    }
+};
+
+class THyperscanMatch: public THyperscanUdfBase {
+public:
+    enum class EMode {
+        NORMAL,
+        BACKTRACKING,
+        MULTI
     };
 
-    class THyperscanMatch: public THyperscanUdfBase {
+    class TFactory: public THyperscanUdfBase {
     public:
-        enum class EMode {
-            NORMAL,
-            BACKTRACKING,
-            MULTI
-        };
-
-        class TFactory: public THyperscanUdfBase {
-        public:
-            TFactory(
-                TSourcePosition pos,
-                bool surroundMode,
-                THyperscanMatch::EMode mode,
-                size_t regexpsCount = 0)
-                : Pos_(pos)
-                , SurroundMode_(surroundMode)
-                , Mode_(mode)
-                , RegexpsCount_(regexpsCount)
-            {
-            }
-
-        private:
-            TUnboxedValue Run(
-                const IValueBuilder* valueBuilder,
-                const TUnboxedValuePod* args) const override {
-                return TUnboxedValuePod(
-                    new THyperscanMatch(
-                        valueBuilder,
-                        args[0],
-                        SurroundMode_,
-                        Mode_,
-                        Pos_,
-                        RegexpsCount_));
-            }
-
-            TSourcePosition Pos_;
-            bool SurroundMode_;
-            THyperscanMatch::EMode Mode_;
-            size_t RegexpsCount_;
-        };
-
-        static const TStringRef& Name(bool isGrep, THyperscanMatch::EMode mode) {
-            static auto match = TStringRef::Of("Match");
-            static auto grep = TStringRef::Of("Grep");
-            static auto backtrackingMatch = TStringRef::Of("BacktrackingMatch");
-            static auto backtrackingGrep = TStringRef::Of("BacktrackingGrep");
-            static auto multiMatch = TStringRef::Of("MultiMatch");
-            static auto multiGrep = TStringRef::Of("MultiGrep");
-            if (isGrep) {
-                switch (mode) {
-                    case THyperscanMatch::EMode::NORMAL:
-                        return grep;
-                    case THyperscanMatch::EMode::BACKTRACKING:
-                        return backtrackingGrep;
-                    case THyperscanMatch::EMode::MULTI:
-                        return multiGrep;
-                }
-            } else {
-                switch (mode) {
-                    case THyperscanMatch::EMode::NORMAL:
-                        return match;
-                    case THyperscanMatch::EMode::BACKTRACKING:
-                        return backtrackingMatch;
-                    case THyperscanMatch::EMode::MULTI:
-                        return multiMatch;
-                }
-            }
-
-            Y_ABORT("Unexpected");
-        }
-
-        THyperscanMatch(
-            const IValueBuilder*,
-            const TUnboxedValuePod& runConfig,
+        TFactory(
+            TSourcePosition pos,
             bool surroundMode,
             THyperscanMatch::EMode mode,
-            TSourcePosition pos,
-            size_t regexpsCount)
-            : Regex_(runConfig.AsStringRef())
+            size_t regexpsCount = 0)
+            : Pos_(pos)
+            , SurroundMode_(surroundMode)
             , Mode_(mode)
-            , Pos_(pos)
             , RegexpsCount_(regexpsCount)
         {
-            try {
-                TOptions options = 0;
-                int pcreOptions = REG_EXTENDED;
-                if (Mode_ == THyperscanMatch::EMode::BACKTRACKING && Regex_.StartsWith(IGNORE_CASE_PREFIX)) {
-                    pcreOptions |= REG_ICASE;
-                }
-                auto regex = Regex_;
-                SetCommonOptions(regex, options);
-                switch (mode) {
-                    case THyperscanMatch::EMode::NORMAL: {
-                        if (!surroundMode) {
-                            regex = TStringBuilder() << '^' << regex << '$';
-                        }
-                        Database_ = Compile(regex, options);
-                        break;
-                    }
-                    case THyperscanMatch::EMode::BACKTRACKING: {
-                        if (!surroundMode) {
-                            regex = TStringBuilder() << '^' << regex << '$';
-                        }
-                        try {
-                            Database_ = Compile(regex, options);
-                            Mode_ = THyperscanMatch::EMode::NORMAL;
-                        } catch (const TCompileException&) {
-                            options |= HS_FLAG_PREFILTER;
-                            Database_ = Compile(regex, options);
-                            Fallback_ = TRegExMatch(regex, pcreOptions);
-                        }
-                        break;
-                    }
-                    case THyperscanMatch::EMode::MULTI: {
-                        std::vector<TString> regexes;
-                        TVector<const char*> cregexes;
-                        TVector<TOptions> flags;
-                        TVector<TOptions> ids;
-
-                        const auto func = [&regexes, &flags, surroundMode](const std::string_view& token) {
-                            TString regex(token);
-
-                            TOptions opt = 0;
-                            SetCommonOptions(regex, opt);
-
-                            if (!surroundMode) {
-                                regex = TStringBuilder() << '^' << regex << '$';
-                            }
-
-                            regexes.emplace_back(std::move(regex));
-                            flags.emplace_back(opt);
-                        };
-                        StringSplitter(Regex_).Split('\n').Consume(func);
-
-                        std::transform(regexes.cbegin(), regexes.cend(), std::back_inserter(cregexes), std::bind(&TString::c_str, std::placeholders::_1));
-                        ids.resize(regexes.size());
-                        std::iota(ids.begin(), ids.end(), 0);
-
-                        Database_ = CompileMulti(cregexes, flags, ids);
-                        break;
-                    }
-                }
-                Scratch_ = MakeScratch(Database_);
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
-            }
         }
 
     private:
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const final try {
-            TUnboxedValue* items = nullptr;
-            TUnboxedValue tuple;
-            size_t i = 0;
-
-            if (Mode_ == THyperscanMatch::EMode::MULTI) {
-                tuple = valueBuilder->NewArray(RegexpsCount_, items);
-                for (i = 0; i < RegexpsCount_; ++i) {
-                    items[i] = TUnboxedValuePod(false);
-                }
-            }
-
-            if (args[0]) {
-                // XXX: StringRef data might not be a NTBS, though the function
-                // <TRegExMatch::Match> expects ASCIIZ string. Explicitly copy
-                // the given argument string and append the NUL terminator to it.
-                const TString input(args[0].AsStringRef());
-                if (Y_UNLIKELY(Mode_ == THyperscanMatch::EMode::MULTI)) {
-                    auto callback = [items] (TOptions id, ui64 /* from */, ui64 /* to */) {
-                        items[id] = TUnboxedValuePod(true);
-                    };
-                    Scan(Database_, Scratch_, input, callback);
-                    return tuple;
-                } else {
-                    bool matches = Matches(Database_, Scratch_, input);
-                    if (matches && Mode_ == THyperscanMatch::EMode::BACKTRACKING) {
-                        matches = Fallback_.Match(input.data());
-                    }
-                    return TUnboxedValuePod(matches);
-                }
-
-            } else {
-                return Mode_ == THyperscanMatch::EMode::MULTI ? tuple : TUnboxedValue(TUnboxedValuePod(false));
-            }
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
-        }
-
-    private:
-        const TString Regex_;
-        THyperscanMatch::EMode Mode_;
-        const TSourcePosition Pos_;
-        const size_t RegexpsCount_;
-        TDatabase Database_;
-        TScratch Scratch_;
-        TRegExMatch Fallback_;
-    };
-
-    class THyperscanCapture: public THyperscanUdfBase {
-    public:
-        class TFactory: public THyperscanUdfBase {
-        public:
-            TFactory(TSourcePosition pos)
-                : Pos_(pos)
-            {}
-
-        private:
-            TUnboxedValue Run(const IValueBuilder*,
-                const TUnboxedValuePod* args) const final try {
-                return TUnboxedValuePod(new THyperscanCapture(args[0], Pos_));
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
-            }
-
-        private:
-            TSourcePosition Pos_;
-        };
-
-        static const TStringRef& Name() {
-            static auto name = TStringRef::Of("Capture");
-            return name;
-        }
-
-        THyperscanCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
-            : Pos_(pos)
-        {
-            Regex_ = runConfig.AsStringRef();
-            TOptions options = HS_FLAG_SOM_LEFTMOST;
-
-            SetCommonOptions(Regex_, options);
-
-            Database_ = Compile(Regex_, options);
-            Scratch_ = MakeScratch(Database_);
-        }
-
-
-    private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const final try {
-            if (const auto arg = args[0]) {
-
-                TUnboxedValue result;
-                auto callback = [valueBuilder, arg, &result] (TOptions id, ui64 from, ui64 to) {
-                    Y_UNUSED(id);
-                    if (!result) {
-                        result = valueBuilder->SubString(arg, from, to);
-                    }
-                };
-                Scan(Database_, Scratch_, arg.AsStringRef(), callback);
-                return result;
-            }
-
-            return TUnboxedValue();
-        } catch (const std::exception& e) {
-            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+            const TUnboxedValuePod* args) const override {
+            return TUnboxedValuePod(
+                new THyperscanMatch(
+                    valueBuilder,
+                    args[0],
+                    SurroundMode_,
+                    Mode_,
+                    Pos_,
+                    RegexpsCount_));
         }
 
         TSourcePosition Pos_;
-        TString Regex_;
-        TDatabase Database_;
-        TScratch Scratch_;
+        bool SurroundMode_;
+        THyperscanMatch::EMode Mode_;
+        size_t RegexpsCount_;
     };
 
-    class THyperscanReplace: public THyperscanUdfBase {
-    public:
-        class TFactory: public THyperscanUdfBase {
-        public:
-            TFactory(TSourcePosition pos)
-                : Pos_(pos)
-            {}
-
-        private:
-            TUnboxedValue Run(const IValueBuilder*,
-                const TUnboxedValuePod* args) const final try {
-                return TUnboxedValuePod(new THyperscanReplace(args[0], Pos_));
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+    static const TStringRef& Name(bool isGrep, THyperscanMatch::EMode mode) {
+        static auto match = TStringRef::Of("Match");
+        static auto grep = TStringRef::Of("Grep");
+        static auto backtrackingMatch = TStringRef::Of("BacktrackingMatch");
+        static auto backtrackingGrep = TStringRef::Of("BacktrackingGrep");
+        static auto multiMatch = TStringRef::Of("MultiMatch");
+        static auto multiGrep = TStringRef::Of("MultiGrep");
+        if (isGrep) {
+            switch (mode) {
+                case THyperscanMatch::EMode::NORMAL:
+                    return grep;
+                case THyperscanMatch::EMode::BACKTRACKING:
+                    return backtrackingGrep;
+                case THyperscanMatch::EMode::MULTI:
+                    return multiGrep;
             }
-
-        private:
-            TSourcePosition Pos_;
-        };
-
-        static const TStringRef& Name() {
-            static auto name = TStringRef::Of("Replace");
-            return name;
+        } else {
+            switch (mode) {
+                case THyperscanMatch::EMode::NORMAL:
+                    return match;
+                case THyperscanMatch::EMode::BACKTRACKING:
+                    return backtrackingMatch;
+                case THyperscanMatch::EMode::MULTI:
+                    return multiMatch;
+            }
         }
 
-        THyperscanReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)
-            : Pos_(pos)
-        {
-            Regex_ = runConfig.AsStringRef();
-            TOptions options = HS_FLAG_SOM_LEFTMOST;
+        Y_ABORT("Unexpected");
+    }
 
-            SetCommonOptions(Regex_, options);
-
-
-            Database_ = Compile(Regex_, options);
-            Scratch_ = MakeScratch(Database_);
-        }
-
-    private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const final try {
-            if (args[0]) {
-                const std::string_view input(args[0].AsStringRef());
-                const std::string_view replacement(args[1].AsStringRef());
-
-                ui64 index = 0;
-                TStringBuilder result;
-                auto callback = [input, replacement, &index, &result] (TOptions id, ui64 from, ui64 to) {
-                    Y_UNUSED(id);
-                    if (index != from) {
-                        result << input.substr(index, from - index);
+    THyperscanMatch(
+        const IValueBuilder*,
+        const TUnboxedValuePod& runConfig,
+        bool surroundMode,
+        THyperscanMatch::EMode mode,
+        TSourcePosition pos,
+        size_t regexpsCount)
+        : Regex_(runConfig.AsStringRef())
+        , Mode_(mode)
+        , Pos_(pos)
+        , RegexpsCount_(regexpsCount)
+    {
+        try {
+            TOptions options = 0;
+            int pcreOptions = REG_EXTENDED;
+            if (Mode_ == THyperscanMatch::EMode::BACKTRACKING && Regex_.StartsWith(IGNORE_CASE_PREFIX)) {
+                pcreOptions |= REG_ICASE;
+            }
+            auto regex = Regex_;
+            SetCommonOptions(regex, options);
+            switch (mode) {
+                case THyperscanMatch::EMode::NORMAL: {
+                    if (!surroundMode) {
+                        regex = TStringBuilder() << '^' << regex << '$';
                     }
-                    result << replacement;
-                    index = to;
+                    Database_ = Compile(regex, options);
+                    break;
+                }
+                case THyperscanMatch::EMode::BACKTRACKING: {
+                    if (!surroundMode) {
+                        regex = TStringBuilder() << '^' << regex << '$';
+                    }
+                    try {
+                        Database_ = Compile(regex, options);
+                        Mode_ = THyperscanMatch::EMode::NORMAL;
+                    } catch (const TCompileException&) {
+                        options |= HS_FLAG_PREFILTER;
+                        Database_ = Compile(regex, options);
+                        Fallback_ = TRegExMatch(regex, pcreOptions);
+                    }
+                    break;
+                }
+                case THyperscanMatch::EMode::MULTI: {
+                    std::vector<TString> regexes;
+                    TVector<const char*> cregexes;
+                    TVector<TOptions> flags;
+                    TVector<TOptions> ids;
+
+                    const auto func = [&regexes, &flags, surroundMode](const std::string_view& token) {
+                        TString regex(token);
+
+                        TOptions opt = 0;
+                        SetCommonOptions(regex, opt);
+
+                        if (!surroundMode) {
+                            regex = TStringBuilder() << '^' << regex << '$';
+                        }
+
+                        regexes.emplace_back(std::move(regex));
+                        flags.emplace_back(opt);
+                    };
+                    StringSplitter(Regex_).Split('\n').Consume(func);
+
+                    std::transform(regexes.cbegin(), regexes.cend(), std::back_inserter(cregexes), std::bind(&TString::c_str, std::placeholders::_1));
+                    ids.resize(regexes.size());
+                    std::iota(ids.begin(), ids.end(), 0);
+
+                    Database_ = CompileMulti(cregexes, flags, ids);
+                    break;
+                }
+            }
+            Scratch_ = MakeScratch(Database_);
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+        }
+    }
+
+private:
+    TUnboxedValue Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const final try {
+        TUnboxedValue* items = nullptr;
+        TUnboxedValue tuple;
+        size_t i = 0;
+
+        if (Mode_ == THyperscanMatch::EMode::MULTI) {
+            tuple = valueBuilder->NewArray(RegexpsCount_, items);
+            for (i = 0; i < RegexpsCount_; ++i) {
+                items[i] = TUnboxedValuePod(false);
+            }
+        }
+
+        if (args[0]) {
+            // XXX: StringRef data might not be a NTBS, though the function
+            // <TRegExMatch::Match> expects ASCIIZ string. Explicitly copy
+            // the given argument string and append the NUL terminator to it.
+            const TString input(args[0].AsStringRef());
+            if (Y_UNLIKELY(Mode_ == THyperscanMatch::EMode::MULTI)) {
+                auto callback = [items](TOptions id, ui64 /* from */, ui64 /* to */) {
+                    items[id] = TUnboxedValuePod(true);
                 };
                 Scan(Database_, Scratch_, input, callback);
-
-                if (!index) {
-                    return args[0];
+                return tuple;
+            } else {
+                bool matches = Matches(Database_, Scratch_, input);
+                if (matches && Mode_ == THyperscanMatch::EMode::BACKTRACKING) {
+                    matches = Fallback_.Match(input.data());
                 }
-
-                result << input.substr(index);
-                return valueBuilder->NewString(result);
+                return TUnboxedValuePod(matches);
             }
 
-            return TUnboxedValue();
+        } else {
+            return Mode_ == THyperscanMatch::EMode::MULTI ? tuple : TUnboxedValue(TUnboxedValuePod(false));
+        }
+    } catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+    }
+
+private:
+    const TString Regex_;
+    THyperscanMatch::EMode Mode_;
+    const TSourcePosition Pos_;
+    const size_t RegexpsCount_;
+    TDatabase Database_;
+    TScratch Scratch_;
+    TRegExMatch Fallback_;
+};
+
+class THyperscanCapture: public THyperscanUdfBase {
+public:
+    class TFactory: public THyperscanUdfBase {
+    public:
+        TFactory(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder*,
+                          const TUnboxedValuePod* args) const final try {
+            return TUnboxedValuePod(new THyperscanCapture(args[0], Pos_));
         } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
 
+    private:
         TSourcePosition Pos_;
-        TString Regex_;
-        TDatabase Database_;
-        TScratch Scratch_;
     };
 
-    class THyperscanModule: public IUdfModule {
-    public:
-        TStringRef Name() const {
-            return TStringRef::Of("Hyperscan");
-        }
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("Capture");
+        return name;
+    }
 
-        void CleanupOnTerminate() const final {
-        }
+    THyperscanCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+        : Pos_(pos)
+    {
+        Regex_ = runConfig.AsStringRef();
+        TOptions options = HS_FLAG_SOM_LEFTMOST;
 
-        void GetAllFunctions(IFunctionsSink& sink) const final {
-            sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::NORMAL));
-            sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL));
-            sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING));
-            sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING));
-            sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
-            sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
-            sink.Add(THyperscanCapture::Name());
-            sink.Add(THyperscanReplace::Name());
-        }
+        SetCommonOptions(Regex_, options);
 
-        void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final {
-            try {
-                Y_UNUSED(userType);
+        Database_ = Compile(Regex_, options);
+        Scratch_ = MakeScratch(Database_);
+    }
 
-                bool typesOnly = (flags & TFlags::TypesOnly);
-                bool isMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL) == name);
-                bool isGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::NORMAL) == name);
-                bool isBacktrackingMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING) == name);
-                bool isBacktrackingGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING) == name);
-                bool isMultiMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI) == name);
-                bool isMultiGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI) == name);
-
-                if (isMatch || isGrep) {
-                    builder.SimpleSignature<bool(TOptional<char*>)>()
-                        .RunConfig<const char*>();
-
-                    if (!typesOnly) {
-                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isGrep, THyperscanMatch::EMode::NORMAL));
-                    }
-                } else if (isBacktrackingMatch || isBacktrackingGrep) {
-                    builder.SimpleSignature<bool(TOptional<char*>)>()
-                        .RunConfig<const char*>();
-
-                    if (!typesOnly) {
-                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isBacktrackingGrep, THyperscanMatch::EMode::BACKTRACKING));
-                    }
-                } else if (isMultiMatch || isMultiGrep) {
-                    auto boolType = builder.SimpleType<bool>();
-                    auto optionalStringType = builder.Optional()->Item<char*>().Build();
-                    const std::string_view regexp(typeConfig);
-                    size_t regexpCount = std::count(regexp.begin(), regexp.end(), '\n') + 1;
-                    auto tuple = builder.Tuple();
-                    for (size_t i = 0; i < regexpCount; ++i) {
-                        tuple->Add(boolType);
-                    }
-                    auto tupleType = tuple->Build();
-                    builder.Args(1)->Add(optionalStringType).Done().Returns(tupleType).RunConfig<char*>();
-
-                    if (!typesOnly) {
-                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isMultiGrep, THyperscanMatch::EMode::MULTI, regexpCount));
-                    }
-                } else if (THyperscanCapture::Name() == name) {
-                    builder.SimpleSignature<TOptional<char*>(TOptional<char*>)>()
-                            .RunConfig<char*>();
-
-                    if (!typesOnly) {
-                        builder.Implementation(new THyperscanCapture::TFactory(builder.GetSourcePosition()));
-                    }
-                } else if (THyperscanReplace::Name() == name) {
-                    builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()
-                        .RunConfig<char*>();
-
-                    if (!typesOnly) {
-                        builder.Implementation(new THyperscanReplace::TFactory(builder.GetSourcePosition()));
-                    }
+private:
+    TUnboxedValue Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const final try {
+        if (const auto arg = args[0]) {
+            TUnboxedValue result;
+            auto callback = [valueBuilder, arg, &result](TOptions id, ui64 from, ui64 to) {
+                Y_UNUSED(id);
+                if (!result) {
+                    result = valueBuilder->SubString(arg, from, to);
                 }
-            } catch (const std::exception& e) {
-                builder.SetError(CurrentExceptionMessage());
-            }
+            };
+            Scan(Database_, Scratch_, arg.AsStringRef(), callback);
+            return result;
         }
+
+        return TUnboxedValue();
+    } catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+    }
+
+    TSourcePosition Pos_;
+    TString Regex_;
+    TDatabase Database_;
+    TScratch Scratch_;
+};
+
+class THyperscanReplace: public THyperscanUdfBase {
+public:
+    class TFactory: public THyperscanUdfBase {
+    public:
+        TFactory(TSourcePosition pos)
+            : Pos_(pos)
+        {
+        }
+
+    private:
+        TUnboxedValue Run(const IValueBuilder*,
+                          const TUnboxedValuePod* args) const final try {
+            return TUnboxedValuePod(new THyperscanReplace(args[0], Pos_));
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+        }
+
+    private:
+        TSourcePosition Pos_;
     };
 
-    class TPcreModule : public THyperscanModule {
-    public:
-        TStringRef Name() const {
-            return TStringRef::Of("Pcre");
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("Replace");
+        return name;
+    }
+
+    THyperscanReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+        : Pos_(pos)
+    {
+        Regex_ = runConfig.AsStringRef();
+        TOptions options = HS_FLAG_SOM_LEFTMOST;
+
+        SetCommonOptions(Regex_, options);
+
+        Database_ = Compile(Regex_, options);
+        Scratch_ = MakeScratch(Database_);
+    }
+
+private:
+    TUnboxedValue Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const final try {
+        if (args[0]) {
+            const std::string_view input(args[0].AsStringRef());
+            const std::string_view replacement(args[1].AsStringRef());
+
+            ui64 index = 0;
+            TStringBuilder result;
+            auto callback = [input, replacement, &index, &result](TOptions id, ui64 from, ui64 to) {
+                Y_UNUSED(id);
+                if (index != from) {
+                    result << input.substr(index, from - index);
+                }
+                result << replacement;
+                index = to;
+            };
+            Scan(Database_, Scratch_, input, callback);
+
+            if (!index) {
+                return args[0];
+            }
+
+            result << input.substr(index);
+            return valueBuilder->NewString(result);
         }
-    };
-}
+
+        return TUnboxedValue();
+    } catch (const std::exception& e) {
+        UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
+    }
+
+    TSourcePosition Pos_;
+    TString Regex_;
+    TDatabase Database_;
+    TScratch Scratch_;
+};
+
+class THyperscanModule: public IUdfModule {
+public:
+    TStringRef Name() const {
+        return TStringRef::Of("Hyperscan");
+    }
+
+    void CleanupOnTerminate() const final {
+    }
+
+    void GetAllFunctions(IFunctionsSink& sink) const final {
+        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::NORMAL));
+        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL));
+        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING));
+        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING));
+        sink.Add(THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
+        sink.Add(THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI))->SetTypeAwareness();
+        sink.Add(THyperscanCapture::Name());
+        sink.Add(THyperscanReplace::Name());
+    }
+
+    void BuildFunctionTypeInfo(
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
+        try {
+            Y_UNUSED(userType);
+
+            bool typesOnly = (flags & TFlags::TypesOnly);
+            bool isMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::NORMAL) == name);
+            bool isGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::NORMAL) == name);
+            bool isBacktrackingMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::BACKTRACKING) == name);
+            bool isBacktrackingGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::BACKTRACKING) == name);
+            bool isMultiMatch = (THyperscanMatch::Name(false, THyperscanMatch::EMode::MULTI) == name);
+            bool isMultiGrep = (THyperscanMatch::Name(true, THyperscanMatch::EMode::MULTI) == name);
+
+            if (isMatch || isGrep) {
+                builder.SimpleSignature<bool(TOptional<char*>)>()
+                    .RunConfig<const char*>();
+
+                if (!typesOnly) {
+                    builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isGrep, THyperscanMatch::EMode::NORMAL));
+                }
+            } else if (isBacktrackingMatch || isBacktrackingGrep) {
+                builder.SimpleSignature<bool(TOptional<char*>)>()
+                    .RunConfig<const char*>();
+
+                if (!typesOnly) {
+                    builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isBacktrackingGrep, THyperscanMatch::EMode::BACKTRACKING));
+                }
+            } else if (isMultiMatch || isMultiGrep) {
+                auto boolType = builder.SimpleType<bool>();
+                auto optionalStringType = builder.Optional()->Item<char*>().Build();
+                const std::string_view regexp(typeConfig);
+                size_t regexpCount = std::count(regexp.begin(), regexp.end(), '\n') + 1;
+                auto tuple = builder.Tuple();
+                for (size_t i = 0; i < regexpCount; ++i) {
+                    tuple->Add(boolType);
+                }
+                auto tupleType = tuple->Build();
+                builder.Args(1)->Add(optionalStringType).Done().Returns(tupleType).RunConfig<char*>();
+
+                if (!typesOnly) {
+                    builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isMultiGrep, THyperscanMatch::EMode::MULTI, regexpCount));
+                }
+            } else if (THyperscanCapture::Name() == name) {
+                builder.SimpleSignature<TOptional<char*>(TOptional<char*>)>()
+                    .RunConfig<char*>();
+
+                if (!typesOnly) {
+                    builder.Implementation(new THyperscanCapture::TFactory(builder.GetSourcePosition()));
+                }
+            } else if (THyperscanReplace::Name() == name) {
+                builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()
+                    .RunConfig<char*>();
+
+                if (!typesOnly) {
+                    builder.Implementation(new THyperscanReplace::TFactory(builder.GetSourcePosition()));
+                }
+            }
+        } catch (const std::exception& e) {
+            builder.SetError(CurrentExceptionMessage());
+        }
+    }
+};
+
+class TPcreModule: public THyperscanModule {
+public:
+    TStringRef Name() const {
+        return TStringRef::Of("Pcre");
+    }
+};
+} // namespace
 
 REGISTER_MODULES(THyperscanModule, TPcreModule)

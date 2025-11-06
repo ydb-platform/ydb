@@ -11,8 +11,9 @@ namespace NMiniKQL {
 namespace {
 
 template <bool Stable>
-class TPickleWrapper : public TMutableComputationNode<TPickleWrapper<Stable>> {
+class TPickleWrapper: public TMutableComputationNode<TPickleWrapper<Stable>> {
     typedef TMutableComputationNode<TPickleWrapper<Stable>> TBaseComputation;
+
 public:
     TPickleWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data)
         : TBaseComputation(mutables)
@@ -33,11 +34,12 @@ private:
 
     TType* Type;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker;
-    IComputationNode *const Data;
+    IComputationNode* const Data;
 };
 
-class TUnpickleWrapper : public TMutableComputationNode<TUnpickleWrapper> {
+class TUnpickleWrapper: public TMutableComputationNode<TUnpickleWrapper> {
     typedef TMutableComputationNode<TUnpickleWrapper> TBaseComputation;
+
 public:
     TUnpickleWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data)
         : TBaseComputation(mutables)
@@ -48,9 +50,13 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto data = Data->GetValue(ctx);
-        auto buffer = data.AsStringRef();
-        return ValuePacker.RefMutableObject(ctx, false, Type).Unpack(buffer, ctx.HolderFactory).Release();
+        try {
+            auto data = Data->GetValue(ctx);
+            auto buffer = data.AsStringRef();
+            return ValuePacker.RefMutableObject(ctx, false, Type).Unpack(buffer, ctx.HolderFactory).Release();
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << "Unpack failed. Original error is: " << e.what()).data());
+        }
     }
 
 private:
@@ -60,22 +66,24 @@ private:
 
     TType* const Type;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker;
-    IComputationNode *const Data;
+    IComputationNode* const Data;
 };
 
-
-class TGenericPresortEncoderBoxed : public TComputationValue<TGenericPresortEncoderBoxed>, public TGenericPresortEncoder {
+class TGenericPresortEncoderBoxed: public TComputationValue<TGenericPresortEncoderBoxed>, public TGenericPresortEncoder {
     typedef TComputationValue<TGenericPresortEncoderBoxed> TBase;
+
 public:
     TGenericPresortEncoderBoxed(TMemoryUsageInfo* memInfo, TType* type)
         : TBase(memInfo)
         , TGenericPresortEncoder(type)
-    {}
+    {
+    }
 };
 
 template <bool Desc>
-class TPresortEncodeWrapper : public TMutableComputationNode<TPresortEncodeWrapper<Desc>> {
+class TPresortEncodeWrapper: public TMutableComputationNode<TPresortEncodeWrapper<Desc>> {
     typedef TMutableComputationNode<TPresortEncodeWrapper<Desc>> TBaseComputation;
+
 public:
     TPresortEncodeWrapper(TComputationMutables& mutables, TType* type, IComputationNode* data)
         : TBaseComputation(mutables)
@@ -96,10 +104,10 @@ private:
 
     TType* Type;
     TMutableObjectOverBoxedValue<TGenericPresortEncoderBoxed> Encoder;
-    IComputationNode *const Data;
+    IComputationNode* const Data;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapPickle(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -127,5 +135,5 @@ IComputationNode* WrapDescending(TCallable& callable, const TComputationNodeFact
     return new TPresortEncodeWrapper<true>(ctx.Mutables, callable.GetInput(0).GetStaticType(), LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

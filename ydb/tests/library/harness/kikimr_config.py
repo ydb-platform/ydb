@@ -186,7 +186,8 @@ class KikimrConfigGenerator(object):
             verbose_memory_limit_exception=False,
             enable_static_auth=False,
             cms_config=None,
-            explicit_statestorage_config=None
+            explicit_statestorage_config=None,
+            protected_mode=False
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -213,7 +214,8 @@ class KikimrConfigGenerator(object):
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
-        self.__grpc_ssl_enable = grpc_ssl_enable
+        self.protected_mode = protected_mode
+        self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
@@ -458,11 +460,51 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_ALLOW_ORIGIN") is not None:
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
 
-        if enforce_user_token_requirement:
+        if enforce_user_token_requirement or protected_mode:
             security_config_root["security_config"]["enforce_user_token_requirement"] = True
 
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
+
+        # protected mode is described in the YDB documentation for cluster deployment: it uses both certificate and token authentication.
+        # see https://ydb.tech/docs/en/devops/deployment-options/manual/initial-deployment?version=main
+        if protected_mode:
+            security_config = security_config_root.setdefault("security_config", {})
+            if "default_users" in security_config:
+                del security_config["default_users"]
+
+            base_sids = ["root", "root@builtin", "ADMINS", "DATABASE-ADMINS", "clusteradmins@cert"]
+            security_config["monitoring_allowed_sids"] = base_sids
+            security_config["viewer_allowed_sids"] = base_sids
+            security_config["bootstrap_allowed_sids"] = base_sids
+            security_config["administration_allowed_sids"] = base_sids
+
+            self.yaml_config["interconnect_config"] = {
+                "start_tcp": True,
+                "encryption_mode": "OPTIONAL",
+                "path_to_certificate_file": self.grpc_tls_cert_path,
+                "path_to_private_key_file": self.grpc_tls_key_path,
+                "path_to_ca_file": self.grpc_tls_ca_path,
+            }
+
+            self.yaml_config['grpc_config']['services_enabled'] = ['legacy']
+            if 'services' in self.yaml_config['grpc_config']:
+                del self.yaml_config['grpc_config']['services']
+
+            self.yaml_config['client_certificate_authorization'] = {
+                "request_client_certificate": True,
+                "client_certificate_definitions": [
+                    {
+                        "member_groups": ["clusteradmins@cert"],
+                        "subject_terms": [
+                            {
+                                "short_name": "O",
+                                "values": ["YDB"]
+                            }
+                        ]
+                    }
+                ]
+            }
 
         if memory_controller_config:
             self.yaml_config["memory_controller_config"] = memory_controller_config
@@ -477,7 +519,6 @@ class KikimrConfigGenerator(object):
 
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
-            self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_pg_syntax'] = True
@@ -533,14 +574,19 @@ class KikimrConfigGenerator(object):
             self._add_host_config_and_hosts()
             self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
+
             if "security_config" in self.yaml_config["domains_config"]:
-                self.yaml_config["domains_config"].pop("security_config")
+                self.yaml_config["security_config"] = self.yaml_config["domains_config"].pop("security_config")
+
+            if "services" in self.yaml_config["grpc_config"] and "config" not in self.yaml_config["grpc_config"]["services"]:
+                self.yaml_config["grpc_config"]["services"].append("config")
+
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
-            for name in ['blob_storage_config', 'domains_config', 'system_tablets', 'grpc_config',
-                         'channel_profile_config', 'interconnect_config']:
+            for name in ['blob_storage_config', 'domains_config', 'system_tablets',
+                         'channel_profile_config']:
                 del self.yaml_config[name]
         if self.simple_config:
             self.yaml_config.pop("feature_flags")

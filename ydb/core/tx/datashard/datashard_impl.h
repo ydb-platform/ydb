@@ -241,6 +241,7 @@ class TDataShard
     class TTxHandleSafeReshuffleKMeansScan;
     class TTxHandleSafeRecomputeKMeansScan;
     class TTxHandleSafeStatisticsScan;
+    class TTxHandleSafeBuildFulltextIndexScan;
 
     class TTxMediatorStateRestored;
 
@@ -379,7 +380,7 @@ class TDataShard
 
         struct TEvPeriodicWakeup : public TEventLocal<TEvPeriodicWakeup, EvPeriodicWakeup> {};
 
-        struct TEvAsyncTableStats : public TEventLocal<TEvAsyncTableStats, EvAsyncTableStats> {
+        struct TEvBuildTableStatsResult : public TEventLocal<TEvBuildTableStatsResult, EvAsyncTableStats> {
             ui64 TableId = -1;
             TInstant StatsUpdateTime;
             NTable::TStats Stats;
@@ -391,27 +392,32 @@ class TDataShard
             bool HasSchemaChanges = false;
         };
 
-        struct TEvTableStatsError : public TEventLocal<TEvTableStatsError, EvTableStatsError> {
+        struct TEvBuildTableStatsError : public TEventLocal<TEvBuildTableStatsError, EvTableStatsError> {
             enum class ECode {
                 FETCH_PAGE_FAILED,
                 RESOURCE_ALLOCATION_FAILED,
                 ACTOR_DIED,
-                UNKNOWN
+                UNHANDLED_EXCEPTION,
+                UNHANDLED_EVENT
             };
 
-            TEvTableStatsError(ui64 tableId, ECode code, const TString& msg)
+            TEvBuildTableStatsError(ui64 tableId, ECode code, const TString& message)
                 : TableId(tableId)
                 , Code(code)
-                , Message(msg)
+                , Message(message)
             {}
 
-            TEvTableStatsError(ui64 tableId, ECode code)
-                : TEvTableStatsError(tableId, code, "")
+            TEvBuildTableStatsError(ui64 tableId, std::exception_ptr exception, const TString& message)
+                : TableId(tableId)
+                , Code(ECode::UNHANDLED_EXCEPTION)
+                , Message(message)
+                , Exception(std::move(exception))
             {}
 
             const ui64 TableId;
             const ECode Code;
             const TString Message;
+            std::exception_ptr Exception;
         };
 
         struct TEvRemoveOldInReadSets : public TEventLocal<TEvRemoveOldInReadSets, EvRemoveOldInReadSets> {};
@@ -1293,8 +1299,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
@@ -1342,6 +1348,8 @@ class TDataShard
     void HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TActorContext& ctx);
@@ -1437,7 +1445,7 @@ class TDataShard
     void OnStopGuardStarting(const TActorContext &ctx);
     void OnStopGuardComplete(const TActorContext &ctx);
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void IcbRegister();
+    void InitControls();
     bool ReadOnlyLeaseEnabled() override;
     TDuration ReadOnlyLeaseDuration() override;
     void OnActivateExecutor(const TActorContext &ctx) override;
@@ -1644,6 +1652,9 @@ public:
 
     void UpdateProposeQueueSize() const;
 
+    template <typename TEvRequest>
+    bool ShouldDelayOperation(TEvRequest& ev);
+
     void CheckDelayedProposeQueue(const TActorContext &ctx);
 
     bool CheckDataTxReject(const TString& opDescr,
@@ -1827,6 +1838,7 @@ public:
     void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
     bool ReassignChannelsEnabled() const override;
     void OnYellowChannelsChanged() override;
+    void DelayS3UploadRows(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
     void OnRejectProbabilityRelaxed() override;
     void OnFollowersCountChanged() override;
     ui64 GetMemoryUsage() const override;
@@ -2124,6 +2136,7 @@ public:
     void StopFindSubDomainPathId();
     void StartFindSubDomainPathId(bool delayFirstRequest = true);
 
+    bool NeedToWatchSubDomainPathId();
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 
@@ -2178,6 +2191,7 @@ public:
         FinishProposeUnit_UpdateCounters,
         UploadRows_Reject,
         EraseRows_Reject,
+        S3UploadRows_Reject,
 
         LAST
     };
@@ -3127,6 +3141,8 @@ protected:
             HFuncTraced(TEvPrivate::TEvMediatorRestoreBackup, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveLockChangeRecords, Handle);
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
+            HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
+            HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()
@@ -3191,8 +3207,8 @@ protected:
             HFunc(TEvDataShard::TEvSplitTransferSnapshotAck, Handle);
             HFunc(TEvDataShard::TEvSplitPartitioningChanged, Handle);
             HFunc(TEvDataShard::TEvGetTableStats, Handle);
-            HFunc(TEvPrivate::TEvAsyncTableStats, Handle);
-            HFunc(TEvPrivate::TEvTableStatsError, Handle);
+            HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
+            HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvDataShard::TEvUploadRowsRequest, Handle);
             HFunc(TEvDataShard::TEvEraseRowsRequest, Handle);
@@ -3225,6 +3241,7 @@ protected:
             HFunc(TEvDataShard::TEvRecomputeKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvLocalKMeansRequest, Handle);
             HFunc(TEvDataShard::TEvPrefixKMeansRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildFulltextIndexRequest, Handle);
             HFunc(TEvDataShard::TEvCdcStreamScanRequest, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanRegistered, Handle);
             HFunc(TEvPrivate::TEvCdcStreamScanProgress, Handle);
@@ -3294,6 +3311,8 @@ protected:
             hFuncTraced(TEvDataShard::TEvReadScanStarted, Handle);
             hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
+            HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
@@ -3330,13 +3349,16 @@ protected:
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
     }
 
+    TDuration GetStatsReportInterval(const TAppData&) const;
+
     void SendPeriodicTableStats(const TActorContext &ctx) {
         if (StatisticsDisabled)
             return;
 
-        TInstant now = AppData(ctx)->TimeProvider->Now();
+        auto* appData = AppData(ctx);
+        TInstant now = appData->TimeProvider->Now();
 
-        if (LastDbStatsReportTime + gDbStatsReportInterval > now)
+        if (LastDbStatsReportTime + GetStatsReportInterval(*appData) > now)
             return;
 
         auto* resourceMetrics = Executor()->GetResourceMetrics();

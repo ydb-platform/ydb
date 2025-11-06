@@ -600,5 +600,4 @@ TUint TJsonPathBuilder::CurrentEndPos() const {
     return Result_->Size();
 }
 
-
-}
+} // namespace NYql::NJsonPath

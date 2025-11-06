@@ -1,5 +1,7 @@
 import decimal
 from typing import Union, Type, Sequence, MutableSequence, Any
+import struct
+import array
 
 from math import nan, isnan, isinf
 
@@ -208,6 +210,80 @@ class Float64(Float):
     np_type = '<f8'
 
 
+class BFloat16(ArrayType):
+    _array_type = "H"
+    python_type = float
+    np_type = "<f4"
+
+    def _write_column_binary(
+        self,
+        column: Sequence[Any],
+        dest: bytearray,
+        ctx: InsertContext,
+    ):
+        if not column:
+            return
+
+        if self.nullable:
+            first = next((x for x in column if x is not None), None)
+            if isinstance(first, float):
+                column = [0 if (x is None or isnan(x) or isinf(x)) else x for x in column]
+            else:
+                column = [0 if x is None else float(x) for x in column]
+        elif not isinstance(column[0], float):
+            column = [float(x) for x in column]
+
+        vals = array.array("H")
+        extend = vals.extend
+        for x in column:
+            bits32 = struct.unpack("<I", struct.pack("<f", x))[0]
+            extend([bits32 >> 16])
+
+        write_array(self._array_type, vals, dest, ctx.column_name)
+
+    def _read_column_binary(
+        self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any
+    ):
+        if ctx.use_numpy:
+            arr16 = numpy_conv.read_numpy_array(source, "<u2", num_rows)
+            return (arr16.astype(np.uint32) << np.uint32(16)).view(np.float32)
+
+        raw = source.read_array(self._array_type, num_rows)
+        return [struct.unpack("<f", struct.pack("<I", v << 16))[0] for v in raw]
+
+    def _read_nullable_column(
+        self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any
+    ):
+        null_map = source.read_bytes(num_rows)
+
+        if ctx.use_numpy:
+            arr16 = numpy_conv.read_numpy_array(source, "<u2", num_rows)
+            floats = (arr16.astype(np.uint32) << np.uint32(16)).view(np.float32)
+            return data_conv.build_nullable_column(
+                floats, null_map, self._active_null(ctx)
+            )
+
+        raw = source.read_array(self._array_type, num_rows)
+        floats = [struct.unpack("<f", struct.pack("<I", v << 16))[0] for v in raw]
+        return data_conv.build_nullable_column(floats, null_map, self._active_null(ctx))
+
+    def _finalize_column(self, column, ctx: QueryContext):
+        if ctx.use_extended_dtypes and self.nullable:
+            return pd.array(column, dtype="Float32")
+        if ctx.use_numpy and not isinstance(column, np.ndarray):
+            return np.array(column, dtype=self.np_type)
+        return column
+
+    def _active_null(self, ctx: QueryContext):
+        if ctx.use_extended_dtypes:
+            return nan
+        if ctx.use_none:
+            return None
+        if ctx.use_numpy:
+            return nan
+        return 0.0
+
+
 class Bool(ClickHouseType):
     np_type = '?'
     python_type = bool
@@ -388,3 +464,47 @@ class Decimal128(BigDecimal):
 
 class Decimal256(BigDecimal):
     dec_size = 256
+
+
+class IntervalNanosecond(Int32):
+    pass
+
+
+class IntervalMicrosecond(Int32):
+    pass
+
+
+class IntervalMillisecond(Int32):
+    pass
+
+
+class IntervalSecond(Int32):
+    pass
+
+
+class IntervalMinute(Int32):
+    pass
+
+
+class IntervalHour(Int32):
+    pass
+
+
+class IntervalDay(Int32):
+    pass
+
+
+class IntervalWeek(Int32):
+    pass
+
+
+class IntervalMonth(Int32):
+    pass
+
+
+class IntervalQuarter(Int32):
+    pass
+
+
+class IntervalYear(Int32):
+    pass

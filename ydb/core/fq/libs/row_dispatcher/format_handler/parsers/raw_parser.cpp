@@ -83,9 +83,9 @@ public:
         return Offsets;
     }
 
-    TValueStatus<const TVector<NYql::NUdf::TUnboxedValue>*> GetParsedColumn(ui64 columnId) const override {
+    TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         Y_ENSURE(columnId == 0, "Invalid column id for raw parser");
-        return &ParsedColumn;
+        return std::span<NYql::NUdf::TUnboxedValue>(ParsedColumn);
     }
 
 protected:

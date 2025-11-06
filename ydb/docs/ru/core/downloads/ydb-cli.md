@@ -6,6 +6,7 @@
 
 #|
 || Версия | Дата выпуска | Скачать | Список изменений ||
+|| v.2.26.0 | 25.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/linux/amd64/ydb) | [См. список](../changelog-cli.md#2-26-0) ||
 || v.2.25.0 | 01.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.25.0/linux/amd64/ydb) | [См. список](../changelog-cli.md#2-25-0) ||
 || v.2.24.1 | 28.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.1/linux/amd64/ydb) | [См. список](../changelog-cli.md#2-24-1) ||
 || v.2.24.0 | 23.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.0/linux/amd64/ydb) | [См. список](../changelog-cli.md#2-24-0) ||
@@ -30,6 +31,7 @@
 
 #|
 || Версия | Дата выпуска | Скачать | Список изменений ||
+|| v.2.26.0 | 25.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/linux/arm64/ydb) | [См. список](../changelog-cli.md#2-26-0) ||
 || v.2.25.0 | 01.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.25.0/linux/arm64/ydb) | [См. список](../changelog-cli.md#2-25-0) ||
 || v.2.24.1 | 28.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.1/linux/arm64/ydb) | [См. список](../changelog-cli.md#2-24-1) ||
 || v.2.24.0 | 23.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.0/linux/arm64/ydb) | [См. список](../changelog-cli.md#2-24-0) ||
@@ -52,6 +54,7 @@
 
 #|
 || Версия | Дата выпуска | Скачать | Список изменений ||
+|| v.2.26.0 | 25.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/darwin/amd64/ydb) | [См. список](../changelog-cli.md#2-26-0) ||
 || v.2.25.0 | 01.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.25.0/darwin/amd64/ydb) | [См. список](../changelog-cli.md#2-25-0) ||
 || v.2.24.1 | 28.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.1/darwin/amd64/ydb) | [См. список](../changelog-cli.md#2-24-1) ||
 || v.2.24.0 | 23.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.0/darwin/amd64/ydb) | [См. список](../changelog-cli.md#2-24-0) ||
@@ -78,6 +81,7 @@
 
 #|
 || Версия | Дата выпуска | Скачать | Список изменений ||
+|| v.2.26.0 | 25.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/darwin/arm64/ydb) | [См. список](../changelog-cli.md#2-26-0) ||
 || v.2.25.0 | 01.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.25.0/darwin/arm64/ydb) | [См. список](../changelog-cli.md#2-25-0) ||
 || v.2.24.1 | 28.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.1/darwin/arm64/ydb) | [См. список](../changelog-cli.md#2-24-1) ||
 || v.2.24.0 | 23.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.0/darwin/arm64/ydb) | [См. список](../changelog-cli.md#2-24-0) ||
@@ -102,6 +106,7 @@
 
 #|
 || Версия | Дата выпуска | Скачать | Список изменений ||
+|| v.2.26.0 | 25.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/windows/amd64/ydb.exe) | [См. список](../changelog-cli.md#2-26-0) ||
 || v.2.25.0 | 01.09.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.25.0/windows/amd64/ydb.exe) | [См. список](../changelog-cli.md#2-25-0) ||
 || v.2.24.1 | 28.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.1/windows/amd64/ydb.exe) | [См. список](../changelog-cli.md#2-24-1) ||
 || v.2.24.0 | 23.07.2025 | [Бинарный файл](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.24.0/windows/amd64/ydb.exe) | [См. список](../changelog-cli.md#2-24-0) ||

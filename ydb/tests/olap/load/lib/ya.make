@@ -8,6 +8,7 @@ PY3_LIBRARY()
         tpcds.py
         tpch.py
         workload_executor.py
+        workload_executor_parallel.py
         workload_manager.py
         workload_simple_queue.py
         workload_oltp.py
@@ -33,6 +34,7 @@ PY3_LIBRARY()
         contrib/python/allure-pytest
         contrib/python/allure-python-commons
         contrib/python/matplotlib
+        contrib/python/pytest-timeout
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers

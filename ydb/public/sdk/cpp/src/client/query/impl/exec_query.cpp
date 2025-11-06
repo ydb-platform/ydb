@@ -128,8 +128,12 @@ private:
 };
 
 TAsyncExecuteQueryPart TExecuteQueryIterator::ReadNext() {
+    if (!ReaderImpl_) {
+        RaiseError("Attempt to read a stream result part on an invalid stream. ");
+    }
+
     if (ReaderImpl_->IsFinished()) {
-        RaiseError("Attempt to perform read on invalid or finished stream");
+        RaiseError("Attempt to read a stream result part on a finished stream. ");
     }
 
     return ReaderImpl_->ReadNext(ReaderImpl_);

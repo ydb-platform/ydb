@@ -25,7 +25,7 @@ namespace NYdb::inline Dev {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing
-constexpr TDuration HOSTSCAN_PERIODIC_ACTION_INTERVAL = TDuration::Seconds(2);
+constexpr TDeadline::Duration HOSTSCAN_PERIODIC_ACTION_INTERVAL = std::chrono::seconds(2);
 constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 
 TDuration GetMinTimeToTouch(const TSessionPoolSettings& settings);
@@ -43,7 +43,7 @@ public:
     void InitStopper();
     NThreading::TFuture<void> Drain();
     NThreading::TFuture<void> Stop();
-    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout);
+    void ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout);
     void StartPeriodicSessionPoolTask();
     static ui64 ScanForeignLocations(std::shared_ptr<TTableClient::TImpl> client);
     static std::pair<ui64, size_t> ScanLocation(std::shared_ptr<TTableClient::TImpl> client,
@@ -139,7 +139,7 @@ public:
 
     void SetStatCollector(const NSdkStats::TStatCollector::TClientStatCollector& collector);
 
-    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings, bool canMove);
+    TAsyncBulkUpsertResult BulkUpsert(const std::string& table, TValue&& rows, const TBulkUpsertSettings& settings);
     TAsyncBulkUpsertResult BulkUpsert(const std::string& table, EDataFormat format,
         const std::string& data, const std::string& schema, const TBulkUpsertSettings& settings);
 

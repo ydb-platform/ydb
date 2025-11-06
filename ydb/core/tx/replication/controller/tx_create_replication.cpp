@@ -62,6 +62,13 @@ public:
         }
 
         if (Replication) {
+            const auto& tenant = Replication->GetDatabase();
+            Y_ABORT_UNLESS(tenant);
+            if (!Self->NodesManager.HasTenant(tenant)) {
+                CLOG_I(ctx, "Discover tenant nodes: tenant# " << tenant);
+                Self->NodesManager.DiscoverNodes(tenant, Self->DiscoveryCache, ctx);
+            }
+
             Replication->Progress(ctx);
         }
     }

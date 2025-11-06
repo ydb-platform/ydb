@@ -8,7 +8,7 @@ namespace NYql {
 class TTypeAnnotationNode;
 
 TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues,
-        TPosition position = {1, 1});
+                    TPosition position = {1, 1});
 
 TString FormatType(const TTypeAnnotationNode* typeNode);
 

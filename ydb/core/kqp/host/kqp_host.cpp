@@ -1130,7 +1130,6 @@ public:
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
         if (tempTablesState) {
-            SessionCtx->SetSessionId(tempTablesState->SessionId);
             SessionCtx->SetTempTables(std::move(tempTablesState));
         }
 
@@ -1461,6 +1460,13 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
+
+        if (settings.RuntimeParameterSizeLimit) {
+            SessionCtx->Query().RuntimeParameterSizeLimit = settings.RuntimeParameterSizeLimit;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
@@ -1495,6 +1501,12 @@ private:
         if (settings.IsInternalCall) {
             SessionCtx->Query().IsInternalCall = *settings.IsInternalCall;
         }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
+        if (settings.RuntimeParameterSizeLimit) {
+            SessionCtx->Query().RuntimeParameterSizeLimit = settings.RuntimeParameterSizeLimit;
+        }
 
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, queryAst.Text, SessionCtx->Config().BindingsMode, GUCSettings);
@@ -1524,6 +1536,13 @@ private:
         if (settings.ConcurrentResults) {
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
+        }
+        if (settings.RuntimeParameterSizeLimitSatisfied) {
+            SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
+        }
+
+        if (settings.RuntimeParameterSizeLimit) {
+            SessionCtx->Query().RuntimeParameterSizeLimit = settings.RuntimeParameterSizeLimit;
         }
 
         TMaybe<TSqlVersion> sqlVersion = settings.SyntaxVersion;
@@ -1773,12 +1792,18 @@ private:
         }
 
         auto state = MakeIntrusive<NYql::TS3State>();
+
+        auto& configuration = *state->Configuration;
+        if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
+            configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
+        }
+        configuration.WriteThroughDqIntegration = true;
+        configuration.AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
+        configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
+
         state->Types = TypesCtx.Get();
         state->FunctionRegistry = FuncRegistry;
         state->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
-        state->Configuration->WriteThroughDqIntegration = true;
-        state->Configuration->AllowAtomicUploadCommit = queryType == EKikimrQueryType::Script;
-        state->Configuration->Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
         state->Gateway = FederatedQuerySetup->HttpGateway;
         state->GatewayRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
         state->ExecutorPoolId = AppData()->UserPoolId;
@@ -1859,6 +1884,8 @@ private:
 
         auto solomonState = MakeIntrusive<TSolomonState>();
 
+        solomonState->SupportRtmrMode = false;
+        solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
@@ -1882,7 +1909,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;;
+        state->Gateway = FederatedQuerySetup->PqGateway;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1937,6 +1964,7 @@ private:
             if (FederatedQuerySetup->PqGateway) {
                 InitPqProvider();
             }
+            TypesCtx->StreamLookupJoin = true;
         }
 
         InitPgProvider();

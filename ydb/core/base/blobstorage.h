@@ -931,7 +931,7 @@ struct TEvBlobStorage {
         EvControllerNodeReport                      = 0x1003180d,
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
-            
+
         // BlobCheckerOrchestrator <-> BSC interface
         EvBlobCheckerUpdateSettings                 = 0x10031820,
         EvBlobCheckerUpdateGroupStatus              = 0x10031821,

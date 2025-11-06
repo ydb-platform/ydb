@@ -74,12 +74,16 @@ void TBlobStorageController::Handle(const TEvBlobCheckerPlanCheck::TPtr& ev) {
         if (status.OperatingStatus == NKikimrBlobStorage::TGroupStatus::FULL) {
             BlobCheckerPlanner->EnqueueCheck(groupInfo);
             UpdateBlobCheckerState();
+        } else {
+            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerDecision(groupId, NKikimrProto::ERROR));
         }
     } else if (const TStaticGroupInfo* staticGroupInfo = staticFinder(groupId)) {
         TGroupInfo::TGroupStatus status = staticGroupInfo->GetStatus(staticFinder, BridgeInfo.get());
         if (status.OperatingStatus == NKikimrBlobStorage::TGroupStatus::FULL) {
             BlobCheckerPlanner->EnqueueCheck(staticGroupInfo->Info.get());
             UpdateBlobCheckerState();
+        } else {
+            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerDecision(groupId, NKikimrProto::ERROR));
         }
     }
 }

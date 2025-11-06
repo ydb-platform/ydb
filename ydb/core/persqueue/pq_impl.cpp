@@ -4409,6 +4409,11 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
     result->Record.SetTxId(tx.TxId);
     result->Record.SetStep(tx.Step);
 
+    if (tx.Error.Defined() && tx.Error->GetKind() != NKikimrPQ::TError::OK) {
+        auto* error = result->Record.MutableErrors()->Add();
+        *error = *tx.Error;
+    }
+
     PQ_LOG_TX_D("TxId: " << tx.TxId <<
              " send TEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(result->Record.GetStatus()) <<

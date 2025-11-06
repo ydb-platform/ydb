@@ -560,11 +560,14 @@ private:
 private:
     void FillQueryRequest(const TRequestOptions& query, NKikimrKqp::EQueryType type, ui32 targetNodeIndex, NKikimrKqp::TEvQueryRequest& event) {
         event.SetTraceId(query.TraceId);
-        event.SetUserToken(NACLib::TUserToken(
-            Settings_.YqlToken,
-            query.UserSID,
-            query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
-        ).SerializeAsString());
+
+        if (query.UserSID) {
+            event.SetUserToken(NACLib::TUserToken(
+                Settings_.YqlToken,
+                query.UserSID,
+                query.GroupSIDs ? *query.GroupSIDs : TVector<NACLib::TSID>{GetRuntime()->GetAppData(targetNodeIndex).AllAuthenticatedUsers}
+            ).SerializeAsString());
+        }
 
         const auto& database = GetDatabasePath(query.Database);
         auto request = event.MutableRequest();

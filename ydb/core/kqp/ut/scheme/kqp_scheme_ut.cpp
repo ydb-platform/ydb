@@ -12627,7 +12627,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .SetEnableResourcePools(true)
             .SetInitFederatedQuerySetupFactory(true));
 
-        const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT)).ExecuteQuery(fmt::format(R"(
+        const auto result = kikimr->GetQueryClient().ExecuteQuery(fmt::format(R"(
             CREATE TOPIC MyTopic;
             CREATE EXTERNAL DATA SOURCE MySource WITH (
                 SOURCE_TYPE = "Ydb",
@@ -12644,7 +12644,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(DisableStreamingQueries) {
         auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ false);
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         auto checkQuery = [&db](const TString& query, EStatus status, const TString& error) {
             Cerr << "Check query:\n" << query << "\n";
@@ -12678,7 +12678,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(StreamingQueriesValidation) {
         auto kikimr = SetupStreamingSource();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         // Test create
 
@@ -12787,7 +12787,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(CreateStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << R"(
@@ -12867,7 +12867,7 @@ END DO)",
     }
 
     void CheckStreamingQueryBodyValidation(TKikimrRunner& kikimr, const TString& prefix) {
-        auto db = kikimr.GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr.GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
@@ -12957,7 +12957,7 @@ END DO)",
     Y_UNIT_TEST(CreateStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -13019,7 +13019,7 @@ END DO)",
 
     Y_UNIT_TEST(ParallelCreateStreamingQuery) {
         auto kikimr = SetupStreamingSource();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         constexpr ui64 PARALLEL_QUERIES = 100;
         std::vector<NQuery::TAsyncExecuteQueryResult> results;
@@ -13066,7 +13066,7 @@ END DO)",
     Y_UNIT_TEST(AlterStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(TStringBuilder() << R"(
@@ -13139,7 +13139,7 @@ END DO)",
     Y_UNIT_TEST(AlterStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -13195,7 +13195,7 @@ END DO)",
     Y_UNIT_TEST(ParallelAlterStreamingQuery) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -13252,7 +13252,7 @@ END DO)",
     Y_UNIT_TEST(DropStreamingQueryBasic) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -13287,7 +13287,7 @@ END DO)",
     Y_UNIT_TEST(DropStreamingQueryErrors) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -13329,7 +13329,7 @@ END DO)",
     Y_UNIT_TEST(ParallelDropStreamingQuery) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = db.ExecuteQuery(R"(
@@ -13380,7 +13380,7 @@ END DO)",
     Y_UNIT_TEST(StreamingQueriesWithResourcePools) {
         auto kikimr = SetupStreamingSource();
         auto& runtime = *kikimr->GetTestServer().GetRuntime();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         {
             const auto result = kikimr->GetQueryClient().ExecuteQuery(R"(
@@ -13429,7 +13429,7 @@ END DO)",
 
     Y_UNIT_TEST(StreamingQueriesAclValidation) {
         auto kikimr = SetupStreamingSource();
-        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+        auto db = kikimr->GetQueryClient();
 
         constexpr char createUser[] = "create@builtin";
         constexpr char removeUser[] = "remove@builtin";

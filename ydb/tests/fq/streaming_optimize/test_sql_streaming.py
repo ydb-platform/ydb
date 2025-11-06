@@ -1,14 +1,13 @@
 import os
-import codecs
-import yatest.common
 import pytest
+import yatest.common
 
 from test_utils import pytest_generate_tests_for_run
 from ydb.tests.fq.tools.fqrun import FqRun
 from yql_utils import yql_binary_path
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
-DATA_PATH = yatest.common.source_path('ydb/tests/fq/streaming_optimize')
+DATA_PATH = yatest.common.source_path('ydb/tests/fq/streaming_optimize/suites')
 
 
 @pytest.fixture
@@ -26,12 +25,12 @@ def fq_run(request) -> FqRun:
 
 
 def pytest_generate_tests(metafunc):
-    return pytest_generate_tests_for_run(metafunc, suites=["suites"], data_path=DATA_PATH)
+    return pytest_generate_tests_for_run(metafunc, data_path=DATA_PATH)
 
 
 def test(suite, case, cfg, fq_run):
     program_sql = os.path.join(DATA_PATH, suite, f"{case}.sql")
-    with codecs.open(program_sql, encoding="utf-8") as f:
+    with open(program_sql, encoding="utf-8") as f:
         sql_query = f.read()
 
     fq_run.add_query(sql_query)

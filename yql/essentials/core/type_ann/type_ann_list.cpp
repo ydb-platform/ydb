@@ -7009,7 +7009,7 @@ namespace {
 
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureArgsCount(*input, 14, ctx.Expr)) {
+        if (!EnsureArgsCount(*input, 15, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto& item = input->ChildRef(0);
@@ -7019,6 +7019,7 @@ namespace {
         auto* hop = input->Child(3);
         auto* interval = input->Child(4);
         auto* delay = input->Child(5);
+        auto dataWatermarks = input->Child(6);
 
         auto& lambdaInit = input->ChildRef(7);
         auto& lambdaUpdate = input->ChildRef(8);
@@ -7026,6 +7027,9 @@ namespace {
         auto& loadLambda = input->ChildRef(10);
         auto& lambdaMerge = input->ChildRef(11);
         auto& lambdaFinish = input->ChildRef(12);
+
+        auto watermarkMode = input->Child(13);
+        auto hoppingColumn = input->Child(14);
 
         if (!EnsureStreamType(*item, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -7073,6 +7077,10 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
         if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*dataWatermarks, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7163,6 +7171,14 @@ namespace {
                     << *loadLambda->GetTypeAnn() << " != " << *stateType));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        if (!EnsureAtom(*watermarkMode, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(*hoppingColumn, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(lambdaFinish->GetTypeAnn()));

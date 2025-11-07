@@ -274,6 +274,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                     moveUncommittedOffset = false;
                     break;
                 case EMessageStatus::DLQ:
+                    ++Metrics.DLQMessageCount;
                     moveUncommittedOffset = false;
                     break;
             }
@@ -323,7 +324,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     return true;
 }
 
-bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
+bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
 
     if (wal.HasBaseDeadlineSeconds() || wal.HasBaseWriteTimestampSeconds()) {
@@ -472,9 +473,7 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     {
-        ui64 offset = 0;
-        for (auto diff : wal.GetDLQ()) {
-            offset += diff;
+        for (auto offset : wal.GetDLQ()) {
             DLQQueue.push_back(offset);
         }
     }
@@ -576,12 +575,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     {
-        ui64 lastOffset = 0;
         for (auto offset : DLQ) {
-            if (offset >= Storage->FirstOffset) {
-                wal.AddDLQ(offset - lastOffset);
-                lastOffset = offset;
-            }
+            wal.AddDLQ(offset);
         }
     }
 

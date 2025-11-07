@@ -596,6 +596,15 @@ TString TStorage::DebugString() const {
     }
 
     sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId.begin(), LockedMessageGroupsId.end()) << "]";
+    sb << " DLQQueue [" << JoinRange(", ", DLQQueue.begin(), DLQQueue.end()) << "]";
+    sb << " Metrics {"
+        << "Infly: " << Metrics.InflyMessageCount << ", "
+        << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "
+        << "Locked: " << Metrics.LockedMessageCount << ", "
+        << "LockedGroups: " << Metrics.LockedMessageGroupCount << ", "
+        << "Committed: " << Metrics.CommittedMessageCount << ", "
+        << "DLQ: " << Metrics.DLQMessageCount
+        << "}";
     return sb;
 }
 

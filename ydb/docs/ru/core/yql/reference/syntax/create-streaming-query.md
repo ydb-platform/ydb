@@ -30,7 +30,8 @@ END;
 
 ## Указание формата и схемы
 
-Для указания формата и схемы данных используется `WITH`: 
+Для указания формата и схемы данных используется секция [WITH](select/with.md):
+
 - `FORMAT = (raw|json_each_row)` - см. описание ниже,
 - `SCHEMA (...)` —  описание схемы хранимых данных.
 
@@ -45,7 +46,20 @@ END;
 
 ### Поддерживаемые типы данных (#schema)
 
-Нужно ли ?
+Таблица всех поддерживаемых типов  в схеме запроса:
+|Тип                                  |json_each_row|raw|
+|-------------------------------------|-------------|---|
+|`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓||
+|`DyNumber`                           |             |   |
+|`String`, `Utf8`, `Json`             |✓            |✓  |
+|`JsonDocument`                       |             |   |
+|`Yson`                               |             |✓  |
+|`Uuid`                               |             |   |
+|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓    |  |
+|`Interval`                           |✓            |   |
+|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|✓     |    |
+|`Optional<T>`                        |✓            |✓  |
+
 
 ### Пример
 

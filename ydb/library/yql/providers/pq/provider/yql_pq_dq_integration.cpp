@@ -318,9 +318,7 @@ public:
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
-                if (skipErrors) {
-                    srcDesc.SetSkipJsonErrors(true);
-                }
+                srcDesc.SetSkipJsonErrors(skipErrors);
 
                 *srcDesc.MutableDisposition() = State_->Disposition;
 

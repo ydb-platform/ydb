@@ -1,0 +1,5 @@
+items:
+  - name: Kafka Connect setup. A step-by-step guide
+    href: connect-step-by-step.md
+  - name: Examples of connector configuration
+    href: connect-examples.md

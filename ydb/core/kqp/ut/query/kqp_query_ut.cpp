@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         {
             // Interval64
             fUpsertAndCheck(31, static_cast<i64>(0), /* success */ true); // Basic
-            fUpsertAndCheck(33, NYql::NUdf::MAX_INTERVAL64, /* success */ true); // Max is inclusive
+            fUpsertAndCheck(32, NYql::NUdf::MAX_INTERVAL64, /* success */ true); // Max is inclusive
             fUpsertAndCheck(33, -NYql::NUdf::MAX_INTERVAL64, /* success */ true); // -Max is inclusive
             fUpsertAndCheck(34, NYql::NUdf::MAX_INTERVAL64 + 1, /* success */ false); // Out of bounds
             fUpsertAndCheck(35, -(NYql::NUdf::MAX_INTERVAL64 + 1), /* success */ false); // Out of bounds

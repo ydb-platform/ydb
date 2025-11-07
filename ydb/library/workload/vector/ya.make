@@ -14,6 +14,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/workload/abstract
+    ydb/public/api/protos
 )
 
 GENERATE_ENUM_SERIALIZATION_WITH_HEADER(vector_enums.h)

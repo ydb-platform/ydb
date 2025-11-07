@@ -1,6 +1,9 @@
 #include "vector_data_generator.h"
 
+#include <ydb/library/formats/arrow/csv/converter/csv_arrow.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
+
+#include <ydb/public/api/protos/ydb_formats.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_nested.h>
@@ -44,14 +47,50 @@ private:
         return std::make_pair(schema, recordBatch);
     }
 
-    static std::shared_ptr<arrow::Table> Deserialize(TDataPortion::TCsv* data) {
+    std::shared_ptr<arrow::Table> Deserialize(TDataPortion::TCsv* data) {
+        Ydb::Formats::CsvSettings csvSettings;
+        if (Y_UNLIKELY(!csvSettings.ParseFromString(data->FormatString))) {
+            ythrow yexception() << "Unable to parse CsvSettings";
+        }
+
+        arrow::csv::ReadOptions readOptions = arrow::csv::ReadOptions::Defaults();
+        readOptions.skip_rows = csvSettings.skip_rows();
+        if (data->Data.size() > NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
+            ui32 blockSize = NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
+            blockSize *= data->Data.size() / blockSize + 1;
+            readOptions.block_size = blockSize;
+        }
+
+        arrow::csv::ParseOptions parseOptions = arrow::csv::ParseOptions::Defaults();
+        const auto& quoting = csvSettings.quoting();
+        if (Y_UNLIKELY(quoting.quote_char().length() > 1)) {
+            ythrow yexception() << "Cannot read CSV: Wrong quote char '" << quoting.quote_char() << "'";
+        }
+        const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
+        parseOptions.quoting = false;
+        parseOptions.quote_char = qchar;
+        parseOptions.double_quote = !quoting.double_quote_disabled();
+        if (csvSettings.delimiter()) {
+            if (Y_UNLIKELY(csvSettings.delimiter().size() != 1)) {
+                ythrow yexception() << "Cannot read CSV: Invalid delimitr in csv: " << csvSettings.delimiter();
+            }
+            parseOptions.delimiter = csvSettings.delimiter().front();
+        }
+
+        arrow::csv::ConvertOptions convertOptions = arrow::csv::ConvertOptions::Defaults();
+        if (csvSettings.null_value()) {
+            convertOptions.null_values = { std::string(csvSettings.null_value().data(), csvSettings.null_value().size()) };
+            convertOptions.strings_can_be_null = true;
+            convertOptions.quoted_strings_can_be_null = false;
+        }
+
         auto bufferReader = std::make_shared<arrow::io::BufferReader>(arrow::util::string_view(data->Data.data(), data->Data.size()));
         auto csvReader = arrow::csv::TableReader::Make(
             arrow::io::default_io_context(),
             bufferReader,
-            arrow::csv::ReadOptions::Defaults(),
-            arrow::csv::ParseOptions::Defaults(),
-            arrow::csv::ConvertOptions::Defaults()
+            readOptions,
+            parseOptions,
+            convertOptions
         ).ValueOrDie();
 
         return csvReader->Read().ValueOrDie();

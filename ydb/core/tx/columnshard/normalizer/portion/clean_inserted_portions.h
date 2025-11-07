@@ -47,4 +47,4 @@ public:
     virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const override;
 };
 
-}   // namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs
+}   // namespace NKikimr::NOlap::NNormalizer::NCleanInsertedPortions

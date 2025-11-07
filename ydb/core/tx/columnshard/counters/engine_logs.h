@@ -241,13 +241,14 @@ public:
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> BlobGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionRecordCountGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionSizeGuards;
-        NMonitoring::TDynamicCounters::TCounterPtr BadPortionsCount;
+        TLineGuard BadPortionsCount;
 
     public:
         TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrPortionSize,
             const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrRecordsCount,
-            NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount)
+            NMonitoring::TDynamicCounters::TCounterPtr badPortionsCount) :
+            BadPortionsCount(badPortionsCount)
         {
             for (auto&& i : distrBlobs) {
                 BlobGuards.emplace_back(i->BuildGuard());
@@ -258,12 +259,11 @@ public:
             for (auto&& i : distrRecordsCount) {
                 PortionRecordCountGuards.emplace_back(i->BuildGuard());
             }
-            BadPortionsCount = badPortionsCount;
         }
 
 
-        void OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
-        void OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
+        void OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
+        void OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion);
 
     };
 

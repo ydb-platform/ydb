@@ -6,6 +6,32 @@
 
 namespace NKikimr::NColumnShard {
 
+class TLineGuard {
+private:
+    NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    i64 Value = 0;
+public:
+    TLineGuard(NMonitoring::TDynamicCounters::TCounterPtr counter)
+        : Counter(counter) {
+
+    }
+
+    ~TLineGuard() {
+        Sub(Value);
+    }
+
+    void Add(const i64 value) {
+        Counter->Add(value);
+        Value += value;
+    }
+
+    void Sub(const i64 value) {
+        Counter->Sub(value);
+        Value -= value;
+        Y_ABORT_UNLESS(Value >= 0);
+    }
+};
+
 class TIncrementalHistogram: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
@@ -20,36 +46,10 @@ private:
             return it->second;
         }
     }
-public:
 
+public:
     class TGuard {
     private:
-        class TLineGuard {
-        private:
-            NMonitoring::TDynamicCounters::TCounterPtr Counter;
-            i64 Value = 0;
-        public:
-            TLineGuard(NMonitoring::TDynamicCounters::TCounterPtr counter)
-                : Counter(counter) {
-
-            }
-
-            ~TLineGuard() {
-                Sub(Value);
-            }
-
-            void Add(const i64 value) {
-                Counter->Add(value);
-                Value += value;
-            }
-
-            void Sub(const i64 value) {
-                Counter->Sub(value);
-                Value -= value;
-                Y_ABORT_UNLESS(Value >= 0);
-            }
-        };
-
         std::map<i64, TLineGuard> Counters;
         TLineGuard PlusInf;
 

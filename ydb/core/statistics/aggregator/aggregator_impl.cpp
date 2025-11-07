@@ -559,7 +559,7 @@ void TStatisticsAggregator::Navigate() {
 }
 
 void TStatisticsAggregator::Resolve() {
-    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
+    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal && !NavigateAnalyzeOperationId
                 || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
 
@@ -571,6 +571,7 @@ void TStatisticsAggregator::Resolve() {
         NavigatePathId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, Columns);
 
     auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+    request->DatabaseName = NavigateDatabase;
     request->ResultSet.emplace_back(std::move(keyDesc));
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));

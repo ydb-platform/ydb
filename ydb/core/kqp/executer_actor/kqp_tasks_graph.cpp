@@ -441,6 +441,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
 
     NKikimrKqp::TKqpStreamLookupSettings* settings = GetMeta().Allocate<NKikimrKqp::TKqpStreamLookupSettings>();
 
+    settings->SetDatabase(GetMeta().Database);
     settings->MutableTable()->CopyFrom(streamLookup.GetTable());
 
     auto columnToProto = [] (TString columnName,
@@ -513,6 +514,7 @@ void TKqpTasksGraph::BuildVectorResolveChannels(const TStageInfo& stageInfo, ui3
     YQL_ENSURE(stageInfo.Meta.IndexMetas.size() == 1);
     const auto& levelTableInfo = stageInfo.Meta.IndexMetas.back().TableConstInfo;
 
+    settings->SetDatabase(GetMeta().Database);
     auto* levelMeta = settings->MutableLevelTable();
     auto& kqpMeta = vectorResolve.GetLevelTable();
     levelMeta->SetTablePath(kqpMeta.GetPath());
@@ -2582,6 +2584,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
         input.Meta.SourceSettings = GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
         NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
+        settings->SetDatabase(GetMeta().Database);
         FillTableMeta(stageInfo, settings->MutableTable());
 
         settings->SetIsTableImmutable(source.GetIsTableImmutable());

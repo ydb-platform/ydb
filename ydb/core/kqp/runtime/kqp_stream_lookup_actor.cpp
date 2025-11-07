@@ -48,6 +48,7 @@ public:
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
         , IsolationLevel(settings.GetIsolationLevel())
+        , Database(settings.GetDatabase())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -754,6 +755,7 @@ private:
         Partitioning.reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Database;
 
         auto keyColumnTypes = StreamLookupWorker->GetKeyColumnTypes();
 
@@ -828,6 +830,7 @@ private:
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
     NKikimrKqp::EIsolationLevel IsolationLevel;
+    const TString Database;
 
     // stats
     ui64 ReadRowsCount = 0;

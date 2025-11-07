@@ -595,6 +595,10 @@ private:
 
     void AckReadSetsToTablet(ui64 tabletId, const TActorContext& ctx);
 
+    void BeginDeleteTransaction(const TActorContext& ctx,
+                                TDistributedTransaction& tx,
+                                NKikimrPQ::TTransaction::EState state);
+
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     NWilson::TSpan WriteTxsSpan;
 

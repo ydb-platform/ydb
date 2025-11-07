@@ -121,7 +121,7 @@ public:
         request->Record.MutableRequest()->SetDatabase("/Root");
         request->Record.MutableRequest()->SetSessionId(SessionId);
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
         request->Record.MutableRequest()->SetQuery(Queries.back());
         Queries.pop_back();
         request->Record.MutableRequest()->SetKeepSession(true);

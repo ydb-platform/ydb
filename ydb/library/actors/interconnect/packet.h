@@ -137,7 +137,6 @@ struct TEventHolder : TNonCopyable {
 
 namespace NActors {
     class TEventOutputChannel;
-    class IInterconnectMetrics;
 }
 
 struct TTcpPacketOutTask : TNonCopyable {
@@ -155,6 +154,8 @@ struct TTcpPacketOutTask : TNonCopyable {
     bool InsideBookmark = false;
 
     ui32 ExternalChecksum = 0;
+
+    ui32 RdmaPayloadSize = 0;
 
     TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
         NInterconnect::TOutgoingStream& xdcStream);
@@ -223,6 +224,10 @@ struct TTcpPacketOutTask : TNonCopyable {
         }
     }
 
+    void AttachRdmaPayloadSize(ui32 sz) {
+        RdmaPayloadSize = sz;
+    }
+
     void Finish(ui64 serial, ui64 confirm) {
         Y_ABORT_UNLESS(InternalSize <= Max<ui16>());
 
@@ -269,6 +274,7 @@ struct TTcpPacketOutTask : TNonCopyable {
     ui32 GetInternalFreeAmount() const { return TTcpPacketBuf::PacketDataLen - InternalSize; }
     ui32 GetExternalFreeAmount() const { return 16384 - ExternalSize; }
     ui32 GetExternalSize() const { return ExternalSize; }
+    ui32 GetRdmaPayloadSize() const { return RdmaPayloadSize; }
 };
 
 namespace NInterconnect::NDetail {

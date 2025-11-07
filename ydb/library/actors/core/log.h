@@ -587,7 +587,7 @@ namespace NActors {
             return *this;
         }
 
-        ~TFormattedRecordWriter();
+        ~TFormattedRecordWriter() noexcept;
     };
 
     class TVerifyFormattedRecordWriter: public TFormatedStreamWriter {

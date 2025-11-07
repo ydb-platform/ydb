@@ -1416,6 +1416,18 @@ public:
             return false;
         }
 
+        if (txCtx.HasTableWrite) {
+            if (txCtx.HasOlapTable && !txCtx.EnableOlapSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for column table writes without enabled olap sink");
+                return false;
+            }
+
+            if (txCtx.HasOltpTable && !txCtx.EnableOltpSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for row table writes without enabled oltp sink");
+                return false;
+            }
+        }
+
         if (!tx) {
             if (txCtx.DeferredEffects.Empty()) {
                 // All transactions already finished

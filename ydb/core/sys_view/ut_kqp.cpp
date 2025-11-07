@@ -2765,6 +2765,14 @@ R"(CREATE TABLE `test_show_create` (
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+
+        // Verify Table0 is no longer in partition_stats
+        auto table0Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+        UNIT_ASSERT_VALUES_EQUAL(table0Count, 0);
+
+        // Verify Table1 exists in partition_stats
+        auto table1Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+        UNIT_ASSERT_VALUES_EQUAL(table1Count, 1);
     }
 
     Y_UNIT_TEST(PartitionStatsFields) {

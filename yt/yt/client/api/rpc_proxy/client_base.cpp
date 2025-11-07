@@ -1104,7 +1104,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     }));
 }
 
-template<class TRequest>
+template <class TRequest>
 void FillRequestBySelectRowsOptionsBase(
     const TSelectRowsOptionsBase& options,
     const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,

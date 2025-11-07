@@ -22,7 +22,7 @@ using TEmaCounterWindowRates = TCompactVector<double, WindowCount>;
 //! A helper structure for maintaining a monotonic counter and
 //! estimating its average rate over a set of configured time windows
 //! using EMA (exponential moving average) technique.
-template<typename T, int WindowCount = TypicalWindowCount>
+template <typename T, int WindowCount = TypicalWindowCount>
     requires std::is_arithmetic_v<T>
 struct TEmaCounter
 {

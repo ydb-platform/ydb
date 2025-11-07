@@ -508,13 +508,13 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<class TBase>
+template <class TBase>
 struct TParserAdapter
     : public TBase
     , public IParser
 {
 public:
-    template<class... TArgs>
+    template <class... TArgs>
     explicit TParserAdapter(TArgs&&... args)
         : TBase(std::forward<TArgs>(args)...)
     { }

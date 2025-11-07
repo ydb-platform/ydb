@@ -1749,6 +1749,29 @@ Y_UNIT_TEST(SlowZone_Commit) {
     utilsD.AssertEquals(utils);
 }
 
+Y_UNIT_TEST(SlowZone_DLQ) {
+    TUtils utils;
+    utils.AddMessage(8);
+    auto snapshot = utils.CreateSnapshot();
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    UNIT_ASSERT(utils.Unlock(0));
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({ 0, 1 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
 
 
 Y_UNIT_TEST(SlowZone_LongScenario) {

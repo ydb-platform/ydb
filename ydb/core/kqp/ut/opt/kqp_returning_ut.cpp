@@ -772,6 +772,78 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
         CompareYson(R"([[3u;"test3"]])",
             ExecuteReturningQueryWithParams(kikimr, QueryService, query, params));
     }
+
+    {
+        // Test DELETE with RETURNING using AS_TABLE with List parameter (same issue #27021)
+        // First insert some data without RETURNING
+        const auto insertQuery = Q_(R"(
+            --!syntax_v1
+            DECLARE $data AS List<Struct<id: UInt64, value: Utf8>>;
+
+            UPSERT INTO test_table
+            SELECT * FROM AS_TABLE($data);
+        )");
+
+        auto insertParamsBuilder = TParamsBuilder();
+        auto& insertDataParam = insertParamsBuilder.AddParam("$data");
+
+        insertDataParam.BeginList();
+        insertDataParam.AddListItem()
+            .BeginStruct()
+            .AddMember("id")
+                .Uint64(10)
+            .AddMember("value")
+                .Utf8("delete1")
+            .EndStruct();
+        insertDataParam.EndList();
+        insertDataParam.Build();
+
+        auto insertParams = insertParamsBuilder.Build();
+
+        // Execute insert without RETURNING
+        if (QueryService) {
+            auto qdb = kikimr.GetQueryClient();
+            auto qSession = qdb.GetSession().GetValueSync().GetSession();
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .Syntax(NYdb::NQuery::ESyntax::YqlV1);
+            auto insertResult = qSession.ExecuteQuery(
+                insertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), insertParams, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+        } else {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto insertResult = session.ExecuteDataQuery(insertQuery, TTxControl::BeginTx().CommitTx(), insertParams).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+        }
+
+        // Now DELETE with RETURNING using AS_TABLE
+        const auto deleteQuery = Q_(R"(
+            --!syntax_v1
+            DECLARE $data AS List<Struct<id: UInt64>>;
+
+            DELETE FROM test_table ON
+            SELECT * FROM AS_TABLE($data)
+            RETURNING *;
+        )");
+
+        auto deleteParamsBuilder = TParamsBuilder();
+        auto& deleteDataParam = deleteParamsBuilder.AddParam("$data");
+
+        deleteDataParam.BeginList();
+        deleteDataParam.AddListItem()
+            .BeginStruct()
+            .AddMember("id")
+                .Uint64(10)
+            .EndStruct();
+        deleteDataParam.EndList();
+        deleteDataParam.Build();
+
+        auto deleteParams = deleteParamsBuilder.Build();
+
+        // This should succeed, but currently fails with infinite loop error
+        CompareYson(R"([[10u;"delete1"]])",
+            ExecuteReturningQueryWithParams(kikimr, QueryService, deleteQuery, deleteParams));
+    }
 }
 
 Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
@@ -821,6 +893,77 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
 
         CompareYson(R"([[1u;["test1"]]])",
             ExecuteReturningQueryWithParams(kikimr, QueryService, query, params));
+    }
+
+    {
+        // Test DELETE with RETURNING using AS_TABLE with List parameter (with nullable columns)
+        // First insert some data without RETURNING
+        const auto insertQuery = Q_(R"(
+            --!syntax_v1
+            DECLARE $data AS List<Struct<id: UInt64, value: Utf8?>>;
+
+            UPSERT INTO test_table_nullable
+            SELECT * FROM AS_TABLE($data);
+        )");
+
+        auto insertParamsBuilder = TParamsBuilder();
+        auto& insertDataParam = insertParamsBuilder.AddParam("$data");
+
+        insertDataParam.BeginList();
+        insertDataParam.AddListItem()
+            .BeginStruct()
+            .AddMember("id")
+                .Uint64(20)
+            .AddMember("value")
+                .OptionalUtf8("delete_nullable1")
+            .EndStruct();
+        insertDataParam.EndList();
+        insertDataParam.Build();
+
+        auto insertParams = insertParamsBuilder.Build();
+
+        // Execute insert without RETURNING
+        if (QueryService) {
+            auto qdb = kikimr.GetQueryClient();
+            auto qSession = qdb.GetSession().GetValueSync().GetSession();
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .Syntax(NYdb::NQuery::ESyntax::YqlV1);
+            auto insertResult = qSession.ExecuteQuery(
+                insertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), insertParams, settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+        } else {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto insertResult = session.ExecuteDataQuery(insertQuery, TTxControl::BeginTx().CommitTx(), insertParams).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(insertResult.GetStatus(), EStatus::SUCCESS, insertResult.GetIssues().ToString());
+        }
+
+        // Now DELETE with RETURNING using AS_TABLE
+        const auto deleteQuery = Q_(R"(
+            --!syntax_v1
+            DECLARE $data AS List<Struct<id: UInt64>>;
+
+            DELETE FROM test_table_nullable ON
+            SELECT * FROM AS_TABLE($data)
+            RETURNING *;
+        )");
+
+        auto deleteParamsBuilder = TParamsBuilder();
+        auto& deleteDataParam = deleteParamsBuilder.AddParam("$data");
+
+        deleteDataParam.BeginList();
+        deleteDataParam.AddListItem()
+            .BeginStruct()
+            .AddMember("id")
+                .Uint64(20)
+            .EndStruct();
+        deleteDataParam.EndList();
+        deleteDataParam.Build();
+
+        auto deleteParams = deleteParamsBuilder.Build();
+
+        CompareYson(R"([[20u;["delete_nullable1"]]])",
+            ExecuteReturningQueryWithParams(kikimr, QueryService, deleteQuery, deleteParams));
     }
 }
 

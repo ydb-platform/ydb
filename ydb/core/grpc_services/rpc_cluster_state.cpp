@@ -103,7 +103,7 @@ public:
         auto kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
         auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         remoteRequest->Record.MutableRequest()->SetDatabase("/Root");
-
+        ++Requested;
         Send(kqpProxyId, remoteRequest.release());
     }
 
@@ -111,13 +111,13 @@ public:
         auto record = ev->Get()->Record;
         TString sessionId = record.GetResponse().GetSessionId();
         auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+        request->Record.MutableRequest()->SetDatabase("/Root");
         request->Record.MutableRequest()->SetSessionId(sessionId);
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery("SELECT * FROM `.sys/partition_stats` LIMIT 10");
+        request->Record.MutableRequest()->SetQuery("SELECT * FROM `/Root/.sys/partition_stats` LIMIT 10");
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->SetTimeoutMs(5000);
-
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());
     }
 
@@ -125,6 +125,8 @@ public:
         auto record = ev->Get()->Record;
         auto* q = State.AddQueries();
         q->CopyFrom(record.GetResponse());
+        ++Received;
+        CheckReply();
     }
 
     void RequestBaseConfig() {

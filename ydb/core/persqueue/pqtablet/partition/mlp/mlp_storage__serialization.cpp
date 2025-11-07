@@ -343,28 +343,33 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
-    for (auto offset : wal.GetMovedToSlowZone()) {
-        auto [message, slowZone] = GetMessageInt(offset);
-        if (message) {
-            AFL_ENSURE(!slowZone)("o", offset);
-            SlowMessages[offset] = *message;
-            continue;
+    {
+        ui64 offset = 0;
+        for (auto diff : wal.GetMovedToSlowZone()) {
+            offset += diff;
+
+            auto [message, slowZone] = GetMessageInt(offset);
+            if (message) {
+                AFL_ENSURE(!slowZone)("o", offset);
+                SlowMessages[offset] = *message;
+                continue;
+            }
+
+            auto it = newMessages.find(offset);
+            AFL_ENSURE(it != newMessages.end())("o", offset);
+            auto& msg = it->second;
+            SlowMessages[offset] = TMessage{
+                .Status = EMessageStatus::Unprocessed,
+                .ReceiveCount = 0,
+                .DeadlineDelta = 0,
+                .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
+                .MessageGroupIdHash = msg.MessageGroup.Fields.MessageGroupIdHash,
+                .WriteTimestampDelta = msg.WriteTimestampDelta
+            };
+
+            ++Metrics.InflyMessageCount;
+            ++Metrics.UnprocessedMessageCount;
         }
-
-        auto it = newMessages.find(offset);
-        AFL_ENSURE(it != newMessages.end())("o", offset);
-        auto& msg = it->second;
-        SlowMessages[offset] = TMessage{
-            .Status = EMessageStatus::Unprocessed,
-            .ReceiveCount = 0,
-            .DeadlineDelta = 0,
-            .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
-            .MessageGroupIdHash = msg.MessageGroup.Fields.MessageGroupIdHash,
-            .WriteTimestampDelta = msg.WriteTimestampDelta
-        };
-
-        ++Metrics.InflyMessageCount;
-        ++Metrics.UnprocessedMessageCount;
     }
 
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
@@ -444,12 +449,16 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
-    for (auto offset : wal.GetDeletedFromSlowZone()) {
-        auto it = SlowMessages.find(offset);
-        AFL_ENSURE(it != SlowMessages.end())("o", offset);
-        auto& message = it->second;
-        RemoveMessage(message);
-        SlowMessages.erase(it);
+    {
+        ui64 offset = 0;
+        for (auto diff : wal.GetDeletedFromSlowZone()) {
+            offset += diff;
+            auto it = SlowMessages.find(offset);
+            AFL_ENSURE(it != SlowMessages.end())("o", offset);
+            auto& message = it->second;
+            RemoveMessage(message);
+            SlowMessages.erase(it);
+        }
     }
 
     auto firstSlowOffset = wal.HasSlowFirstOffset() ? wal.GetSlowFirstOffset() : Max<ui64>();
@@ -462,8 +471,12 @@ bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
         it = SlowMessages.erase(it);
     }
 
-    for (auto offset : wal.GetDLQ()) {
-        DLQQueue.push_back(offset);
+    {
+        ui64 offset = 0;
+        for (auto diff : wal.GetDLQ()) {
+            offset += diff;
+            DLQQueue.push_back(offset);
+        }
     }
 
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
@@ -562,20 +575,31 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         wal.SetChangedMessages(std::move(serializer.Buffer));
     }
 
-    for (auto offset : DLQ) {
-        if (offset >= Storage->FirstOffset) {
-            wal.AddDLQ(offset);
+    {
+        ui64 lastOffset = 0;
+        for (auto offset : DLQ) {
+            if (offset >= Storage->FirstOffset) {
+                wal.AddDLQ(offset - lastOffset);
+                lastOffset = offset;
+            }
         }
     }
 
-    for (auto offset : MovedToSlowZone) {
-        wal.AddMovedToSlowZone(offset);
+    {
+        ui64 lastOffset = 0;
+        for (auto offset : MovedToSlowZone) {
+            wal.AddMovedToSlowZone(offset - lastOffset);
+            lastOffset = offset;
+        }
     }
 
     if (!Storage->SlowMessages.empty()) {
+        ui64 lastOffset = 0;
+        std::sort(DeletedFromSlowZone.begin(), DeletedFromSlowZone.end());
         for (auto offset : DeletedFromSlowZone) {
             if (offset >= Storage->SlowMessages.begin()->first) {
-                wal.AddDeletedFromSlowZone(offset);
+                wal.AddDeletedFromSlowZone(offset - lastOffset);
+                lastOffset = offset;
             }
         }
     }

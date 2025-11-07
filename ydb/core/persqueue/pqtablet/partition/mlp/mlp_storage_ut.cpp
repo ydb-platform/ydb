@@ -33,7 +33,7 @@ struct TUtils {
     {
         Storage.SetKeepMessageOrder(true);
         Storage.SetMaxMessageProcessingCount(1);
-        Storage.SetRetentionPeriod(TDuration::Seconds(7 * 13));
+        Storage.SetRetentionPeriod(TDuration::Seconds(10));
     }
 
     TIntrusivePtr<MockTimeProvider> TimeProvider;
@@ -1779,6 +1779,54 @@ Y_UNIT_TEST(SlowZone_CommitAndAdd) {
     utils.End();
 
     utils.AssertSlowZone({0, 2});
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_Retention_1message) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(3));
+    utils.Storage.Compact();
+
+    utils.End();
+
+    utils.AssertSlowZone({1});
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_Retention_2message) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(4));
+    utils.Storage.Compact();
+
+    utils.End();
+
+    utils.AssertSlowZone({});
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_Retention_3message) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
+    utils.Storage.Compact();
+
+    utils.End();
+
+    utils.AssertSlowZone({});
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 3);
 
     utils.AssertLoad();
 }

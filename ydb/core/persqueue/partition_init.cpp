@@ -532,28 +532,25 @@ enum EKeyPosition {
 // Calculates the location of keys relative to each other
 static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
 {
-    // Called from FilterBlobsMetaData. The keys are pre-sorted
-    Y_ABORT_UNLESS(lhs.GetOffset() <= rhs.GetOffset(),
-                   "lhs: %s, rhs: %s",
-                   lhs.ToString().data(), rhs.ToString().data());
-
     if (lhs.GetOffset() == rhs.GetOffset()) {
         if (lhs.GetPartNo() == rhs.GetPartNo()) {
-            Y_ABORT_UNLESS(lhs.GetCount() <= rhs.GetCount(),
-                           "lhs: %s, rhs: %s",
-                           lhs.ToString().data(), rhs.ToString().data());
-            return RhsContainsLhs;
+            if (lhs.GetCount() < rhs.GetCount()) {
+                return RhsContainsLhs;
+            } else if (lhs.GetCount() == rhs.GetCount()) {
+                if (lhs.GetInternalPartsCount() < rhs.GetInternalPartsCount()) {
+                    return RhsContainsLhs;
+                } else {
+                    return LhsContainsRhs;
+                }
+            } else {
+                return LhsContainsRhs;
+            }
+        } else if (lhs.GetPartNo() > rhs.GetPartNo()) {
+            return LhsContainsRhs;
+        } else {
+            return RhsAfterLhs;
         }
-
-        // case lhs.GetOffset() == rhs.GetOffset() && lhs.GetPartNo() < rhs.GetPartNo()
-        Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() <= rhs.GetPartNo(),
-                       "lhs: %s, rhs: %s",
-                       lhs.ToString().data(), rhs.ToString().data());
-
-        return RhsAfterLhs;
     }
-
-    // case lhs.GetOffset() < rhs.GetOffset()
 
     if (ui64 nextOffset = lhs.GetOffset() + lhs.GetCount(); nextOffset > rhs.GetOffset()) {
         return LhsContainsRhs;

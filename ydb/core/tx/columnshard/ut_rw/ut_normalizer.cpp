@@ -100,6 +100,12 @@ public:
     }
 };
 
+class TInsertedPortionsCleaner: public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext&) const override {
+    }
+};
+
 class TEmptyPortionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
@@ -328,6 +334,25 @@ Y_UNIT_TEST_SUITE(Normalizers) {
             }
         };
         TestNormalizerImpl<TPortionsCleaner>(TLocalNormalizerChecker());
+    }
+    
+    Y_UNIT_TEST(InsertedPortionsCleanerNormalizer) {
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecodsCount*/) const override {
+                return 0;
+            }
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& /* featuresFlags */) const override {
+            }
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("CleanInsertedPortions");
+                    repair->SetDescription("Removing inserted portions");
+                }
+            }
+        };
+        TestNormalizerImpl<TInsertedPortionsCleaner>(TLocalNormalizerChecker());
     }
 
     Y_UNIT_TEST(SchemaVersionsNormalizer) {

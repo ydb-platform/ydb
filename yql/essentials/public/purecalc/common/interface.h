@@ -403,6 +403,13 @@ public:
      * @return reference to self, to allow method chaining.
      */
     TProgramFactoryOptions& SetUseWorkerPool(bool useWorkerPool);
+
+    /**
+     * Set internal program settings.
+     *
+     * @return reference to self, to allow method chaining.
+     */
+    TProgramFactoryOptions& SetInternalSettings(const TInternalProgramSettings& settings);
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

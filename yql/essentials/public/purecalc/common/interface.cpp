@@ -126,6 +126,11 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetUseWorkerPool(bool useWorkerP
     return *this;
 }
 
+TProgramFactoryOptions& TProgramFactoryOptions::SetInternalSettings(const TInternalProgramSettings& settings) {
+    InternalSettings = settings;
+    return *this;
+}
+
 void NYql::NPureCalc::ConfigureLogging(const TLoggingOptions& options) {
     InitLogging(options);
 }

@@ -212,6 +212,7 @@ struct TEvPQ {
         EvMLPChangeMessageDeadlineResponse,
         EvGetMLPConsumerStateRequest,
         EvGetMLPConsumerStateResponse,
+        EvMLPConsumerUpdateConfig,
         EvEnd
     };
 
@@ -1572,6 +1573,21 @@ struct TEvPQ {
         };
 
         std::vector<TMessage> Messages;
+    };
+
+    struct TEvMLPConsumerUpdateConfig : TEventLocal<TEvMLPConsumerUpdateConfig, EvMLPConsumerUpdateConfig> {
+
+        TEvMLPConsumerUpdateConfig(
+            const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+            std::optional<TDuration> retentionPeriod
+        )
+            : Config(config)
+            , RetentionPeriod(retentionPeriod)
+        {
+        }
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
     };
 };
 

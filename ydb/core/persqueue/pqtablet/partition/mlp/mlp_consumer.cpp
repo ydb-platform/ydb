@@ -8,7 +8,7 @@ namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
-static constexpr size_t MaxWALCount = 250;
+static constexpr size_t MaxWALCount = 256;
 
 enum class EKvCookie {
     InitialRead = 1,
@@ -82,22 +82,22 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
     readWAL->SetIncludeData(true);
 }
 
-TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config, std::optional<TDuration> reteintion)
+TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
+    const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
+    std::optional<TDuration> retentionPeriod)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
+    , RetentionPeriod(retentionPeriod)
     , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
-    Storage->SetReteintion(reteintion);
 }
 
 void TConsumerActor::Bootstrap() {
     LOG_D("Start MLP consumer " << Config.GetName());
     Become(&TConsumerActor::StateInit);
 
-    // TODO MLP Update consumer config and reteintion
-    Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
-    Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
+    UpdateStorageConfig();
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(static_cast<ui64>(EKvCookie::InitialRead));
@@ -330,6 +330,19 @@ void TConsumerActor::CommitIfNeeded() {
     }
 }
 
+void TConsumerActor::UpdateStorageConfig() {
+    Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
+    Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
+    Storage->SetRetentionPeriod(RetentionPeriod);
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
+    Config = std::move(ev->Get()->Config);
+    RetentionPeriod = ev->Get()->RetentionPeriod;
+
+   UpdateStorageConfig();
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     auto response = std::make_unique<TEvPQ::TEvGetMLPConsumerStateResponse>();
 
@@ -354,6 +367,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
@@ -372,6 +386,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Handle);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
@@ -390,6 +405,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
@@ -454,7 +470,7 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
         if (visibilityDeadline == TInstant::Zero()) {
-            visibilityDeadline = TDuration::Seconds(Config.GetDefaultVisibilityTimeoutSeconds()).ToDeadLine(now);
+            visibilityDeadline = TDuration::Seconds(Config.GetDefaultProcessingTimeoutSeconds()).ToDeadLine(now);
         }
 
         std::deque<ui64> messages;

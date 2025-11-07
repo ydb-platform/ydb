@@ -59,10 +59,17 @@ inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TStrin
 
 inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName) {
     return CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName(consumerName)
-                .AddAttribute("_mlp", "1")
-            .EndAddConsumer());
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(10)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()
+        );
 }
 
 inline TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {

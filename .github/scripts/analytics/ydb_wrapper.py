@@ -8,7 +8,7 @@ import sys
 import time
 import uuid
 import ydb
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from contextlib import contextmanager
 
 class YDBWrapper:
@@ -597,7 +597,7 @@ class YDBWrapper:
         """Execute scan query with logging"""
         return self._execute_with_logging("scan_query", None, query, None, query_name)
     
-    def execute_scan_query_with_metadata(self, query: str, query_name: str = None) -> tuple[List[Dict[str, Any]], List[tuple[str, Any]]]:
+    def execute_scan_query_with_metadata(self, query: str, query_name: str = None) -> Tuple[List[Dict[str, Any]], List[Tuple[str, Any]]]:
         """Execute scan query with return of data and column metadata"""
         def operation(driver):
             tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)

@@ -78,4 +78,4 @@ TConclusion<bool> TCleanInsertedPortionsNormalizer::DoInitImpl(const TNormalizat
     return true;
 }
 
-}   // namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs
+}   // namespace NKikimr::NOlap::NNormalizer::NCleanInsertedPortions

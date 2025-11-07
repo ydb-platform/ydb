@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     Y_UNIT_TEST(InsertedPortionsCleanerNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
-            virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecodsCount*/) const override {
+            virtual ui64 RecordsCountAfterReboot(const ui64 /*initialRecordsCount*/) const override {
                 return 0;
             }
             virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& /* featuresFlags */) const override {

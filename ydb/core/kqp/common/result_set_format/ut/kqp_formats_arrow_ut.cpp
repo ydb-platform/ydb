@@ -339,11 +339,83 @@ struct TTestContext {
         return values;
     }
 
-    TType* GetDoubleOptionalType() {
+    TType* GetOptionalStructType() {
+        return TOptionalType::Create(GetStructType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalStructs(ui32 quantity) {
+        TUnboxedValueVector values = CreateStructs(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
+    TType* GetOptionalTupleType() {
+        return TOptionalType::Create(GetTupleType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalTuples(ui32 quantity) {
+        TUnboxedValueVector values = CreateTuples(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
+    TType* GetOptionalListType() {
+        return TOptionalType::Create(GetListType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalLists(ui32 quantity) {
+        TUnboxedValueVector values = CreateLists(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
+    TType* GetOptionalDictType() {
+        return TOptionalType::Create(GetDictType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalDicts(ui32 quantity) {
+        TUnboxedValueVector values = CreateDicts(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
+    TType* GetOptionalVariantType() {
+        return TOptionalType::Create(GetVariantOverStructType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalVariants(ui32 quantity) {
+        TUnboxedValueVector values = CreateVariantsOverStruct(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
+    TType* GetOptionalTaggedType() {
+        return TOptionalType::Create(GetTaggedType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalTaggeds(ui32 quantity) {
+        TUnboxedValueVector values = CreateTaggeds(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
+    TType* GetOptionalOptionalType() {
         return TOptionalType::Create(GetDataOptionalType(), TypeEnv);
     }
 
-    TUnboxedValueVector CreateDoubleOptionals(ui32 quantity) {
+    TUnboxedValueVector CreateOptionalOptionals(ui32 quantity) {
         TUnboxedValueVector values;
         for (ui64 value = 0; value < quantity; ++value) {
             if (value % 3 == 0) {
@@ -365,32 +437,6 @@ struct TTestContext {
         TUnboxedValueVector values;
         for (ui64 value = 0; value < quantity; ++value) {
             values.push_back(NUdf::TUnboxedValuePod(static_cast<i32>(value)));
-        }
-        return values;
-    }
-
-    TType* GetOptionalListOfOptional() {
-        TType* itemType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), TypeEnv);
-        return TOptionalType::Create(TListType::Create(itemType, TypeEnv), TypeEnv);
-    }
-
-    TUnboxedValueVector CreateOptionalListOfOptional(ui32 quantity) {
-        TUnboxedValueVector values;
-        for (ui64 value = 0; value < quantity; ++value) {
-            if (value % 2 == 0) {
-                values.emplace_back(NUdf::TUnboxedValuePod());
-                continue;
-            }
-
-            TUnboxedValueVector items;
-            items.reserve(value);
-            for (ui64 i = 0; i < value; ++i) {
-                NUdf::TUnboxedValue item = ((value + i) % 2 == 0) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(i);
-                items.push_back(std::move(item).MakeOptional());
-            }
-
-            auto listValue = Vb.NewList(items.data(), value);
-            values.emplace_back(std::move(listValue).MakeOptional());
         }
         return values;
     }
@@ -499,61 +545,6 @@ struct TTestContext {
             NUdf::TUnboxedValue item = NUdf::TUnboxedValuePod(static_cast<i32>(value));
             auto wrapped = Vb.NewVariant(typeIndex, std::move(item));
             values.emplace_back(std::move(wrapped));
-        }
-        return values;
-    }
-
-    TType* GetDictOptionalToTupleType() {
-        TType* keyType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv), TypeEnv);
-        TType* members[2] = {
-            TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
-            TDataType::Create(NUdf::TDataType<ui32>::Id, TypeEnv),
-        };
-        TType* payloadType = TTupleType::Create(2, members, TypeEnv);
-        return TDictType::Create(keyType, payloadType, TypeEnv);
-    }
-
-    TUnboxedValueVector CreateDictOptionalToTuple(ui32 quantity) {
-        TUnboxedValueVector values;
-        for (ui64 value = 0; value < quantity; ++value) {
-            auto dictBuilder = Vb.NewDict(GetDictOptionalToTupleType(), 0);
-            for (ui64 i = 0; i < value * value; ++i) {
-                NUdf::TUnboxedValue key;
-                if (i == 0) {
-                    key = NUdf::TUnboxedValuePod();
-                } else {
-                    key = NUdf::TUnboxedValuePod(value / 4).MakeOptional();
-                }
-                NUdf::TUnboxedValue* items;
-                auto payload = Vb.NewArray(2, items);
-                items[0] = NUdf::TUnboxedValuePod(static_cast<i32>(-value));
-                items[1] = NUdf::TUnboxedValuePod(static_cast<ui32>(value));
-                dictBuilder->Add(std::move(key), std::move(payload));
-            }
-            auto dictValue = dictBuilder->Build();
-            values.emplace_back(std::move(dictValue));
-        }
-        return values;
-    }
-
-    TType* GetOptionalOfOptionalType() {
-        return TOptionalType::Create(
-                   TOptionalType::Create(
-                       TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv),
-                       TypeEnv),
-                   TypeEnv);
-    }
-
-    TUnboxedValueVector CreateOptionalOfOptional(ui32 quantity) {
-        TUnboxedValueVector values;
-        for (ui64 value = 0; value < quantity; ++value) {
-            NUdf::TUnboxedValue element = value % 3 == 0
-                                        ? NUdf::TUnboxedValuePod(value).MakeOptional()
-                                        : NUdf::TUnboxedValuePod();
-            if (value % 3 != 2) {
-                element = element.MakeOptional();
-            }
-            values.emplace_back(std::move(element));
         }
         return values;
     }
@@ -1146,11 +1137,169 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         }
     }
 
-    Y_UNIT_TEST(NestedType_Optional_Double) {
+    Y_UNIT_TEST(NestedType_Optional_Struct) {
         TTestContext context;
 
-        auto optionalType = context.GetDoubleOptionalType();
-        auto values = context.CreateDoubleOptionals(TEST_ARRAY_NESTED_SIZE);
+        auto optionalType = context.GetOptionalStructType();
+        auto values = context.CreateOptionalStructs(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
+
+        UNIT_ASSERT(structArray->GetFieldByName("ABC") && structArray->GetFieldByName("ABC") == structArray->field(0));
+        UNIT_ASSERT(structArray->GetFieldByName("DEF") && structArray->GetFieldByName("DEF") == structArray->field(1));
+        UNIT_ASSERT(structArray->GetFieldByName("GHI") && structArray->GetFieldByName("GHI") == structArray->field(2));
+        UNIT_ASSERT(structArray->GetFieldByName("JKL") && structArray->GetFieldByName("JKL") == structArray->field(3));
+        UNIT_ASSERT(structArray->GetFieldByName("MNO") && structArray->GetFieldByName("MNO") == structArray->field(4));
+
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::INT64);
+        UNIT_ASSERT(structArray->field(4)->type_id() == arrow::Type::STRING);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_Tuple) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalTupleType();
+        auto values = context.CreateOptionalTuples(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
+
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_List) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalListType();
+        auto values = context.CreateOptionalLists(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_Dict) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalDictType();
+        auto values = context.CreateOptionalDicts(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+
+        auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(0));
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DOUBLE);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_Variant) {
+        TTestContext context;
+
+        auto variantType = context.GetOptionalVariantType();
+        auto values = context.CreateOptionalVariants(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(variantType));
+
+        auto array = MakeArrowArray(values, variantType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+
+        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+        UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 4);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FLOAT);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::UINT8);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, variantType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], variantType);
+        };
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_Tagged) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalTaggedType();
+        auto values = context.CreateOptionalTaggeds(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_Optional) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalOptionalType();
+        auto values = context.CreateOptionalOptionals(TEST_ARRAY_NESTED_SIZE);
 
         UNIT_ASSERT(IsArrowCompatible(optionalType));
 
@@ -1292,207 +1441,6 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], taggedType);
-        }
-    }
-}
-
-Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
-    Y_UNIT_TEST(OptionalListOfOptional) {
-        TTestContext context;
-
-        auto listType = context.GetOptionalListOfOptional();
-        Y_ABORT_UNLESS(IsArrowCompatible(listType));
-
-        auto values = context.CreateOptionalListOfOptional(100);
-        auto array = MakeArrowArray(values, listType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
-        UNIT_ASSERT(listArray->num_fields() == 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
-
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(listArray->values());
-        auto index = 0;
-        auto innerIndex = 0;
-        for (const auto& value: values) {
-            if (!value.HasValue()) {
-                UNIT_ASSERT(listArray->IsNull(index));
-                ++index;
-                continue;
-            }
-
-            auto listValue = value.GetOptionalValue();
-
-            UNIT_ASSERT_VALUES_EQUAL(listValue.GetListLength(), static_cast<ui64>(listArray->value_length(index)));
-            const auto iter = listValue.GetListIterator();
-            for (NUdf::TUnboxedValue item; iter.Next(item);) {
-                if (!item.HasValue()) {
-                    UNIT_ASSERT(i32Array->IsNull(innerIndex));
-                } else {
-                    UNIT_ASSERT(i32Array->Value(innerIndex) == item.GetOptionalValue().Get<i32>());
-                }
-                ++innerIndex;
-            }
-            ++index;
-        }
-    }
-}
-
-Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
-    Y_UNIT_TEST(DictOptionalToTuple) {
-        TTestContext context;
-
-        auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(IsArrowCompatible(dictType));
-
-        auto values = context.CreateDictOptionalToTuple(100);
-        auto array = MakeArrowArray(values, dictType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
-        UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::STRUCT);
-
-        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT_EQUAL(wrapArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(wrapArray->field(0)->type_id(), arrow::Type::LIST);
-
-        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow::Type::UINT64);
-        auto listArray = static_pointer_cast<arrow::ListArray>(wrapArray->field(0));
-        UNIT_ASSERT_EQUAL(static_cast<ui64>(listArray->length()), values.size());
-
-        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow::Type::UINT64);
-        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
-        UNIT_ASSERT_EQUAL(static_cast<ui64>(customArray->length()), values.size());
-
-        UNIT_ASSERT_EQUAL(listArray->value_type()->id(), arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(listArray->values());
-
-        UNIT_ASSERT_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT_EQUAL(structArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(structArray->field(0)->type_id(), arrow::Type::DOUBLE);
-        UNIT_ASSERT_EQUAL(structArray->field(1)->type_id(), arrow::Type::STRUCT);
-        auto keysArray = static_pointer_cast<arrow::DoubleArray>(structArray->field(0));
-        auto itemsArray = static_pointer_cast<arrow::StructArray>(structArray->field(1));
-        UNIT_ASSERT_EQUAL(itemsArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(itemsArray->field(0)->type_id(), arrow::Type::INT32);
-        UNIT_ASSERT_EQUAL(itemsArray->field(1)->type_id(), arrow::Type::UINT32);
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(itemsArray->field(0));
-        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(itemsArray->field(1));
-
-        ui64 index = 0;
-        for (const auto& value: values) {
-            UNIT_ASSERT(value.GetDictLength() == static_cast<ui64>(listArray->value_length(index)));
-            for (auto subindex = listArray->value_offset(index); subindex < listArray->value_offset(index + 1); ++subindex) {
-                NUdf::TUnboxedValue key = keysArray->IsNull(subindex)
-                                        ? NUdf::TUnboxedValuePod()
-                                        : NUdf::TUnboxedValuePod(keysArray->Value(subindex));
-                UNIT_ASSERT(value.Contains(key));
-                NUdf::TUnboxedValue payloadValue = value.Lookup(key);
-                UNIT_ASSERT_EQUAL(payloadValue.GetElement(0).Get<i32>(), i32Array->Value(subindex));
-                UNIT_ASSERT_EQUAL(payloadValue.GetElement(1).Get<ui32>(), ui32Array->Value(subindex));
-            }
-            ++index;
-        }
-    }
-
-    Y_UNIT_TEST(OptionalOfOptional) {
-        TTestContext context;
-
-        auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(IsArrowCompatible(doubleOptionalType));
-
-        auto values = context.CreateOptionalOfOptional(100);
-        auto array = MakeArrowArray(values, doubleOptionalType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
-
-        auto index = 0;
-        for (auto value: values) {
-            std::shared_ptr<arrow::Array> currentArray = array;
-            int depth = 0;
-
-            while (currentArray->type()->id() == arrow::Type::STRUCT) {
-                auto structArray = static_pointer_cast<arrow::StructArray>(currentArray);
-                UNIT_ASSERT_EQUAL(structArray->num_fields(), 1);
-
-                if (structArray->IsNull(index)) {
-                    break;
-                }
-
-                ++depth;
-
-                auto childArray = structArray->field(0);
-                if (childArray->type()->id() == arrow::Type::DENSE_UNION) {
-                    break;
-                }
-
-                currentArray = childArray;
-            }
-
-            while (depth--) {
-                UNIT_ASSERT(value);
-                value = value.GetOptionalValue();
-            }
-
-            if (value.HasValue()) {
-                if (currentArray->type()->id() == arrow::Type::INT32) {
-                    UNIT_ASSERT_EQUAL(value.Get<i32>(), static_pointer_cast<arrow::Int32Array>(currentArray)->Value(index));
-                } else {
-                    UNIT_ASSERT(!currentArray->IsNull(index));
-                }
-            } else {
-                UNIT_ASSERT(currentArray->IsNull(index));
-            }
-
-            ++index;
-        }
-    }
-}
-
-Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
-    Y_UNIT_TEST(OptionalListOfOptional) {
-        TTestContext context;
-
-        auto listType = context.GetOptionalListOfOptional();
-        Y_ABORT_UNLESS(IsArrowCompatible(listType));
-
-        auto values = context.CreateOptionalListOfOptional(100);
-        auto array = MakeArrowArray(values, listType);
-        auto restoredValues = ExtractUnboxedVector(array, listType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], listType);
-        }
-    }
-
-    Y_UNIT_TEST(DictOptionalToTuple) {
-        TTestContext context;
-
-        auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(IsArrowCompatible(dictType));
-
-        auto values = context.CreateDictOptionalToTuple(100);
-        auto array = MakeArrowArray(values, dictType);
-        auto restoredValues = ExtractUnboxedVector(array, dictType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], dictType);
-        }
-    }
-
-    Y_UNIT_TEST(OptionalOfOptional) {
-        TTestContext context;
-
-        auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(IsArrowCompatible(doubleOptionalType));
-
-        auto values = context.CreateOptionalOfOptional(100);
-        auto array = MakeArrowArray(values, doubleOptionalType);
-        auto restoredValues = ExtractUnboxedVector(array, doubleOptionalType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalType);
         }
     }
 }

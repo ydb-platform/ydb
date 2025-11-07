@@ -230,6 +230,16 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
     }
 }
 
+void FillExternalSource(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTable& tableProto) {
+    THashSet<TStringBuf> columns;
+    columns.reserve(tableMeta.Columns.size());
+    for (const auto& [col, _] : tableMeta.Columns){
+        columns.emplace(col);
+    }
+
+    FillTable(tableMeta, std::move(columns), tableProto);
+}
+
 template <typename TProto, typename TContainer>
 void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMeta,
     TProto& opProto, bool allowSystemColumns)
@@ -1072,15 +1082,16 @@ private:
             FillTable(*tableMeta, std::move(tableColumns), *txProto.AddTables());
         }
 
-        for (const auto& [a, desc] : TablesData->GetTables()) {
-            auto tableMeta = desc.Metadata;
-            YQL_ENSURE(tableMeta);
-            if (desc.Metadata->Kind == NYql::EKikimrTableKind::External) {
-                THashSet<TStringBuf> columns;
-                for (const auto& [col, _]: tableMeta->Columns){
-                    columns.emplace(col);
+        for (const auto& [path, desc] : TablesData->GetTables()) {
+            const auto tableMeta = desc.Metadata;
+            Y_ENSURE(tableMeta, path.first << ":" << path.second);
+
+            if (tableMeta->Kind == NYql::EKikimrTableKind::External) {
+                FillExternalSource(*tableMeta, *txProto.AddTables());
+
+                if (const auto sourceMeta = tableMeta->ExternalSource.UnderlyingExternalSourceMetadata) {
+                    FillExternalSource(*sourceMeta, *txProto.AddTables());
                 }
-                FillTable(*tableMeta, std::move(columns), *txProto.AddTables());
             }
         }
 

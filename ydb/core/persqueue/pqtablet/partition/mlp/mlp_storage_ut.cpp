@@ -49,6 +49,10 @@ struct TUtils {
     }
 
     NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
+        // Clear batch
+        auto batch = Storage.GetBatch();
+        Y_UNUSED(batch);
+
         NKikimrPQ::TMLPStorageSnapshot snapshot;
         Storage.SerializeTo(snapshot);
         Cerr << "CREATE" << Endl;
@@ -67,16 +71,16 @@ struct TUtils {
     }
 
     void LoadSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
-        Storage.Initialize(snapshot);
         Cerr << "LOAD" << Endl;
         Cerr << "< SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
+        Storage.Initialize(snapshot);
         Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
     void LoadWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
-        Storage.ApplyWAL(wal);
         Cerr << "LOAD" << Endl;
         Cerr << "< WAL: " << wal.ShortDebugString() << Endl;
+        Storage.ApplyWAL(wal);
         Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
@@ -1687,6 +1691,31 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
     assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
+
+Y_UNIT_TEST(SlowZone_Lock) {
+    TUtils utils;
+    utils.AddMessage(8);
+    auto snapshot = utils.CreateSnapshot();
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({ 0, 1 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
+
 
 Y_UNIT_TEST(SlowZone_LongScenario) {
     const size_t maxMessages = 8;

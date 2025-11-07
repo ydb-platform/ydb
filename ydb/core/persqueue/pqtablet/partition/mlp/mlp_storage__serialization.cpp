@@ -473,9 +473,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     {
-        ui64 offset = 0;
-        for (auto diff : wal.GetDLQ()) {
-            offset += diff;
+        for (auto offset : wal.GetDLQ()) {
             DLQQueue.push_back(offset);
         }
     }
@@ -577,10 +575,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     {
-        ui64 lastOffset = 0;
         for (auto offset : DLQ) {
-            wal.AddDLQ(offset - lastOffset);
-            lastOffset = offset;
+            wal.AddDLQ(offset);
         }
     }
 

@@ -1850,8 +1850,6 @@ private:
     void FlushWritesToActors() {
         AFL_ENSURE(!IsError());
 
-        const bool updateWithoutLookup = (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !PathLookupInfo.contains(PathId));
-
         if (PathWriteInfo.contains(PathId) ? PathWriteInfo.size() > 1 : PathWriteInfo.size() > 0) {
             // Secondary index exists
             std::vector<NKikimr::NKqp::IDataBatchPtr> batches;
@@ -1867,11 +1865,7 @@ private:
                 // At first, write to indexes
                 if (PathId != actorPathId) {
                     // TODO: skip unchanged rows for UPSERT/REPLACE/UPDATE
-                    if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                            && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
-                            && !updateWithoutLookup) {
-                        AFL_ENSURE(actorInfo.DeleteProjection);
-
+                    if (actorInfo.DeleteProjection) {
                         {
                             actorInfo.DeleteProjection->Fill(deleteRows);
                             auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
@@ -1916,7 +1910,8 @@ private:
         AFL_ENSURE(!IsError());
         for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
-            if (pathId != PathId) {
+            if (actorInfo.DeleteProjection) {
+                AFL_ENSURE(pathId != PathId);
                 actorInfo.WriteActor->Close(DeleteCookie);
             }
         }
@@ -2631,6 +2626,16 @@ public:
                 }
             }
 
+            THashSet<TStringBuf> primaryKeyColumnsSet;
+            for (const auto& column : settings.KeyColumns) {
+                primaryKeyColumnsSet.insert(column.GetName());
+            }
+            const auto isSubsetOfPrimaryKeyColumns = [&](const TVector<NKikimrKqp::TKqpColumnMetadataProto>& columns) {
+                return std::all_of(columns.begin(), columns.end(), [&](const NKikimrKqp::TKqpColumnMetadataProto& column) {
+                    return primaryKeyColumnsSet.contains(column.GetName());
+                });
+            };
+
             for (const auto& indexSettings : settings.Indexes) {
                 if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
@@ -2699,6 +2704,11 @@ public:
                     /* preferAdditionalInputColumns */ true,
                     Alloc);
 
+                // Flag for the case of UPDATE been processed without doing lookup,
+                // so no secondary index key columns are touched.
+                // In this case we must use UPDATE operation at shards for all table,
+                // because we don't know if updated rows exist.
+                // No lookup means that secondary key is subset of primary key.
                 const bool updateWithoutLookup = (
                     settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
                     && settings.LookupColumns.empty());
@@ -2715,17 +2725,22 @@ public:
                     indexSettings.WriteIndex,
                     settings.Priority);
 
-                writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
-                    deleteCookie,
-                    NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
-                    indexSettings.KeyColumns,
-                    indexSettings.KeyColumns,
-                    keyWriteIndex,
-                    settings.Priority);
+                const bool needAdditionalDelete = !isSubsetOfPrimaryKeyColumns(indexSettings.KeyColumns)
+                    && settings.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE;
+
+                if (needAdditionalDelete) {
+                    writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
+                        deleteCookie,
+                        NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+                        indexSettings.KeyColumns,
+                        indexSettings.KeyColumns,
+                        keyWriteIndex,
+                        settings.Priority);
+                }
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
                     .Projection = std::move(projection),
-                    .DeleteProjection = std::move(deleteProjection),
+                    .DeleteProjection = needAdditionalDelete ? std::move(deleteProjection) : nullptr,
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 });
 
@@ -2803,7 +2818,7 @@ public:
             writeInfo.Actors.at(settings.TableId.PathId).WriteActor->Open(
                 token.Cookie,
                 (settings.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !settings.LookupColumns.empty())
-                    ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                    ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT // Avoid unnecessary reads at datashard if we have already done lookup
                     : settings.OperationType,
                 settings.KeyColumns,
                 std::move(settings.Columns),

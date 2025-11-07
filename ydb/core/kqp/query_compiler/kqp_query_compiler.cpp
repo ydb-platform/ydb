@@ -1381,7 +1381,7 @@ private:
                             }
                         }
 
-                        THashSet<TStringBuf> lookupColumnsSet;
+                        bool needLookup = false;
                         for (size_t index : affectedIndexes) {
                             const auto& indexDescription = tableMeta->Indexes[index];
 
@@ -1393,29 +1393,40 @@ private:
 
                             AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
+                            bool needLookupForIndex = false;
                             for (const auto& columnName : implTable->KeyColumnNames) {
                                 if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                                     AFL_ENSURE(columnsSet.contains(columnName));
-                                } else if (!mainKeyColumnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
-                                    lookupColumns.push_back(columnName);
+                                } else if (!mainKeyColumnsSet.contains(columnName)) {
+                                    needLookupForIndex = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!needLookupForIndex) {
+                                // Secondary index key wasn't changed
+                                for (const auto& [columnName, _] : implTable->Columns) {
+                                    if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                                        AFL_ENSURE(columnsSet.contains(columnName));
+                                    } else if (!columnsSet.contains(columnName)) {
+                                        // TODO: exclude UPDATE/UPSERT/REPLACE here?
+                                        needLookupForIndex = true;
+                                        break;
+                                    }
                                 }
                             }
 
-                            for (const auto& [columnName, _] : implTable->Columns) {
-                                if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                                    AFL_ENSURE(columnsSet.contains(columnName));
-                                } else if (!columnsSet.contains(columnName) && lookupColumnsSet.insert(columnName).second) {
-                                    lookupColumns.push_back(columnName);
-                                }
-                            }
+                            needLookup |= needLookupForIndex;
                         }
 
-                        for (const auto& columnName : lookupColumns) {
-                            const auto columnMeta = tableMeta->Columns.FindPtr(columnName);
-                            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                            auto columnProto = settingsProto.AddLookupColumns();
-                            fillColumnProto(columnName, columnMeta, columnProto);
+                        if (needLookup) {
+                            for (const auto& [columnName, columnMeta] : tableMeta->Columns) {
+                                if (!mainKeyColumnsSet.contains(columnName)) {
+                                    lookupColumns.push_back(columnName);
+                                    auto columnProto = settingsProto.AddLookupColumns();
+                                    fillColumnProto(columnName, &columnMeta, columnProto);
+                                }
+                            }
                         }
                     }
 

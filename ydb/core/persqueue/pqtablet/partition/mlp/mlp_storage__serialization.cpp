@@ -323,7 +323,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     return true;
 }
 
-bool TStorage::ApplyWAL(NKikimrPQ::TMLPStorageWAL& wal) {
+bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
 
     if (wal.HasBaseDeadlineSeconds() || wal.HasBaseWriteTimestampSeconds()) {

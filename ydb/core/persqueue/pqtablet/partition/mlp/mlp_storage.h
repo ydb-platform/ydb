@@ -182,7 +182,7 @@ public:
 
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);
-    bool ApplyWAL(NKikimrPQ::TMLPStorageWAL&);
+    bool ApplyWAL(const NKikimrPQ::TMLPStorageWAL&);
 
     const TMetrics& GetMetrics() const;
 

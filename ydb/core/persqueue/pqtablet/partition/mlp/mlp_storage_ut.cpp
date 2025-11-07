@@ -24,6 +24,101 @@ struct MockTimeProvider : public ITimeProvider {
     TInstant Value;
 };
 
+struct TUtils {
+    TUtils()
+        : TimeProvider(TIntrusivePtr<MockTimeProvider>(new MockTimeProvider()))
+        , Storage(TimeProvider, 1, 8)
+        , BaseWriteTimestamp(TimeProvider->Now() - TDuration::Seconds(8))
+    {
+    }
+
+    TIntrusivePtr<MockTimeProvider> TimeProvider;
+    TStorage Storage;
+
+    TInstant BaseWriteTimestamp;
+    ui64 Offset = 0;
+
+    void AddMessage(size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            Storage.AddMessage(Offset, true, Offset, BaseWriteTimestamp + TDuration::Seconds(Offset));
+            ++Offset;
+        }
+    }
+
+    NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        Storage.SerializeTo(snapshot);
+        return snapshot;
+    }
+
+    NKikimrPQ::TMLPStorageWAL CreateWAL() {
+        NKikimrPQ::TMLPStorageWAL wal;
+        Storage.GetBatch().SerializeTo(wal);
+        Cerr << "STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "WAL: " << wal.ShortDebugString() << Endl;
+        return wal;
+    }
+
+    void LoadSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
+        Storage.Initialize(snapshot);
+        Cerr << "SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
+        Cerr << "STORAGE DUMP: " << Storage.DebugString() << Endl;
+    }
+
+    void LoadWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
+        Storage.ApplyWAL(wal);
+        Cerr << "WAL: " << wal.ShortDebugString() << Endl;
+        Cerr << "STORAGE DUMP: " << Storage.DebugString() << Endl;
+    }
+
+    void AssertSlowZone(std::vector<ui64> expectedOffsets) {
+        auto i = expectedOffsets.begin();
+        auto m = Storage.begin();
+
+        while (i != expectedOffsets.end() && m != Storage.end()) {
+            UNIT_ASSERT_VALUES_EQUAL(*i, (*m).Offset);
+            UNIT_ASSERT((*m).SlowZone);
+            ++i;
+            ++m;
+        }
+
+        UNIT_ASSERT(i == expectedOffsets.end());
+        if (m != Storage.end()) {
+            UNIT_ASSERT(!(*m).SlowZone);
+        }
+    }
+
+    std::optional<TStorage::TMessageWrapper> GetMessage(ui64 offset) {
+        for (auto it = Storage.begin(); it != Storage.end(); ++it) {
+            if ((*it).Offset == offset) {
+                return *it;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    void AssertEquals(TUtils& other) {
+        auto i = other.Storage.begin();
+        auto m = Storage.begin();
+
+        while (i != other.Storage.end() && m != Storage.end()) {
+            UNIT_ASSERT_VALUES_EQUAL((*i).Offset, (*m).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).SlowZone, (*m).SlowZone, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).Status, (*m).Status, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).ProcessingCount, (*m).ProcessingCount, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).ProcessingDeadline, (*m).ProcessingDeadline, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).WriteTimestamp, (*m).WriteTimestamp, (*i).Offset);
+
+            ++i;
+            ++m;
+        }
+
+        UNIT_ASSERT(i == other.Storage.end());
+        UNIT_ASSERT(m == Storage.end());
+    }
+};
+
 Y_UNIT_TEST(NextFromEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider());
 
@@ -1403,6 +1498,39 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     }
 }
 
+auto assertMetrics = [](auto restoredMetrics, auto metrics) {
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.InflyMessageCount, metrics.InflyMessageCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageCount, metrics.LockedMessageCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.CommittedMessageCount, metrics.CommittedMessageCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DLQMessageCount, metrics.DLQMessageCount);
+};
+
+Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    auto snapshot = utils.CreateSnapshot();
+    utils.AddMessage(1);
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
 Y_UNIT_TEST(SlowZone_LongScenario) {
     const size_t maxMessages = 8;
 
@@ -1416,16 +1544,6 @@ Y_UNIT_TEST(SlowZone_LongScenario) {
 
     NKikimrPQ::TMLPStorageSnapshot snapshot;
     storage.SerializeTo(snapshot);
-
-    auto assertMetrics = [](auto restoredMetrics, auto metrics) {
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.InflyMessageCount, metrics.InflyMessageCount);
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageCount, metrics.LockedMessageCount);
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.CommittedMessageCount, metrics.CommittedMessageCount);
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
-        UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DLQMessageCount, metrics.DLQMessageCount);
-    };
 
     {
         UNIT_ASSERT(storage.AddMessage(0, true, 100, now - TDuration::Seconds(7 * 12)));

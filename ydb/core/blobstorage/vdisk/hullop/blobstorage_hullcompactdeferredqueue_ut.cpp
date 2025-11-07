@@ -52,7 +52,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageHullCompactDeferredQueueTest) {
         TString data = "AAABBBCCCDDDEEEFFF";
         TLogoBlobID blobId(0, 0, 0, 0, data.size(), 0);
         std::array<TRope, 6> parts;
-        ErasureSplit(static_cast<TErasureType::ECrcMode>(blobId.CrcMode()), GType, TRope(data), parts);
+        ErasureSplit(static_cast<TErasureType::ECrcMode>(blobId.CrcMode()), GType, TRope(data), parts,
+            nullptr, GetDefaultRcBufAllocator());
 
         std::unordered_map<TString, size_t> resm;
 

@@ -84,6 +84,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
             }
 
             auto queueActorId = env.CreateQueueActor(vdiskId, NKikimrBlobStorage::GetFastRead, 0, actorId.NodeId());
+            auto allocator = GetDefaultRcBufAllocator();
 
             for (ui32 iter = 0; iter < 1000; ++iter) {
                 ui32 numBlobs = 1 + RandomNumber(100u);
@@ -135,7 +136,8 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
                     const TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                     const TString data = FastGenDataForLZ4(id.BlobSize(), id.Step());
                     std::vector<TRope> parts(info->Type.TotalPartCount());
-                    ErasureSplit(static_cast<TBlobStorageGroupType::ECrcMode>(id.CrcMode()), info->Type, TRope(data), parts);
+                    ErasureSplit(static_cast<TBlobStorageGroupType::ECrcMode>(id.CrcMode()), info->Type, TRope(data), parts,
+                        nullptr, allocator);
                     UNIT_ASSERT(ev->HasBlob(item));
                     const TRope& readPartData = ev->GetBlobData(item);
                     const TRope& expectedPart = parts[id.PartId() - 1];
@@ -170,6 +172,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
 
         std::vector<TLogoBlobID> blobs;
         THashMap<TLogoBlobID, TDiskPart> prevLocation;
+        auto allocator = GetDefaultRcBufAllocator();
 
         for (ui32 iter = 0; iter < 2; ++iter) {
             ui32 index = iter + 1;
@@ -243,7 +246,8 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
                 const TLogoBlobID id = LogoBlobIDFromLogoBlobID(item.GetBlobID());
                 const TString data = FastGenDataForLZ4(id.BlobSize(), id.Step());
                 std::vector<TRope> parts(info->Type.TotalPartCount());
-                ErasureSplit(static_cast<TBlobStorageGroupType::ECrcMode>(id.CrcMode()), info->Type, TRope(data), parts);
+                ErasureSplit(static_cast<TBlobStorageGroupType::ECrcMode>(id.CrcMode()), info->Type, TRope(data), parts,
+                    nullptr, allocator);
                 UNIT_ASSERT(ev->HasBlob(item));
                 const TRope& readPartData = ev->GetBlobData(item);
                 const TRope& expectedPart = parts[id.PartId() - 1];

@@ -173,6 +173,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
         return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
+
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
         for (auto item : maybeList.Cast()) {
             if (auto upsert = item.Maybe<TKqlUpsertRows>()) {
@@ -218,48 +219,33 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     return node;
 }
 
-TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
-    auto upsert = node.Cast<TKqlUpsertRows>();
-    if (upsert.ReturningColumns().Empty()) {
+template<typename TEffect>
+TExprBase KqpRewriteReturningInput(TExprBase node, TExprContext& ctx) {
+    auto effect = node.Cast<TEffect>();
+    if (effect.ReturningColumns().Empty()) {
         return node;
     }
 
-    if (upsert.Input().Maybe<TDqPrecompute>() || upsert.Input().Maybe<TDqPhyPrecompute>()) {
+    if (effect.Input().template Maybe<TDqPrecompute>() || effect.Input().template Maybe<TDqPhyPrecompute>()) {
         return node;
     }
 
-    return
-        Build<TKqlUpsertRows>(ctx, upsert.Pos())
-            .Input<TDqPrecompute>()
-                .Input(upsert.Input())
-                .Build()
-            .Table(upsert.Table())
-            .Columns(upsert.Columns())
-            .IsBatch(upsert.IsBatch())
-            .Settings(upsert.Settings())
-            .ReturningColumns(upsert.ReturningColumns())
-            .Done();
+    if (NDq::IsDqPureExpr(effect.Input())) {
+        return node;
+    }
+
+    auto newInput = Build<TDqPrecompute>(ctx, effect.Pos())
+        .Input(effect.Input())
+        .Done().Ptr();
+
+    return TExprBase(ctx.ChangeChild(*effect.Raw(), TEffect::idx_ReturningColumns, std::move(newInput)));
 }
 
 TExprBase KqpRewriteReturningDelete(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
-    auto del = node.Cast<TKqlDeleteRows>();
-    if (del.ReturningColumns().Empty()) {
-        return node;
-    }
-
-    if (del.Input().Maybe<TDqPrecompute>() || del.Input().Maybe<TDqPhyPrecompute>()) {
-        return node;
-    }
-
-    return
-        Build<TKqlDeleteRows>(ctx, del.Pos())
-            .Input<TDqPrecompute>()
-                .Input(del.Input())
-                .Build()
-            .Table(del.Table())
-            .IsBatch(del.IsBatch())
-            .ReturningColumns(del.ReturningColumns())
-            .Done();
+    return KqpRewriteReturningInput<TKqlDeleteRows>(node, ctx);
 }
 
+TExprBase KqpRewriteReturningUpsert(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext&) {
+    return KqpRewriteReturningInput<TKqlUpsertRows>(node, ctx);
+}
 } // namespace NKikimr::NKqp::NOpt

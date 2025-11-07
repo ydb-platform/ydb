@@ -738,7 +738,7 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
         auto params = paramsBuilder.Build();
 
         // This should succeed, but currently fails with infinite loop error
-        CompareYson(R"([[[1u];["test1"]];[[2u];["test2"]]])",
+        CompareYson(R"([[1u;"test1"];[2u;"test2"]])",
             ExecuteReturningQueryWithParams(kikimr, QueryService, query, params));
     }
 
@@ -769,7 +769,7 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListNotNullOnly, QueryService) {
 
         auto params = paramsBuilder.Build();
 
-        CompareYson(R"([[[3u];["test3"]]])",
+        CompareYson(R"([[3u;"test3"]])",
             ExecuteReturningQueryWithParams(kikimr, QueryService, query, params));
     }
 }
@@ -819,7 +819,7 @@ Y_UNIT_TEST_TWIN(ReturningUpsertAsTableListWithNullable, QueryService) {
 
         auto params = paramsBuilder.Build();
 
-        CompareYson(R"([[[1u];["test1"]]])",
+        CompareYson(R"([[1u;["test1"]]])",
             ExecuteReturningQueryWithParams(kikimr, QueryService, query, params));
     }
 }

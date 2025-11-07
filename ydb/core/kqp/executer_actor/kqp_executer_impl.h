@@ -156,10 +156,7 @@ public:
         , TasksGraph(Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
-
-        if (executerConfig.TableServiceConfig.HasBufferPageAllocSize()) {
-            BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
-        }
+        BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
 
         EnableReadsMerge = *MergeDatashardReadsControl() == 1;
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);

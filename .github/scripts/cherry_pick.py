@@ -7,6 +7,7 @@ import argparse
 from github import Github, GithubException, GithubObject, Commit
 
 
+
 class CherryPickCreator:
     def __init__(self, args):
         def __split(s: str, seps: str = ', \n'):

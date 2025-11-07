@@ -1,5 +1,6 @@
 import logging
 import pytest
+import ydb
 
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.olap.s3_import.base import S3ImportTestBase
@@ -355,11 +356,11 @@ class TestTypesAndFormats(S3ImportTestBase):
                 (
                     5,
                     Date("2105-12-31"),
-                    Date32("148106-12-31"),
+                    Date32("148107-12-31"),
                     Datetime("2105-12-31T23:59:59Z"),
-                    Datetime64("148106-12-31T23:59:59Z"),
+                    Datetime64("148107-12-31T23:59:59Z"),
                     Timestamp("2105-12-31T23:59:59Z"),
-                    Timestamp64("148106-12-31T23:59:59Z")
+                    Timestamp64("148107-12-31T23:59:59Z")
                 )
         """)
 
@@ -408,3 +409,45 @@ class TestTypesAndFormats(S3ImportTestBase):
         """)
 
         self._check_tables_hash(olap_table_name, from_s3_table_name)
+
+        erronious_query = f"""
+            UPSERT INTO {olap_table_name} (c_int32, c_date, c_date32, c_datetime, c_datetime64, c_timestamp, c_timestamp64)
+            VALUES
+                (
+                    6,
+                    Date("1969-12-31"),
+                    Date32("-144170-12-31"),
+                    Datetime("1969-12-31T23:59:59Z"),
+                    Datetime64("-144170-12-31T23:59:59Z"),
+                    Timestamp("1969-12-31T23:59:59Z"),
+                    Timestamp64("-144170-12-31T23:59:59Z")
+                ),
+                (
+                    7,
+                    Date("2106-01-01"),
+                    Date32("148108-01-01"),
+                    Datetime("2106-01-01T00:00:00Z"),
+                    Datetime64("148108-01-01T00:00:00Z"),
+                    Timestamp("2106-01-01T00:00:00Z"),
+                    Timestamp64("148108-01-01T00:00:00Z")
+                )
+        """
+        expected_errors = [
+            "Invalid value \\\"1969-12-31\\\" for type Date",
+            "Invalid value \\\"-144170-12-31\\\" for type Date32",
+            "Invalid value \\\"1969-12-31T23:59:59Z\\\" for type Datetime",
+            "Invalid value \\\"-144170-12-31T23:59:59Z\\\" for type Datetime64",
+            "Invalid value \\\"1969-12-31T23:59:59Z\\\" for type Timestamp",
+            "Invalid value \\\"-144170-12-31T23:59:59Z\\\" for type Timestamp64",
+            "Invalid value \\\"2106-01-01\\\" for type Date",
+            "Invalid value \\\"148108-01-01\\\" for type Date32",
+            "Invalid value \\\"2106-01-01T00:00:00Z\\\" for type Datetime",
+            "Invalid value \\\"148108-01-01T00:00:00Z\\\" for type Datetime64",
+            "Invalid value \\\"2106-01-01T00:00:00Z\\\" for type Timestamp",
+            "Invalid value \\\"148108-01-01T00:00:00Z\\\" for type Timestamp64"
+        ]
+        try:
+            self.ydb_client.query(erronious_query)
+        except ydb.issues.GenericError as error:
+            for expected_error in expected_errors:
+                assert expected_error in error.message

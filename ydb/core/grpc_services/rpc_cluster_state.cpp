@@ -45,6 +45,12 @@ public:
     TVector<ui32> NodeReceived;
     ui32 Requested = 0;
     ui32 Received = 0;
+    TString SessionId;
+    std::deque<TString> Queries = {
+        "SELECT * FROM `/Root/.sys/partition_stats` LIMIT 10",
+        "SELECT * FROM `/Root/.sys/nodes` LIMIT 10",
+        "SELECT * FROM `/Root/.sys/query_sessions` LIMIT 10"
+    };
 
     TVector<TVector<TString>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
@@ -107,24 +113,34 @@ public:
         Send(kqpProxyId, remoteRequest.release());
     }
 
-    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr ev) {
-        auto record = ev->Get()->Record;
-        TString sessionId = record.GetResponse().GetSessionId();
+    void DoQueryRequest() {
+        if (Queries.empty()) {
+            return;
+        }
         auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         request->Record.MutableRequest()->SetDatabase("/Root");
-        request->Record.MutableRequest()->SetSessionId(sessionId);
-        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
+        request->Record.MutableRequest()->SetSessionId(SessionId);
+        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery("SELECT * FROM `/Root/.sys/partition_stats` LIMIT 10");
+        request->Record.MutableRequest()->SetQuery(Queries.back());
+        Queries.pop_back();
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->SetTimeoutMs(5000);
+        ++Requested;
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());
+    }
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr ev) {
+        ++Received;
+        auto record = ev->Get()->Record;
+        SessionId = record.GetResponse().GetSessionId();
+        DoQueryRequest();
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
         auto record = ev->Get()->Record;
         auto* q = State.AddQueries();
         q->CopyFrom(record.GetResponse());
+        DoQueryRequest();
         ++Received;
         CheckReply();
     }

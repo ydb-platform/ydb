@@ -831,7 +831,7 @@ namespace NActors {
         TBase::WriteDirectly(TlsLogContext.Get().GetCurrentHeader());
     }
 
-    TFormattedRecordWriter::~TFormattedRecordWriter() {
+    TFormattedRecordWriter::~TFormattedRecordWriter() noexcept {
         if (ActorContext) {
             ::NActors::MemLogAdapter(
                 *ActorContext,

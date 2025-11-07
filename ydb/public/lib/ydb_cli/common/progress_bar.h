@@ -18,7 +18,8 @@ public:
 
     YDB_READONLY(size_t, Capacity, 0);
     YDB_READONLY(size_t, CurProgress, 0);
-    YDB_READONLY(size_t, Parts, 0)
+    YDB_READONLY(size_t, Parts, 0);
+
 private:
     void Render(bool newPart);
 

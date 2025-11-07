@@ -721,7 +721,7 @@ private:
         auto weakHandle = std::weak_ptr<CURLM>(Handle);
         Handle.reset();
         while (!weakHandle.expired()) { // short busy-wait in unlikely case of collision with TCountedContent
-            Sleep(TInstant::MicroSeconds(1));
+            Sleep(TDuration::MicroSeconds(1));
         }
         curl_global_cleanup();
     }

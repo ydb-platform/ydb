@@ -23,7 +23,11 @@ namespace NKikimr {
         }
     };
 
-    void ErasureSplitBlock42Prepare(const TRope& whole, std::span<TRope> parts) {
+    const char* GetZeroDataAddrForTestOnly() {
+        return ZeroData;
+    }
+
+    void ErasureSplitBlock42Prepare(const TRope& whole, std::span<TRope> parts, IRcBufAllocator* allocator) {
         const ui32 blockSize = 32;
         const ui32 fullBlockSize = 4 * blockSize;
         const ui32 partSize = ((whole.size() + fullBlockSize - 1) & ~(fullBlockSize - 1)) / 4;
@@ -31,6 +35,13 @@ namespace NKikimr {
         ui32 remains = whole.size() % fullBlockSize;
 
         auto iter = whole.begin();
+
+        // TODO(dcherednik): Support zero chunk RDMA allocation and transfer via IC
+        // In case of RDMA all chunks must be allocated on the same allocator
+        // but right now we have no safe and efficient mechanism to preallocate
+        // zerro buffer on the rdma registered memory. So for rdma we will zero it
+        // just during this call. 
+        bool useZeroPage = allocator == GetDefaultRcBufAllocator();
 
         for (ui32 part = 0; part < 4; ++part) {
             ui32 partLen = fullBlocks * blockSize;
@@ -45,19 +56,26 @@ namespace NKikimr {
                 r = {iter, nextIter};
                 Y_DEBUG_ABORT_UNLESS(r.size() == partLen);
                 if (const ui32 padding = partSize - r.size()) {
-                    TRcBuf buffer(MakeIntrusive<TZeroBuffer>());
-                    r.Insert(r.End(), TRcBuf(TRcBuf::Piece, buffer.data(), padding, buffer));
+                    if (useZeroPage) {
+                        TRcBuf buffer(MakeIntrusive<TZeroBuffer>());
+                        r.Insert(r.End(), TRcBuf(TRcBuf::Piece, buffer.data(), padding, buffer));
+                    } else {
+                        //TODO: Support zero chunk allocation
+                        TRcBuf buffer = allocator->AllocRcBuf(padding, 0, 0);
+                        memset(buffer.GetContiguousSpanMut().data(), 0, padding);
+                        r.Insert(r.End(), buffer);
+                    }
                 }
             }
             iter = nextIter;
         }
 
         if (!parts[4]) {
-            parts[4] = TRcBuf::Uninitialized(partSize);
+            parts[4] = allocator->AllocRcBuf(partSize, 0, 0);
         }
 
         if (!parts[5]) {
-            parts[5] = TRcBuf::Uninitialized(partSize);
+            parts[5] =  allocator->AllocRcBuf(partSize, 0, 0);
         }
     }
 
@@ -160,11 +178,11 @@ namespace NKikimr {
     }
 
     bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
-            TErasureSplitContext *context) {
+            TErasureSplitContext *context, IRcBufAllocator* allocator) {
         Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
 
         if (erasure.GetErasure() == TErasureType::Erasure4Plus2Block && crcMode == TErasureType::CrcModeNone) {
-            ErasureSplitBlock42Prepare(whole, parts);
+            ErasureSplitBlock42Prepare(whole, parts, allocator);
             if (context) {
                 Y_ABORT_UNLESS(context->MaxSizeAtOnce % 32 == 0);
                 context->Offset += ErasureSplitBlock42(parts, context->Offset, context->MaxSizeAtOnce);

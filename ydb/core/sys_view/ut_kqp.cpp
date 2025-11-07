@@ -2750,6 +2750,23 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(1); // LocksBroken
     }
 
+    Y_UNIT_TEST(PartitionStatsRenameTable) {
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
+        CreateRootTable(env, /* partitionCount */ 1, /* fillTable */ false);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `Root/Table0` RENAME TO `Root/Table1`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+    }
+
     Y_UNIT_TEST(PartitionStatsFields) {
         auto nowUs = TInstant::Now().MicroSeconds();
 

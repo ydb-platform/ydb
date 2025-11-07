@@ -279,11 +279,18 @@ public:
             context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
+
+            // Update partition stats collector with new path
+            TVector<TTableShardInfo> partitioning = tableInfo->GetPartitions();
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo, std::move(partitioning));
         } else if (srcPath->IsColumnTable()) {
             auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
             auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
+
+            // Update partition stats collector with new path for column table
+            context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         } else {
             Y_ABORT();
         }

@@ -1069,8 +1069,7 @@ IHTTPGateway::TCountedContent::TCountedContent(TString&& data, const std::shared
     }
 }
 
-IHTTPGateway::TCountedContent::~TCountedContent()
-{
+void IHTTPGateway::TCountedContent::BeforeRelease() {
     auto oldSize = Counter->fetch_sub(size());
     if (oldSize >= Threshold && oldSize - size() < Threshold) {
         if (auto handle = Handle.lock()) {
@@ -1082,16 +1081,12 @@ IHTTPGateway::TCountedContent::~TCountedContent()
     }
 }
 
+IHTTPGateway::TCountedContent::~TCountedContent() {
+    BeforeRelease();
+}
+
 TString IHTTPGateway::TCountedContent::Extract() {
-    auto oldSize = Counter->fetch_sub(size());
-    if (oldSize >= Threshold && oldSize - size() < Threshold) {
-        if (auto handle = Handle.lock()) {
-            curl_multi_wakeup(handle.get());
-        }
-    }
-    if (InflightCounter) {
-        InflightCounter->Sub(size());
-    }
+    BeforeRelease();
     return TContentBase::Extract();
 }
 

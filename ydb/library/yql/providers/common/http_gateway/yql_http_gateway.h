@@ -109,6 +109,8 @@ public:
 
         TString Extract();
     private:
+        void BeforeRelease();
+
         const std::shared_ptr<std::atomic_size_t> Counter;
         const ::NMonitoring::TDynamicCounters::TCounterPtr InflightCounter;
         std::weak_ptr<CURLM> Handle;

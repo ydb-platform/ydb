@@ -12,7 +12,7 @@ TProgressBar::TProgressBar(size_t capacity, size_t parts)
      , Parts(parts)
 {}
 
-void TProgressBar::SetProcess(size_t progress)
+void TProgressBar::SetProgress(size_t progress)
 {
     const auto partSize = Parts ? Max<size_t>(Capacity / Parts, 1) : Max<size_t>();
     const auto curPartNum = CurProgress / partSize;
@@ -23,7 +23,7 @@ void TProgressBar::SetProcess(size_t progress)
 }
 
 void TProgressBar::AddProgress(size_t value) {
-    SetProcess(CurProgress + value);
+    SetProgress(CurProgress + value);
 }
 
 TProgressBar::~TProgressBar() {

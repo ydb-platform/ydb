@@ -12,7 +12,7 @@ public:
 
     ~TProgressBar();
 
-    void SetProcess(size_t progress);
+    void SetProgress(size_t progress);
 
     void AddProgress(size_t value);
 

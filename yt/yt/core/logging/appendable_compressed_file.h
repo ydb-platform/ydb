@@ -13,6 +13,7 @@ namespace NYT::NLogging {
 struct TAppendableCompressedFileOptions
 {
     bool WriteTruncateMessage = false;
+    bool TryNotBreakLines = true;
 };
 
 IStreamLogOutputPtr CreateAppendableCompressedFile(

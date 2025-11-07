@@ -1207,14 +1207,14 @@ TUniqueSecondaryKeyCollector::TUniqueSecondaryKeyCollector(
     const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
     const TConstArrayRef<ui32> secondaryKeyColumns,
     const TConstArrayRef<ui32> secondaryTableKeyColumns,
-    const TConstArrayRef<ui32> pkInSecondaryTableKeyColumns)
+    const TConstArrayRef<ui32> primaryKeyInSecondaryTableKeyColumns)
         : PrimaryKeyColumnTypes(primaryKeyColumnTypes)
         , SecondaryKeyColumnTypes(secondaryKeyColumnTypes)
         , SecondaryKeyColumns(secondaryKeyColumns)
         , SecondaryTableKeyColumns(secondaryTableKeyColumns)
-        , PkInSecondaryTableKeyColumns(pkInSecondaryTableKeyColumns) {
-    AFL_ENSURE(PkInSecondaryTableKeyColumns.size() == primaryKeyColumnTypes.size());
-    AFL_ENSURE(PkInSecondaryTableKeyColumns.size() <= secondaryTableKeyColumns.size());
+        , PrimaryKeyInSecondaryTableKeyColumns(primaryKeyInSecondaryTableKeyColumns) {
+    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() == primaryKeyColumnTypes.size());
+    AFL_ENSURE(PrimaryKeyInSecondaryTableKeyColumns.size() <= secondaryTableKeyColumns.size());
     AFL_ENSURE(secondaryTableKeyColumns.size() == secondaryKeyColumnTypes.size());
     AFL_ENSURE(secondaryKeyColumns.size() <= secondaryTableKeyColumns.size());
     AFL_ENSURE(secondaryTableKeyColumns.size() <= primaryKeyColumnTypes.size() + secondaryKeyColumnTypes.size());
@@ -1247,7 +1247,7 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
     auto createPrimaryKey = [&](TConstArrayRef<TCell> data) {
         std::vector<TCell> primaryKey(PrimaryKeyColumnTypes.size());
         for (size_t index = 0; index < PrimaryKeyColumnTypes.size(); ++index) {
-            primaryKey[index] = data[PkInSecondaryTableKeyColumns[index]];
+            primaryKey[index] = data[PrimaryKeyInSecondaryTableKeyColumns[index]];
         }
         return primaryKey;
     };

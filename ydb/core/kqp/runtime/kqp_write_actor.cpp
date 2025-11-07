@@ -199,6 +199,9 @@ namespace {
         }
         return true;
     }
+
+    const TStringBuf ConflictWithExistingKeyErrorText = "Conflict with existing key.";
+    const TStringBuf DuplicateKeyErrorText = "Duplicated keys found.";
 }
 
 
@@ -1622,7 +1625,7 @@ private:
                 for (const auto& row : GetRows(batch)) {
                     const auto& key = row.first(KeyColumnTypes.size());
                     if (!primaryKeysSet.insert(key).second) {
-                        Error = "Duplicate primary key";
+                        Error = DuplicateKeyErrorText;
                         return false;
                     }
                 }
@@ -1656,7 +1659,7 @@ private:
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
-                            Error = "TODO";
+                            Error = DuplicateKeyErrorText;
                             return false;
                         }
                     }
@@ -1774,10 +1777,10 @@ private:
                         lookupInfo.FullKeyIndexes,
                         lookupInfo.PkInFullKeyIndexes);
 
-                // TODO: skip unchanged rows
+                // TODO: skip unchanged rows?
                 for (const auto& row : writeRows) {
                     if (!collector.AddRow(row)) {
-                        Error = "TODO";
+                        Error = DuplicateKeyErrorText;
                         return false;
                     }
                 }
@@ -1830,7 +1833,7 @@ private:
                 for (const auto& write : Writes) {
                     for (const auto& row : GetRows(write.Batch)) {
                         if (!collector.AddRow(row)) {
-                            Error = "TODO";
+                            Error = ConflictWithExistingKeyErrorText;
                             return false;
                         }
                     }

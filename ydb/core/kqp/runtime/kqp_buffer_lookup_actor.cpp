@@ -494,7 +494,7 @@ public:
             return RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    "unique check failed"); // TODO: error text
+                    "Conflict with existing key.");
         }
 
         {

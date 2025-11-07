@@ -109,7 +109,7 @@ public:
         const TConstArrayRef<NScheme::TTypeInfo> secondaryKeyColumnTypes,
         const TConstArrayRef<ui32> secondaryKeyColumns,
         const TConstArrayRef<ui32> secondaryTableKeyColumns,
-        const TConstArrayRef<ui32> pkInSecondaryTableKeyColumns);
+        const TConstArrayRef<ui32> primaryKeyInSecondaryTableKeyColumns);
 
     bool AddRow(const TConstArrayRef<TCell> row);
     bool AddSecondaryTableRow(const TConstArrayRef<TCell> row);
@@ -125,7 +125,7 @@ private:
     const TConstArrayRef<NScheme::TTypeInfo> SecondaryKeyColumnTypes;
     const TConstArrayRef<ui32> SecondaryKeyColumns;
     const TConstArrayRef<ui32> SecondaryTableKeyColumns;
-    const TConstArrayRef<ui32> PkInSecondaryTableKeyColumns;
+    const TConstArrayRef<ui32> PrimaryKeyInSecondaryTableKeyColumns;
 
     std::vector<std::vector<TCell>> Cells;
     TKeysSet UniqueCellsSet;

@@ -5976,6 +5976,8 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         auto client = kikimr.GetQueryClient();
 
+        const bool isStreamIndex = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite();
+
         {
             const TString query(Q_(std::format(R"(
                 CREATE TABLE `/Root/TestTable` (
@@ -6024,7 +6026,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                     query,
                     NQuery::TTxControl::NoTx())
                 .ExtractValueSync();
-            if (Uniq) {
+            if (Uniq && !isStreamIndex) {
                 UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS_C(
                     result.GetIssues().ToString(),

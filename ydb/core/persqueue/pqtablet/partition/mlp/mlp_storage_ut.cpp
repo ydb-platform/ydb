@@ -1795,6 +1795,7 @@ Y_UNIT_TEST(SlowZone_Retention_1message) {
 
     utils.AssertSlowZone({1});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
 
     utils.AssertLoad();
 }
@@ -1811,6 +1812,7 @@ Y_UNIT_TEST(SlowZone_Retention_2message) {
 
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 6);
 
     utils.AssertLoad();
 }
@@ -1827,6 +1829,7 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
 
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 5);
 
     utils.AssertLoad();
 }

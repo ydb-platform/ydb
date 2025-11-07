@@ -6,6 +6,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
+#include <util/datetime/base.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <thread>
@@ -719,7 +720,9 @@ private:
         Y_ABORT_UNLESS(Handle);
         auto weakHandle = std::weak_ptr<CURLM>(Handle);
         Handle.reset();
-        while (!weakHandle.expired()) {} // short busy-wait in case of TCountedContent
+        while (!weakHandle.expired()) { // short busy-wait in unlikely case of collision with TCountedContent
+            Sleep(TInstant::MicroSeconds(1));
+        }
         curl_global_cleanup();
     }
 

@@ -333,6 +333,10 @@ const std::deque<ui64>& TStorage::GetDLQMessages() const {
     return DLQQueue;
 }
 
+const std::unordered_set<ui32>& TStorage::GetLockedMessageGroupsId() const {
+    return LockedMessageGroupsId;
+}
+
 std::pair<TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {
     auto [message, slowZone] = GetMessageInt(offset);
     if (!message) {

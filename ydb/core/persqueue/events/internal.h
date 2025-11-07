@@ -1564,6 +1564,10 @@ struct TEvPQ {
     // Response from the MLP consumer. Only for testing purposes.
     //
     struct TEvGetMLPConsumerStateResponse : TEventLocal<TEvGetMLPConsumerStateResponse, EvGetMLPConsumerStateResponse> {
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
+
         struct TMessage {
             ui64 Offset;
             ui32 Status;

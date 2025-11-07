@@ -345,6 +345,8 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     auto response = std::make_unique<TEvPQ::TEvGetMLPConsumerStateResponse>();
+    response->RetentionPeriod = RetentionPeriod;
+    response->Config = Config;
 
     for (auto it = Storage->begin(); it != Storage->end(); ++it) {
         auto msg = *it;

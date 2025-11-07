@@ -433,7 +433,9 @@ public:
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-        Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
+        if (skipJsonErrors) {
+            Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
+        }
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);

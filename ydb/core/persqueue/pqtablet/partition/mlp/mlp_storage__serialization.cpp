@@ -274,6 +274,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                     moveUncommittedOffset = false;
                     break;
                 case EMessageStatus::DLQ:
+                    ++Metrics.DLQMessageCount;
                     moveUncommittedOffset = false;
                     break;
             }

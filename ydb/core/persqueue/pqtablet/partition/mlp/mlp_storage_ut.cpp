@@ -30,6 +30,9 @@ struct TUtils {
         , Storage(TimeProvider, 1, 8)
         , BaseWriteTimestamp(TimeProvider->Now() - TDuration::Seconds(8))
     {
+        Storage.SetKeepMessageOrder(true);
+        Storage.SetMaxMessageProcessingCount(1);
+        Storage.SetRetentionPeriod(TDuration::Seconds(7 * 13));
     }
 
     TIntrusivePtr<MockTimeProvider> TimeProvider;
@@ -48,27 +51,33 @@ struct TUtils {
     NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
         NKikimrPQ::TMLPStorageSnapshot snapshot;
         Storage.SerializeTo(snapshot);
+        Cerr << "CREATE" << Endl;
+        Cerr << "> STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "> SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
         return snapshot;
     }
 
     NKikimrPQ::TMLPStorageWAL CreateWAL() {
         NKikimrPQ::TMLPStorageWAL wal;
         Storage.GetBatch().SerializeTo(wal);
-        Cerr << "STORAGE DUMP: " << Storage.DebugString() << Endl;
-        Cerr << "WAL: " << wal.ShortDebugString() << Endl;
+        Cerr << "CREATE" << Endl;
+        Cerr << "> STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "> WAL: " << wal.ShortDebugString() << Endl;
         return wal;
     }
 
     void LoadSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         Storage.Initialize(snapshot);
-        Cerr << "SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
-        Cerr << "STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "LOAD" << Endl;
+        Cerr << "< SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
+        Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
     void LoadWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         Storage.ApplyWAL(wal);
-        Cerr << "WAL: " << wal.ShortDebugString() << Endl;
-        Cerr << "STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "LOAD" << Endl;
+        Cerr << "< WAL: " << wal.ShortDebugString() << Endl;
+        Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
     }
 
     void AssertSlowZone(std::vector<ui64> expectedOffsets) {
@@ -105,6 +114,10 @@ struct TUtils {
 
     bool Commit(ui64 offset) {
         return Storage.Commit(offset);
+    }
+
+    bool Unlock(ui64 offset) {
+        return Storage.Unlock(offset);
     }
 
     void AssertEquals(TUtils& other) {
@@ -1574,6 +1587,31 @@ Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
 
     // Committed message isn`t move to SlowZone
     utils.AssertSlowZone({ });
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
+Y_UNIT_TEST(SlowZone_MoveDLQToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    UNIT_ASSERT(utils.Unlock(0));
+    auto snapshot = utils.CreateSnapshot();
+    utils.AddMessage(1);
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
     TUtils utilsD;
     utilsD.LoadSnapshot(snapshot);

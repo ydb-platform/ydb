@@ -595,7 +595,15 @@ TString TStorage::DebugString() const {
         dump(FirstOffset + i, Messages[i], 'f');
     }
 
-    sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId.begin(), LockedMessageGroupsId.end()) << "]";
+    sb << "] LockedGroups [" << JoinRange(", ", LockedMessageGroupsId.begin(), LockedMessageGroupsId.end())
+        << "] Metrics {"
+        << "Infly: " << Metrics.InflyMessageCount << ", "
+        << "Unprocessed: " << Metrics.UnprocessedMessageCount << ", "
+        << "Locked: " << Metrics.LockedMessageCount << ", "
+        << "LockedGroups: " << Metrics.LockedMessageGroupCount << ", "
+        << "Committed: " << Metrics.CommittedMessageCount << ", "
+        << "DLQ: " << Metrics.DLQMessageCount
+        << "}";
     return sb;
 }
 

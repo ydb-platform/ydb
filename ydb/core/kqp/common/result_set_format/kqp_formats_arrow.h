@@ -15,6 +15,10 @@
 
 namespace NKikimr::NKqp::NFormats {
 
+constexpr size_t MAX_VARIANT_FLATTEN_SIZE = static_cast<size_t>(arrow::UnionType::kMaxTypeCode) + 1;
+constexpr size_t MAX_VARIANT_NESTED_SIZE = MAX_VARIANT_FLATTEN_SIZE * MAX_VARIANT_FLATTEN_SIZE;
+constexpr size_t MAX_VARIANT_DEPTH = 2;
+
 /**
  * @brief Dispatches MiniKQL data type to corresponding Arrow type via compile-time callback.
  *

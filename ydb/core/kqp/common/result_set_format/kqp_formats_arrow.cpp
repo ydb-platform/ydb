@@ -388,16 +388,192 @@ void AppendDataValue<arrow::FixedSizeBinaryType>(arrow::ArrayBuilder* builder, N
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 }
 
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TDataType* dataType) {
+    auto slot = *dataType->GetDataSlot().Get();
+    bool success = SwitchMiniKQLDataTypeToArrowType(slot, [&]<typename TType>() {
+            AppendDataValue<TType>(builder, value, slot);
+            return true;
+        });
+    YQL_ENSURE(success, "Failed to append data value to arrow builder");
+}
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TOptionalType* optionalType) {
+    auto innerType = SkipTaggedType(optionalType->GetItemType());
+    ui32 depth = 1;
+
+    while (innerType->IsOptional()) {
+        innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType) ->GetItemType());
+        ++depth;
+    }
+
+    // For types without native validity bitmap (e.g., Variant, Null) we need to wrap them in an additional struct layer
+    // Furthermore, other singular types (e.g., Void, EmptyList, EmptyDict) also need to wrap (from YQL-15332)
+    // Thus, the depth == 2 for Optional<Variant<T, F, ...>> type
+    if (NeedWrapByExternalOptional(innerType)) {
+        ++depth;
+    }
+
+    auto innerBuilder = builder;
+    auto innerValue = value;
+
+    for (ui32 i = 1; i < depth; ++i) {
+        YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+        auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(innerBuilder);
+        YQL_ENSURE(structBuilder->num_fields() == 1, "Unexpected number of fields");
+
+        if (!innerValue) {
+            auto status = innerBuilder->AppendNull();
+            YQL_ENSURE(status.ok(), "Failed to append null optional value: " << status.ToString());
+            return;
+        }
+
+        auto status = structBuilder->Append();
+        YQL_ENSURE(status.ok(), "Failed to append optional value: " << status.ToString());
+
+        innerValue = innerValue.GetOptionalValue();
+        innerBuilder = structBuilder->field_builder(0);
+    }
+
+    if (innerValue) {
+        NFormats::AppendElement(innerValue.GetOptionalValue(), innerBuilder, innerType);
+    } else {
+        auto status = innerBuilder->AppendNull();
+        YQL_ENSURE(status.ok(), "Failed to append null optional value: " << status.ToString());
+    }
+}
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TListType* listType) {
+    auto itemType = listType->GetItemType();
+
+    YQL_ENSURE(builder->type()->id() == arrow::Type::LIST, "Unexpected builder type");
+    auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
+
+    auto status = listBuilder->Append();
+    YQL_ENSURE(status.ok(), "Failed to append list value: " << status.ToString());
+
+    auto innerBuilder = listBuilder->value_builder();
+    if (auto item = value.GetElements()) {
+        auto length = value.GetListLength();
+        while (length > 0) {
+            NFormats::AppendElement(*item++, innerBuilder, itemType);
+            --length;
+        }
+    } else {
+        const auto iter = value.GetListIterator();
+        for (NUdf::TUnboxedValue item; iter.Next(item);) {
+            NFormats::AppendElement(item, innerBuilder, itemType);
+        }
+    }
+}
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TStructType* structType) {
+    YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+    auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+
+    auto status = structBuilder->Append();
+    YQL_ENSURE(status.ok(), "Failed to append struct value: " << status.ToString());
+
+    YQL_ENSURE(static_cast<ui32>(structBuilder->num_fields()) == structType->GetMembersCount(), "Unexpected number of fields");
+    for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+        auto innerBuilder = structBuilder->field_builder(index);
+        auto memberType = structType->GetMemberType(index);
+        NFormats::AppendElement(value.GetElement(index), innerBuilder, memberType);
+    }
+}
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TTupleType* tupleType) {
+    YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+    auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
+
+    auto status = structBuilder->Append();
+    YQL_ENSURE(status.ok(), "Failed to append tuple value: " << status.ToString());
+
+    YQL_ENSURE(static_cast<ui32>(structBuilder->num_fields()) == tupleType->GetElementsCount(), "Unexpected number of fields");
+    for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
+        auto innerBuilder = structBuilder->field_builder(index);
+        auto elementType = tupleType->GetElementType(index);
+        NFormats::AppendElement(value.GetElement(index), innerBuilder, elementType);
+    }
+}
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TDictType* dictType) {
+    auto keyType = dictType->GetKeyType();
+    auto payloadType = dictType->GetPayloadType();
+
+    YQL_ENSURE(builder->type()->id() == arrow::Type::LIST, "Unexpected builder type");
+    auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
+
+    auto status = listBuilder->Append();
+    YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
+
+    YQL_ENSURE(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
+    auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(listBuilder->value_builder());
+    YQL_ENSURE(structBuilder->num_fields() == 2, "Unexpected number of fields");
+
+    auto keyBuilder = structBuilder->field_builder(0);
+    auto itemBuilder = structBuilder->field_builder(1);
+
+    const auto iter = value.GetDictIterator();
+    for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
+        auto status = structBuilder->Append();
+        YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
+
+        NFormats::AppendElement(key, keyBuilder, keyType);
+        NFormats::AppendElement(payload, itemBuilder, payloadType);
+    }
+}
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TVariantType* variantType) {
+    YQL_ENSURE(builder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
+    auto unionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(builder);
+
+    ui32 variantIndex = value.GetVariantIndex();
+    NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
+
+    if (innerType->IsStruct()) {
+        innerType = static_cast<NMiniKQL::TStructType*>(innerType)->GetMemberType(variantIndex);
+    } else {
+        YQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
+        innerType = static_cast<NMiniKQL::TTupleType*>(innerType)->GetElementType(variantIndex);
+    }
+
+    if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
+        ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
+        YQL_ENSURE(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups, "Unexpected variant number of groups");
+
+        ui32 groupIndex = variantIndex / arrow::UnionType::kMaxTypeCode;
+        auto status = unionBuilder->Append(groupIndex);
+        YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
+
+        auto innerBuilder = unionBuilder->child_builder(groupIndex);
+        YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
+        auto innerUnionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(innerBuilder.get());
+
+        ui32 innerVariantIndex = variantIndex % arrow::UnionType::kMaxTypeCode;
+        status = innerUnionBuilder->Append(innerVariantIndex);
+        YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
+
+        auto doubleInnerBuilder = innerUnionBuilder->child_builder(innerVariantIndex);
+        NFormats::AppendElement(value.GetVariantItem(), doubleInnerBuilder.get(), innerType);
+    } else {
+        auto status = unionBuilder->Append(variantIndex);
+        YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
+
+        auto innerBuilder = unionBuilder->child_builder(variantIndex);
+        NFormats::AppendElement(value.GetVariantItem(), innerBuilder.get(), innerType);
+    }
+}
+
 } // namespace
 
 bool NeedWrapByExternalOptional(const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::Null:
-        case NMiniKQL::TType::EKind::Variant:
-        case NMiniKQL::TType::EKind::Optional:
+        case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict: {
+        case NMiniKQL::TType::EKind::EmptyDict:
+        case NMiniKQL::TType::EKind::Optional:
+        case NMiniKQL::TType::EKind::Variant: {
             return true;
         }
 
@@ -440,43 +616,35 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
         }
 
         case NMiniKQL::TType::EKind::Data: {
-            auto dataType = static_cast<const NMiniKQL::TDataType*>(type);
-            return GetArrowType(dataType);
-        }
-
-        case NMiniKQL::TType::EKind::Struct: {
-            auto structType = static_cast<const NMiniKQL::TStructType*>(type);
-            return GetArrowType(structType);
-        }
-
-        case NMiniKQL::TType::EKind::Tuple: {
-            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
-            return GetArrowType(tupleType);
+            return GetArrowType(static_cast<const NMiniKQL::TDataType*>(type));
         }
 
         case NMiniKQL::TType::EKind::Optional: {
-            auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(type);
-            return GetArrowType(optionalType);
+            return GetArrowType(static_cast<const NMiniKQL::TOptionalType*>(type));
+        }
+
+        case NMiniKQL::TType::EKind::Struct: {
+            return GetArrowType(static_cast<const NMiniKQL::TStructType*>(type));
+        }
+
+        case NMiniKQL::TType::EKind::Tuple: {
+            return GetArrowType(static_cast<const NMiniKQL::TTupleType*>(type));
         }
 
         case NMiniKQL::TType::EKind::List: {
-            auto listType = static_cast<const NMiniKQL::TListType*>(type);
-            return GetArrowType(listType);
+            return GetArrowType(static_cast<const NMiniKQL::TListType*>(type));
         }
 
         case NMiniKQL::TType::EKind::Dict: {
-            auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
-            return GetArrowType(dictType);
+            return GetArrowType(static_cast<const NMiniKQL::TDictType*>(type));
         }
 
         case NMiniKQL::TType::EKind::Variant: {
-            auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
-            return GetArrowType(variantType);
+            return GetArrowType(static_cast<const NMiniKQL::TVariantType*>(type));
         }
 
         case NMiniKQL::TType::EKind::Tagged: {
-            auto taggedType = static_cast<const NMiniKQL::TTaggedType*>(type);
-            return GetArrowType(taggedType->GetBaseType());
+            return GetArrowType(static_cast<const NMiniKQL::TTaggedType*>(type)->GetBaseType());
         }
 
         case NMiniKQL::TType::EKind::Type:
@@ -498,12 +666,17 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
 
 bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
     switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::Null:
+        case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
         case NMiniKQL::TType::EKind::Data: {
             return true;
+        }
+
+        case NMiniKQL::TType::EKind::Optional: {
+            auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(type);
+            return IsArrowCompatible(optionalType->GetItemType());
         }
 
         case NMiniKQL::TType::EKind::Struct: {
@@ -526,15 +699,17 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
             return isCompatible;
         }
 
-        case NMiniKQL::TType::EKind::Optional: {
-            auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(type);
-            return IsArrowCompatible(optionalType->GetItemType());
-        }
-
         case NMiniKQL::TType::EKind::List: {
             auto listType = static_cast<const NMiniKQL::TListType*>(type);
             auto itemType = listType->GetItemType();
             return IsArrowCompatible(itemType);
+        }
+
+        case NMiniKQL::TType::EKind::Dict: {
+            auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
+            auto keyType = dictType->GetKeyType();
+            auto payloadType = dictType->GetPayloadType();
+            return IsArrowCompatible(keyType) && IsArrowCompatible(payloadType);
         }
 
         case NMiniKQL::TType::EKind::Variant: {
@@ -551,13 +726,6 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
 
             YQL_ENSURE(false, "Unexpected underlying variant type: " << innerType->GetKindAsStr());
             return false;
-        }
-
-        case NMiniKQL::TType::EKind::Dict: {
-            auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
-            auto keyType = dictType->GetKeyType();
-            auto payloadType = dictType->GetPayloadType();
-            return IsArrowCompatible(keyType) && IsArrowCompatible(payloadType);
         }
 
         case NMiniKQL::TType::EKind::Tagged: {
@@ -602,204 +770,42 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         }
 
         case NMiniKQL::TType::EKind::Data: {
-            auto dataType = static_cast<const NMiniKQL::TDataType*>(type);
-            auto slot = *dataType->GetDataSlot().Get();
-            bool success = SwitchMiniKQLDataTypeToArrowType(slot, [&]<typename TType>() {
-                    AppendDataValue<TType>(builder, value, slot);
-                    return true;
-                });
-            YQL_ENSURE(success, "Failed to append data value to arrow builder");
+            AppendElement(value, builder, static_cast<const NMiniKQL::TDataType*>(type));
             break;
         }
 
         case NMiniKQL::TType::EKind::Optional: {
-            auto innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(type)->GetItemType());
-            ui32 depth = 1;
-
-            while (innerType->IsOptional()) {
-                innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType) ->GetItemType());
-                ++depth;
-            }
-
-            // For types without native validity bitmap (e.g., Variant, Null) we need to wrap them in an additional struct layer
-            // Furthermore, other singular types (e.g., Void, EmptyList, EmptyDict) also need to wrap (from YQL-15332)
-            // Thus, the depth == 2 for Optional<Variant<T, F, ...>> type
-            if (NeedWrapByExternalOptional(innerType)) {
-                ++depth;
-            }
-
-            auto innerBuilder = builder;
-            auto innerValue = value;
-
-            for (ui32 i = 1; i < depth; ++i) {
-                YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-                auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(innerBuilder);
-                YQL_ENSURE(structBuilder->num_fields() == 1, "Unexpected number of fields");
-
-                if (!innerValue) {
-                    auto status = innerBuilder->AppendNull();
-                    YQL_ENSURE(status.ok(), "Failed to append null optional value: " << status.ToString());
-                    return;
-                }
-
-                auto status = structBuilder->Append();
-                YQL_ENSURE(status.ok(), "Failed to append optional value: " << status.ToString());
-
-                innerValue = innerValue.GetOptionalValue();
-                innerBuilder = structBuilder->field_builder(0);
-            }
-
-            if (innerValue) {
-                AppendElement(innerValue.GetOptionalValue(), innerBuilder, innerType);
-            } else {
-                auto status = innerBuilder->AppendNull();
-                YQL_ENSURE(status.ok(), "Failed to append null optional value: " << status.ToString());
-            }
-            break;
-        }
-
-        case NMiniKQL::TType::EKind::List: {
-            auto listType = static_cast<const NMiniKQL::TListType*>(type);
-            auto itemType = listType->GetItemType();
-
-            YQL_ENSURE(builder->type()->id() == arrow::Type::LIST, "Unexpected builder type");
-            auto listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
-
-            auto status = listBuilder->Append();
-            YQL_ENSURE(status.ok(), "Failed to append list value: " << status.ToString());
-
-            auto innerBuilder = listBuilder->value_builder();
-            if (auto item = value.GetElements()) {
-                auto length = value.GetListLength();
-                while (length > 0) {
-                    AppendElement(*item++, innerBuilder, itemType);
-                    --length;
-                }
-            } else {
-                const auto iter = value.GetListIterator();
-                for (NUdf::TUnboxedValue item; iter.Next(item);) {
-                    AppendElement(item, innerBuilder, itemType);
-                }
-            }
+            AppendElement(value, builder, static_cast<const NMiniKQL::TOptionalType*>(type));
             break;
         }
 
         case NMiniKQL::TType::EKind::Struct: {
-            auto structType = static_cast<const NMiniKQL::TStructType*>(type);
-
-            YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-            auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
-
-            auto status = structBuilder->Append();
-            YQL_ENSURE(status.ok(), "Failed to append struct value: " << status.ToString());
-
-            YQL_ENSURE(static_cast<ui32>(structBuilder->num_fields()) == structType->GetMembersCount(), "Unexpected number of fields");
-            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                auto innerBuilder = structBuilder->field_builder(index);
-                auto memberType = structType->GetMemberType(index);
-                AppendElement(value.GetElement(index), innerBuilder, memberType);
-            }
+            AppendElement(value, builder, static_cast<const NMiniKQL::TStructType*>(type));
             break;
         }
 
         case NMiniKQL::TType::EKind::Tuple: {
-            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
+            AppendElement(value, builder, static_cast<const NMiniKQL::TTupleType*>(type));
+            break;
+        }
 
-            YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-            auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
-
-            auto status = structBuilder->Append();
-            YQL_ENSURE(status.ok(), "Failed to append tuple value: " << status.ToString());
-
-            YQL_ENSURE(static_cast<ui32>(structBuilder->num_fields()) == tupleType->GetElementsCount(), "Unexpected number of fields");
-            for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
-                auto innerBuilder = structBuilder->field_builder(index);
-                auto elementType = tupleType->GetElementType(index);
-                AppendElement(value.GetElement(index), innerBuilder, elementType);
-            }
+        case NMiniKQL::TType::EKind::List: {
+            AppendElement(value, builder, static_cast<const NMiniKQL::TListType*>(type));
             break;
         }
 
         case NMiniKQL::TType::EKind::Dict: {
-            auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
-            auto keyType = dictType->GetKeyType();
-            auto payloadType = dictType->GetPayloadType();
-
-            arrow::ArrayBuilder* keyBuilder = nullptr;
-            arrow::ArrayBuilder* itemBuilder = nullptr;
-            arrow::StructBuilder* structBuilder = nullptr;
-
-            YQL_ENSURE(builder->type()->id() == arrow::Type::LIST, "Unexpected builder type");
-            arrow::ListBuilder* listBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
-
-            auto status = listBuilder->Append();
-            YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
-
-            YQL_ENSURE(listBuilder->value_builder()->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-            structBuilder = reinterpret_cast<arrow::StructBuilder*>(listBuilder->value_builder());
-            YQL_ENSURE(structBuilder->num_fields() == 2, "Unexpected number of fields");
-
-            keyBuilder = structBuilder->field_builder(0);
-            itemBuilder = structBuilder->field_builder(1);
-
-            const auto iter = value.GetDictIterator();
-            for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
-                status = structBuilder->Append();
-                YQL_ENSURE(status.ok(), "Failed to append dict value: " << status.ToString());
-
-                AppendElement(key, keyBuilder, keyType);
-                AppendElement(payload, itemBuilder, payloadType);
-            }
+            AppendElement(value, builder, static_cast<const NMiniKQL::TDictType*>(type));
             break;
         }
 
         case NMiniKQL::TType::EKind::Variant: {
-            auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
-
-            YQL_ENSURE(builder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
-            auto unionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(builder);
-
-            ui32 variantIndex = value.GetVariantIndex();
-            NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
-
-            if (innerType->IsStruct()) {
-                innerType = static_cast<NMiniKQL::TStructType*>(innerType)->GetMemberType(variantIndex);
-            } else {
-                YQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
-                innerType = static_cast<NMiniKQL::TTupleType*>(innerType)->GetElementType(variantIndex);
-            }
-
-            if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
-                ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
-                YQL_ENSURE(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups, "Unexpected variant number of groups");
-
-                ui32 groupIndex = variantIndex / arrow::UnionType::kMaxTypeCode;
-                auto status = unionBuilder->Append(groupIndex);
-                YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
-
-                auto innerBuilder = unionBuilder->child_builder(groupIndex);
-                YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
-                auto innerUnionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(innerBuilder.get());
-
-                ui32 innerVariantIndex = variantIndex % arrow::UnionType::kMaxTypeCode;
-                status = innerUnionBuilder->Append(innerVariantIndex);
-                YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
-
-                auto doubleInnerBuilder = innerUnionBuilder->child_builder(innerVariantIndex);
-                AppendElement(value.GetVariantItem(), doubleInnerBuilder.get(), innerType);
-            } else {
-                auto status = unionBuilder->Append(variantIndex);
-                YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
-
-                auto innerBuilder = unionBuilder->child_builder(variantIndex);
-                AppendElement(value.GetVariantItem(), innerBuilder.get(), innerType);
-            }
+            AppendElement(value, builder, static_cast<const NMiniKQL::TVariantType*>(type));
             break;
         }
 
         case NMiniKQL::TType::EKind::Tagged: {
-            auto taggedType = static_cast<const NMiniKQL::TTaggedType*>(type);
-            AppendElement(value, builder, taggedType->GetBaseType());
+            AppendElement(value, builder, static_cast<const NMiniKQL::TTaggedType*>(type)->GetBaseType());
             break;
         }
 

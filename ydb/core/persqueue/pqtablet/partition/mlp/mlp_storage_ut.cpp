@@ -1715,6 +1715,40 @@ Y_UNIT_TEST(SlowZone_Lock) {
     utilsD.AssertEquals(utils);
 }
 
+Y_UNIT_TEST(SlowZone_Commit_First) {
+    TUtils utils;
+    utils.AddMessage(8);
+    auto snapshot = utils.CreateSnapshot();
+    UNIT_ASSERT(utils.Commit(0));
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({1 });
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
+Y_UNIT_TEST(SlowZone_Commit) {
+    TUtils utils;
+    utils.AddMessage(8);
+    auto snapshot = utils.CreateSnapshot();
+    UNIT_ASSERT(utils.Commit(1));
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({0 });
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
 
 
 Y_UNIT_TEST(SlowZone_LongScenario) {

@@ -330,6 +330,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
         runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
+        block.Unblock();
         block.Stop();
         RebootTablet(runtime, tableInfo.ShardIds[0], sender);
 

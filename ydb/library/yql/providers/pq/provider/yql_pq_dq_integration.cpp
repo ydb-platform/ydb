@@ -268,7 +268,6 @@ public:
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {
-                        Cerr << "found SkipErrors" << Endl;
                         skipErrors = FromString<bool>(Value(setting));
                     }
                 }

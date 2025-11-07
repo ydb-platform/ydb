@@ -1179,25 +1179,33 @@ class TestPqRowDispatcher(TestYdsBase):
         assert received == expected
 
     @yq_v1
-    def test_json_errors(self, kikimr, client):
+    @pytest.mark.parametrize("use_binding", [False, True], ids=[ "with_option", "bindings"])
+    def test_json_errors(self, kikimr, client, use_binding):
         connection_response = client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
         self.init_topics("test_json_errors", create_input=True, create_output=True, partitions_count=1)
 
         time_type = ydb_value.Column(name="time", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.INT32))
         data_type = ydb_value.Column(name="data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))
 
-        binding_response = client.create_yds_binding(
-            name="my_binding",
-            stream=self.input_topic,
-            format="json_each_row",
-            connection_id=connection_response.result.connection_id,
-            columns=[time_type, data_type],
-            format_setting={"skip.json.errors": "true"},
-        )
+        if use_binding:
+            client.create_yds_binding(
+                name="my_binding",
+                stream=self.input_topic,
+                format="json_each_row",
+                connection_id=connection_response.result.connection_id,
+                columns=[time_type, data_type],
+                format_setting={"skip.json.errors": "true"},
+            )
 
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT data FROM bindings.`my_binding`;'''
+        if use_binding:
+            sql = Rf'''
+                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                SELECT data FROM bindings.`my_binding`;'''
+        else:
+            sql = Rf'''
+                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+                    WITH (format=json_each_row, `skip.json.errors` = "true", SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)

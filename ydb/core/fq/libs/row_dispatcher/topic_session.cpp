@@ -988,7 +988,7 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
 
     if (SkipJsonErrors && SkipJsonErrors != source.GetSkipJsonErrors()) {
         LOG_ROW_DISPATCHER_INFO("Different skip json errors mode, expected " <<  SkipJsonErrors << ", actual " << source.GetSkipJsonErrors() << ", send error");
-        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors sessiong in all queries via RD (current mode " << SkipJsonErrors << ")"), false);
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors settings in all queries via RD (current mode " << SkipJsonErrors << ")"), false);
         return false;
     }
     return true;

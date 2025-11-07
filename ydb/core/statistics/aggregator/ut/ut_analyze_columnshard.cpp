@@ -324,15 +324,22 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
-        TBlockEvents<TEvStatistics::TEvAnalyzeTableResponse> block(runtime);
+        bool eventSeen = false;
+        bool tabletRebooted = false;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeTableResponse>([&](auto& ev) {
+            if (!tabletRebooted) {
+                eventSeen = true;
+                ev.Reset();
+            }
+        });
 
         auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
-        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return block.size(); });
-        block.Unblock();
-        block.Stop();
+        runtime.WaitFor("TEvAnalyzeTableResponse", [&]{ return eventSeen; });
         RebootTablet(runtime, tableInfo.ShardIds[0], sender);
+        tabletRebooted = true;
+        observer.Remove();
 
         runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
     }

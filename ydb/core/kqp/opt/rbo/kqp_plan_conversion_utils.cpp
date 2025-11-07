@@ -214,7 +214,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
         keyColumns.push_back(TInfoUnit(TString(keyColumn)));
     }
 
-    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, node->Pos());
+    const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
+    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, distinctAll, node->Pos());
 }
 
 } // namespace NKqp

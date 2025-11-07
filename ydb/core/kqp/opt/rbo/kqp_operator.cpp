@@ -732,8 +732,9 @@ TString TOpLimit::ToString(TExprContext& ctx) {
 }
 
 TOpAggregate::TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggTraitsList, TVector<TInfoUnit>& keyColumns,
-                           EAggregationPhase aggPhase, TPositionHandle pos)
-    : IUnaryOperator(EOperator::Aggregate, pos, input), AggregationTraitsList(aggTraitsList), KeyColumns(keyColumns), AggregationPhase(aggPhase) {}
+                           EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos)
+    : IUnaryOperator(EOperator::Aggregate, pos, input), AggregationTraitsList(aggTraitsList), KeyColumns(keyColumns),
+      AggregationPhase(aggPhase), DistinctAll(distinctAll) {}
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
     // We assume that aggregation returns column is order [keys, states]

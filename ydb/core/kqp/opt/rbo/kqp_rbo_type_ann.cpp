@@ -11,7 +11,7 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
-THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count"};
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max", "count", "distinct_all"};
 
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)

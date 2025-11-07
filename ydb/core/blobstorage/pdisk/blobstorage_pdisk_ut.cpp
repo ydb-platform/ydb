@@ -1249,14 +1249,14 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ui32 expectedTotalChunks,
         ui32 expectedUsedChunks,
         double expectedNormalizedOccupancy,
-        double expectedVDiskSlotUtilization,
-        double expectedPDiskFillPercent,
+        double expectedVDiskSlotUsage,
+        double expectedPDiskUsage,
         ui32 expectedNumSlots,
         ui32 expectedNumActiveSlots,
         NKikimrBlobStorage::TPDiskSpaceColor::E expectedColor
     ) {
         UNIT_ASSERT_GT(expectedTotalChunks, 0);
-        double expectedVDiskFairPartFillPercent = 100. * ((double)expectedUsedChunks) / expectedTotalChunks;
+        double expectedVDiskRawUsage = 100. * ((double)expectedUsedChunks) / expectedTotalChunks;
 
         Cerr << (TStringBuilder() << "... Checking EvCheckSpace"
             << " VDisk# " << vdisk.VDiskID
@@ -1264,9 +1264,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             << " TotalChunks# " << expectedTotalChunks
             << " UsedChunks# " << expectedUsedChunks
             << " NormalizedOccupancy# " << expectedNormalizedOccupancy
-            << " VDiskSlotUtilization# " << expectedVDiskSlotUtilization
-            << " VDiskFairPartFillPercent# " << expectedVDiskFairPartFillPercent
-            << " PDiskFillPercent# " << expectedPDiskFillPercent
+            << " VDiskSlotUsage# " << expectedVDiskSlotUsage
+            << " VDiskRawUsage# " << expectedVDiskRawUsage
+            << " PDiskUsage# " << expectedPDiskUsage
             << " NumSlots# " << expectedNumSlots
             << " NumActiveSlots# " << expectedNumActiveSlots
             << " Color# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(expectedColor)
@@ -1276,9 +1276,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             NKikimrProto::OK);
         Cerr << (TStringBuilder() << "Got " << evCheckSpaceResult->ToString()
             << " NormalizedOccupancy# " << evCheckSpaceResult->NormalizedOccupancy
-            << " VDiskSlotUtilization# " << evCheckSpaceResult->VDiskSlotUtilization
-            << " VDiskFairPartFillPercent# " << evCheckSpaceResult->VDiskFairPartFillPercent
-            << " PDiskFillPercent# " << evCheckSpaceResult->PDiskFillPercent
+            << " VDiskSlotUsage# " << evCheckSpaceResult->VDiskSlotUsage
+            << " VDiskRawUsage# " << evCheckSpaceResult->VDiskRawUsage
+            << " PDiskUsage# " << evCheckSpaceResult->PDiskUsage
             << Endl);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->FreeChunks, expectedFreeChunks);
         UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedTotalChunks);
@@ -1288,10 +1288,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), expectedColor);
 
         UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->NormalizedOccupancy, expectedNormalizedOccupancy, 0.01);
-        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->VDiskSlotUtilization, expectedVDiskSlotUtilization, 1e-6);
-        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->PDiskFillPercent, expectedPDiskFillPercent, 0.1);
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->VDiskSlotUsage, expectedVDiskSlotUsage, 1e-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->PDiskUsage, expectedPDiskUsage, 0.1);
 
-        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->VDiskFairPartFillPercent, expectedVDiskFairPartFillPercent, 0.1);
+        UNIT_ASSERT_DOUBLES_EQUAL(evCheckSpaceResult->VDiskRawUsage, expectedVDiskRawUsage, 0.1);
 
         return evCheckSpaceResult;
     };

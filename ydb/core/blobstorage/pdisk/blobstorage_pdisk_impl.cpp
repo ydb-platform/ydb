@@ -1626,18 +1626,18 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             double occupancy;
             NPDisk::TStatusFlags statusFlags = Keeper.GetSpaceStatusFlags(owner, &occupancy);
             NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor = StatusFlagToSpaceColor(statusFlags);
-            double vdiskSlotUtilization = Keeper.GetVDiskSlotUtilization(owner);
-            double vdiskFairPartFillPercent = Keeper.GetVDiskFairPartFillPercent(owner);
+            double vdiskSlotUsage = Keeper.GetVDiskSlotUsage(owner);
+            double vdiskRawUsage = Keeper.GetVDiskRawUsage(owner);
             vdiskMetrics->SetStatusFlags(statusFlags);
             vdiskMetrics->SetNormalizedOccupancy(occupancy);
-            vdiskMetrics->SetVDiskSlotUtilization(vdiskSlotUtilization);
-            vdiskMetrics->SetVDiskFairPartFillPercent(vdiskFairPartFillPercent);
-            vdiskMetrics->SetCapacityAlertLevel(spaceColor);
+            vdiskMetrics->SetVDiskSlotUsage(vdiskSlotUsage);
+            vdiskMetrics->SetVDiskRawUsage(vdiskRawUsage);
+            vdiskMetrics->SetCapacityAlert(spaceColor);
 
             vdiskInfo.SetNormalizedOccupancy(occupancy);
-            vdiskInfo.SetVDiskSlotUtilization(vdiskSlotUtilization);
-            vdiskInfo.SetVDiskFairPartFillPercent(vdiskFairPartFillPercent);
-            vdiskInfo.SetCapacityAlertLevel(spaceColor);
+            vdiskInfo.SetVDiskSlotUsage(vdiskSlotUsage);
+            vdiskInfo.SetVDiskRawUsage(vdiskRawUsage);
+            vdiskInfo.SetCapacityAlert(spaceColor);
 
             auto *vslotId = vdiskMetrics->MutableVSlotId();
             vslotId->SetNodeId(PCtx->ActorSystem->NodeId);
@@ -1669,9 +1669,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             pDiskMetrics.SetSlotCount(ExpectedSlotCount);
         }
 
-        double pdiskFillPercent = Keeper.GetPDiskFillPercent();
-        pDiskMetrics.SetPDiskFillPercent(pdiskFillPercent);
-        pdiskState.SetPDiskFillPercent(pdiskFillPercent);
+        double pdiskUsage = Keeper.GetPDiskUsage();
+        pDiskMetrics.SetPDiskUsage(pdiskUsage);
+        pdiskState.SetPDiskUsage(pdiskUsage);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2200,9 +2200,9 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 TString(),
                 GetStatusFlags(OwnerSystem, evCheckSpace.OwnerGroupType));
     result->NormalizedOccupancy = occupancy;
-    result->VDiskSlotUtilization = Keeper.GetVDiskSlotUtilization(evCheckSpace.Owner);
-    result->VDiskFairPartFillPercent = Keeper.GetVDiskFairPartFillPercent(evCheckSpace.Owner);
-    result->PDiskFillPercent = Keeper.GetPDiskFillPercent();
+    result->VDiskSlotUsage = Keeper.GetVDiskSlotUsage(evCheckSpace.Owner);
+    result->VDiskRawUsage = Keeper.GetVDiskRawUsage(evCheckSpace.Owner);
+    result->PDiskUsage = Keeper.GetPDiskUsage();
     PCtx->ActorSystem->Send(evCheckSpace.Sender, result.release());
     Mon.CheckSpace.CountResponse();
     return;

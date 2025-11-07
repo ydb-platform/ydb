@@ -1030,8 +1030,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT(pdiskInfo.HasTotalSize());
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            UNIT_ASSERT(pdiskInfo.HasPDiskFillPercent());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskFillPercent(), 0.0);
+            UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
+            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
             break;
         }
 
@@ -1049,8 +1049,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT(metrics.HasSlotSizeInUnits());
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            UNIT_ASSERT(metrics.HasPDiskFillPercent());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskFillPercent(), 0.0);
+            UNIT_ASSERT(metrics.HasPDiskUsage());
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
         }
     }
 

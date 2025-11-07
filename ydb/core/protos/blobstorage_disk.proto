@@ -63,9 +63,9 @@ message TVDiskMetrics {
     optional uint32 StatusFlags = 7;
     optional TVSlotId VSlotId = 8;
     optional double NormalizedOccupancy = 9;
-    optional double VDiskSlotUtilization = 16;  // 100.0 * Owner.Used / Owner.LightYellowLimit
-    optional double VDiskFairPartFillPercent = 17;  // 100.0 * Owner.Used / Owner.HardLimit
-    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlertLevel = 10;
+    optional double VDiskSlotUsage = 16;  // 100.0 * Owner.Used / Owner.LightYellowLimit
+    optional double VDiskRawUsage = 17;  // 100.0 * Owner.Used / Owner.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 10;
     optional NKikimrWhiteboard.EVDiskState State = 11;
     optional bool Replicated = 12;
     optional NKikimrWhiteboard.EFlag DiskSpace = 13;
@@ -92,5 +92,5 @@ message TPDiskMetrics {
     optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
     optional uint64 SlotCount = 12;
     optional uint32 SlotSizeInUnits = 13;
-    optional double PDiskFillPercent = 14;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    optional double PDiskUsage = 14;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
 }

@@ -16,7 +16,7 @@ struct TKeyLess;
 template <>
 struct TKeyLess<true>
 {
-    template<typename T>
+    template <typename T>
     bool operator()(const T& lhs, const T& rhs) const
     {
         return lhs < rhs;
@@ -26,7 +26,7 @@ struct TKeyLess<true>
 template <>
 struct TKeyLess<false>
 {
-    template<typename T>
+    template <typename T>
     bool operator()(const T& lhs, const T& rhs) const
     {
         return lhs.first < rhs.first;

@@ -1142,7 +1142,7 @@ void SerializeStringLikeColumn(
         });
 }
 
-template<ESimpleLogicalValueType type>
+template <ESimpleLogicalValueType type>
 void SerializeTzColumnImpl(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context,

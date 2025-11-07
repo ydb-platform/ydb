@@ -1411,9 +1411,21 @@ public:
         }
 
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.HasTableWrite || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table and topic operations");
+        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
             return false;
+        }
+
+        if (txCtx.HasTableWrite) {
+            if (txCtx.HasOlapTable && !txCtx.EnableOlapSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for column table writes without enabled olap sink");
+                return false;
+            }
+
+            if (txCtx.HasOltpTable && !txCtx.EnableOltpSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for row table writes without enabled oltp sink");
+                return false;
+            }
         }
 
         if (!tx) {

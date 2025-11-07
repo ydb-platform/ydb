@@ -1870,21 +1870,21 @@ private:
         return result;
     }
 
-    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
-        YQL_ENSURE(!Closed);
+        YQL_ENSURE(!Closed || data.empty());
         Closed = finished;
         EgressStats.Resume();
         Y_UNUSED(size);
 
         try {
-            Batcher->AddData(data);
-            YQL_ENSURE(WriteTableActor);
-            WriteTableActor->Write(WriteToken, GetOperation(Settings.GetType()), Batcher->Build());
-            if (Closed) {
-                WriteTableActor->Close(WriteToken);
-                WriteTableActor->FlushBuffers();
-                WriteTableActor->Close();
+            if (!data.empty()) {
+                Batcher->AddData(data);
+                DataBuffer.emplace(Batcher->Build());
+            }
+
+            if (checkpoint) {
+                DataBuffer.emplace(*checkpoint);
             }
         } catch (const TMemoryLimitExceededException&) {
             RuntimeError(
@@ -1908,6 +1908,32 @@ private:
 
     void Process() {
         try {
+            YQL_ENSURE(WriteTableActor);
+            if (CheckpointInProgress && WriteTableActor->IsEmpty()) {
+                DoCheckpoint();
+            }
+
+            while (!DataBuffer.empty() && !CheckpointInProgress) {
+                auto variant = std::move(DataBuffer.front());
+                DataBuffer.pop();
+
+                if (std::holds_alternative<IDataBatchPtr>(variant)) {
+                    WriteTableActor->Write(WriteToken, GetOperation(Settings.GetType()), std::get<IDataBatchPtr>(std::move(variant)));
+                } else if (std::holds_alternative<NYql::NDqProto::TCheckpoint>(variant)) {
+                    CheckpointInProgress = std::get<NYql::NDqProto::TCheckpoint>(std::move(variant));
+                    WriteTableActor->FlushBuffers();
+                    if (WriteTableActor->IsEmpty()) {
+                        DoCheckpoint();
+                    }
+                }
+            }
+
+            if (Closed && DataBuffer.empty() && !WriteTableActor->IsClosed()) {
+                WriteTableActor->Close(WriteToken);
+                WriteTableActor->FlushBuffers();
+                WriteTableActor->Close();
+            }
+
             const bool outOfMemory = GetFreeSpace() <= 0;
             if (outOfMemory) {
                 WaitingForTableActor = true;
@@ -1929,7 +1955,7 @@ private:
                 WriteTableActor->FlushBuffers();
             }
 
-            if (Closed || outOfMemory) {
+            if (Closed || outOfMemory || CheckpointInProgress) {
                 if (!WriteTableActor->FlushToShards()) {
                     return;
                 }
@@ -2025,6 +2051,12 @@ private:
         }
     }
 
+    void DoCheckpoint() {
+        YQL_ENSURE(CheckpointInProgress);
+        Callbacks->OnAsyncOutputStateSaved({}, OutputIndex, *CheckpointInProgress);
+        CheckpointInProgress = std::nullopt;
+    }
+
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
     TWriteActorSettings MessageSettings;
@@ -2041,6 +2073,8 @@ private:
     TActorId WriteTableActorId;
 
     TKqpTableWriteActor::TWriteToken WriteToken = 0;
+    std::queue<std::variant<IDataBatchPtr, NYql::NDqProto::TCheckpoint>> DataBuffer;
+    std::optional<NYql::NDqProto::TCheckpoint> CheckpointInProgress;
 
     bool Closed = false;
     bool WaitingForTableActor = false;

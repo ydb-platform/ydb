@@ -537,6 +537,7 @@ class YqTenant(BaseTenant):
             'max_session_used_memory': 1000000,
             'without_consumer': True}
         fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator'] = {'rebalancing_timeout_sec': "5"}
         fq_config['row_dispatcher']['coordinator']['database'] = {}
         self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
                                  "RowDispatcher_" + self.uuid)

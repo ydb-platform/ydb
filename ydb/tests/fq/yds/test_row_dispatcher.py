@@ -75,11 +75,10 @@ def wait_actor_count(kikimr, activity, expected_count):
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
             if count == expected_count:
-                return node_index # return any node
+                return node_index  #  return any node
         assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
         time.sleep(1)
     return None
-
 
 
 def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match=True):
@@ -630,7 +629,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
 
     @yq_v1
-    def test_stop_start777(self, kikimr, client):
+    def test_stop_start(self, kikimr, client):
         self.init(client, "test_stop_start", 10)
 
         sql1 = Rf'''
@@ -639,7 +638,7 @@ class TestPqRowDispatcher(TestYdsBase):
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql1)
-        #wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
 
         data = ['{"time": 101}', '{"time": 102}']
         self.write_stream(data)
@@ -1232,7 +1231,8 @@ class TestPqRowDispatcher(TestYdsBase):
 
     @yq_v1
     def test_redistribute_partition_after_timeout(self, kikimr, client):
-        self.init(client, "redistribute", partitions=10)
+        partitions_count = 3
+        self.init(client, "redistribute", partitions=partitions_count)
         sql = Rf'''
             --PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -1240,25 +1240,20 @@ class TestPqRowDispatcher(TestYdsBase):
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
 
         query_id = start_yds_query(kikimr, client, sql)
-        session_node_index = wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 10)
-        logging.debug(f"Topic session node: {session_node_index}")
-
-        message_count = 20
-        expected = "hello"
-        for i in range(message_count):
-            self.write_stream(['{"time": 100, "data": "hello"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
-        self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+        session_node_index = wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
         kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
-        # data = ['{"time": 101, "data": "hello"}']
-        # self.write_stream(data)
-        # expected = ['hello']
-        # assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        message_count = 10
+        expected = "hello"
+        for i in range(message_count):
+            self.write_stream(['{"time": 100, "data": "hello"}'], topic_path=None, partition_key=str(i))
+        self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+        kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
         logging.debug(f"Stopping node: {session_node_index}")
         kikimr.compute_plane.kikimr_cluster.nodes[session_node_index].stop()
 
         expected = "Relativitätstheorie"
         for i in range(message_count):
-            self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
+            self.write_stream(['{"time": 101, "data": "Relativitätstheorie"}'], topic_path=None, partition_key=str(i))
         assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count

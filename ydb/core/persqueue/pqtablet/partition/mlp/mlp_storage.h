@@ -151,7 +151,7 @@ public:
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
     const std::deque<ui64>& GetDLQMessages() const;
-    const std::unordered_set<ui32> GetLockedMessageGroupsId() const;
+    const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
 
 
     struct TPosition {

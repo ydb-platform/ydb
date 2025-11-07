@@ -24,6 +24,9 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <google/protobuf/util/json_util.h>
 
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -68,6 +71,7 @@ public:
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        RequestSession();
         RequestHealthCheck();
         RequestBaseConfig();
         Nodes = ev->Get()->Nodes;
@@ -93,6 +97,34 @@ public:
         } else {
             ReplyAndPassAway();
         }
+    }
+
+    void RequestSession() {
+        auto kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
+        auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        remoteRequest->Record.MutableRequest()->SetDatabase("/Root");
+
+        Send(kqpProxyId, remoteRequest.release());
+    }
+
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr ev) {
+        auto record = ev->Get()->Record;
+        TString sessionId = record.GetResponse().GetSessionId();
+        auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+        request->Record.MutableRequest()->SetSessionId(sessionId);
+        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_PREPARE);
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        request->Record.MutableRequest()->SetQuery("SELECT * FROM `.sys/partition_stats` LIMIT 10");
+        request->Record.MutableRequest()->SetKeepSession(true);
+        request->Record.MutableRequest()->SetTimeoutMs(5000);
+
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());
+    }
+
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
+        auto record = ev->Get()->Record;
+        auto* q = State.AddQueries();
+        q->CopyFrom(record.GetResponse());
     }
 
     void RequestBaseConfig() {
@@ -218,6 +250,8 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
+            hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
             hFunc(NKikimr::NStorage::TEvNodeWardenBaseConfig, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);

@@ -153,7 +153,22 @@ inline void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::stri
     }
 
     session->Close();
+}
 
+inline ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0) {
+    CreateDescriberActor(setup->GetRuntime(), database, topic);
+    auto result = GetDescriberResponse(setup->GetRuntime());
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    return result->Topics[topic].Info->PartitionGraph->GetPartition(partitionId)->TabletId;
+}
+
+inline THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::shared_ptr<TTopicSdkTestSetup>& setup,
+    const TString& database, const TString& topic, const TString& consumer, ui32 partitionId = 0) {
+    auto tabletId = GetTabletId(setup, database, topic, partitionId);
+
+    ForwardToTablet(setup->GetRuntime(), tabletId, setup->GetRuntime().AllocateEdgeActor(),
+        new NKikimr::TEvPQ::TEvGetMLPConsumerStateRequest(topic, consumer, partitionId));
+    return setup->GetRuntime().GrabEdgeEvent<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse>();
 }
 
 }

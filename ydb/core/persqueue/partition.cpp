@@ -1466,7 +1466,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
             if (SeqnoViolation(inFlightIter->second.KafkaProducerEpoch, inFlightIter->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
                 tx.Predicate = false;
-                tx.Message = (MakeTxWriteErrorMessage(tx.GetTxId(), TopicName(), Partition, s.first, existing->second.SeqNo) <<
+                tx.Message = (MakeTxWriteErrorMessage(tx.GetTxId(), TopicName(), Partition, s.first, inFlightIter->second.SeqNo) <<
                               "MinSeqNo violation failure. " <<
                               "SeqNo " << s.second.MinSeqNo);
                 tx.WriteInfoApplied = true;
@@ -1477,7 +1477,9 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) 
         if (auto existing = knownSourceIds.find(s.first); !existing.IsEnd()) {
             if (SeqnoViolation(existing->second.ProducerEpoch, existing->second.SeqNo, s.second.ProducerEpoch, s.second.MinSeqNo)) {
                 tx.Predicate = false;
-                tx.Message = TStringBuilder() << "MinSeqNo violation failure on " << s.first;
+                tx.Message = (MakeTxWriteErrorMessage(tx.GetTxId(), TopicName(), Partition, s.first, existing->second.SeqNo) <<
+                              "MinSeqNo violation failure. " <<
+                              "SeqNo " << s.second.MinSeqNo);
                 tx.WriteInfoApplied = true;
                 break;
             }

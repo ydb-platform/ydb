@@ -755,6 +755,7 @@ public:
     inline static constexpr char INPUT_TOPIC_NAME[] = "sysViewInput";
     inline static constexpr char OUTPUT_TOPIC_NAME[] = "sysViewOutput";
     inline static constexpr char PQ_SOURCE[] = "sysViewSourceName";
+    inline static constexpr TDuration STATS_WAIT_DURATION = TDuration::Seconds(2);
 
 public:
     void Setup() {
@@ -3021,7 +3022,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("C");
         StartQuery("D");
         StartQuery("E");
-        Sleep(TDuration::Seconds(1));
+        Sleep(STATS_WAIT_DURATION);
 
         CheckSysView({
             {"A"}, {"B"}, {"C"}, {"D"}, {"E"}
@@ -3063,6 +3064,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         StartQuery("B");
         StartQuery("C");
         StartQuery("D");
+        Sleep(STATS_WAIT_DURATION);
 
         CheckSysView({
             {"A"}, {"B"}, {"C"}, {"D"}
@@ -3116,7 +3118,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         pqGateway->WaitWriteSession(OutputTopic)->ExpectMessage("test0");
 
         {
-            Sleep(TDuration::Seconds(1));
+            Sleep(STATS_WAIT_DURATION);
             const auto result = CheckSysView({{
                 .Name = queryName,
                 .Status = "RUNNING",
@@ -3412,6 +3414,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             return count == 0;
         });
 
+        Sleep(STATS_WAIT_DURATION);
         CheckSysView(rows);
     }
 }

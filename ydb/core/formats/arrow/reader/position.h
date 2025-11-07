@@ -12,11 +12,30 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/system/types.h>
+#include <unordered_set>
+#include <unordered_map>
 
 namespace NKikimr::NArrow::NMerger {
 
 class TRecordBatchBuilder;
 class TSortableScanData;
+
+struct TDebugKeyMapping {
+    std::unordered_set<std::string> BoolColumns;
+    std::unordered_map<std::string, std::string> TypeOverrideByName;
+
+    bool IsBool(const std::string& name) const {
+        return BoolColumns.find(name) != BoolColumns.end();
+    }
+
+    const std::string* GetTypeOverride(const std::string& name) const {
+        auto it = TypeOverrideByName.find(name);
+        if (it == TypeOverrideByName.end()) {
+            return nullptr;
+        }
+        return &it->second;
+    }
+};
 
 class TCursor {
 private:
@@ -202,6 +221,49 @@ public:
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
             jsonColumn["value"] = PositionAddress[i].DebugString(position);
+        }
+        return result;
+    }
+
+    NJson::TJsonValue DebugJson(const ui64 position, const TDebugKeyMapping* mapping) const {
+        if (!mapping) {
+            return DebugJson(position);
+        }
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
+        for (auto&& f : Fields) {
+            const std::string* typeOverride = mapping->GetTypeOverride(f->name());
+            if (typeOverride) {
+                TStringBuilder s;
+                s << f->name() << ": " << TString(*typeOverride);
+                jsonFields.AppendValue(std::move(s));
+            } else {
+                jsonFields.AppendValue(f->ToString());
+            }
+        }
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
+            const auto& fieldName = Fields[i]->name();
+            jsonColumn["name"] = TString(fieldName);
+
+            if (mapping->IsBool(fieldName)) {
+                auto arr = PositionAddress[i].CopyRecord(position);
+                auto sres = arr->GetScalar(0);
+                if (sres.ok()) {
+                    TString s = (*sres)->ToString();
+                    if (s == "0" || s == "\u0000") {
+                        jsonColumn["value"] = "false";
+                    } else if (s == "1" || s == "\u0001") {
+                        jsonColumn["value"] = "true";
+                    } else {
+                        jsonColumn["value"] = s;
+                    }
+                } else {
+                    jsonColumn["value"] = sres.status().ToString();
+                }
+            } else {
+                jsonColumn["value"] = PositionAddress[i].DebugString(position);
+            }
         }
         return result;
     }

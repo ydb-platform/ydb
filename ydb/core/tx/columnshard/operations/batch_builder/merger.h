@@ -39,98 +39,22 @@ public:
     TYdbConclusionStatus AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data);
 };
 
-struct TSortingKeyMapping {
-    struct TItem {
-        TString Name;
-        TString Type;
-        TString Value;
-    };
-
-    std::vector<TItem> Items;
-
-    static TSortingKeyMapping Build(const std::shared_ptr<ISnapshotSchema>& schema,
-        const NArrow::NMerger::TSortableBatchPosition& position)
-    {
-        TSortingKeyMapping mapping;
-        auto cursor = position.BuildSortingCursor();
-        const auto pkNames = schema->GetPKColumnNames();
-        const auto& pkColumns = schema->GetIndexInfo().GetPrimaryKeyColumns();
-        std::vector<std::shared_ptr<arrow::Field>> pkFields;
-        pkFields.reserve(pkNames.size());
-        const auto& allFields = schema->GetSchema()->fields();
-        for (auto&& name : pkNames) {
-            std::shared_ptr<arrow::Field> found;
-            for (const auto& f : allFields) {
-                if (f->name() == name) {
-                    found = f;
-                    break;
-                }
-            }
-
-            if (found) {
-                pkFields.emplace_back(found);
-            }
-        }
-
-        auto rb = cursor.ExtractSortingPosition(pkFields);
-        AFL_VERIFY(pkColumns.size() == (size_t)rb->num_columns());
-        for (int i = 0; i < rb->num_columns(); ++i) {
-            TItem item;
-            item.Name = pkFields[i]->name();
-            const auto& arr = rb->column(i);
-            if (pkColumns[i].second.GetTypeId() == NScheme::NTypeIds::Bool) {
-                auto sres = arr->GetScalar(0);
-                if (sres.ok()) {
-                    TString s = (*sres)->ToString();
-                    if (s == "0") {
-                        item.Value = "false";
-                    } else if (s == "1") {
-                        item.Value = "true";
-                    } else {
-                        item.Value = s;
-                    }
-                } else {
-                    item.Value = sres.status().ToString();
-                }
-
-                item.Type = "bool";
-            } else {
-                auto sres = arr->GetScalar(0);
-                if (sres.ok()) {
-                    item.Value = (*sres)->ToString();
-                } else {
-                    item.Value = sres.status().ToString();
-                }
-
-                item.Type = pkFields[i]->type()->ToString();
-            }
-
-            mapping.Items.emplace_back(std::move(item));
-        }
-
-        return mapping;
-    }
-
-    NJson::TJsonValue ToJson() const {
-        NJson::TJsonValue json = NJson::JSON_ARRAY;
-        for (const auto& i : Items) {
-            NJson::TJsonValue itemJson = NJson::JSON_MAP;
-            itemJson.InsertValue("name", i.Name);
-            itemJson.InsertValue("type", i.Type);
-            itemJson.InsertValue("value", i.Value);
-            json.AppendValue(itemJson);
-        }
-        return json;
-    }
-};
-
 class TInsertMerger: public IMerger {
 private:
     using TBase = IMerger;
     virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
-        const auto mapping = TSortingKeyMapping::Build(Schema, exists);
+        NArrow::NMerger::TDebugKeyMapping mapping;
+        const auto pkNames = Schema->GetPKColumnNames();
+        const auto& pkColumns = Schema->GetIndexInfo().GetPrimaryKeyColumns();
+        for (ui32 i = 0; i < pkNames.size() && i < pkColumns.size(); ++i) {
+            if (pkColumns[i].second.GetTypeId() == NScheme::NTypeIds::Bool) {
+                mapping.BoolColumns.insert(pkNames[i]);
+                mapping.TypeOverrideByName.emplace(pkNames[i], std::string("bool"));
+            }
+        }
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED,
-            TStringBuilder() << "Conflict with existing key. " << mapping.ToJson().GetStringRobust());
+            TStringBuilder() << "Conflict with existing key. "
+                             << exists.GetSorting()->DebugJson(exists.GetPosition(), &mapping).GetStringRobust());
     }
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         return TYdbConclusionStatus::Success();

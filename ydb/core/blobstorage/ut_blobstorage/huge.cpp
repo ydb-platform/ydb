@@ -46,7 +46,8 @@ namespace {
             }
 
             Parts.resize(GType.TotalPartCount());
-            const bool success = ErasureSplit(TErasureType::CrcModeNone, GType, TRope(Data), Parts);
+            const bool success = ErasureSplit(TErasureType::CrcModeNone, GType, TRope(Data), Parts,
+                nullptr, GetDefaultRcBufAllocator());
             UNIT_ASSERT(success);
 
 //            for (ui32 i = 0; i < 6; ++i) { // put main parts

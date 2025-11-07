@@ -1297,7 +1297,7 @@ bool TUniqueSecondaryKeyCollector::AddRowImpl() {
             SecondaryToPrimary.erase(oldSecondaryKey);
         }
 
-        PrimaryToSecondary[std::vector<TCell>(primaryKey.begin(), primaryKey.end())] = Cells.size() - 1;
+        PrimaryToSecondary[primaryKey] = Cells.size() - 1;
         SecondaryToPrimary[std::vector<TCell>(secondaryKey.begin(), secondaryKey.end())] = Cells.size() - 1;
 
         UniqueCellsSet.insert(secondaryKey);

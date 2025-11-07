@@ -1340,11 +1340,10 @@ private:
 
                 if (Config->EnableIndexStreamWrite) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-                    // collect lookup columns
-                    TVector<TStringBuf> lookupColumns;
 
                     std::vector<size_t> affectedIndexes;
                     THashSet<size_t> affectedKeysIndexes;
+                    TVector<TStringBuf> lookupColumns;
                     {
                         THashSet<TStringBuf> columnsSet;
                         for (const auto& columnName : columns) {

@@ -68,10 +68,21 @@ public:
     static constexpr char ActorName[] = "KQP_BUFFER_LOOKUP_ACTOR";
 
     void PassAway() final {
-        if (Settings.Alloc) {
+        Settings.Counters->StreamLookupActorsCount->Dec();
+        AFL_ENSURE(Settings.Alloc);
+        {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
             CookieToLookupState.clear();
         }
+
+        for (const auto& [readId, state] : ReadIdToState) {
+            Settings.Counters->SentIteratorCancels->Inc();
+            auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
+            cancel->Record.SetReadId(readId);
+            Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
+        }
+
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
     }

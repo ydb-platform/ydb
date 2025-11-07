@@ -1729,6 +1729,7 @@ private:
                     rowsBatcher->AddCell(cell);
                 }
 
+                // TODO: skip unchanged rows?
                 rowsBatcher->AddRow();
                 existsMask.push_back(true);
             } else if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
@@ -1777,7 +1778,6 @@ private:
                         lookupInfo.FullKeyIndexes,
                         lookupInfo.PkInFullKeyIndexes);
 
-                // TODO: skip unchanged rows?
                 for (const auto& row : writeRows) {
                     if (!collector.AddRow(row)) {
                         Error = DuplicateKeyErrorText;
@@ -1866,7 +1866,7 @@ private:
             for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
                 // At first, write to indexes
                 if (PathId != actorPathId) {
-                    // TODO: skip unchanged rows for UPSERT/REPLACE
+                    // TODO: skip unchanged rows for UPSERT/REPLACE/UPDATE
                     if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                             && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
                             && !updateWithoutLookup) {

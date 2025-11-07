@@ -52,4 +52,3 @@ CREATE EXTERNAL DATA SOURCE `source_name` WITH (
 ## См. также
 
 - [Чекпойнты](checkpoints.md)
-- [Оптимизация чтение Shared reading](shared_reading.md)

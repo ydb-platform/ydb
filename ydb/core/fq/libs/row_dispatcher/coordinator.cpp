@@ -49,12 +49,14 @@ struct TEvPrivate {
         EvPrintState = EvBegin,
         EvListNodes,
         EvRebalancing,
+        EvStartingTimeout,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvListNodes : public NActors::TEventLocal<TEvListNodes, EvListNodes> {};
     struct TEvRebalancing : public NActors::TEventLocal<TEvRebalancing, EvRebalancing> {};
+    struct TEvStartingTimeout : public NActors::TEventLocal<TEvStartingTimeout, EvStartingTimeout> {};
 };
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
@@ -118,9 +120,9 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
             : Connected(connected)
             , State(state)
             , IsLocal(isLocal) {}
-       bool Connected = false;
-       ENodeState State; 
-       bool IsLocal = false;
+        bool Connected = false;
+        ENodeState State; 
+        bool IsLocal = false;
         THashSet<TPartitionKey, TPartitionKeyHash> Locations;
     };
 
@@ -201,6 +203,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     ui64 NodesCount = 0;
     NActors::TActorId NodesManagerId;
     bool RebalancingScheduled = false;
+    ENodeState State = ENodeState::Initializing;
 
 public:
     TActorCoordinator(
@@ -223,6 +226,7 @@ public:
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvListNodes::TPtr&);
     void Handle(TEvPrivate::TEvRebalancing::TPtr&);
+    void Handle(TEvPrivate::TEvStartingTimeout::TPtr&);
     void Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr&);
     void Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr&);
 
@@ -237,13 +241,14 @@ public:
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvListNodes, Handle);
         hFunc(TEvPrivate::TEvRebalancing, Handle);
+        hFunc(TEvPrivate::TEvStartingTimeout, Handle);
         hFunc(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(NFq::TEvNodesManager::TEvGetNodesResponse, Handle);
     })
 
 private:
 
-    void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
+    void UpdateKnownRowDispatchers(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     TTopicInfo& GetOrCreateTopicInfo(const TTopicKey& topic);
     std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds);  // std::nullopt if TopicPartitionsLimitPerNode reached
@@ -254,6 +259,7 @@ private:
     bool IsReadyPartitionDistribution() const;
     void SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message);
     void ScheduleNodeInfoRequest() const;
+    void UpdateGlobalState();
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -269,24 +275,26 @@ TActorCoordinator::TActorCoordinator(
     , Metrics(counters)
     , NodesManagerId(nodesManagerId)
 {
-    AddRowDispatcher(localRowDispatcherId, true);
+    UpdateKnownRowDispatchers(localRowDispatcherId, true);
 }
 
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     ScheduleNodeInfoRequest();
+    Schedule(TDuration::Seconds(1), new TEvPrivate::TEvStartingTimeout());
     // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());  // Logs (InternalState) is too big
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId() << ", NodesManagerId " << NodesManagerId);
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
     Metrics.IsActive = nodeGroup->GetCounter("IsActive");
 }
 
-void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal) {
+void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, bool isLocal) {
+    LOG_ROW_DISPATCHER_TRACE("UpdateKnownRowDispatchers " << actorId.ToString());
+
     auto it = RowDispatchers.find(actorId);
     if (it != RowDispatchers.end()) {
         it->second.Connected = true;
-        //it->second.State = ENodeState::Connected;
         UpdatePendingReadActors();
         return;
     }
@@ -301,19 +309,24 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal
             PartitionLocations[key] = actorId;
         }
         info.Connected = true;
-       // info.State = ENodeState::Connected;
         auto node = RowDispatchers.extract(oldActorId);
         node.key() = actorId;
         RowDispatchers.insert(std::move(node));
         UpdatePendingReadActors();
         return;
     }
-    auto state = ENodeState::Initializing;
-    if (!IsReadyPartitionDistribution()) {
-        state = ENodeState::Started; // 
+    auto nodeState = State == ENodeState::Initializing ? ENodeState::Started : ENodeState::Initializing;
+
+    LOG_ROW_DISPATCHER_TRACE("Add new row dispatcher to map (state " << static_cast<int>(nodeState) << ")");
+    RowDispatchers.emplace(actorId, RowDispatcherInfo{true, nodeState, isLocal});
+    UpdateGlobalState();
+
+    if (nodeState == ENodeState::Initializing && !RebalancingScheduled) {
+        LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
+        Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
+        RebalancingScheduled = true;
     }
-    LOG_ROW_DISPATCHER_TRACE("Add new rd to map (state " << static_cast<int>(state));
-    RowDispatchers.emplace(actorId, RowDispatcherInfo{true, state, isLocal});
+
     UpdatePendingReadActors();
 }
 
@@ -332,17 +345,9 @@ void TActorCoordinator::UpdateInterconnectSessions(const NActors::TActorId& inte
 void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     LOG_ROW_DISPATCHER_TRACE("TEvPing received, " << ev->Sender);
     UpdateInterconnectSessions(ev->InterconnectSession);
-    AddRowDispatcher(ev->Sender, false);
+    UpdateKnownRowDispatchers(ev->Sender, false);
     LOG_ROW_DISPATCHER_TRACE("Send TEvPong to " << ev->Sender);
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery);
-
-
-    if (!RebalancingScheduled) {
-        LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
-        Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
-        RebalancingScheduled = true;
-
-    }
 }
 
 TString TActorCoordinator::GetInternalState() {
@@ -457,7 +462,6 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
     TActorId bestLocation;
     ui64 bestNumberPartitions = std::numeric_limits<ui64>::max();
     for (auto& [location, info] : RowDispatchers) {
-        LOG_ROW_DISPATCHER_INFO("  rd " << location);
         if (info.State != ENodeState::Started) {
             LOG_ROW_DISPATCHER_INFO("  State  not connected");
             continue;
@@ -587,6 +591,7 @@ void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult
     }
     LOG_ROW_DISPATCHER_INFO("Updated node info, node count: " << ev->Get()->AssignedNodes.size() << ", AssignedNodes: " << JoinSeq(", ", ev->Get()->AssignedNodes));
     NodesCount = ev->Get()->AssignedNodes.size();
+    UpdateGlobalState();
     UpdatePendingReadActors();
 }
 
@@ -604,46 +609,70 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
     LOG_ROW_DISPATCHER_DEBUG("Rebalancing...");
     RebalancingScheduled = false;
 
-    bool isUpdated = false;
+    bool needRebalance = false;
     TSet<TActorId> toDelete;
 
+    auto printState = [&](const TString& str){
+        LOG_ROW_DISPATCHER_DEBUG(str);
+        for (auto& [actorId, info] : RowDispatchers) {
+            LOG_ROW_DISPATCHER_DEBUG("  node " << actorId.NodeId() << " (" << actorId << ") state " << (info.State == ENodeState::Initializing ? "Initializing" : "Started") << " connected " << info.Connected << " partitions count " << info.Locations.size());
+        }
+    };
+
+    printState("Current state (rebalancing):");
+    
     for (auto& [actorId, info] : RowDispatchers) {
-        LOG_ROW_DISPATCHER_DEBUG("Move rd (actorId " << actorId << ") to Started state");
-        if (info.State == ENodeState::Initializing && info.Connected) {
-            info.State = ENodeState::Started;
-            isUpdated = true;
-        } else (info.State == ENodeState::Started && !info.Connected) {
-            // Schedue
-            toDelete.insert(actorId);
-            isUpdated = true;
+        if (info.State == ENodeState::Initializing) {
+            if (info.Connected) {
+                info.State = ENodeState::Started;
+                needRebalance = true;
+            } else {
+                toDelete.insert(actorId);
+            }
+        } else {    // Started
+            if (!info.Connected) {
+                toDelete.insert(actorId);
+                if (!info.Locations.empty()) {
+                    needRebalance = true;
+                }
+            }
         }
     }
     for (const auto& actorId : toDelete) {
         RowDispatchers.erase(actorId);
     }
-    if (isUpdated) {
-        for (const auto& readActorId : KnownReadActors) {
-            LOG_ROW_DISPATCHER_TRACE("Send TEvCoordinatorDistributionReset to " << readActorId);
-            Send(readActorId, new TEvRowDispatcher::TEvCoordinatorDistributionReset(), IEventHandle::FlagTrackDelivery);
-        }
-
-        PendingReadActors.clear();
-        PartitionLocations.clear();
-        TopicsInfo.clear();
-        KnownReadActors.clear();
+    if (!needRebalance) {
+        return;
     }
 
+    for (const auto& readActorId : KnownReadActors) {
+        LOG_ROW_DISPATCHER_TRACE("Send TEvCoordinatorDistributionReset to " << readActorId);
+        Send(readActorId, new TEvRowDispatcher::TEvCoordinatorDistributionReset(), IEventHandle::FlagTrackDelivery);
+    }
 
+    for (auto& [actorId, info] : RowDispatchers) {
+        info.Locations.clear();
+    }
+    PendingReadActors.clear();
+    PartitionLocations.clear();
+    TopicsInfo.clear();
+    KnownReadActors.clear();
+
+    printState("Current state (after rebalancing):");
+}
+
+void TActorCoordinator::Handle(TEvPrivate::TEvStartingTimeout::TPtr&) {
+    if (State != ENodeState::Started) {
+        LOG_ROW_DISPATCHER_TRACE("Change global state to Started (by timeout)");
+        State = ENodeState::Started;
+    }
 }
 
 bool TActorCoordinator::IsReadyPartitionDistribution() const {
     if (Config.GetLocalMode()) {
         return true;
     }
-    if (!NodesCount) {
-        return false;
-    }
-    return RowDispatchers.size() >= NodesCount;// TOOD add timeout
+    return State == ENodeState::Started;
 }
 
 void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorRequest& request, const TString& message) {
@@ -660,12 +689,19 @@ void TActorCoordinator::ScheduleNodeInfoRequest() const {
 void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
     NodesCount = ev->Get()->NodeIds.size();
     LOG_ROW_DISPATCHER_INFO("Updated node info, node count: " << NodesCount);
+    UpdateGlobalState();
     if (!NodesCount) {
         ScheduleNodeInfoRequest();
     }
     UpdatePendingReadActors();
 }
 
+void TActorCoordinator::UpdateGlobalState() {
+     if (State != ENodeState::Started && NodesCount && RowDispatchers.size() >= NodesCount) {
+        LOG_ROW_DISPATCHER_TRACE("Change global state to Started (by nodes count)");
+        State = ENodeState::Started;
+    }
+}
 } // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////

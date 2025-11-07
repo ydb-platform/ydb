@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
 
     Y_UNIT_TEST_F(RebalanceAfterNodeDisconnected, TFixture) {
         ExpectCoordinatorChangesSubscribe();
-        ProcessNodesManagerRequest(2);
+        ProcessNodesManagerRequest(3);
         TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
         for (auto id : rowDispatcherIds) {
             Ping(id);
@@ -273,6 +273,7 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
         ExpectDistributionReset(ReadActor1);
 
         MockRequest(ReadActor1, "endpoint1", "read_group", "topic1", {0, 1, 2});
+        result1 = ExpectResult(ReadActor1);
         UNIT_ASSERT(result1.PartitionsSize() == 2);
     }
 }

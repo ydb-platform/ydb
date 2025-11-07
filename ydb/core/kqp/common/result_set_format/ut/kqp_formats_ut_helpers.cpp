@@ -205,12 +205,21 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             ++depth;
         }
 
+        if (innerType->IsOptional()) { // depth + 1 == count of structs for types with validity bitmaps
+            innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType());
+            ++depth;
+        }
+
+        auto wrap = NeedWrapByExternalOptional(innerType);
+        auto isNull = innerArray->IsNull(row);
+
         NUdf::TUnboxedValue value;
-        if (NeedWrapByExternalOptional(innerType) || !innerArray->IsNull(row)) {
+        if (wrap || !isNull) {
             value = NFormats::ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
-            if (NeedWrapByExternalOptional(innerType)) {
-                --depth;
-            }
+        }
+
+        if (wrap || isNull) {
+            --depth;
         }
 
         for (int i = 0; i < depth; ++i) {

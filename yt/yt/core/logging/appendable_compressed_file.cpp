@@ -133,6 +133,12 @@ private:
         }
 
         size_t toWrite = std::min(Input_.Size(), static_cast<size_t>(MaxBlockSize_));
+        if (Options_.TryNotBreakLines) {
+            auto newlinePos = std::string_view(Input_.Begin(), Input_.End()).find_last_of('\n');
+            if (newlinePos != std::string_view::npos) {
+                toWrite = newlinePos + 1;
+            }
+        }
         EnqueueBuffer(TBuffer(Input_.Data(), toWrite));
         Input_.ChopHead(toWrite);
     }

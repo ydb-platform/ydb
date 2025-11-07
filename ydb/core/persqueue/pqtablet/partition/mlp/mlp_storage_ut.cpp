@@ -98,6 +98,11 @@ struct TUtils {
         return std::nullopt;
     }
 
+    ui64 Next(TDuration timeout = TDuration::Seconds(8)) {
+        TStorage::TPosition position;
+        return Storage.Next(TimeProvider->Now() + timeout, position).value();
+    }
+
     void AssertEquals(TUtils& other) {
         auto i = other.Storage.begin();
         auto m = Storage.begin();
@@ -1521,6 +1526,30 @@ Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
+Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    auto snapshot = utils.CreateSnapshot();
+    utils.AddMessage(1);
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
     TUtils utilsD;

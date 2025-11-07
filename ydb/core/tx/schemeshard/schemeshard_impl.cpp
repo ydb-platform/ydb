@@ -2643,6 +2643,16 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
         txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
         bool serializeRes = proto.SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
+    } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
+               txState.TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan ||
+               txState.TxType == TTxState::TxAlterCdcStreamAtTable ||
+               txState.TxType == TTxState::TxAlterCdcStreamAtTableDropSnapshot ||
+               txState.TxType == TTxState::TxDropCdcStreamAtTable ||
+               txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
+        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+        txState.CdcPathId.ToProto(proto.MutableTxCopyTableExtraData()->MutableCdcPathId());
+        bool serializeRes = proto.SerializeToString(&extraData);
+        Y_ABORT_UNLESS(serializeRes);
     }
 
     db.Table<Schema::TxInFlightV2>().Key(opId.GetTxId(), opId.GetSubTxId()).Update(

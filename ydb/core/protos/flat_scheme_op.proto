@@ -2304,7 +2304,7 @@ message TBackupCollectionDescription {
     }
 
     message TIncrementalBackupConfig {
-
+        optional bool OmitIndexes = 1 [default = false];
     }
 
     oneof Entries {

@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/join.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -142,6 +143,23 @@ struct TUtils {
 
         UNIT_ASSERT(i == other.Storage.end());
         UNIT_ASSERT(m == Storage.end());
+
+        auto join = [](const std::deque<ui64> vs) {
+            return JoinRange(",", vs.begin(), vs.end());
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetDLQMessages()), join(Storage.GetDLQMessages()));
+
+        auto ometrics = other.Storage.GetMetrics();
+        auto metrics = Storage.GetMetrics();
+
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflyMessageCount, metrics.InflyMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageCount, metrics.LockedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.CommittedMessageCount, metrics.CommittedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.DLQMessageCount, metrics.DLQMessageCount);
     }
 };
 
@@ -1524,16 +1542,6 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     }
 }
 
-auto assertMetrics = [](auto restoredMetrics, auto metrics) {
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.InflyMessageCount, metrics.InflyMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageCount, metrics.LockedMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.CommittedMessageCount, metrics.CommittedMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DLQMessageCount, metrics.DLQMessageCount);
-};
-
 Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
     TUtils utils;
     utils.AddMessage(6);
@@ -1553,7 +1561,6 @@ Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1577,7 +1584,6 @@ Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1596,7 +1602,6 @@ Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1621,7 +1626,6 @@ Y_UNIT_TEST(SlowZone_MoveDLQToSlowZone) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1645,7 +1649,6 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndLock) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1663,7 +1666,6 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndCommit) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1688,7 +1690,6 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1711,7 +1712,6 @@ Y_UNIT_TEST(SlowZone_Lock) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1728,7 +1728,6 @@ Y_UNIT_TEST(SlowZone_Commit_First) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1745,7 +1744,6 @@ Y_UNIT_TEST(SlowZone_Commit) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1769,7 +1767,6 @@ Y_UNIT_TEST(SlowZone_DLQ) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1789,7 +1786,6 @@ Y_UNIT_TEST(SlowZone_CommitToFast) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 
@@ -1807,7 +1803,6 @@ Y_UNIT_TEST(SlowZone_CommitAndAdd) {
     utilsD.LoadSnapshot(snapshot);
     utilsD.LoadWAL(wal);
 
-    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
     utilsD.AssertEquals(utils);
 }
 

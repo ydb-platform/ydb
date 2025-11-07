@@ -579,10 +579,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     {
         ui64 lastOffset = 0;
         for (auto offset : DLQ) {
-            if (offset >= Storage->FirstOffset) {
-                wal.AddDLQ(offset - lastOffset);
-                lastOffset = offset;
-            }
+            wal.AddDLQ(offset - lastOffset);
+            lastOffset = offset;
         }
     }
 

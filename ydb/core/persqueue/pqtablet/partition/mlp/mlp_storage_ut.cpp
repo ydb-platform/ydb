@@ -103,6 +103,10 @@ struct TUtils {
         return Storage.Next(TimeProvider->Now() + timeout, position).value();
     }
 
+    bool Commit(ui64 offset) {
+        return Storage.Commit(offset);
+    }
+
     void AssertEquals(TUtils& other) {
         auto i = other.Storage.begin();
         auto m = Storage.begin();
@@ -1551,6 +1555,25 @@ Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
+Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    UNIT_ASSERT(utils.Commit(0));
+    auto snapshot = utils.CreateSnapshot();
+    utils.AddMessage(1);
+    auto wal = utils.CreateWAL();
+
+    // Committed message isn`t move to SlowZone
+    utils.AssertSlowZone({ });
 
     TUtils utilsD;
     utilsD.LoadSnapshot(snapshot);

@@ -1595,7 +1595,7 @@ Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
     utils.AddMessage(1);
     auto wal = utils.CreateWAL();
 
-    // Committed message isn`t move to SlowZone
+    // Committed message isn't moved to SlowZone
     utils.AssertSlowZone({ });
 
     TUtils utilsD;
@@ -1722,7 +1722,7 @@ Y_UNIT_TEST(SlowZone_Commit_First) {
     UNIT_ASSERT(utils.Commit(0));
     auto wal = utils.CreateWAL();
 
-    utils.AssertSlowZone({1 });
+    utils.AssertSlowZone({1});
 
     TUtils utilsD;
     utilsD.LoadSnapshot(snapshot);
@@ -1738,7 +1738,7 @@ Y_UNIT_TEST(SlowZone_Commit) {
     UNIT_ASSERT(utils.Commit(1));
     auto wal = utils.CreateWAL();
 
-    utils.AssertSlowZone({0 });
+    utils.AssertSlowZone({0});
 
     TUtils utilsD;
     utilsD.LoadSnapshot(snapshot);
@@ -1778,7 +1778,7 @@ Y_UNIT_TEST(SlowZone_CommitToFast) {
     utils.Storage.Compact();
     auto wal = utils.CreateWAL();
 
-    utils.AssertSlowZone({0, 1 });
+    utils.AssertSlowZone({0, 1});
     // Compaction removed the message with offset 2
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
 
@@ -1797,7 +1797,7 @@ Y_UNIT_TEST(SlowZone_CommitAndAdd) {
     utils.AddMessage(1);
     auto wal = utils.CreateWAL();
 
-    utils.AssertSlowZone({0, 2 });
+    utils.AssertSlowZone({0, 2});
 
     TUtils utilsD;
     utilsD.LoadSnapshot(snapshot);

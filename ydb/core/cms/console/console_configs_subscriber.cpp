@@ -232,13 +232,6 @@ public:
                 notChanged = false;
             }
 
-            if (!notChanged) {
-                CurrentDynConfig.Clear();
-                if (rec.HasConfig()) {
-                    CurrentDynConfig.CopyFrom(rec.GetConfig());
-                }
-            }
-
             if (rec.VolatileConfigsSize() != VolatileYamlConfigs.size()) {
                 notChanged = false;
             }

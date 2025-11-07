@@ -144,11 +144,12 @@ struct TUtils {
         UNIT_ASSERT(i == other.Storage.end());
         UNIT_ASSERT(m == Storage.end());
 
-        auto join = [](const std::deque<ui64> vs) {
+        auto join = [](const auto& vs) {
             return JoinRange(",", vs.begin(), vs.end());
         };
 
         UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetDLQMessages()), join(Storage.GetDLQMessages()));
+        UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetLockedMessageGroupsId()), join(Storage.GetLockedMessageGroupsId()));
 
         auto ometrics = other.Storage.GetMetrics();
         auto metrics = Storage.GetMetrics();
@@ -1542,6 +1543,22 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     }
 }
 
+auto assertDeserialization = [](TUtils& original, auto& firstSnapshot, auto& wal, auto& endSnapshot) {
+    {
+        TUtils utils;
+        utils.LoadSnapshot(firstSnapshot);
+        utils.LoadWAL(wal);
+
+        utils.AssertEquals(original);
+    }
+    {
+        TUtils utils;
+        utils.LoadSnapshot(endSnapshot);
+
+        utils.AssertEquals(original);
+    }
+};
+
 Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
     TUtils utils;
     utils.AddMessage(6);
@@ -1557,11 +1574,9 @@ Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
@@ -1580,11 +1595,9 @@ Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
@@ -1598,11 +1611,9 @@ Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
     // Committed message isn't moved to SlowZone
     utils.AssertSlowZone({ });
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_MoveDLQToSlowZone) {
@@ -1622,11 +1633,9 @@ Y_UNIT_TEST(SlowZone_MoveDLQToSlowZone) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndLock) {
@@ -1645,11 +1654,9 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndLock) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndCommit) {
@@ -1662,11 +1669,9 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndCommit) {
 
     utils.AssertSlowZone({ });
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
@@ -1686,11 +1691,9 @@ Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_Lock) {
@@ -1708,11 +1711,9 @@ Y_UNIT_TEST(SlowZone_Lock) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_Commit_First) {
@@ -1724,11 +1725,9 @@ Y_UNIT_TEST(SlowZone_Commit_First) {
 
     utils.AssertSlowZone({1});
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_Commit) {
@@ -1740,11 +1739,9 @@ Y_UNIT_TEST(SlowZone_Commit) {
 
     utils.AssertSlowZone({0});
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_DLQ) {
@@ -1763,11 +1760,9 @@ Y_UNIT_TEST(SlowZone_DLQ) {
     UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_CommitToFast) {
@@ -1782,11 +1777,9 @@ Y_UNIT_TEST(SlowZone_CommitToFast) {
     // Compaction removed the message with offset 2
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 Y_UNIT_TEST(SlowZone_CommitAndAdd) {
@@ -1799,11 +1792,9 @@ Y_UNIT_TEST(SlowZone_CommitAndAdd) {
 
     utils.AssertSlowZone({0, 2});
 
-    TUtils utilsD;
-    utilsD.LoadSnapshot(snapshot);
-    utilsD.LoadWAL(wal);
+    auto snapshot2 = utils.CreateSnapshot();
 
-    utilsD.AssertEquals(utils);
+    assertDeserialization(utils, snapshot, wal, snapshot2);
 }
 
 }

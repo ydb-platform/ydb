@@ -310,6 +310,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
                     ++Metrics.UnprocessedMessageCount;
                     break;
                 case EMessageStatus::DLQ:
+                    ++Metrics.DLQMessageCount;
                     break;
             }
         }

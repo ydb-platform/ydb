@@ -113,12 +113,12 @@ public:
     private:
         TStorage* Storage;
 
-        std::set<ui64> ChangedMessages;
+        std::vector<ui64> ChangedMessages;
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
-        std::deque<ui64> DLQ;
-        std::deque<ui64> MovedToSlowZone;
-        std::deque<ui64> DeletedFromSlowZone;
+        std::vector<ui64> DLQ;
+        std::vector<ui64> MovedToSlowZone;
+        std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
 
         std::optional<TInstant> BaseDeadline;
@@ -138,8 +138,8 @@ public:
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
 
     void SetKeepMessageOrder(bool keepMessageOrder);
-    void SetMaxMessageReceiveCount(ui32 maxMessageReceiveCount);
-    void SetReteintion(std::optional<TDuration> reteintion);
+    void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
+    void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
 
     ui64 GetFirstOffset() const;
     size_t GetMessageCount() const;
@@ -171,7 +171,6 @@ public:
     // For SQS compatibility
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
-
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
 
     size_t ProccessDeadlines();
@@ -214,8 +213,8 @@ private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 
     bool KeepMessageOrder = false;
-    ui32 MaxMessageReceiveCount = 1000;
-    std::optional<TDuration> Reteintion = TDuration::Days(365);
+    ui32 MaxMessageProcessingCount = 1000;
+    std::optional<TDuration> RetentionPeriod = TDuration::Days(365);
 
     // Offset of the first message loaded for processing. All messages with a smaller offset
     // have either already been committed or deleted from the partition.

@@ -25,6 +25,7 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
+
 @pytest.fixture
 def kikimr(request):
     kikimr_conf = StreamingOverKikimrConfig(
@@ -1179,7 +1180,7 @@ class TestPqRowDispatcher(TestYdsBase):
         assert received == expected
 
     @yq_v1
-    @pytest.mark.parametrize("use_binding", [False, True], ids=[ "with_option", "bindings"])
+    @pytest.mark.parametrize("use_binding", [False, True], ids=["with_option", "bindings"])
     def test_json_errors(self, kikimr, client, use_binding):
         connection_response = client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
         self.init_topics("test_json_errors", create_input=True, create_output=True, partitions_count=1)

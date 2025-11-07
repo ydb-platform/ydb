@@ -1,14 +1,15 @@
 #include "kqp_buffer_lookup_actor.h"
 
-#include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/runtime/kqp_stream_lookup_worker.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 namespace NKikimr {
@@ -264,8 +265,9 @@ public:
         auto& state = CookieToLookupState.at(cookie);
         auto& worker = state.Worker;
 
-        // TODO: stats
-        worker->ReadAllResult(callback);
+        const auto stats = worker->ReadAllResult(callback);
+        ReadRowsCount += stats.ReadRowsCount;
+        ReadBytesCount += stats.ReadBytesCount;
         AFL_ENSURE(worker->AllRowsProcessed());
     }
 
@@ -597,6 +599,26 @@ public:
             const NYql::TIssues& subIssues = {}) {
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
     }
+
+    void FillStats(NYql::NDqProto::TDqTaskStats* stats) override {
+        NYql::NDqProto::TDqTableStats* tableStats = nullptr;
+        for (size_t i = 0; i < stats->TablesSize(); ++i) {
+            auto* table = stats->MutableTables(i);
+            if (table->GetTablePath() == Settings.TablePath) {
+                tableStats = table;
+            }
+        }
+        if (!tableStats) {
+            tableStats = stats->AddTables();
+            tableStats->SetTablePath(Settings.TablePath);
+        }
+
+        tableStats->SetReadRows(tableStats->GetReadRows() + ReadRowsCount);
+        tableStats->SetReadBytes(tableStats->GetReadBytes() + ReadBytesCount);
+
+        ReadRowsCount = 0;
+        ReadBytesCount = 0;
+    }
     
 private:
     TKqpBufferTableLookupSettings Settings;
@@ -627,6 +649,10 @@ private:
     THashMap<ui64, TReadState> ReadIdToState;
 
     ui64 ReadId = 0;
+
+    // stats
+    ui64 ReadRowsCount = 0;
+    ui64 ReadBytesCount = 0;
 };
 
 }

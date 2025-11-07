@@ -4186,6 +4186,9 @@ public:
         ForEachWriteActor([&](TKqpTableWriteActor* actor, const TActorId) {
             actor->FillStats(&result);
         });
+        ForEachLookupActor([&](IKqpBufferTableLookup* actor, const TActorId) {
+            actor->FillStats(&result);
+        });
         return result;
     }
 

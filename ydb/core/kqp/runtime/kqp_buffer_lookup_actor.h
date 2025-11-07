@@ -44,6 +44,8 @@ public:
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
     virtual ui32 LookupColumnsCount(ui64 cookie) const = 0;
 
+    virtual void FillStats(NYql::NDqProto::TDqTaskStats* stats) = 0;
+
     // Clear all memory
     virtual void Terminate() = 0;
 };

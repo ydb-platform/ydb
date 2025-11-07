@@ -11926,9 +11926,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto backupDirName = descr.GetChildren(0).GetName().c_str();
 
+        // When WithIncremental=true, __ydb_backup_meta directory is created for index backups
+        // So we expect 3 children: Table1, DirA, and __ydb_backup_meta
+        // When WithIncremental=false, we expect 2 children: Table1 and DirA
         TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s", backupDirName)), {
             NLs::PathExist,
-            NLs::ChildrenCount(2),
+            NLs::ChildrenCount(WithIncremental ? 3 : 2),
             NLs::Finished,
         });
 
@@ -11992,9 +11995,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
 
+            // Incremental backup directory contains Table1, DirA, and __ydb_backup_meta
             TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s", incrBackupDirName)), {
                 NLs::PathExist,
-                NLs::ChildrenCount(2),
+                NLs::ChildrenCount(3),
                 NLs::Finished,
             });
 

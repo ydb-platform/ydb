@@ -1722,7 +1722,8 @@ Y_UNIT_TEST(SlowZone_Commit_First) {
 
     utils.AssertSlowZone({1});
 
-    utils.AssertLoad();}
+    utils.AssertLoad();
+}
 
 Y_UNIT_TEST(SlowZone_Commit) {
     TUtils utils;

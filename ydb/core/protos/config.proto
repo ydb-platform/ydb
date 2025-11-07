@@ -2057,10 +2057,10 @@ message THiveConfig {
     reserved 66;
     optional double ObjectImbalanceToBalance = 67 [default = 0.02];
     optional EHiveChannelBalanceStrategy ChannelBalanceStrategy = 68 [default = HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional uint64 MaxChannelHistorySize = 69 [default = 200];
+    optional uint64 MaxChannelHistorySize = 69 [default = 10];
     optional uint64 StorageInfoRefreshFrequency = 70 [default = 600000]; // send a query to BSC every x milliseconds
-    optional double MinStorageScatterToBalance = 71 [default = 999]; // storage balancer trigger is disabled by default
-    optional double MinGroupUsageToBalance = 72 [default = 0.1];
+    optional double MinStorageScatterToBalance = 71 [default = 0.5]; // storage balancer trigger threshold (enabled by default)
+    optional double MinGroupUsageToBalance = 72 [default = 0.05];
     optional uint64 StorageBalancerInflight = 73 [default = 1];
     optional bool EnableDestroyOperations = 74 [default = false];
     optional double NodeUsageRangeToKick = 75 [default = 0.2];

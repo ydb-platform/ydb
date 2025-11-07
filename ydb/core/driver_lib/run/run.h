@@ -88,6 +88,8 @@ protected:
 
     virtual void InitializeRegistries(const TKikimrRunConfig& runConfig);
 
+    void InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConfig);
+
     void InitializeAllocator(const TKikimrRunConfig& runConfig);
 
     void InitializeLogSettings(const TKikimrRunConfig& runConfig);

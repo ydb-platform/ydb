@@ -115,27 +115,33 @@ public:
                     return {};
                 }
             }
-           // const TExprNode::TPtr& settiongs = pqReadTopic.Settings();
 
-            std::string_view skipJsonErrorsValue;
-
+            bool skipJsonErrors = false;
             if (auto settingsList = pqReadTopic.Settings().Maybe<TExprList>()) {
                 for (const TExprNode::TPtr& s : pqReadTopic.Settings().Raw()->Children()) {
                     if (s->ChildrenSize() >= 2 && s->Child(0)->Content() == "skip.json.errors"sv) {
-                        auto val = s->Child(1)->Content();
-                        skipJsonErrorsValue = s->Child(1)->Content();
-                        Cerr << "Found skipJsonErrorsValue val " << val << Endl;
+                        if (!TryFromString<bool>(s->Child(1)->Content(), skipJsonErrors)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"("skip.json.errors" must be boolean type))"));
+                            return {};
+                        }
                     }
                 }
             }
 
+            if (skipJsonErrors) {
+                auto clusterConfiguration = GetClusterConfiguration(clusterName);
+                if (!UseSharedReading(clusterConfiguration, format) ) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"("skip.json.errors" is supported only in shared reading mode))"));
+                    return {};
+                }
+            }
 
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, pos, format, skipJsonErrorsValue, ctx))
+                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, pos, format, skipJsonErrors, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -411,7 +417,7 @@ public:
         const IDqIntegration::TWrapReadSettings& wrSettings,
         TPositionHandle pos,
         std::string_view format,
-        std::string_view skipJsonErrors,
+        bool skipJsonErrors,
         TExprContext& ctx) const
     {
         TVector<TCoNameValueTuple> props;
@@ -430,9 +436,7 @@ public:
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-        if (!skipJsonErrors.empty()) {
-            Add(props, SkipJsonErrors, skipJsonErrors, pos, ctx);
-        }
+        Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);

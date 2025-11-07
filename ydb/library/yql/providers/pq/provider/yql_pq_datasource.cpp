@@ -185,7 +185,6 @@ public:
         }
 
         if (topicKeyParser.GetSkipJsonErrors()) {
-            Cerr << "settings.Add(topicKeyParser.GetSkipErrors());" << Endl; 
             settings.Add(topicKeyParser.GetSkipJsonErrors());
         }
 
@@ -260,8 +259,6 @@ public:
         TString sharedReading = properties.Value("shared_reading", "false");
         sharedReading.to_lower();
         cluster.SetSharedReading(sharedReading == "true"sv);
-        //TString skipJsonErrors = properties.Value("skip_errors", "false");
-        //cluster.SetSkipErrors(skipErrors == "true"sv);
 
         State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
         Gateway_->AddCluster(cluster);

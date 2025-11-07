@@ -1208,7 +1208,7 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 103, "data": "hello2"}'
         ]
 
-        self.write_stream(data)
+        self.write_stream(data, partition_key="key")
         expected = ['hello1', 'hello2']
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 

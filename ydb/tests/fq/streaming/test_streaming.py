@@ -309,12 +309,20 @@ class TestStreamingInYdb(TestYdsBase):
                 WITH (
                     FORMAT="json_each_row",
                     `skip.json.errors` = "true",
-                    SCHEMA=(time String NOT NULL, data String NOT NULL));
+                    SCHEMA=(time UINT32 NOT NULL, data String NOT NULL));
                 INSERT INTO {source_name}.`{output_topic}` SELECT data FROM $in;
             END DO;'''
-                     #    SCHEMA=(time UINT32 NOT NULL, data STRING NOT NULL))   
-                           # SCHEMA=(time UINT32 NOT NULL, data STRING NOT NULL),
-#                    `skip.json.errors` = "true")
+
         query_id = "query_id"  # TODO
         kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         self.wait_completed_checkpoints(kikimr, query_id)
+
+        data = [
+            '{"time": 101, "data": "hello1"}',
+            '{"time": 102, "data": 7777}',
+            '{"time": 103, "data": "hello2"}'
+        ]
+        self.write_stream(data, partition_key="key")
+
+        expected = ['hello1', 'hello2']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected

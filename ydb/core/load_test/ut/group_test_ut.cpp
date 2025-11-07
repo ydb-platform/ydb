@@ -38,8 +38,7 @@ struct TTetsEnv {
                             const TRcBuf& chunk = it.GetChunk();
                             auto memReg = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
                             UNIT_ASSERT_C(!memReg.Empty(), "unable to extract mem region from chunk");
-                            UNIT_ASSERT_C(memReg.GetLKey(0) != 0, "invalid lkey");
-                            UNIT_ASSERT_C(memReg.GetRKey(0) != 0, "invalid rkey");
+                            UNIT_ASSERT_C(memReg.GetAddr(), "got memory region with invalid address");
                         }
                     }
                 }

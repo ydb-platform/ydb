@@ -57,7 +57,7 @@ public:
     }
 };
 
-class RcBufTestAllocator final : public IRcBufAllocator {
+class TRcBufTestAllocator final : public IRcBufAllocator {
 public:
     TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
         auto region = MakeIntrusive<TRcBufCustomBackend>(size + headRoom + tailRoom);
@@ -70,7 +70,7 @@ public:
 };
 
 void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, bool zeroPages) {
-    RcBufTestAllocator rcBufAllocator;
+    TRcBufTestAllocator rcBufAllocator;
 
     TActorSystemStub actorSystemStub;
     i32 size = 786;

@@ -184,7 +184,7 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
         context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
         context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     } else if (srcPath->IsColumnTable()) {
-        context.SS->PersistColumnTableRemove(db, srcPath->PathId, context.Ctx);
+        context.SS->PersistColumnTableRemove(db, srcPath->PathId);
     }
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 

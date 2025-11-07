@@ -1381,43 +1381,27 @@ private:
                             }
                         }
 
-                        bool needLookup = false;
-                        for (size_t index : affectedIndexes) {
+                        const bool needLookup = std::any_of(affectedIndexes.begin(), affectedIndexes.end(), [&](size_t index) {
                             const auto& indexDescription = tableMeta->Indexes[index];
 
                             if (indexDescription.Type != TIndexDescription::EType::GlobalSync
                                 && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
-                                continue;
+                                return false;
                             }
                             const auto& implTable = tableMeta->ImplTables[index];
 
                             AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
-                            bool needLookupForIndex = false;
                             for (const auto& columnName : implTable->KeyColumnNames) {
                                 if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                                     AFL_ENSURE(columnsSet.contains(columnName));
                                 } else if (!mainKeyColumnsSet.contains(columnName)) {
-                                    needLookupForIndex = true;
-                                    break;
-                                }
-                            }
-                            
-                            if (!needLookupForIndex) {
-                                // Secondary index key wasn't changed
-                                for (const auto& [columnName, _] : implTable->Columns) {
-                                    if (settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
-                                        AFL_ENSURE(columnsSet.contains(columnName));
-                                    } else if (!columnsSet.contains(columnName)) {
-                                        // TODO: exclude UPDATE/UPSERT/REPLACE here?
-                                        needLookupForIndex = true;
-                                        break;
-                                    }
+                                    return true;
                                 }
                             }
 
-                            needLookup |= needLookupForIndex;
-                        }
+                            return false;
+                        });
 
                         if (needLookup) {
                             for (const auto& [columnName, columnMeta] : tableMeta->Columns) {

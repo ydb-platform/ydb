@@ -609,16 +609,18 @@ TStringBuf RemoveJoinAliases(TStringBuf keyName) {
 
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
-    TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
+    TKqpQueryCompiler(const TString& cluster, const TString& database, const TIntrusivePtr<TKikimrTablesData> tablesData,
         const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
         : Cluster(cluster)
+        , Database(database)
         , TablesData(tablesData)
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
-        , KqlCtx(cluster, tablesData, TypeEnv, FuncRegistry)
+        , KqlCtx(cluster, optimizeCtx.Tables, TypeEnv, FuncRegistry)
         , KqlCompiler(CreateKqlCompiler(KqlCtx, typesCtx))
         , TypesCtx(typesCtx)
+        , OptimizeCtx(optimizeCtx)
         , Config(config)
     {
         Alloc.Release();
@@ -1344,8 +1346,9 @@ private:
 
                 settingsProto.SetIsOlap(tableMeta->Kind == EKikimrTableKind::Olap);
 
-                AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
-                settingsProto.SetInconsistentTx(false);
+                const bool inconsistentWrite = settings.InconsistentWrite().Cast().Value() == "true"sv;
+                AFL_ENSURE(!inconsistentWrite || (OptimizeCtx.UserRequestContext && OptimizeCtx.UserRequestContext->IsStreamingQuery));
+                settingsProto.SetInconsistentTx(inconsistentWrite);
 
                 if (Config->EnableIndexStreamWrite && settingsProto.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                     AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
@@ -1923,17 +1926,18 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    NOpt::TKqpOptimizeContext& OptimizeCtx;
     TKikimrConfiguration::TPtr Config;
     TSet<TString> SecretNames;
 };
 
 } // namespace
 
-TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
+TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, const TString& database,
     const TIntrusivePtr<TKikimrTablesData> tablesData, const IFunctionRegistry& funcRegistry,
     TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
 {
-    return MakeIntrusive<TKqpQueryCompiler>(cluster, tablesData, funcRegistry, typesCtx, config);
+    return MakeIntrusive<TKqpQueryCompiler>(cluster, database, tablesData, funcRegistry, typesCtx, config);
 }
 
 } // namespace NKqp

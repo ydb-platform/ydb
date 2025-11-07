@@ -121,7 +121,7 @@ public:
                 .AddLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG)
                 .AddLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG)
                 .AddLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG)
-                .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_DEBUG);
+                .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
                 .CredentialsFactory = CreateCredentialsFactory(),
@@ -3011,6 +3011,155 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(2, 1);
 
         ReadTopicMessage(outputTopicName, "B-P3", readDisposition);
+    }
+
+    void CheckTable(TStreamingTestFixture& self, const TString& tableName, const std::map<TString, TString>& rows) {
+        const auto results = self.ExecQuery(fmt::format(
+            "SELECT * FROM `{table}` ORDER BY Key",
+            "table"_a = tableName
+        ));
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+
+        auto it = rows.begin();
+        self.CheckScriptResult(results[0], 2, rows.size(), [&](TResultSetParser& parser) {
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetString(), it->first);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Value").GetString(), it->second);
+            ++it;
+        });
+    }
+
+    Y_UNIT_TEST_F(WritingInLocalYdbTablesWithCheckpoints, TStreamingTestFixture) {
+        constexpr char pqSourceName[] = "pqSource";
+        CreatePqSource(pqSourceName);
+
+        for (const bool rowTables : {true, false}) {
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbInputTopicName" << rowTables;
+            CreateTopic(inputTopicName);
+
+            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE TABLE `{table}` (
+                    Key String NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                ) {settings})",
+                "table"_a = ydbTable,
+                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
+            ));
+
+            const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    UPSERT INTO `{ydb_table}`
+                    SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (
+                            Key String NOT NULL,
+                            Value String NOT NULL
+                        )
+                    )
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable
+            ));
+
+            CheckScriptExecutionsCount(1, 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
+            Sleep(TDuration::Seconds(1));
+            CheckTable(*this, ydbTable, {{"message1", "value1"}});
+
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    RUN = FALSE
+                );)",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(1, 0);
+            CheckTable(*this, ydbTable, {{"message1", "value1"}});
+
+            Sleep(TDuration::Seconds(1));
+            WriteTopicMessage(inputTopicName, R"({"Key": "message2", "Value": "value2"})");
+
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    RUN = TRUE
+                );)",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(2, 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value3"})");
+            Sleep(TDuration::Seconds(1));
+            CheckTable(*this, ydbTable, {{"message1", "value3"}, {"message2", "value2"}});
+
+            ExecQuery(fmt::format(
+                "DROP STREAMING QUERY `{query_name}`",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(0, 0);
+        }
+    }
+
+    Y_UNIT_TEST_F(WritingInLocalYdbTablesWithLimit, TStreamingTestFixture) {
+        constexpr char pqSourceName[] = "pqSource";
+        CreatePqSource(pqSourceName);
+
+        for (const bool rowTables : {true, false}) {
+            const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
+            CreateTopic(inputTopicName);
+
+            const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE TABLE `{table}` (
+                    Key String NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                ) {settings})",
+                "table"_a = ydbTable,
+                "settings"_a = rowTables ? "" : "WITH (STORE = COLUMN)"
+            ));
+
+            const auto queryName = TStringBuilder() << "streamingQuery" << rowTables;
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    UPSERT INTO `{ydb_table}`
+                    SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                        FORMAT = json_each_row,
+                        SCHEMA (
+                            Key String NOT NULL,
+                            Value String NOT NULL
+                        )
+                    ) LIMIT 1
+                END DO;)",
+                "query_name"_a = queryName,
+                "pq_source"_a = pqSourceName,
+                "input_topic"_a = inputTopicName,
+                "ydb_table"_a = ydbTable
+            ));
+
+            CheckScriptExecutionsCount(1, 1);
+            Sleep(TDuration::Seconds(1));
+
+            WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
+            Sleep(TDuration::Seconds(1));
+            CheckTable(*this, ydbTable, {{"message1", "value1"}});
+
+            Sleep(TDuration::Seconds(1));
+            CheckScriptExecutionsCount(1, 0);
+
+            ExecQuery(fmt::format(
+                "DROP STREAMING QUERY `{query_name}`",
+                "query_name"_a = queryName
+            ));
+            CheckScriptExecutionsCount(0, 0);
+        }
     }
 }
 

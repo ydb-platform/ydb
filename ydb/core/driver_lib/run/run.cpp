@@ -1341,9 +1341,8 @@ void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConf
 
     static const TString XDS_BOOTSTRAP_ENV = "GRPC_XDS_BOOTSTRAP";
     static const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
-    if (GetEnv(XDS_BOOTSTRAP_ENV).empty() && GetEnv(XDS_BOOTSTRAP_CONFIG_ENV).empty()) {
-        TXdsBootstrapConfigBuilder xdsConfigBuilder(runConfig.AppConfig.GetGRpcConfig().GetXdsBootstrap());
-        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, xdsConfigBuilder.Build());
+    if (GetEnv(XDS_BOOTSTRAP_ENV).empty() && GetEnv(XDS_BOOTSTRAP_CONFIG_ENV).empty() && runConfig.AppConfig.GetGRpcConfig().HasXdsBootstrap()) {
+        SetEnv(XDS_BOOTSTRAP_CONFIG_ENV, TXdsBootstrapConfigBuilder(runConfig.AppConfig.GetGRpcConfig().GetXdsBootstrap()).Build());
     }
 }
 

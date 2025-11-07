@@ -1773,6 +1773,26 @@ Y_UNIT_TEST(SlowZone_DLQ) {
     utilsD.AssertEquals(utils);
 }
 
+Y_UNIT_TEST(SlowZone_CommitToFast) {
+    TUtils utils;
+    utils.AddMessage(8);
+    auto snapshot = utils.CreateSnapshot();
+    UNIT_ASSERT(utils.Commit(2));
+    utils.Storage.Compact();
+    auto wal = utils.CreateWAL();
+
+    utils.AssertSlowZone({0, 1 });
+    // Compaction removed the message with offset 2
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+
+    TUtils utilsD;
+    utilsD.LoadSnapshot(snapshot);
+    utilsD.LoadWAL(wal);
+
+    assertMetrics(utilsD.Storage.GetMetrics(), utils.Storage.GetMetrics());
+    utilsD.AssertEquals(utils);
+}
+
 
 Y_UNIT_TEST(SlowZone_LongScenario) {
     const size_t maxMessages = 8;

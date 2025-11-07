@@ -295,3 +295,26 @@ class TestStreamingInYdb(TestYdsBase):
         self.write_stream(data)
         expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+
+    def test_json_errors(self, kikimr):
+        sourceName = "test_json_errors" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.init_topics(sourceName, partitions_count=10)
+        self.create_source(kikimr, sourceName, True)
+
+        name = "query1"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT data FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA=(time String NOT NULL, data String NOT NULL));
+                INSERT INTO {source_name}.`{output_topic}` SELECT data FROM $in;
+            END DO;'''
+                     #    SCHEMA=(time UINT32 NOT NULL, data STRING NOT NULL))   
+                           # SCHEMA=(time UINT32 NOT NULL, data STRING NOT NULL),
+#                    `skip.json.errors` = "true")
+        query_id = "query_id"  # TODO
+        kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        self.wait_completed_checkpoints(kikimr, query_id)

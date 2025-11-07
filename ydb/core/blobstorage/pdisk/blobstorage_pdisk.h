@@ -1427,7 +1427,10 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
     ui32 NumSlots; // number of VDisks over PDisk, not their weight
     ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].SlotSizeInUnits / PDisk.SlotSizeInUnits)} $
-    double Occupancy = 0;
+    double NormalizedOccupancy = 0;
+    double VDiskSlotUtilization = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
+    double VDiskFairPartFillPercent = 0;  // 100.0 * Owner.Used / Owner.HardLimit
+    double PDiskFillPercent = 0;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
 

@@ -1589,7 +1589,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSerialNumber(Cfg->ExpectedSerial);
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
-        
+
         // Only report size information when PDisk is not in error state
         if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
             pdiskState.SetAvailableSize(availableSize);
@@ -1624,8 +1624,21 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             vdiskMetrics->SetAvailableSize(ownerFree);
             vdiskMetrics->SetAllocatedSize(ownerAllocated);
             double occupancy;
-            vdiskMetrics->SetStatusFlags(Keeper.GetSpaceStatusFlags(owner, &occupancy));
-            vdiskMetrics->SetOccupancy(occupancy);
+            NPDisk::TStatusFlags statusFlags = Keeper.GetSpaceStatusFlags(owner, &occupancy);
+            NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor = StatusFlagToSpaceColor(statusFlags);
+            double vdiskSlotUtilization = Keeper.GetVDiskSlotUtilization(owner);
+            double vdiskFairPartFillPercent = Keeper.GetVDiskFairPartFillPercent(owner);
+            vdiskMetrics->SetStatusFlags(statusFlags);
+            vdiskMetrics->SetNormalizedOccupancy(occupancy);
+            vdiskMetrics->SetVDiskSlotUtilization(vdiskSlotUtilization);
+            vdiskMetrics->SetVDiskFairPartFillPercent(vdiskFairPartFillPercent);
+            vdiskMetrics->SetCapacityAlertLevel(spaceColor);
+
+            vdiskInfo.SetNormalizedOccupancy(occupancy);
+            vdiskInfo.SetVDiskSlotUtilization(vdiskSlotUtilization);
+            vdiskInfo.SetVDiskFairPartFillPercent(vdiskFairPartFillPercent);
+            vdiskInfo.SetCapacityAlertLevel(spaceColor);
+
             auto *vslotId = vdiskMetrics->MutableVSlotId();
             vslotId->SetNodeId(PCtx->ActorSystem->NodeId);
             vslotId->SetPDiskId(PCtx->PDiskId);
@@ -1655,6 +1668,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         if (ExpectedSlotCount) {
             pDiskMetrics.SetSlotCount(ExpectedSlotCount);
         }
+
+        double pdiskFillPercent = Keeper.GetPDiskFillPercent();
+        pDiskMetrics.SetPDiskFillPercent(pdiskFillPercent);
+        pdiskState.SetPDiskFillPercent(pdiskFillPercent);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2182,7 +2199,10 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 GetNumActiveSlots(),
                 TString(),
                 GetStatusFlags(OwnerSystem, evCheckSpace.OwnerGroupType));
-    result->Occupancy = occupancy;
+    result->NormalizedOccupancy = occupancy;
+    result->VDiskSlotUtilization = Keeper.GetVDiskSlotUtilization(evCheckSpace.Owner);
+    result->VDiskFairPartFillPercent = Keeper.GetVDiskFairPartFillPercent(evCheckSpace.Owner);
+    result->PDiskFillPercent = Keeper.GetPDiskFillPercent();
     PCtx->ActorSystem->Send(evCheckSpace.Sender, result.release());
     Mon.CheckSpace.CountResponse();
     return;

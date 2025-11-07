@@ -188,14 +188,14 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         if (metrics.HasMaxWriteThroughput()) {
             writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
         }
-        if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
-            occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
+        if (const auto& vm = vslot->Metrics; vm.HasNormalizedOccupancy()) {
+            occupancy = Max(occupancy.value_or(0), vm.GetNormalizedOccupancy());
         }
 
         const bool hasAllMetrics = metrics.HasMaxIOPS()
             && metrics.HasMaxReadThroughput()
             && metrics.HasMaxWriteThroughput()
-            && vslot->Metrics.HasOccupancy();
+            && vslot->Metrics.HasNormalizedOccupancy();
         if (hasAllMetrics) {
             vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
         }
@@ -238,8 +238,8 @@ bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
         if (m.HasAllocatedSize()) {
             pb->SetAllocatedSize(Max<ui64>(pb->HasAllocatedSize() ? pb->GetAllocatedSize() : 0, f * m.GetAllocatedSize()));
         }
-        if (m.HasSpaceColor()) {
-            pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetSpaceColor()) : m.GetSpaceColor());
+        if (m.HasCapacityAlertLevel()) {
+            pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetCapacityAlertLevel()) : m.GetCapacityAlertLevel());
         }
 
         const bool hasAllMetrics = m.HasAvailableSize() && m.HasAllocatedSize();

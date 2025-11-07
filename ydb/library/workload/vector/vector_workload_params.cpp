@@ -56,6 +56,9 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
         ConfigureCommonOpts(opts);
         addInitParam();
         break;
+    case TWorkloadParams::ECommandType::Import:
+        ConfigureCommonOpts(opts);
+        break;
     case TWorkloadParams::ECommandType::Run:
         ConfigureCommonOpts(opts);
         switch (static_cast<EWorkloadRunType>(workloadType)) {

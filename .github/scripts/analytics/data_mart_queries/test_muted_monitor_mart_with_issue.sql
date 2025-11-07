@@ -45,7 +45,3 @@ LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
 WHERE tm.date_window >= CurrentUtcDate() - 30 * Interval("P1D")
 and ( tm.branch = 'main' or tm.branch like 'stable-%' or tm.branch like 'stream-nb-25%')
 and tm.is_test_chunk = 0
-and (CASE 
-        WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE
-        ELSE FALSE
-    END ) = TRUE

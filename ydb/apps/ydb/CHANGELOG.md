@@ -1,3 +1,4 @@
+* Added a simple progress bar for non-interactive stderr.
 
 ## 2.27.0 ##
 

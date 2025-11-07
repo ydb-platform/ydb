@@ -2,6 +2,8 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_create_cdc_stream.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_utils.h"
 #include "schemeshard_impl.h"
 
 
@@ -64,11 +66,11 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
+    
+    bool omitIndexes = bc->Description.GetOmitIndexes() || 
+                       (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
+    
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
-
-    bool omitIndexes = bc->Description.HasOmitIndexes() 
-        ? bc->Description.GetOmitIndexes()
-        : false;
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
@@ -166,6 +168,74 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
             const auto streamPath = sPath.Child(streamName);
 
             NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, streamName, table, boundaries, false);
+        }
+
+        if (!omitIndexes) {
+            for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+                const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+                
+                // Iterate through table's children to find indexes
+                for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                    auto childPath = context.SS->PathsById.at(childPathId);
+                    
+                    // Skip non-index children (CDC streams, etc.)
+                    if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
+                        continue;
+                    }
+                    
+                    // Skip deleted indexes
+                    if (childPath->Dropped()) {
+                        continue;
+                    }
+                    
+                    // Get index info and filter for global sync only
+                    // We need more complex logic for vector indexes in future
+                    auto indexInfo = context.SS->Indexes.at(childPathId);
+                    if (indexInfo->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                        continue;
+                    }
+                
+                    // Get index implementation table (the only child of index)
+                    auto indexPath = TPath::Init(childPathId, context.SS);
+                    Y_ABORT_UNLESS(indexPath.Base()->GetChildren().size() == 1);
+                    auto [implTableName, implTablePathId] = *indexPath.Base()->GetChildren().begin();
+                    
+                    auto indexTablePath = indexPath.Child(implTableName);
+                    auto indexTable = context.SS->Tables.at(implTablePathId);
+                    
+                    // Create CDC stream on index impl table
+                    NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
+                    createCdcStreamOp.SetTableName(implTableName);
+                    auto& streamDescription = *createCdcStreamOp.MutableStreamDescription();
+                    streamDescription.SetName(streamName);
+                    streamDescription.SetMode(NKikimrSchemeOp::ECdcStreamModeUpdate);
+                    streamDescription.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
+                    
+                    NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, indexTablePath, false, false);
+                    
+                    // Create AtTable operation to notify datashard (without schema change)
+                    {
+                        auto outTx = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
+                        auto& cdcOp = *outTx.MutableCreateCdcStream();
+                        cdcOp.CopyFrom(createCdcStreamOp);
+                        result.push_back(CreateNewCdcStreamAtTable(NextPartId(opId, result), outTx, false));
+                    }
+                    
+                    // Create PQ part for index CDC stream
+                    TVector<TString> boundaries;
+                    const auto& partitions = indexTable->GetPartitions();
+                    boundaries.reserve(partitions.size() - 1);
+                    for (ui32 i = 0; i < partitions.size(); ++i) {
+                        const auto& partition = partitions.at(i);
+                        if (i != partitions.size() - 1) {
+                            boundaries.push_back(partition.EndOfRange);
+                        }
+                    }
+                    
+                    const auto streamPath = indexTablePath.Child(streamName);
+                    NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, streamPath, streamName, indexTable, boundaries, false);
+                }
+            }
         }
     }
 

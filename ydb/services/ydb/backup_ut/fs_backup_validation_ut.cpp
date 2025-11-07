@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path must be an absolute path",
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: use absolute path
         {
             // NExport::TExportToFsSettings fixSettings = settings;
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Unsupported compression codec",
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: use valid codec
         {
             // NExport::TExportToFsSettings fixSettings = settings;
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE_F(FsBackupParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: valid level
         {
             // NExport::TExportToFsSettings fixSettings = settings;
@@ -271,7 +271,7 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "base_path must be an absolute path",
             res.Status().GetIssues().ToString());
 
-        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in NFS
+        //TODO(st-shchetinin): Uncomment after supporting the entire export pipeline in FS
         // Fix: use absolute path
         {
             // NImport::TImportFromFsSettings fixSettings = settings;

@@ -2585,9 +2585,10 @@ public:
                     .HolderFactory = *HolderFactory,
                     .SessionActorId = SessionActorId,
                     .Counters = Counters,
+
+                    .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
                 });
 
-                //TODO: ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 TActorId id = RegisterWithSameMailbox(actor);
                 CA_LOG_D("Create new KqpBufferTableLookup for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
 

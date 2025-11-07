@@ -56,7 +56,8 @@ public:
         : Settings(std::move(settings)) 
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
-            << "SessionActorId: " << Settings.SessionActorId) {
+            << "SessionActorId: " << Settings.SessionActorId)
+        , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
     }
 
     void Bootstrap() {
@@ -86,6 +87,8 @@ public:
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
+
+        LookupActorSpan.End();
     }
 
     void Terminate() override {
@@ -339,7 +342,8 @@ public:
                     .Subscribe = needToCreatePipe,
                 }),
             IEventHandle::FlagTrackDelivery,
-            0);
+            0,
+            LookupActorSpan.GetTraceId());
 
         shardState.HasPipe = true;
 
@@ -497,7 +501,9 @@ public:
                         .AutoConnect = needToCreatePipe,
                         .Subscribe = needToCreatePipe,
                     }),
-                IEventHandle::FlagTrackDelivery);
+                IEventHandle::FlagTrackDelivery,
+                0,
+                LookupActorSpan.GetTraceId());
 
             shardState.HasPipe = true;
             CA_LOG_D("TEvReadAck was sent to shard: " << shardId);
@@ -597,6 +603,9 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
+        if (LookupActorSpan) {
+            LookupActorSpan.EndError(message);
+        }
         Settings.Callbacks->OnLookupError(statusCode, id, message, subIssues);
     }
 
@@ -653,6 +662,8 @@ private:
     // stats
     ui64 ReadRowsCount = 0;
     ui64 ReadBytesCount = 0;
+
+    NWilson::TSpan LookupActorSpan;
 };
 
 }

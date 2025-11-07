@@ -632,7 +632,7 @@ namespace NActors {
 /// Assert that depend on NDEBUG macro and outputs message like printf
 #define AFL_VERIFY_DEBUG AFL_VERIFY
 #else
-#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 #endif
 
 #define ACTORS_FORMATTED_LOG(mPriority, mComponent) \

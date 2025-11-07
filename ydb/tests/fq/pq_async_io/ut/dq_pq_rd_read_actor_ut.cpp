@@ -353,7 +353,7 @@ public:
     void MockCoordinatorDistributionReset(NActors::TActorId coordinatorId) const {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset();
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0, cookie));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0));
         });
     }
 
@@ -901,9 +901,9 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockCoordinatorDistributionReset(CoordinatorId1);
 
         auto req = ExpectCoordinatorRequest(CoordinatorId1);
-        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, req->Cookie);
-        ExpectStartSession({}, RowDispatcherId1, 1);
-        MockAck(RowDispatcherId1, 1, PartitionId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId2, PartitionId1}}, req->Cookie);
+        ExpectStartSession({}, RowDispatcherId2, 2);
+        MockAck(RowDispatcherId2, 2, PartitionId1);
     }
 }
 

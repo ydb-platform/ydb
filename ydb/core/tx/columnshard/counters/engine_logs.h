@@ -241,7 +241,7 @@ public:
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> BlobGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionRecordCountGuards;
         std::vector<std::shared_ptr<TIncrementalHistogram::TGuard>> PortionSizeGuards;
-        TLineGuard BadPortionsCount;
+        TValueGuard BadPortionsCount;
 
     public:
         TPortionsInfoGuard(const std::vector<std::shared_ptr<TIncrementalHistogram>>& distrBlobs,

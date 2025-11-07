@@ -2182,7 +2182,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap. Fetch config");
+        LOG_D("Bootstrap");
 
         TBase::Become(&TDerived::StateFunc);
         DescribeQuery("start handling");

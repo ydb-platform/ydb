@@ -53,7 +53,7 @@ std::shared_ptr<arrow::DataType> BuildArrowType<arrow::StructType>(NUdf::EDataSl
             return std::make_shared<arrow::NullType>();
     }
 
-    std::vector<std::shared_ptr<arrow::Field>> fields{
+    arrow::FieldVector fields{
         std::make_shared<arrow::Field>("datetime", type, false),
         std::make_shared<arrow::Field>("timezone", arrow::utf8(), false),
     };
@@ -74,7 +74,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TDataType* dataTyp
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TStructType* structType) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    arrow::FieldVector fields;
     fields.reserve(structType->GetMembersCount());
     for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
         auto memberType = structType->GetMemberType(index);
@@ -87,7 +87,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TStructType* struc
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TTupleType* tupleType) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    arrow::FieldVector fields;
     fields.reserve(tupleType->GetElementsCount());
     for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
         auto elementName = "field" + std::to_string(index);
@@ -119,7 +119,6 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TDictType* dictTyp
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TVariantType* variantType) {
     NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
-    arrow::FieldVector types;
     NMiniKQL::TStructType* structType = nullptr;
     NMiniKQL::TTupleType* tupleType = nullptr;
 
@@ -130,48 +129,50 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TVariantType* vari
         tupleType = static_cast<NMiniKQL::TTupleType*>(innerType);
     }
 
-    if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
-        ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
-        types.reserve(numberOfGroups);
+    YQL_ENSURE(variantType->GetAlternativesCount() <= MAX_VARIANT_NESTED_SIZE, "Variant type has more than " << MAX_VARIANT_NESTED_SIZE << " alternatives");
 
-        for (ui32 groupIndex = 0; groupIndex < numberOfGroups; ++groupIndex) {
-            ui32 beginIndex = groupIndex * arrow::UnionType::kMaxTypeCode;
-            ui32 endIndex = std::min((groupIndex + 1) * arrow::UnionType::kMaxTypeCode, variantType->GetAlternativesCount());
+    arrow::FieldVector fields;
+    if (variantType->GetAlternativesCount() > MAX_VARIANT_FLATTEN_SIZE) {
+        ui32 numberOfGroups = ((variantType->GetAlternativesCount() - 1) / MAX_VARIANT_FLATTEN_SIZE) + 1;
+        fields.reserve(numberOfGroups);
 
-            arrow::FieldVector groupTypes;
-            groupTypes.reserve(endIndex - beginIndex);
+        for (ui32 group = 0; group < numberOfGroups; ++group) {
+            ui32 beginIndex = group * MAX_VARIANT_FLATTEN_SIZE;
+            ui32 endIndex = std::min<ui32>((group + 1) * MAX_VARIANT_FLATTEN_SIZE, variantType->GetAlternativesCount());
 
-            for (ui32 index = beginIndex; index < endIndex; ++index) {
-                auto itemName = (structType == nullptr)
-                    ? std::string("field" + ToString(index))
-                    : std::string(structType->GetMemberName(index));
-                auto itemType = (structType == nullptr)
-                    ? tupleType->GetElementType(index)
-                    : structType->GetMemberType(index);
+            arrow::FieldVector groupFields;
+            groupFields.reserve(endIndex - beginIndex);
+
+            for (ui32 i = beginIndex; i < endIndex; ++i) {
+                auto itemName = (structType == nullptr) ? std::string("field" + ToString(i)) : std::string(structType->GetMemberName(i));
+                auto itemType = (structType == nullptr) ? tupleType->GetElementType(i) : structType->GetMemberType(i);
                 auto itemArrowType = NFormats::GetArrowType(itemType);
 
-                groupTypes.emplace_back(std::make_shared<arrow::Field>( itemName, itemArrowType, itemType->IsOptional()));
+                groupFields.emplace_back(std::make_shared<arrow::Field>( itemName, itemArrowType, itemType->IsOptional()));
             }
 
-            auto fieldName = std::string("field" + ToString(groupIndex));
-            types.emplace_back(std::make_shared<arrow::Field>(fieldName, arrow::dense_union(groupTypes), false));
+            std::vector<int8_t> typeCodes(groupFields.size());
+            std::iota(typeCodes.begin(), typeCodes.end(), 0);
+
+            auto fieldName = std::string("field" + ToString(group));
+            fields.emplace_back(std::make_shared<arrow::Field>(fieldName, arrow::dense_union(groupFields, typeCodes), false));
         }
 
-        return arrow::dense_union(types);
+        return arrow::dense_union(fields);
     }
 
-    types.reserve(variantType->GetAlternativesCount());
+    fields.reserve(variantType->GetAlternativesCount());
     for (ui32 index = 0; index < variantType->GetAlternativesCount(); ++index) {
-        auto itemName = (structType == nullptr)
-            ? std::string("field" + ToString(index))
-            : std::string(structType->GetMemberName(index));
+        auto itemName = (structType == nullptr) ? std::string("field" + ToString(index)) : std::string(structType->GetMemberName(index));
         auto itemType = (structType == nullptr) ? tupleType->GetElementType(index) : structType->GetMemberType(index);
         auto itemArrowType = NFormats::GetArrowType(itemType);
 
-        types.emplace_back(std::make_shared<arrow::Field>(itemName, itemArrowType, itemType->IsOptional()));
+        fields.emplace_back(std::make_shared<arrow::Field>(itemName, itemArrowType, itemType->IsOptional()));
     }
 
-    return arrow::dense_union(types);
+    std::vector<int8_t> typeCodes(fields.size());
+    std::iota(typeCodes.begin(), typeCodes.end(), 0);
+    return arrow::dense_union(fields, typeCodes);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TOptionalType* optionalType) {
@@ -537,11 +538,13 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         innerType = static_cast<NMiniKQL::TTupleType*>(innerType)->GetElementType(variantIndex);
     }
 
-    if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
-        ui32 numberOfGroups = (variantType->GetAlternativesCount() - 1) / arrow::UnionType::kMaxTypeCode + 1;
+    YQL_ENSURE(variantType->GetAlternativesCount() <= MAX_VARIANT_NESTED_SIZE, "Variant type has more than " << MAX_VARIANT_NESTED_SIZE << " alternatives");
+
+    if (variantType->GetAlternativesCount() > MAX_VARIANT_FLATTEN_SIZE) {
+        ui32 numberOfGroups = ((variantType->GetAlternativesCount() - 1) / MAX_VARIANT_FLATTEN_SIZE) + 1;
         YQL_ENSURE(static_cast<ui32>(unionBuilder->num_children()) == numberOfGroups, "Unexpected variant number of groups");
 
-        ui32 groupIndex = variantIndex / arrow::UnionType::kMaxTypeCode;
+        ui32 groupIndex = variantIndex / MAX_VARIANT_FLATTEN_SIZE;
         auto status = unionBuilder->Append(groupIndex);
         YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
 
@@ -549,7 +552,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         YQL_ENSURE(innerBuilder->type()->id() == arrow::Type::DENSE_UNION, "Unexpected builder type");
         auto innerUnionBuilder = reinterpret_cast<arrow::DenseUnionBuilder*>(innerBuilder.get());
 
-        ui32 innerVariantIndex = variantIndex % arrow::UnionType::kMaxTypeCode;
+        ui32 innerVariantIndex = variantIndex % MAX_VARIANT_FLATTEN_SIZE;
         status = innerUnionBuilder->Append(innerVariantIndex);
         YQL_ENSURE(status.ok(), "Failed to append variant value: " << status.ToString());
 
@@ -604,6 +607,7 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type) {
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
+    YQL_ENSURE(IsArrowCompatible(type));
     switch (type->GetKind()) {
         case NMiniKQL::TType::EKind::Null: {
             return arrow::null();
@@ -714,18 +718,12 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
 
         case NMiniKQL::TType::EKind::Variant: {
             auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
-            ui32 maxTypesCount = (arrow::UnionType::kMaxTypeCode + 1) * (arrow::UnionType::kMaxTypeCode + 1);
-            if (variantType->GetAlternativesCount() > maxTypesCount) {
+            if (variantType->GetAlternativesCount() > MAX_VARIANT_NESTED_SIZE) {
                 return false;
             }
 
             NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
-            if (innerType->IsStruct() || innerType->IsTuple()) {
-                return IsArrowCompatible(innerType);
-            }
-
-            YQL_ENSURE(false, "Unexpected underlying variant type: " << innerType->GetKindAsStr());
-            return false;
+            return (innerType->IsStruct() || innerType->IsTuple()) && IsArrowCompatible(innerType);
         }
 
         case NMiniKQL::TType::EKind::Tagged: {

@@ -308,19 +308,21 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
     auto rowInChild = unionArray->value_offset(row);
     auto valuesArray = unionArray->field(variantIndex);
 
-    if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
+    YQL_ENSURE(variantType->GetAlternativesCount() <= MAX_VARIANT_NESTED_SIZE, "Variant type has more than " << MAX_VARIANT_NESTED_SIZE << " alternatives");
+
+    if (variantType->GetAlternativesCount() > MAX_VARIANT_FLATTEN_SIZE) {
         YQL_ENSURE(valuesArray->type_id() == arrow::Type::DENSE_UNION, "Unexpected array type");
         auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(valuesArray);
         auto innerVariantIndex = innerUnionArray->child_id(rowInChild);
 
         rowInChild = innerUnionArray->value_offset(rowInChild);
         valuesArray = innerUnionArray->field(innerVariantIndex);
-        variantIndex =variantIndex * arrow::UnionType::kMaxTypeCode + innerVariantIndex;
+        variantIndex = variantIndex * MAX_VARIANT_FLATTEN_SIZE + innerVariantIndex;
     }
 
     NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
     if (innerType->IsStruct()) {
-        innerType =static_cast<NMiniKQL::TStructType*>(innerType)->GetMemberType(variantIndex);
+        innerType = static_cast<NMiniKQL::TStructType*>(innerType)->GetMemberType(variantIndex);
     } else {
         YQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
         innerType = static_cast<NMiniKQL::TTupleType*>(innerType)->GetElementType(variantIndex);

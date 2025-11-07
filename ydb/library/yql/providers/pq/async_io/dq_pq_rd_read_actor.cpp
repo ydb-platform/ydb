@@ -541,7 +541,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , MaxBufferSize(bufferSize)
 {
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
-        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << " skip json errors: " << SourceParams.GetSkipJsonErrors());
+        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << ", skip json errors: " << SourceParams.GetSkipJsonErrors());
     if (Parent != this) {
         return;
     }

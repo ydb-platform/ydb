@@ -471,21 +471,21 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
     CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx);
 }
 
-THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& SecretNames) {
+THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
     THashMap<TString, TString> secureParams;
     NYql::NCommon::FillSecureParams(node, typesCtx, secureParams);
 
     for (auto& [secretName, structuredToken] : secureParams) {
         const auto& tokenParser = CreateStructuredTokenParser(structuredToken);
-        tokenParser.ListReferences(SecretNames);
+        tokenParser.ListReferences(secretNames);
         structuredToken = tokenParser.ToBuilder().RemoveSecrets().ToJson();
     }
 
     return secureParams;
 }
 
-std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, const TString& nodeName, TSet<TString>& SecretNames) {
-    const auto& secureParams = FindSecureParams(node, typesCtx, SecretNames);
+std::optional<std::pair<TString, TString>> FindOneSecureParam(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, const TString& nodeName, TSet<TString>& secretNames) {
+    const auto& secureParams = FindSecureParams(node, typesCtx, secretNames);
     if (secureParams.empty()) {
         return std::nullopt;
     }
@@ -1846,6 +1846,11 @@ private:
             dqIntegration->FillLookupSourceSettings(lookupSourceWrap.Ref(), lookupSourceSettings, lookupSourceType);
             YQL_ENSURE(!lookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings for its dq source node");
             YQL_ENSURE(lookupSourceType, "Data source provider \"" << dataSourceCategory << "\" did't fill dq source settings type for its dq source node");
+
+            if (const auto& secureParams = FindOneSecureParam(lookupSourceWrap.Ptr(), TypesCtx, "streamLookupSource", SecretNames)) {
+                lookupSource.SetSourceName(secureParams->first);
+                lookupSource.SetAuthInfo(secureParams->second);
+            }
 
             const auto& streamLookupOutput = streamLookup.Output();
             const auto connectionInputRowType = GetSeqItemType(streamLookupOutput.Ref().GetTypeAnn());

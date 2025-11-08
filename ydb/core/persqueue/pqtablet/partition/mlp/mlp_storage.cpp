@@ -38,11 +38,11 @@ void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
     RetentionPeriod = retentionPeriod;
 }
 
-std::optional<ui32> TStorage::GetDieDelta() const {
+std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
     if (RetentionPeriod) {
-        auto dieTime = TrimToSeconds(TimeProvider->Now(), false) - RetentionPeriod.value();
-        if (dieTime >= BaseWriteTimestamp) {
-            return (dieTime - BaseWriteTimestamp).Seconds();
+        auto retentionDeadline = TrimToSeconds(TimeProvider->Now(), false) - RetentionPeriod.value();
+        if (retentionDeadline >= BaseWriteTimestamp) {
+            return (retentionDeadline - BaseWriteTimestamp).Seconds();
         }
     }
 
@@ -50,14 +50,14 @@ std::optional<ui32> TStorage::GetDieDelta() const {
 }
 
 std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
-    std::optional<ui64> dieDelta = GetDieDelta();
+    std::optional<ui64> retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     if (!position.SlowPosition) {
         position.SlowPosition = SlowMessages.begin();
     }
 
     auto retentionExpired = [&](const auto& message) {
-        return dieDelta && message.WriteTimestampDelta <= dieDelta.value();
+        return retentionDeadlineDelta && message.WriteTimestampDelta <= retentionDeadlineDelta.value();
     };
 
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
@@ -167,8 +167,8 @@ size_t TStorage::Compact() {
     size_t removed = 0;
 
     // Remove messages by retention
-    if (auto dieDelta = GetDieDelta(); dieDelta.has_value()) {
-        auto dieProcessingDelta = dieDelta.value() + 60;
+    if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
+        auto dieProcessingDelta = retentionDeadlineDelta.value() + 60;
 
         auto canRemove = [&](auto& message) {
             switch (message.Status) {
@@ -177,7 +177,7 @@ size_t TStorage::Compact() {
                 case EMessageStatus::Unprocessed:
                 case EMessageStatus::Committed:
                 case EMessageStatus::DLQ:
-                    return message.WriteTimestampDelta <= dieDelta.value();
+                    return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
                 default:
                     return false;
             }

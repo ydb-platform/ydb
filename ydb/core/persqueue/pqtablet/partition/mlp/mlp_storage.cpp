@@ -57,7 +57,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
     }
 
     auto retentionExpired = [&](const auto& message) {
-        return dieDelta && message.WriteTimestampDelta <= *dieDelta;
+        return dieDelta && message.WriteTimestampDelta <= dieDelta.value();
     };
 
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
@@ -177,7 +177,7 @@ size_t TStorage::Compact() {
                 case EMessageStatus::Unprocessed:
                 case EMessageStatus::Committed:
                 case EMessageStatus::DLQ:
-                    return message.WriteTimestampDelta <= *dieDelta;
+                    return message.WriteTimestampDelta <= dieDelta.value();
                 default:
                     return false;
             }

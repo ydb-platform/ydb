@@ -331,9 +331,9 @@ void TConsumerActor::CommitIfNeeded() {
 }
 
 void TConsumerActor::UpdateStorageConfig() {
-
     LOG_D("Update config: RetentionPeriod: " << (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")
         << " " << Config.ShortDebugString());
+
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
@@ -481,7 +481,7 @@ void TConsumerActor::ProcessEventQueue() {
         std::deque<ui64> messages;
         for (; count; --count) {
             auto result = Storage->Next(visibilityDeadline, position);
-            if (!result.has_value()) {
+            if (!result) {
                 break;
             }
 

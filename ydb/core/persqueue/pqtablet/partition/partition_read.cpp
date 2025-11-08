@@ -242,7 +242,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr&
 void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
     TSet<TString> important;
     for (const auto& consumer : Config.GetConsumers()) {
-        if (!consumer.GetImportant() && !(consumer.GetAvailabilityPeriodMs() > 0)) {
+        if (!consumer.GetImportant() && !(consumer.GetAvailabilityPeriodMs() > 0) && !MLPConsumers.contains(consumer.GetName())) {
             continue;
         }
 

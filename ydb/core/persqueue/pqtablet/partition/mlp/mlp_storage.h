@@ -209,6 +209,8 @@ private:
 
     void RemoveMessage(const TMessage& message);
 
+    std::optional<ui32> GetDieDelta() const;
+
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 

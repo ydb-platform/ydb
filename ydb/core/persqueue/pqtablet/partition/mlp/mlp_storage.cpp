@@ -38,22 +38,33 @@ void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
     RetentionPeriod = retentionPeriod;
 }
 
-std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
-    auto dieDelta = Max<ui64>();
+std::optional<ui32> TStorage::GetDieDelta() const {
     if (RetentionPeriod) {
-        auto dieTime = TimeProvider->Now() - RetentionPeriod.value();
-        dieDelta = dieTime > BaseWriteTimestamp ? (dieTime - BaseWriteTimestamp).Seconds() : 0;
+        auto dieTime = TrimToSeconds(TimeProvider->Now(), false) - RetentionPeriod.value();
+        if (dieTime >= BaseWriteTimestamp) {
+            return (dieTime - BaseWriteTimestamp).Seconds();
+        }
     }
+
+    return std::nullopt;
+}
+
+std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
+    std::optional<ui64> dieDelta = GetDieDelta();
 
     if (!position.SlowPosition) {
         position.SlowPosition = SlowMessages.begin();
     }
 
+    auto retentionExpired = [&](const auto& message) {
+        return dieDelta && message.WriteTimestampDelta <= *dieDelta;
+    };
+
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
         auto offset = position.SlowPosition.value()->first;
         auto& message = position.SlowPosition.value()->second;
         if (message.Status == EMessageStatus::Unprocessed) {
-            if (message.WriteTimestampDelta < dieDelta) {
+            if (retentionExpired(message)) {
                 continue;
             }
 
@@ -69,7 +80,7 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
     for (size_t i = std::max(position.FastPosition, FirstUnlockedOffset) - FirstOffset; i < Messages.size(); ++i) {
         auto& message = Messages[i];
         if (message.Status == EMessageStatus::Unprocessed) {
-            if (message.WriteTimestampDelta < dieDelta) {
+            if (retentionExpired(message)) {
                 if (moveUnlockedOffset) {
                     ++FirstUnlockedOffset;
                 }
@@ -86,7 +97,6 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
             }
 
             ui64 offset = FirstOffset + i;
-
             return DoLock(offset, message, deadline);
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
@@ -157,18 +167,17 @@ size_t TStorage::Compact() {
     size_t removed = 0;
 
     // Remove messages by retention
-    if (RetentionPeriod && (TimeProvider->Now() - RetentionPeriod.value()) > BaseWriteTimestamp) {
-        auto dieDelta = (TimeProvider->Now() - RetentionPeriod.value() - BaseWriteTimestamp).Seconds();
-        auto dieProcessingDelta = dieDelta + 60;
+    if (auto dieDelta = GetDieDelta(); dieDelta.has_value()) {
+        auto dieProcessingDelta = dieDelta.value() + 60;
 
         auto canRemove = [&](auto& message) {
             switch (message.Status) {
                 case EMessageStatus::Locked:
-                    return message.DeadlineDelta < dieProcessingDelta;
+                    return message.DeadlineDelta <= dieProcessingDelta;
                 case EMessageStatus::Unprocessed:
                 case EMessageStatus::Committed:
                 case EMessageStatus::DLQ:
-                    return message.WriteTimestampDelta < dieDelta;
+                    return message.WriteTimestampDelta <= *dieDelta;
                 default:
                     return false;
             }

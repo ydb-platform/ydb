@@ -331,6 +331,9 @@ void TConsumerActor::CommitIfNeeded() {
 }
 
 void TConsumerActor::UpdateStorageConfig() {
+
+    LOG_D("Update config: RetentionPeriod: " << (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")
+        << " " << Config.ShortDebugString());
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
@@ -478,7 +481,7 @@ void TConsumerActor::ProcessEventQueue() {
         std::deque<ui64> messages;
         for (; count; --count) {
             auto result = Storage->Next(visibilityDeadline, position);
-            if (!result) {
+            if (!result.has_value()) {
                 break;
             }
 
@@ -500,8 +503,6 @@ void TConsumerActor::ProcessEventQueue() {
 
     ReadRequestsQueue = std::move(readRequestsQueue);
 
-    LOG_T("AfterQueueDump: " << Storage->DebugString());
-
     Persist();
 }
 
@@ -517,6 +518,8 @@ void TConsumerActor::Persist() {
     }
 
     Become(&TConsumerActor::StateWrite);
+
+    LOG_T("Dump befor persist: " << Storage->DebugString());
 
     auto tryInlineChannel = [](auto& write) {
         if (write->GetValue().size() < 1000) {

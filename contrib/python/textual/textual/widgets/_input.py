@@ -84,7 +84,12 @@ class Input(ScrollView):
             "Move cursor left a word and select",
             show=False,
         ),
-        Binding("right", "cursor_right", "Move cursor right", show=False),
+        Binding(
+            "right",
+            "cursor_right",
+            "Move cursor right or accept the completion suggestion",
+            show=False,
+        ),
         Binding(
             "shift+right",
             "cursor_right(True)",
@@ -123,18 +128,27 @@ class Input(ScrollView):
     | Key(s) | Description |
     | :- | :- |
     | left | Move the cursor left. |
+    | shift+left | Move cursor left and select. |
     | ctrl+left | Move the cursor one word to the left. |
     | right | Move the cursor right or accept the completion suggestion. |
+    | ctrl+shift+left | Move cursor left a word and select. |
+    | shift+right | Move cursor right and select. |
     | ctrl+right | Move the cursor one word to the right. |
     | backspace | Delete the character to the left of the cursor. |
+    | ctrl+shift+right | Move cursor right a word and select. |
     | home,ctrl+a | Go to the beginning of the input. |
     | end,ctrl+e | Go to the end of the input. |
+    | shift+home | Select up to the input start. |
+    | shift+end | Select up to the input end. |
     | delete,ctrl+d | Delete the character to the right of the cursor. |
     | enter | Submit the current value of the input. |
     | ctrl+w | Delete the word to the left of the cursor. |
     | ctrl+u | Delete everything to the left of the cursor. |
     | ctrl+f | Delete the word to the right of the cursor. |
     | ctrl+k | Delete everything to the right of the cursor. |
+    | ctrl+x | Cut selected text. |
+    | ctrl+c | Copy selected text. |
+    | ctrl+v | Paste text from the clipboard. | 
     """
 
     COMPONENT_CLASSES: ClassVar[set[str]] = {
@@ -278,6 +292,29 @@ class Input(ScrollView):
         """The result of validating the value on submission, formed by combining the results for each validator.
         This value will be None if no validation was performed, which will be the case if no validators are supplied
         to the corresponding `Input` widget."""
+
+        @property
+        def control(self) -> Input:
+            """Alias for self.input."""
+            return self.input
+
+    @dataclass
+    class Blurred(Message):
+        """Posted when the widget is blurred (loses focus).
+
+        Can be handled using `on_input_blurred` in a subclass of `Input` or in a parent
+        widget in the DOM.
+        """
+
+        input: Input
+        """The `Input` widget that was changed."""
+
+        value: str
+        """The value that the input was changed to."""
+
+        validation_result: ValidationResult | None = None
+        """The result of validating the value (formed by combining the results from each validator), or None
+            if validation was not performed (for example when no validators are specified in the `Input`s init)"""
 
         @property
         def control(self) -> Input:
@@ -636,12 +673,14 @@ class Input(ScrollView):
 
     def _on_blur(self, event: Blur) -> None:
         self._pause_blink()
-        if "blur" in self.validate_on:
-            self.validate(self.value)
+        validation_result = (
+            self.validate(self.value) if "blur" in self.validate_on else None
+        )
+        self.post_message(self.Blurred(self, self.value, validation_result))
 
     def _on_focus(self, event: Focus) -> None:
         self._restart_blink()
-        if self.select_on_focus:
+        if self.select_on_focus and not event.from_app_focus:
             self.selection = Selection(0, len(self.value))
         self.app.cursor_position = self.cursor_screen_offset
         self._suggestion = ""
@@ -761,11 +800,14 @@ class Input(ScrollView):
         Args:
             select: If `True`, select the text to the left of the cursor.
         """
+        start, end = self.selection
         if select:
-            start, end = self.selection
             self.selection = Selection(start, end - 1)
         else:
-            self.cursor_position -= 1
+            if self.selection.is_empty:
+                self.cursor_position -= 1
+            else:
+                self.cursor_position = min(start, end)
 
     def action_cursor_right(self, select: bool = False) -> None:
         """Accept an auto-completion or move the cursor one position to the right.
@@ -773,15 +815,18 @@ class Input(ScrollView):
         Args:
             select: If `True`, select the text to the right of the cursor.
         """
+        start, end = self.selection
         if select:
-            start, end = self.selection
             self.selection = Selection(start, end + 1)
         else:
             if self._cursor_at_end and self._suggestion:
                 self.value = self._suggestion
                 self.cursor_position = len(self.value)
             else:
-                self.cursor_position += 1
+                if self.selection.is_empty:
+                    self.cursor_position += 1
+                else:
+                    self.cursor_position = max(start, end)
 
     def action_home(self, select: bool = False) -> None:
         """Move the cursor to the start of the input.

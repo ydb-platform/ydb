@@ -62,6 +62,7 @@ class LinuxDriver(Driver):
         # keep track of this.
         self._must_signal_resume = False
         self._in_band_window_resize = False
+        self._mouse_pixels = False
 
         # Put handlers for SIGTSTP and SIGCONT in place. These are necessary
         # to support the user pressing Ctrl+Z (or whatever the dev might
@@ -133,6 +134,13 @@ class LinuxDriver(Driver):
 
         # Note: E.g. lxterminal understands 1000h, but not the urxvt or sgr
         #       extensions.
+
+    def _enable_mouse_pixels(self) -> None:
+        """Enable mouse reporting as pixels."""
+        if not self._mouse:
+            return
+        self.write("\x1b[?1016h")
+        self._mouse_pixels = True
 
     def _enable_bracketed_paste(self) -> None:
         """Enable bracketed paste mode."""
@@ -291,7 +299,7 @@ class LinuxDriver(Driver):
     def _request_terminal_sync_mode_support(self) -> None:
         """Writes an escape sequence to query the terminal support for the sync protocol."""
         # Terminals should ignore this sequence if not supported.
-        # Apple terminal doesn't, and writes a single 'p' in to the terminal,
+        # Apple terminal doesn't, and writes a single 'p' into the terminal,
         # so we will make a special case for Apple terminal (which doesn't support sync anyway).
         if not self.input_tty:
             return
@@ -440,24 +448,24 @@ class LinuxDriver(Driver):
             try:
                 for event in feed(""):
                     pass
-            except ParseError:
+            except (EOFError, ParseError):
                 pass
 
     def process_message(self, message: Message) -> None:
         # intercept in-band window resize
         if isinstance(message, TerminalSupportInBandWindowResize):
-            # If it is supported, enabled it
-            if message.supported and not message.enabled:
-                self._enable_in_band_window_resize()
-                self._in_band_window_resize = message.supported
-            elif message.enabled:
-                self._in_band_window_resize = message.supported
-            # Send up-to-date message
-            super().process_message(
-                TerminalSupportInBandWindowResize(
-                    message.supported, self._in_band_window_resize
-                )
-            )
-            return
+            if message.supported:
+                self._in_band_window_resize = True
+                if message.enabled:
+                    # Supported and enabled
+                    super().process_message(message)
+                else:
+                    # Supported, but not enabled
+                    self._enable_in_band_window_resize()
+                    super().process_message(
+                        TerminalSupportInBandWindowResize(True, True)
+                    )
+                self._enable_mouse_pixels()
+                return
 
         super().process_message(message)

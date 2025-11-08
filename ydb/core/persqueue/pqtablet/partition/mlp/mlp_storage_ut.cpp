@@ -1813,7 +1813,7 @@ Y_UNIT_TEST(SlowZone_Retention_1message) {
     utils.AddMessage(8);
     utils.Begin();
 
-    utils.TimeProvider->Tick(TDuration::Seconds(3));
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
     utils.Storage.Compact();
 
     utils.End();
@@ -1830,7 +1830,7 @@ Y_UNIT_TEST(SlowZone_Retention_2message) {
     utils.AddMessage(8);
     utils.Begin();
 
-    utils.TimeProvider->Tick(TDuration::Seconds(4));
+    utils.TimeProvider->Tick(TDuration::Seconds(3));
     utils.Storage.Compact();
 
     utils.End();
@@ -1847,7 +1847,7 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
     utils.AddMessage(8);
     utils.Begin();
 
-    utils.TimeProvider->Tick(TDuration::Seconds(5));
+    utils.TimeProvider->Tick(TDuration::Seconds(4));
     utils.Storage.Compact();
 
     utils.End();

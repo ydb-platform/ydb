@@ -156,4 +156,10 @@ THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::sh
     return setup->GetRuntime().GrabEdgeEvent<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse>();
 }
 
+void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId) {
+    auto& runtime = setup->GetRuntime();
+    auto tabletId = GetTabletId(setup, database, topic, partitionId);
+    ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+}
+
 }

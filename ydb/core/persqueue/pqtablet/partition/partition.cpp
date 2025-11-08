@@ -430,21 +430,16 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
     return size * duration.MilliSeconds() / 1000 / 1_MB; // mb*seconds
 }
 
+static TDuration GetAvailabilityPeriod(const TUserInfo& consumer)  {
+    if (consumer.Important) {
+        return TDuration::Max();
+    }
+    return consumer.AvailabilityPeriod;
+}
+
 bool TPartition::ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const {
-    auto getAvailabilityPeriod = [&](const TUserInfo& consumer) {
-        if (consumer.Important) {
-            return TDuration::Max();
-        }
-
-        if (MLPConsumers.contains(consumer.User)) {
-            // The MLP consumer monitors the retention period of messages itself and explicitly commits them.
-            return TDuration::Max();
-        }
-        return consumer.AvailabilityPeriod;
-    };
-
     for (const auto& [name, userInfo] : UsersInfoStorage->ViewImportant()) {
-        const TDuration availabilityPeriod = getAvailabilityPeriod(userInfo);
+        const TDuration availabilityPeriod = GetAvailabilityPeriod(userInfo);
         if (availabilityPeriod == TDuration::Zero()) {
             continue;
         }

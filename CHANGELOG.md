@@ -13,3 +13,5 @@
 * 24725:https://github.com/ydb-platform/ydb/issues/24701 [#24725](https://github.com/ydb-platform/ydb/pull/24725) ([Pavel Velikhov](https://github.com/pavelvelikhov))
 * 24668:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23895) that scalar and block hash shuffles may be incompatible and it causes incorrect results, for example, in hash joins. Now no 2 different kinds of shuffles (SCALAR and BLOCK) should be inputs to the single stage. (#24033) [#24666](https://github.com/ydb-platform/ydb/pull/24666) (#24033) [#24668](https://github.com/ydb-platform/ydb/pull/24668) ([Ivan](https://github.com/abyss7))
 * 24633:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/23731) when `IF` predicate pushdown into column shards by expanding constant folding and getting rid of the `IF`. [#24633](https://github.com/ydb-platform/ydb/pull/24633) ([Pavel Velikhov](https://github.com/pavelvelikhov))
+* 27643:Fixed the error of calculation of the consumer MaxCommittedTimeLag metric [#27643](https://github.com/ydb-platform/ydb/pull/27643) ([Nikolay Shestakov](https://github.com/nshestakov))
+

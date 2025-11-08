@@ -1,0 +1,25 @@
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================COPYRIGHT====================
+    Type *I32Ty = Type::getInt32Ty(C);
+    Value *Elt0 = Builder.CreateExtractElement(CI->getArgOperand(0),
+                                               ConstantInt::get(I32Ty, 0));
+
+
+====================COPYRIGHT====================
+  LLVMContext &Context = *unwrap(C);
+  SmallVector<Metadata *, 8> MDs;
+  for (auto *OV : ArrayRef(Vals, Count)) {
+
+
+====================COPYRIGHT====================
+  MDBuilder MDB(C);
+  SmallVector<Metadata *, 3> Vals;
+  Vals.push_back(ProfileData->getOperand(0));

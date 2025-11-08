@@ -151,7 +151,7 @@ public:
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
         const auto arrayType = ArrayType::get(valType, ArgNodes.size());
-        const auto args = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "args", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "args", block);
+        const auto args = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "args", ctx.GetEntryBlockEnd()) : new AllocaInst(arrayType, 0U, "args", block);
 
         ui32 i = 0;
         std::vector<std::pair<Value*, EValueRepresentation>> argsv;

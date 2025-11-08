@@ -10,6 +10,7 @@ PEERDIR(
     contrib/libs/llvm16/lib/Target/X86/Disassembler
     contrib/libs/llvm16/lib/Transforms/IPO
     contrib/libs/llvm16/lib/Transforms/ObjCARC
+    contrib/libs/llvm16/lib/TargetParser
 )
 
 IF (OS_LINUX)

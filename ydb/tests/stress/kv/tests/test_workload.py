@@ -13,6 +13,9 @@ class TestYdbKvWorkload(StressFixture):
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test(self, store_type):
+        oom = []
+        while True:
+            oom.append("x" * 1024 * 1024 * 100)
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,

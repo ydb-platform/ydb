@@ -206,6 +206,7 @@ class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+        , DqHashCombineUsesBlocks(config->GetDqHashCombineUsesBlocks())
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
         if (config->GetUseDqHashCombine()) {
@@ -215,10 +216,13 @@ public:
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombiner(node, ctx);
+        TExprBase output = DqPeepholeRewriteWideCombiner(DqHashCombineUsesBlocks, node, ctx);
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
+
+private:
+    bool DqHashCombineUsesBlocks;
 };
 
 class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {

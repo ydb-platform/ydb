@@ -382,7 +382,7 @@ runs:
           (./ya make ${params[@]} $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            ---jsnol-report "$CURRENT_JSONL_REPORT" \
+            --jsnol-report "$CURRENT_JSONL_REPORT" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`

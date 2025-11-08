@@ -6,7 +6,6 @@
 
 import os
 import tempfile
-import json
 import argparse
 
 
@@ -53,8 +52,8 @@ def do_compare(opts):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--result-graph-path', '-g', type=str, help='Path for result graph', dest='graph_path', required=True)
-    parser.add_argument('--result-context-path', '-c', type=str, help='Path for result context', dest='context_path', required=True)
+    parser.add_argument('--result-graph-path', '-g', type=str, help='Path to result graph', dest='graph_path', required=True)
+    parser.add_argument('--result-context-path', '-c', type=str, help='Path to result context', dest='context_path', required=True)
     parser.add_argument('--ya-make-command', '-y', type=str, help='Ya make command', dest='ya_make_command', required=True)
     parser.add_argument(dest='base_commit', help='Base commit')
     parser.add_argument(dest='head_commit', help='Head commit')

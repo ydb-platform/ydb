@@ -354,13 +354,16 @@ runs:
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            RERUN_FAILED_OPT="-X"
+            if [ -z "$GRAPH_PATH" ]; then
+              RERUN_FAILED_OPT="-X"
+            fi
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+          CURRENT_JSONL_REPORT=$CURRENT_PUBLIC_DIR/report.jsonl
 
           monitor_memory() {
               set +x
@@ -379,6 +382,7 @@ runs:
           (./ya make ${params[@]} $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+            ---jsnol-report "$CURRENT_JSONL_REPORT" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
@@ -495,6 +499,12 @@ runs:
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
+          fi
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+              .github/scripts/graph_patch.py \
+                --in-graph="$GRAPH_PATH" --in-context="$CONTEXT_PATH" \
+                --out-graph="$GRAPH_PATH" --out-context="$CONTEXT_PATH" \
+                --report="$CURRENT_JSONL_REPORT" --muted=.github/config/muted_ya.txt
           fi
         done;
 

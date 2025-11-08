@@ -758,7 +758,7 @@ private:
                         curl_easy_pause(streamHandle, CURLPAUSE_RECV_CONT);
                         break;
                     case TEasyCurlStream::EAction::Stop:
-                        curl_easy_pause(streamHandle, CURL_WRITEFUNC_PAUSE);
+                        curl_easy_pause(streamHandle, CURLPAUSE_RECV);
                         break;
                     case TEasyCurlStream::EAction::Drop:
                         curl_multi_remove_handle(Handle, streamHandle);

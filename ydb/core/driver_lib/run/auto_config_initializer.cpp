@@ -39,6 +39,11 @@ namespace {
     constexpr i16 GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase = 1000;
     constexpr i16 GRpcHandlersPerCompletionQueuePerCpu = GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase / MaxPreparedCpuCount;
 
+    constexpr i16 SchedulerTinyCoresThreshold = 4;
+
+    constexpr ::arc_ui64 SchedulerDefaultResolution = 64;
+    constexpr ::arc_ui64 SchedulerTinyResolution = 1024;
+
     TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][5] {
         {  {0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
         {  {1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
@@ -239,7 +244,10 @@ namespace NKikimr::NAutoConfigInitializer {
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
-            scheduler->SetResolution(tinyMode ? 1024 : 64);
+
+            bool useTiny = tinyMode || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
+            scheduler->SetResolution(useTiny ? SchedulerTinyResolution : SchedulerDefaultResolution);
+
             scheduler->SetSpinThreshold(0);
             scheduler->SetProgressThreshold(10'000);
         }

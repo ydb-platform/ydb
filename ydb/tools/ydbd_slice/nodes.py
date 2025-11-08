@@ -239,4 +239,4 @@ class Nodes(object):
             self._copy_on_node(local_path, hub, remote_path)
             self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
         if compressed_path is not None:
-            self.execute_async('if [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(from_=remote_path, to=original_remote_path))
+            self.execute_async('if  [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(from_=remote_path, to=original_remote_path))

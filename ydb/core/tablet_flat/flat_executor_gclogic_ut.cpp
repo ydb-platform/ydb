@@ -113,5 +113,26 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
     }
 }
 
+
+Y_UNIT_TEST_SUITE(THistoryCutter) {
+    Y_UNIT_TEST(TestHistoryCutter) {
+        TIntrusivePtr<TTabletStorageInfo> info = new TTabletStorageInfo(1, TTabletTypes::Dummy);
+        info->Channels.emplace_back();
+        ui32 group = 0;
+        for (ui32 gen : {1, 2, 5, 6, 7, 9, 10}) {
+            info->Channels[0].History.emplace_back(gen, ++group);
+        }
+        THistoryCutter cutter(info);
+        for (ui32 gen : {3, 4, 8, 9}) {
+            cutter.SeenBlob(TLogoBlobID(1, gen, 1, 0, 42, 0));
+        }
+        std::vector<const TTabletChannelInfo::THistoryEntry*> toCut = cutter.GetHistoryToCut(0);
+        UNIT_ASSERT_VALUES_EQUAL(toCut.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(toCut[0]->FromGeneration, 1);
+        UNIT_ASSERT_VALUES_EQUAL(toCut[1]->FromGeneration, 5);
+        UNIT_ASSERT_VALUES_EQUAL(toCut[2]->FromGeneration, 6);
+    }
+}
+
 }
 }

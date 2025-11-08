@@ -6,7 +6,6 @@
 {%-     set all_targets = all_targets + extra_targets -%}
 {%- endif -%}
 
-{%- set publish = all_targets|selectattr('publish', 'eq', true)|length -%}
 {%- if not output_root -%}
 {%-     set output_root = arcadia_root -%}
 {%- endif -%}

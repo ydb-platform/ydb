@@ -1595,7 +1595,11 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
                            : BuildQuotedAtom(Pos_, *GetColumnName());
 
         if (IsYqlRef_) {
-            Node_ = Y("YqlColumnRef", ref);
+            if (!Source_.empty()) {
+                Node_ = Y("YqlColumnRef", Q(Source_), ref);
+            } else {
+                Node_ = Y("YqlColumnRef", ref);
+            }
         } else {
             Node_ = Y(callable, "row", ref);
         }

@@ -242,7 +242,7 @@ void TPartition::Handle(NReadQuoterEvents::TEvAccountQuotaCountersUpdated::TPtr&
 void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
     TSet<TString> important;
     for (const auto& consumer : Config.GetConsumers()) {
-        if (!consumer.GetImportant() && !(consumer.GetAvailabilityPeriodMs() > 0) && !MLPConsumers.contains(consumer.GetName())) {
+        if (!IsImportant(consumer) && !(consumer.GetAvailabilityPeriodMs() > 0)) {
             continue;
         }
 
@@ -253,12 +253,12 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
             if (!ImporantOrExtendedAvailabilityPeriod(*userInfo) && userInfo->LabeledCounters) {
                 ctx.Send(TabletActorId, new TEvPQ::TEvPartitionLabeledCountersDrop(Partition, userInfo->LabeledCounters->GetGroup()));
             }
-            UsersInfoStorage->SetImportant(*userInfo, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
+            UsersInfoStorage->SetImportant(*userInfo, IsImportant(consumer), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()));
             continue;
         }
         if (!userInfo) {
             userInfo = &UsersInfoStorage->Create(
-                    ctx, consumer.GetName(), 0, consumer.GetImportant(), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
+                    ctx, consumer.GetName(), 0, IsImportant(consumer), TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs()), "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
         if (userInfo->Offset < (i64)GetStartOffset())

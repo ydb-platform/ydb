@@ -3171,7 +3171,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
             ts += TDuration::MilliSeconds(1);
         }
         userInfo.ReadFromTimestamp = ts;
-        userInfo.Important = consumer.GetImportant();
+        userInfo.Important = IsImportant(consumer);
         userInfo.AvailabilityPeriod = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
 
         ui64 rrGen = consumer.GetGeneration();
@@ -4547,6 +4547,10 @@ void TPartition::ResetDetailedMetrics() {
     TimeSinceLastWriteMsPerPartition.Reset();
     BytesWrittenPerPartition.Reset();
     MessagesWrittenPerPartition.Reset();
+}
+
+bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer) {
+    return consumer.GetImportant() || consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
 }
 
 } // namespace NKikimr::NPQ

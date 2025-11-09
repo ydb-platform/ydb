@@ -21,11 +21,9 @@ public:
 
 protected:
     static IActor* GetStreamingQueriesCreator() {
-        const bool isSecure = AppData()->FeatureFlags.GetEnableSecureScriptExecutions();
-
         NACLib::TDiffACL acl;
         acl.ClearAccess();
-        acl.SetInterruptInheritance(isSecure);
+        acl.SetInterruptInheritance(AppData()->FeatureFlags.GetEnableSecureScriptExecutions());
 
         return CreateTableCreator(
             SplitPath(TStreamingQueryConfig::GetTablesPath()),
@@ -38,7 +36,7 @@ protected:
             NKikimrServices::KQP_PROXY,
             {},
             {},
-            /* isSystemUser */ isSecure,
+            /* isSystemUser */ true,
             Nothing(),
             acl
         );

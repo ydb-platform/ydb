@@ -14,7 +14,7 @@ struct TSnapshotMessage {
             struct {
                 ui64 Status: 3;
                 ui64 Reserve: 3;
-                ui64 ReceiveCount: 10;
+                ui64 ProcessingCount: 10;
                 ui64 DeadlineDelta: 16;
                 ui64 HasMessageGroupId: 1;
                 ui64 MessageGroupIdHash: 31;
@@ -46,7 +46,7 @@ struct TMessageChange {
         struct {
             ui32 Status: 3;
             ui32 Reserve: 3;
-            ui32 ReceiveCount: 10;
+            ui32 ProcessingCount: 10;
             ui32 DeadlineDelta: 16;
         } Fields;
         ui32 Value;
@@ -362,7 +362,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             auto& msg = it->second;
             SlowMessages[offset] = TMessage{
                 .Status = EMessageStatus::Unprocessed,
-                .ReceiveCount = 0,
+                .ProcessingCount = 0,
                 .DeadlineDelta = 0,
                 .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
                 .MessageGroupIdHash = msg.MessageGroup.Fields.MessageGroupIdHash,
@@ -394,7 +394,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             if (offset >= GetLastOffset()) {
                 Messages.push_back({
                     .Status = EMessageStatus::Unprocessed,
-                    .ReceiveCount = 0,
+                    .ProcessingCount = 0,
                     .DeadlineDelta = 0,
                     .HasMessageGroupId = msg.MessageGroup.Fields.HasMessageGroupId,
                     .MessageGroupIdHash = msg.MessageGroup.Fields.MessageGroupIdHash,
@@ -426,7 +426,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
 
             message->Status = msg.Common.Fields.Status;
             message->DeadlineDelta = msg.Common.Fields.DeadlineDelta;
-            message->ReceiveCount = msg.Common.Fields.ReceiveCount;
+            message->ProcessingCount = msg.Common.Fields.ProcessingCount;
 
             if (statusChanged) {
                 switch(message->Status) {
@@ -566,7 +566,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
             if (message) {
                 TMessageChange msg;
                 msg.Common.Fields.Status = message->Status;
-                msg.Common.Fields.ReceiveCount = message->ReceiveCount;
+                msg.Common.Fields.ProcessingCount = message->ProcessingCount;
                 msg.Common.Fields.DeadlineDelta = message->DeadlineDelta;
                 serializer.Add(offset, msg);
             }

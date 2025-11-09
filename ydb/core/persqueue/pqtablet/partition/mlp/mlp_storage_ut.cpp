@@ -34,6 +34,7 @@ struct TUtils {
         Storage.SetKeepMessageOrder(true);
         Storage.SetMaxMessageProcessingCount(1);
         Storage.SetRetentionPeriod(TDuration::Seconds(10));
+        Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
     }
 
     TIntrusivePtr<MockTimeProvider> TimeProvider;
@@ -1119,6 +1120,8 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
         TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
         storage.SetMaxMessageProcessingCount(1);
+        storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    
         storage.SerializeTo(snapshot);
 
         storage.AddMessage(3, true, 5, writeTimestamp);
@@ -1158,6 +1161,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
     {
         TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
+        storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
 
         storage.Initialize(snapshot);
         storage.ApplyWAL(wal);
@@ -1450,6 +1454,8 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
 Y_UNIT_TEST(CompactStorage_WithDLQ) {
     TStorage storage(CreateDefaultTimeProvider());
     storage.SetMaxMessageProcessingCount(1);
+    storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
 
@@ -1519,12 +1525,12 @@ Y_UNIT_TEST(ProccessDeadlines) {
     {
         auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
-        UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
     {
         auto [message, _] = storage.GetMessage(4);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
-        UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
 
     auto& metrics = storage.GetMetrics();

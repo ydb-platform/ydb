@@ -127,6 +127,7 @@ void TPartition::InitializeMLPConsumers() {
 
         LOG_I("Creating MLP consumer '" << name << "'");
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
+            DbPath,
             TabletId,
             TabletActorId,
             Partition.OriginalPartitionId,

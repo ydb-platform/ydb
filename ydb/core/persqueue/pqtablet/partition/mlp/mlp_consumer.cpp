@@ -1,5 +1,4 @@
 #include "mlp_consumer.h"
-#include "mlp_message_enricher.h"
 #include "mlp_storage.h"
 
 #include <ydb/core/persqueue/common/key.h>
@@ -82,10 +81,11 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
     readWAL->SetIncludeData(true);
 }
 
-TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
+TConsumerActor::TConsumerActor(const TString& database,ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
     const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     std::optional<TDuration> retentionPeriod)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
+    , Database(database)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
@@ -311,7 +311,7 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
-        RegisterWithSameMailbox(new TMessageEnricherActor(TabletActorId, PartitionId, Config.GetName(), std::move(msgs)));
+        RegisterWithSameMailbox(CreateMessageEnricher(TabletActorId, PartitionId, Config.GetName(), std::move(msgs)));
     }
     ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
@@ -334,6 +334,11 @@ void TConsumerActor::UpdateStorageConfig() {
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
     Storage->SetRetentionPeriod(RetentionPeriod);
+    if (Config.GetDeadLetterPolicyEnabled() && Config.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED) {
+        Storage->SetDeadLetterPolicy(Config.GetDeadLetterPolicy());
+    } else {
+        Storage->SetDeadLetterPolicy(std::nullopt);
+    }
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
@@ -672,6 +677,18 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
     FetchMessagesIfNeeded();
     ProcessEventQueue();
+
+    if (!DLQMoverActorId && !Storage->GetDLQMessages().empty()) {
+        std::deque<ui64> messages;
+        DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover(
+            Database,
+            TabletId,
+            PartitionId,
+            Config.GetName(),
+            Config.GetDeadLetterQueue(),
+            std::move(messages)
+        ));
+    }
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -681,13 +698,14 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
 }
 
 NActors::IActor* CreateConsumerActor(
+    const TString& database,
     ui64 tabletId,
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
     const std::optional<TDuration> reteintion) {
-    return new TConsumerActor(tabletId, tabletActorId, partitionId, partitionActorId, config, reteintion);
+    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, reteintion);
 }
 
 }

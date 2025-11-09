@@ -44,4 +44,16 @@ bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
 bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev);
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 
+NActors::IActor* CreateMessageEnricher(const NActors::TActorId& tabletActorId,
+                                       const ui32 partitionId,
+                                       const TString& consumerName,
+                                       std::deque<TReadResult>&& replies);
+
+NActors::IActor* CreateDLQMover(const TString& database,
+                                const ui64 tabletId,
+                                const ui32 partitionId,
+                                const TString& consumerName,
+                                const TString& destinationTopic,
+                                std::deque<ui64>&& offsets);
+
 } // namespace NKikimr::NPQ::NMLP

@@ -8,7 +8,6 @@
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
-// TODO MLP DLQ
 namespace NKikimr::NPQ::NMLP {
 
 class TBatch;
@@ -21,7 +20,7 @@ class TConsumerActor : public TBaseTabletActor<TConsumerActor>
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
 
 public:
-    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
+    TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
         const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
         std::optional<TDuration> retentionPeriod);
 
@@ -70,6 +69,7 @@ private:
     void UpdateStorageConfig();
     
 private:
+    const TString Database;
     const ui32 PartitionId;
     const TActorId PartitionActorId;
     NKikimrPQ::TPQTabletConfig::TConsumer Config;
@@ -78,6 +78,8 @@ private:
     bool FetchInProgress = false;
     ui64 FetchCookie = 0;
     ui64 LastCommittedOffset = 0;
+
+    TActorId DLQMoverActorId;
 
     std::unique_ptr<TStorage> Storage;
 

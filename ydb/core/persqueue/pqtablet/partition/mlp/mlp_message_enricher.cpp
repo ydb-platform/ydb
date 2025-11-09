@@ -136,4 +136,11 @@ void TMessageEnricherActor::ProcessQueue() {
     }
 }
 
+NActors::IActor* CreateMessageEnricher(const NActors::TActorId& tabletActorId,
+                                       const ui32 partitionId,
+                                       const TString& consumerName,
+                                       std::deque<TReadResult>&& replies) {
+    return new TMessageEnricherActor(tabletActorId, partitionId, consumerName, std::move(replies));
+}
+
 } // namespace NKikimr::NPQ::NMLP

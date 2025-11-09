@@ -38,6 +38,10 @@ void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
     RetentionPeriod = retentionPeriod;
 }
 
+void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy) {
+    DeadLetterPolicy = deadLetterPolicy;
+}
+
 std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
     auto dieDelta = Max<ui64>();
     if (RetentionPeriod) {
@@ -276,11 +280,11 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,
-        .ReceiveCount = 0,
+        .ProcessingCount = 0,
         .DeadlineDelta = 0,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
-        .WriteTimestampDelta = (TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds()
+        .WriteTimestampDelta = static_cast<ui32>((TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds())
     });
 
     Batch.AddNewMessage(offset);
@@ -375,7 +379,9 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     AFL_VERIFY(message.Status == EMessageStatus::Unprocessed)("status", message.Status);
     message.Status = EMessageStatus::Locked;
     message.DeadlineDelta = NormalizeDeadline(deadline);
-    ++message.ReceiveCount;
+    if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
+        ++message.ProcessingCount;
+    }
 
     Batch.AddChange(offset);
 
@@ -470,20 +476,30 @@ void TStorage::DoUnlock( ui64 offset, TMessage& message) {
 
     --Metrics.LockedMessageCount;
 
-    if (message.ReceiveCount >= MaxMessageProcessingCount) {
-        // TODO Move to DLQ or remove message
-        message.Status = EMessageStatus::DLQ;
-        DLQQueue.push_back(offset);
-        Batch.AddDLQ(offset);
+    if (message.ProcessingCount >= MaxMessageProcessingCount) {
+        if (DeadLetterPolicy) {
+            switch (DeadLetterPolicy.value()) {
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                    message.Status = EMessageStatus::DLQ;
+                    DLQQueue.push_back(offset);
+                    Batch.AddDLQ(offset);
 
-        ++Metrics.DLQMessageCount;
-    } else {
-        if (offset >= FirstOffset) {
-            FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
+                    ++Metrics.DLQMessageCount;
+                    return;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                    DoCommit(offset);
+                    return;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                    break;
+            }
         }
-        
-        ++Metrics.UnprocessedMessageCount;
     }
+
+    if (offset >= FirstOffset) {
+        FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
+    }
+
+    ++Metrics.UnprocessedMessageCount;
 }
 
 void TStorage::MoveBaseDeadline() {
@@ -704,7 +720,7 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
         .SlowZone = Iterator != Storage.SlowMessages.end(),
         .Offset = offset,
         .Status = static_cast<EMessageStatus>(message->Status),
-        .ProcessingCount = message->ReceiveCount,
+        .ProcessingCount = message->ProcessingCount,
         .ProcessingDeadline = static_cast<EMessageStatus>(message->Status) == EMessageStatus::Locked ?
             Storage.BaseDeadline + TDuration::Seconds(message->DeadlineDelta) : TInstant::Zero(),
         .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),

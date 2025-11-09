@@ -3439,6 +3439,17 @@ BELONGS ya.make
         i18n/windtfmt.cpp [5:6]
         i18n/winnmfmt.cpp [5:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 9f184de85b168ec6b7a738a17e128f26
+BELONGS ya.make
+    License text:
+        Copyright (c) 1997-date Stuart Langridge
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [553:553]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 9f89fd35d0b55a21c8bf543e7e9b8974
 BELONGS ya.make
     License text:
@@ -3450,7 +3461,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [505:507]
+        i18n/messageformat2.cpp [544:546]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a021d3bd6d6cbb97cbccc0ab1586c491
 BELONGS ya.make
@@ -3840,7 +3851,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        APIChangeReport.html [566:568]
+        APIChangeReport.html [1706:1708]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c1b7297fc443f46a1d1de36f8b788822
 BELONGS ya.make
@@ -4354,7 +4365,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        i18n/messageformat2.cpp [563:573]
+        i18n/messageformat2.cpp [602:612]
 
 KEEP     COPYRIGHT_SERVICE_LABEL eed7e8b3d80757822970ac3a50dd6716
 BELONGS ya.make

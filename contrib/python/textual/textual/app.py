@@ -795,7 +795,7 @@ class App(Generic[ReturnType], DOMNode):
         self._clipboard: str = ""
         """Contents of local clipboard."""
 
-        self.supports_smooth_scrolling: bool = True
+        self.supports_smooth_scrolling: bool = False
         """Does the terminal support smooth scrolling?"""
 
         if self.ENABLE_COMMAND_PALETTE:
@@ -2921,8 +2921,11 @@ class App(Generic[ReturnType], DOMNode):
     def capture_mouse(self, widget: Widget | None) -> None:
         """Send all mouse events to the given widget or disable mouse capture.
 
+        Normally mouse events are sent to the widget directly under the pointer.
+        Capturing the mouse allows a widget to receive mouse events even when the pointer is over another widget.
+
         Args:
-            widget: If a widget, capture mouse event, or `None` to end mouse capture.
+            widget: Widget to capture mouse events, or `None` to end mouse capture.
         """
         if widget == self.mouse_captured:
             return
@@ -4396,6 +4399,7 @@ class App(Generic[ReturnType], DOMNode):
             self._driver.resume_application_mode()
             # ...and publish a resume signal.
             self._resume_signal()
+            self.refresh(layout=True)
         else:
             raise SuspendNotSupported(
                 "App.suspend is not supported in this environment."
@@ -4647,14 +4651,10 @@ class App(Generic[ReturnType], DOMNode):
                 "Failed to save screenshot", title="Screenshot", severity="error"
             )
 
-    @on(messages.TerminalSupportInBandWindowResize)
-    def _on_terminal_supports_in_band_window_resize(
-        self, message: messages.TerminalSupportInBandWindowResize
-    ) -> None:
-        """There isn't much we can do with this information currently, so
-        we will just log it.
-        """
-        self.supports_smooth_scrolling = True
+    @on(messages.InBandWindowResize)
+    def _on_in_band_window_resize(self, message: messages.InBandWindowResize) -> None:
+        """In band window resize enables smooth scrolling."""
+        self.supports_smooth_scrolling = message.enabled
         self.log.debug(message)
 
     def _on_idle(self) -> None:

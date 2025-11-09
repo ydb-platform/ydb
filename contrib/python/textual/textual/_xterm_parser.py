@@ -43,7 +43,10 @@ _re_in_band_window_resize: Final = re.compile(
 )
 
 
-IS_ITERM = os.environ.get("TERM_PROGRAM", "") == "iTerm.app"
+IS_ITERM = (
+    os.environ.get("LC_TERMINAL", "") == "iTerm2"
+    or os.environ.get("TERM_PROGRAM", "") == "iTerm.app"
+)
 
 
 class XTermParser(Parser[Message]):
@@ -80,13 +83,15 @@ class XTermParser(Parser[Message]):
                 and self.terminal_pixel_size is not None
                 and self.terminal_size is not None
             ):
-                x_ratio = self.terminal_pixel_size[0] / self.terminal_size[0]
-                y_ratio = self.terminal_pixel_size[1] / self.terminal_size[1]
+                pixel_width, pixel_height = self.terminal_pixel_size
+                width, height = self.terminal_size
+                x_ratio = pixel_width / width
+                y_ratio = pixel_height / height
                 x /= x_ratio
                 y /= y_ratio
 
-            delta_x = x - self.last_x
-            delta_y = y - self.last_y
+            delta_x = int(x) - int(self.last_x)
+            delta_y = int(y) - int(self.last_y)
             self.last_x = x
             self.last_y = y
             event_class: type[events.MouseEvent]
@@ -293,8 +298,10 @@ class XTermParser(Parser[Message]):
                             and not IS_ITERM
                         ):
                             # TODO: iTerm is buggy in one or more of the protocols required here
-                            in_band_event = messages.TerminalSupportInBandWindowResize.from_setting_parameter(
-                                setting_parameter
+                            in_band_event = (
+                                messages.InBandWindowResize.from_setting_parameter(
+                                    setting_parameter
+                                )
                             )
                             on_token(in_band_event)
                         break

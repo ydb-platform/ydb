@@ -227,8 +227,10 @@ struct TScriptExecutionsYdbSetup {
     }
 
     void WaitTableCreation(TVector<TActorId> edgeActors) {
-        for (const auto& actor: edgeActors) {
-            GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor, TestTimeout);
+        for (const auto& actor : edgeActors) {
+            const auto reply = GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor, TestTimeout);
+            UNIT_ASSERT_C(reply, "CreateTable response is empty");
+            UNIT_ASSERT_C(reply->Get()->Success, reply->Get()->Issues.ToOneLineString());
         }
     }
 
@@ -913,7 +915,6 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         acl.SetInterruptInheritance(true);
 
         ydb.CreateTableInDbSync(EXTENDED_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, true, acl);
-        Sleep(TDuration::Seconds(1));
         ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>());
     }
 

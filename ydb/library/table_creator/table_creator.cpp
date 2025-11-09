@@ -77,6 +77,8 @@ public:
     )
 
     void Bootstrap() {
+        LogPrefix = TStringBuilder() << LogPrefix << " SelfId: " << SelfId() << " Owner: " << Owner << ". ";
+
         Become(&TTableCreator::StateFuncCheck);
         if (!Database) {
             Database = AppData()->TenantName;
@@ -154,21 +156,21 @@ public:
             aclChanged = changedObject != *securityObject || (IsSystemUser && securityObject->GetOwnerSID() != BUILTIN_ACL_METADATA);
         }
 
-        if (!Columns.empty() || aclChanged) {
-            if (!Columns.empty()) {
-                OperationType = NKikimrSchemeOp::ESchemeOpAlterTable;
-                PartialModification = aclChanged;
-            } else {
-                OperationType = NKikimrSchemeOp::ESchemeOpModifyACL;
-                PartialModification = false;
-            }
-
-            Become(&TTableCreator::StateFuncUpgrade);
-            RunTableRequest();
+        if (Columns.empty() && !aclChanged) {
+            Success();
             return;
         }
 
-        Success();
+        if (!Columns.empty()) {
+            OperationType = NKikimrSchemeOp::ESchemeOpAlterTable;
+            PartialModification = aclChanged;
+        } else {
+            OperationType = NKikimrSchemeOp::ESchemeOpModifyACL;
+            PartialModification = false;
+        }
+
+        Become(&TTableCreator::StateFuncUpgrade);
+        RunTableRequest();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -231,11 +233,11 @@ public:
                 [[fallthrough]];
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    if (!PartialModification) {
-                        Success(ev);
-                    } else {
+                    if (PartialModification) {
                         // Apply next modification
                         FallBack();
+                    } else {
+                        Success(ev);
                     }
                 } else {
                     Fail(ev);
@@ -299,8 +301,7 @@ public:
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
-        LOG_DEBUG_S(*TlsActivationContext, LogService,
-            LogPrefix << "Subscribe on create table tx: " << txId);
+        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Subscribe on create table tx: " << txId);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -324,7 +325,8 @@ public:
         PipeClientClosedByUs = false;
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev) {
+        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Subscribe on tx: " << ev->Get()->Record.GetTxId() << " registered");
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
@@ -483,7 +485,7 @@ private:
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
     bool PipeClientClosedByUs = false;
-    const TString LogPrefix;
+    TString LogPrefix;
     TTableCreatorRetryPolicy::IRetryState::TPtr RetryState;
 };
 

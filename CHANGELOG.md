@@ -2,8 +2,7 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* None:Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -72,6 +71,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 * 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 28077:Added Reject Probability to help prevent overloads:
+- Reject operations in column shards by probability https://github.com/ydb-platform/ydb/pull/26783
+- Move MaxTxInFly to ICB https://github.com/ydb-platform/ydb/pull/27635 [#28077](https://github.com/ydb-platform/ydb/pull/28077) ([Stanislav Yablonskiy](https://github.com/neyrox))
 
 ### Bug fixes
 
@@ -132,6 +134,8 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 28210:Fix crashing on decompression error [#28210](https://github.com/ydb-platform/ydb/pull/28210) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
+* 28060:Fix successful reads not always waiting for read conflicts to persist, which could cause commits to violate serializability. Fixes #27961. [#28060](https://github.com/ydb-platform/ydb/pull/28060) ([Aleksei Borzenkov](https://github.com/snaury))
 
 ### YDB UI
 
@@ -157,3 +161,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+

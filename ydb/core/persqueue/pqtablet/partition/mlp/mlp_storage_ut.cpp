@@ -1827,6 +1827,46 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
     utils.AssertLoad();
 }
 
+Y_UNIT_TEST(ChangeDeadLettePolicy_Delete) {
+    TUtils utils;
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    utils.Storage.SetMaxMessageProcessingCount(1);
+
+    utils.AddMessage(1);
+    utils.Next();
+    utils.Storage.Unlock(0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+
+    utils.Begin();
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().CommittedMessageCount, 1);
+    utils.End();
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(ChangeDeadLettePolicy_Unspecified) {
+    TUtils utils;
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    utils.Storage.SetMaxMessageProcessingCount(1);
+
+    utils.AddMessage(1);
+    utils.Next();
+    utils.Storage.Unlock(0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+
+    utils.Begin();
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().UnprocessedMessageCount, 1);
+    utils.End();
+
+    utils.AssertLoad();
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

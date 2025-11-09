@@ -51,6 +51,7 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
         DLQQueue.pop_front();
 
         Batch.AddChange(offset);
+        Batch.DeleteFromDLQ(offset);
 
         switch (policy) {
             case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
@@ -59,9 +60,15 @@ void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDe
             case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
                 Commit(offset);
                 break;
-            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
-                Unlock(offset);
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED: {
+                auto [message, _] = GetMessageInt(offset);
+                message->Status = EMessageStatus::Unprocessed;
+
+                --Metrics.DLQMessageCount;
+                ++Metrics.UnprocessedMessageCount;
+
                 break;
+            }
         }
     }
 }
@@ -498,7 +505,7 @@ bool TStorage::DoUnlock(ui64 offset) {
     return true;
 }
 
-void TStorage::DoUnlock( ui64 offset, TMessage& message) {
+void TStorage::DoUnlock(ui64 offset, TMessage& message) {
     message.Status = EMessageStatus::Unprocessed;
     message.DeadlineDelta = 0;
 

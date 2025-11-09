@@ -448,7 +448,12 @@ public:
         LogConfig.Swap(event.MutableConfig()->MutableLogConfig());
         UpdateYqlLogLevels();
 
-        FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
+        auto* newFeatureFlags = event.MutableConfig()->MutableFeatureFlags();
+        if (newFeatureFlags->GetEnableSecureScriptExecutions() != FeatureFlags.GetEnableSecureScriptExecutions()) {
+            ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::NotStarted;
+        }
+
+        FeatureFlags.Swap(newFeatureFlags);
         WorkloadManagerConfig.Swap(event.MutableConfig()->MutableWorkloadManagerConfig());
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
@@ -1563,9 +1568,14 @@ private:
         Send(requestEvent->Sender, new TResponse(status, std::move(issues)), 0, requestEvent->Cookie);
     }
 
+    void StartScriptExecutionsTablesCreation() {
+        ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
+        Register(CreateScriptExecutionsTablesCreator(FeatureFlags), TMailboxType::HTSwap, AppData()->SystemPoolId);
+    }
+
     template<typename TEvent>
     bool CheckScriptExecutionsTablesReady(TEvent& ev, EDelayedRequestType requestType) {
-        if (!AppData()->FeatureFlags.GetEnableScriptExecutionOperations()) {
+        if (!FeatureFlags.GetEnableScriptExecutionOperations()) {
             NYql::TIssues issues;
             issues.AddIssue("ExecuteScript feature is not enabled");
             HandleDelayedRequestError(requestType, std::move(ev), Ydb::StatusIds::UNSUPPORTED, std::move(issues));
@@ -1580,8 +1590,7 @@ private:
 
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
-                ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Pending;
-                Register(CreateScriptExecutionsTablesCreator(FeatureFlags), TMailboxType::HTSwap, AppData()->SystemPoolId);
+                StartScriptExecutionsTablesCreation();
                 [[fallthrough]];
             case EScriptExecutionsCreationStatus::Pending:
                 if (DelayedEventsQueue.size() < 10000) {
@@ -1601,6 +1610,11 @@ private:
     }
 
     void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
+        if (ScriptExecutionsCreationStatus == EScriptExecutionsCreationStatus::NotStarted) {
+            StartScriptExecutionsTablesCreation();
+            return;
+        }
+
         ScriptExecutionsCreationStatus = EScriptExecutionsCreationStatus::Finished;
 
         NYql::TIssue rootIssue;

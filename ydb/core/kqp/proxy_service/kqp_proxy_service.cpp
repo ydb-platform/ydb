@@ -174,6 +174,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         GetScriptExecutionOperation,
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
+        GetScriptExecutionPhysicalGraph,
     };
 
 public:
@@ -1247,6 +1248,7 @@ public:
             hFunc(NKqp::TEvGetScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
+            hFunc(NKqp::TEvGetScriptExecutionPhysicalGraph, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
@@ -1549,6 +1551,10 @@ private:
             case EDelayedRequestType::CancelScriptExecutionOperation:
                 HandleDelayedScriptRequestError<TEvCancelScriptExecutionOperationResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
+
+            case EDelayedRequestType::GetScriptExecutionPhysicalGraph:
+                HandleDelayedScriptRequestError<TEvGetScriptPhysicalGraphResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
         }
     }
 
@@ -1638,6 +1644,12 @@ private:
     void Handle(NKqp::TEvCancelScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::CancelScriptExecutionOperation)) {
             Register(CreateCancelScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+        }
+    }
+
+    void Handle(TEvGetScriptExecutionPhysicalGraph::TPtr& ev) {
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionPhysicalGraph)) {
+            Register(CreateGetScriptExecutionPhysicalGraphActor(ev->Sender, ev->Get()->Database, ev->Get()->ExecutionId));
         }
     }
 
@@ -1867,7 +1879,7 @@ private:
     }
 };
 
-} // namespace
+} // anonymous namespace
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,

@@ -48,7 +48,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         return TConclusionStatus::Fail(TStringBuilder{}
             << "Internal deserialization error. type: dictionary (schema variants), schema: " << schemaVariants->ToString()
             << " records count: " << externalInfo.GetRecordsCount()
-            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unkown"})
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
             << " reason: " << resultVariants.status().ToString()
             << " original data: " << Base64Encode(TString(blobVariants.data(), blobVariants.size())));
     }
@@ -62,7 +62,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         return TConclusionStatus::Fail(TStringBuilder{}
             << "Internal deserialization error. type: dictionary (schema records), schema: " << schemaRecords->ToString()
             << " records count: " << externalInfo.GetRecordsCount()
-            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unkown"})
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
             << " variants count: " << rbVariants->num_rows()
             << " reason: " << resultRecords.status().ToString()
             << " original data: " << Base64Encode(TString(blobRecords.data(), blobRecords.size())));

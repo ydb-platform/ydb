@@ -20,7 +20,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         return TConclusionStatus::Fail(TStringBuilder{}
             << "Internal deserialization error. type: plain, schema: " << schema->ToString()
             << " records count: " << externalInfo.GetRecordsCount()
-            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unkown"})
+            << " not null records count: " << (externalInfo.GetNotNullRecordsCount() ? ToString(*externalInfo.GetNotNullRecordsCount()) :  TString{"unknown"})
             << " reason: " << result.status().ToString()
             << " original data: " << Base64Encode(originalData));
     }

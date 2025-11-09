@@ -351,6 +351,6 @@ class TestStreamingInYdb(TestYdsBase):
         for i in range(message_count):
             self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
         expected = [message for i in range(message_count)]
-        self.read_stream(message_count, topic_path=self.output_topic) == expected
+        assert self.read_stream(message_count, topic_path=self.output_topic) == expected
 
         kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")

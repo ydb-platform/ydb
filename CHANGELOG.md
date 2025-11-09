@@ -76,6 +76,21 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 28304:DS proxy should allocate chunks using rdma aware allocator [#28304](https://github.com/ydb-platform/ydb/pull/28304) ([Daniil Cherednik](https://github.com/dcherednik))
+* 28281:New column `TxCompleteLag` in system view `partition_stats` [#28281](https://github.com/ydb-platform/ydb/pull/28281) ([azevaykin](https://github.com/azevaykin))
+* 28265:The RDMA code will not work without ibverbs but we still need mem pool in this case for test purpose.
+    So this pr emulate memory region registration if we have no ibverbs context [#28265](https://github.com/ydb-platform/ydb/pull/28265) ([Daniil Cherednik](https://github.com/dcherednik))
+* 28220:Supported inconsistent UPSERT INTO row and column tables in streaming queries with checkpoints support [#28220](https://github.com/ydb-platform/ydb/pull/28220) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28184:Add IC queue time metric. Time spend in the interconnect queue does not report in any existed counter, but the time spend in this queue important for performance analysis. [#28184](https://github.com/ydb-platform/ydb/pull/28184) ([Daniil Cherednik](https://github.com/dcherednik))
+* 28179:RDMA handshake support for interconnect.
+
+negotiate qp, mtu. Pass rdma primitives in to ic session actor [#28179](https://github.com/ydb-platform/ydb/pull/28179) ([Daniil Cherednik](https://github.com/dcherednik))
+* 27774:Added an option to add a trailing dot to all resolving domains
+
+```
+nameservice_config:
+  add_trailing_dot: true
+``` [#27774](https://github.com/ydb-platform/ydb/pull/27774) ([Robert Drynkin](https://github.com/robdrynkin))
 
 ### Bug fixes
 
@@ -146,12 +161,26 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 28331:Create table
+```
+CREATE TABLE table1
+SELECT * FROM `.sys/partition_stats` WHERE Path like '%table1' -- is OK.
+```
+Rename table
+```
+ALTER TABLE table1 RENAME TO table2
+SELECT * FROM `.sys/partition_stats` WHERE Path like '%table2' -- is empty. But should be OK
+``` [#28331](https://github.com/ydb-platform/ydb/pull/28331) ([azevaykin](https://github.com/azevaykin))
+* 28330:Fixed token auth for YDB external data source when Token Accessor is not configured in auth config [#28330](https://github.com/ydb-platform/ydb/pull/28330) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28275:fixes bug, that caused datetime64 values to be different after export and then import [#28275](https://github.com/ydb-platform/ydb/pull/28275) ([Ivan Sukhov](https://github.com/evanevanevanevannnn))
+* 28195:fix an issue where autobalancing could stop after manual group reassign https://github.com/ydb-platform/ydb/issues/28194 [#28195](https://github.com/ydb-platform/ydb/pull/28195) ([vporyadke](https://github.com/vporyadke))
+* 28193:Fixed streaming queries creation without user token [#28193](https://github.com/ydb-platform/ydb/pull/28193) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28186:Fixed cache invalidation for external sources [#28186](https://github.com/ydb-platform/ydb/pull/28186) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28183:Forbidden change of external data source type [#28183](https://github.com/ydb-platform/ydb/pull/28183) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28171:Fixed streaming query not changed after create or replace [#28171](https://github.com/ydb-platform/ydb/pull/28171) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28170:Fixed checkpoints event undelivery logging in sync compute actor [#28170](https://github.com/ydb-platform/ydb/pull/28170) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 28157:Fixed token passing for stream lookup join with external sources [#28157](https://github.com/ydb-platform/ydb/pull/28157) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### YDB UI
 
@@ -178,4 +207,5 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 27493:Optimize filtering rows by primary key ranges on CS [#27493](https://github.com/ydb-platform/ydb/pull/27493) ([Semyon](https://github.com/swalrus1))
 

@@ -212,21 +212,27 @@ size_t TStorage::Compact() {
 }
 
 void TStorage::RemoveMessage(const TMessage& message) {
+    AFL_ENSURE(Metrics.InflyMessageCount > 0);
     --Metrics.InflyMessageCount;
     switch(message.Status) {
         case EMessageStatus::Unprocessed:
+            AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
             --Metrics.UnprocessedMessageCount;
             break;
         case EMessageStatus::Locked:
+            AFL_ENSURE(Metrics.LockedMessageCount > 0);
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+                AFL_ENSURE(Metrics.LockedMessageGroupCount > 0);
                 --Metrics.LockedMessageGroupCount;
             }
             break;
         case EMessageStatus::Committed:
+            AFL_ENSURE(Metrics.CommittedMessageCount > 0);
             --Metrics.CommittedMessageCount;
             break;
         case EMessageStatus::DLQ:
+            AFL_ENSURE(Metrics.DLQMessageCount > 0);
             --Metrics.DLQMessageCount;
             break;
     }
@@ -392,6 +398,7 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     }
 
     ++Metrics.LockedMessageCount;
+    AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
     --Metrics.UnprocessedMessageCount;
 
     return offset;
@@ -409,6 +416,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
             }
+            AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
             break;
         case EMessageStatus::Locked:
@@ -417,9 +425,11 @@ bool TStorage::DoCommit(ui64 offset) {
                 ++Metrics.CommittedMessageCount;
             }
 
+            AFL_ENSURE(-Metrics.LockedMessageCount > 0)("o", offset);
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
                 if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
+                    AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
                     --Metrics.LockedMessageGroupCount;
                 }
             }
@@ -433,6 +443,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 ++Metrics.CommittedMessageCount;
             }
 
+            AFL_ENSURE(Metrics.DLQMessageCount > 0)("o", offset);
             --Metrics.DLQMessageCount;
             break;
     }
@@ -440,6 +451,7 @@ bool TStorage::DoCommit(ui64 offset) {
     if (slowZone) {
         SlowMessages.erase(offset);
         Batch.DeleteFromSlow(offset);
+        AFL_ENSURE(Metrics.InflyMessageCount > 0)("o", offset);
         --Metrics.InflyMessageCount;
     } else {
         message->Status = EMessageStatus::Committed;
@@ -466,14 +478,18 @@ void TStorage::DoUnlock( ui64 offset, TMessage& message) {
     message.Status = EMessageStatus::Unprocessed;
     message.DeadlineDelta = 0;
 
+    Batch.AddChange(offset);
+
+    ++Metrics.UnprocessedMessageCount;
+
     if (KeepMessageOrder && message.HasMessageGroupId) {
         if (LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+            AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
             --Metrics.LockedMessageGroupCount;
         }
     }
 
-    Batch.AddChange(offset);
-
+    AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
     --Metrics.LockedMessageCount;
 
     if (message.ProcessingCount >= MaxMessageProcessingCount) {
@@ -484,6 +500,8 @@ void TStorage::DoUnlock( ui64 offset, TMessage& message) {
                     DLQQueue.push_back(offset);
                     Batch.AddDLQ(offset);
 
+                    AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
+                    --Metrics.UnprocessedMessageCount;
                     ++Metrics.DLQMessageCount;
                     return;
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
@@ -498,8 +516,6 @@ void TStorage::DoUnlock( ui64 offset, TMessage& message) {
     if (offset >= FirstOffset) {
         FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
     }
-
-    ++Metrics.UnprocessedMessageCount;
 }
 
 void TStorage::MoveBaseDeadline() {

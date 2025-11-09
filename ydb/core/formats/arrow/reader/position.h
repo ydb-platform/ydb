@@ -15,17 +15,26 @@
 #include <unordered_set>
 #include <unordered_map>
 
+namespace NKikimr::NOlap {
+class ISnapshotSchema;
+}
+
 namespace NKikimr::NArrow::NMerger {
 
 class TRecordBatchBuilder;
 class TSortableScanData;
 
-struct TDebugKeyMapping {
+struct TDebugTypesMapping {
     std::unordered_set<std::string> BoolColumns;
+    std::unordered_set<std::string> ForceScalarColumns;
     std::unordered_map<std::string, std::string> TypeOverrideByName;
 
     bool IsBool(const std::string& name) const {
         return BoolColumns.find(name) != BoolColumns.end();
+    }
+
+    bool NeedScalarString(const std::string& name) const {
+        return ForceScalarColumns.find(name) != ForceScalarColumns.end() || IsBool(name);
     }
 
     const std::string* GetTypeOverride(const std::string& name) const {
@@ -33,6 +42,7 @@ struct TDebugKeyMapping {
         if (it == TypeOverrideByName.end()) {
             return nullptr;
         }
+
         return &it->second;
     }
 };
@@ -225,7 +235,7 @@ public:
         return result;
     }
 
-    NJson::TJsonValue DebugJson(const ui64 position, const TDebugKeyMapping* mapping) const {
+    NJson::TJsonValue DebugJson(const ui64 position, const TDebugTypesMapping* mapping) const {
         if (!mapping) {
             return DebugJson(position);
         }
@@ -246,15 +256,19 @@ public:
             const auto& fieldName = Fields[i]->name();
             jsonColumn["name"] = TString(fieldName);
 
-            if (mapping->IsBool(fieldName)) {
+            if (mapping->NeedScalarString(fieldName)) {
                 auto arr = PositionAddress[i].CopyRecord(position);
                 auto sres = arr->GetScalar(0);
                 if (sres.ok()) {
                     TString s = (*sres)->ToString();
-                    if (s == "0" || s == "\u0000") {
-                        jsonColumn["value"] = "false";
-                    } else if (s == "1" || s == "\u0001") {
-                        jsonColumn["value"] = "true";
+                    if (mapping->IsBool(fieldName)) {
+                        if (s == "0" || s == "\u0000") {
+                            jsonColumn["value"] = "false";
+                        } else if (s == "1" || s == "\u0001") {
+                            jsonColumn["value"] = "true";
+                        } else {
+                            jsonColumn["value"] = s;
+                        }
                     } else {
                         jsonColumn["value"] = s;
                     }
@@ -267,6 +281,8 @@ public:
         }
         return result;
     }
+
+    NJson::TJsonValue DebugJson(const ui64 position, const NOlap::ISnapshotSchema& schema) const;
 
     std::vector<std::string> GetFieldNames() const {
         std::vector<std::string> result;

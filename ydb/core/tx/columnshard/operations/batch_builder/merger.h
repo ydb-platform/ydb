@@ -43,18 +43,9 @@ class TInsertMerger: public IMerger {
 private:
     using TBase = IMerger;
     virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
-        NArrow::NMerger::TDebugKeyMapping mapping;
-        const auto pkNames = Schema->GetPKColumnNames();
-        const auto& pkColumns = Schema->GetIndexInfo().GetPrimaryKeyColumns();
-        for (ui32 i = 0; i < pkNames.size() && i < pkColumns.size(); ++i) {
-            if (pkColumns[i].second.GetTypeId() == NScheme::NTypeIds::Bool) {
-                mapping.BoolColumns.insert(pkNames[i]);
-                mapping.TypeOverrideByName.emplace(pkNames[i], std::string("bool"));
-            }
-        }
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Conflict with existing key. "
-                             << exists.GetSorting()->DebugJson(exists.GetPosition(), &mapping).GetStringRobust());
+                             << exists.GetSorting()->DebugJson(exists.GetPosition(), *Schema).GetStringRobust());
     }
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         return TYdbConclusionStatus::Success();

@@ -40,6 +40,30 @@ void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
 
 void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy) {
     DeadLetterPolicy = deadLetterPolicy;
+
+    if (DeadLetterPolicy && DeadLetterPolicy.value() == NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE) {
+        return;
+    }
+
+    auto policy = DeadLetterPolicy.value_or(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+    while (!DLQQueue.empty()) {
+        auto offset = DLQQueue.front();
+        DLQQueue.pop_front();
+
+        Batch.AddChange(offset);
+
+        switch (policy) {
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                // unreachable
+                break;
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                Commit(offset);
+                break;
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                Unlock(offset);
+                break;
+        }
+    }
 }
 
 std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
@@ -655,6 +679,11 @@ void TStorage::TBatch::AddChange(ui64 offset) {
 
 void TStorage::TBatch::AddDLQ(ui64 offset) {
     DLQ.push_back(offset);
+}
+
+void TStorage::TBatch::DeleteFromDLQ(ui64 offset) {
+    Y_UNUSED(offset);
+    ++DeletedFromDLQ;
 }
 
 void TStorage::TBatch::AddNewMessage(ui64 offset) {

@@ -474,6 +474,10 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     {
+        AFL_ENSURE(wal.GetDeletedFromDLQ() <= DLQQueue.size())("d", wal.GetDeletedFromDLQ())("q", DLQQueue.size());
+        for (size_t i = 0; i < wal.GetDeletedFromDLQ(); ++i) {
+            DLQQueue.pop_front();
+        }
         for (auto offset : wal.GetDLQ()) {
             DLQQueue.push_back(offset);
         }
@@ -579,6 +583,7 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         for (auto offset : DLQ) {
             wal.AddDLQ(offset);
         }
+        wal.SetDeletedFromDLQ(DeletedFromDLQ);
     }
 
     {

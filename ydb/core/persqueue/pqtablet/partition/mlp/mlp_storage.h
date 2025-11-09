@@ -106,6 +106,7 @@ public:
         void AddNewMessage(ui64 offset);
         void AddChange(ui64 offset);
         void AddDLQ(ui64 offset);
+        void DeleteFromDLQ(ui64 offset);
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
 
@@ -119,6 +120,7 @@ public:
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
         std::vector<ui64> DLQ;
+        size_t DeletedFromDLQ = 0;
         std::vector<ui64> MovedToSlowZone;
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;

@@ -42,7 +42,7 @@ protected:
         );
     }
 
-    void OnTablesCreated(bool success, NYql::TIssues issues) final  {
+    void OnTablesCreated(bool success, NYql::TIssues issues) final {
         if (success) {
             ExternalController->OnModificationFinished(ModificationId);
         } else {

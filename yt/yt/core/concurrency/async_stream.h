@@ -128,12 +128,14 @@ struct IAsyncZeroCopyInputStream
 
     // Extension methods
 
-    //! Reads all content from the stream by iteratively calling #Read until the stream is exhausted.
+    //! Reads all content from the stream.
     /*!
+     *  Default implementation iteratively calls #Read until the stream is exhausted.
+     *
      *  \note
      *  May (and typically will) cause fiber context switch.
      */
-    TSharedRef ReadAll();
+    virtual TSharedRef ReadAll();
 };
 
 DEFINE_REFCOUNTED_TYPE(IAsyncZeroCopyInputStream)

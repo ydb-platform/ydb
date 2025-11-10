@@ -701,6 +701,7 @@ private:
     TCurlInitConfig InitConfig;
 
     void InitCurl() {
+        // FIXME: NOT SAFE (see man libcurl(3))
         const CURLcode globalInitResult = curl_global_init(CURL_GLOBAL_ALL);
         if (globalInitResult != CURLE_OK) {
            throw yexception() << "curl_global_init error " << int(globalInitResult) << ": " << curl_easy_strerror(globalInitResult) << Endl;
@@ -710,6 +711,7 @@ private:
             if (multiCleanupResult != CURLM_OK) {
                 Cerr << "curl_multi_cleanup error " << int(multiCleanupResult) << ": " << curl_multi_strerror(multiCleanupResult) << Endl;
             }
+            curl_global_cleanup(); // FIXME: NOT SAFE (see man libcurl(3))
         });
         if (!Handle) {
             throw yexception() << "curl_multi_init error";
@@ -720,10 +722,6 @@ private:
         Y_ABORT_UNLESS(Handle);
         auto weakHandle = std::weak_ptr<CURLM>(Handle);
         Handle.reset();
-        while (!weakHandle.expired()) { // short busy-wait in unlikely case of collision with TCountedContent
-            Sleep(TDuration::MicroSeconds(1));
-        }
-        curl_global_cleanup();
     }
 
     void Perform() {

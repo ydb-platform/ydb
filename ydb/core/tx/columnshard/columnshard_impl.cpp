@@ -1232,6 +1232,7 @@ private:
     std::vector<TPortionConstructorV2> Portions;
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        TMemoryProfileGuard mpg("TAccessorsParsingTask::Execute");
         std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>> accessors;
         accessors.reserve(Portions.size());
         for (auto&& i : Portions) {

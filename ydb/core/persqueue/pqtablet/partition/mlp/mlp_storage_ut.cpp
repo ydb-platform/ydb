@@ -443,6 +443,30 @@ Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
+Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    TStorage storage(timeProvider);
+    storage.SetRetentionPeriod(std::nullopt);
+
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+
+    // skip message by retention
+    TStorage::TPosition position;
+    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(result.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
 Y_UNIT_TEST(SkipLockedMessage) {
     TStorage storage(CreateDefaultTimeProvider());
     {
@@ -1415,7 +1439,7 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
     storage.AddMessage(4, true, 7, timeProvider->Now() + TDuration::Seconds(11));
     storage.AddMessage(5, true, 11, writeTimestamp);
 
-    timeProvider->Tick(TDuration::Seconds(13));
+    timeProvider->Tick(TDuration::Seconds(12));
 
     auto result = storage.Compact();
     Cerr << storage.DebugString() << Endl;
@@ -1789,7 +1813,7 @@ Y_UNIT_TEST(SlowZone_Retention_1message) {
     utils.AddMessage(8);
     utils.Begin();
 
-    utils.TimeProvider->Tick(TDuration::Seconds(3));
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
     utils.Storage.Compact();
 
     utils.End();
@@ -1806,7 +1830,7 @@ Y_UNIT_TEST(SlowZone_Retention_2message) {
     utils.AddMessage(8);
     utils.Begin();
 
-    utils.TimeProvider->Tick(TDuration::Seconds(4));
+    utils.TimeProvider->Tick(TDuration::Seconds(3));
     utils.Storage.Compact();
 
     utils.End();
@@ -1823,7 +1847,7 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
     utils.AddMessage(8);
     utils.Begin();
 
-    utils.TimeProvider->Tick(TDuration::Seconds(5));
+    utils.TimeProvider->Tick(TDuration::Seconds(4));
     utils.Storage.Compact();
 
     utils.End();

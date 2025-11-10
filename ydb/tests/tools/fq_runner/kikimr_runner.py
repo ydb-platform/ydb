@@ -371,7 +371,7 @@ class BaseTenant(abc.ABC):
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
             if completed >= expected:
                 break
-            assert time.time() < deadline, "Wait checkpoint failed, actual current: " + str(completed) + ", expected" + str(expected)
+            assert time.time() < deadline, "Wait checkpoint failed, actual current: " + str(completed) + ", expected " + str(expected)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),

@@ -720,7 +720,6 @@ private:
 
     void UninitCurl() {
         Y_ABORT_UNLESS(Handle);
-        auto weakHandle = std::weak_ptr<CURLM>(Handle);
         Handle.reset();
     }
 

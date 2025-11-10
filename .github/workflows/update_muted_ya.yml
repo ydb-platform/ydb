@@ -71,7 +71,7 @@ jobs:
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: muted_ya_new_iteration
           fetch-depth: 0
 
       - name: Install dependencies
@@ -92,14 +92,13 @@ jobs:
           git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
           echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
     
-      - name: Collect test history data
-        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
-      
-      - name: Update muted tests in DB
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 
-      
-      - name: Update test monitor
-        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+      - name: Update YDB for muted tests
+        uses: ./.github/workflows/reusable/update_ydb_for_muted_tests.yml
+        with:
+          branch: ${{ env.BASE_BRANCH }}
+          build_type: ${{ env.BUILD_TYPE }}
+        secrets:
+          CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Generate new muted_ya.txt
         run: |

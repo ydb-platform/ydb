@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 
+
+
+
 def ydb_bin():
     if os.getenv('YDB_CLI_BINARY'):
         return yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))

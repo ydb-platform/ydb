@@ -41,7 +41,9 @@ private:
     const ui64 TabletId;
     const ui32 PartitionId;
     const TString ConsumerName;
+    const ui64 ConsumerGeneration;
     const TString DestinationTopic;
+    ui64 FirstMessageSeqNo;
     std::deque<ui64> Queue;
 };
 

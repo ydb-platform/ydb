@@ -49,11 +49,17 @@ NActors::IActor* CreateMessageEnricher(const NActors::TActorId& tabletActorId,
                                        const TString& consumerName,
                                        std::deque<TReadResult>&& replies);
 
-NActors::IActor* CreateDLQMover(const TString& database,
-                                const ui64 tabletId,
-                                const ui32 partitionId,
-                                const TString& consumerName,
-                                const TString& destinationTopic,
-                                std::deque<ui64>&& offsets);
+struct TDLQMoverSettings {
+    TString Database;
+    ui64 TabletId;
+    ui32 PartitionId;
+    TString ConsumerName;
+    ui64 ConsumerGeneration;
+    TString DestinationTopic;
+    ui64 FirstMessageSeqNo;
+    std::deque<ui64> Messages;
+};
+
+NActors::IActor* CreateDLQMover(TDLQMoverSettings&& settings);
 
 } // namespace NKikimr::NPQ::NMLP

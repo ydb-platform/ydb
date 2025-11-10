@@ -2,18 +2,8 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-NActors::IActor* CreateDLQMover(const TString& database,
-                                const ui64 tabletId,
-                                const ui32 partitionId,
-                                const TString& consumerName,
-                                const TString& destinationTopic,
-                                std::deque<ui64>&& offsets) {
-    Y_UNUSED(database);
-    Y_UNUSED(tabletId);
-    Y_UNUSED(partitionId);
-    Y_UNUSED(consumerName);
-    Y_UNUSED(destinationTopic);
-    Y_UNUSED(offsets);
+NActors::IActor* CreateDLQMover(TDLQMoverSettings&& settings) {
+    Y_UNUSED(settings);
 
     return nullptr;
 }

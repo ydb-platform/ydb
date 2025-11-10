@@ -43,7 +43,7 @@ public:
         TBatch(std::initializer_list<TRow> rows);
 
         template <typename TIterator>
-        explicit TBatch(const TIterator& begin, const TIterator& end)
+        TBatch(const TIterator& begin, const TIterator& end)
             : Rows{begin, end} {
         }
 

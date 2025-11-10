@@ -180,54 +180,47 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
 NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array, ui64 row,
     const NMiniKQL::TOptionalType* optionalType, const NMiniKQL::THolderFactory& holderFactory)
 {
-    auto innerOptionalType = SkipTaggedType(optionalType->GetItemType());
-    if (NeedWrapByExternalOptional(innerOptionalType)) {
-        YQL_ENSURE(array->type_id() == arrow::Type::STRUCT, "Unexpected array type");
+    auto innerType = SkipTaggedType(optionalType->GetItemType());
+    ui32 depth = 1;
 
-        auto innerArray = array;
-        auto innerType = static_cast<const NMiniKQL::TType*>(optionalType);
-        int depth = 0;
-
-        while (innerArray->type_id() == arrow::Type::STRUCT) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(innerArray);
-            YQL_ENSURE(structArray->num_fields() == 1, "Unexpected count of fields");
-
-            if (structArray->IsNull(row)) {
-                NUdf::TUnboxedValue value;
-                for (int i = 0; i < depth; ++i) {
-                    value = value.MakeOptional();
-                }
-                return value;
-            }
-
-            innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType());
-            innerArray = structArray->field(0);
-            ++depth;
-        }
-
-        if (innerType->IsOptional()) { // depth + 1 == count of structs for types with validity bitmaps
-            innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType());
-            ++depth;
-        }
-
-        auto wrap = NeedWrapByExternalOptional(innerType);
-        auto isNull = innerArray->IsNull(row);
-
-        NUdf::TUnboxedValue value;
-        if (wrap || !isNull) {
-            value = NFormats::ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
-        }
-
-        if (wrap || isNull) {
-            --depth;
-        }
-
-        for (int i = 0; i < depth; ++i) {
-            value = value.MakeOptional();
-        }
-        return value;
+    while (innerType->IsOptional()) {
+        innerType = SkipTaggedType(static_cast<const NMiniKQL::TOptionalType*>(innerType)->GetItemType());
+        ++depth;
     }
-    return NFormats::ExtractUnboxedValue(array, row, innerOptionalType, holderFactory).Release().MakeOptional();
+
+    // For types without native validity bitmap (e.g., Variant, Null) we need to wrap them in an additional struct layer
+    // Furthermore, other singular types (e.g., Void, EmptyList, EmptyDict) also need to wrap (from YQL-15332)
+    // Thus, the depth == 2 for Optional<Variant<T, F, ...>> type
+    if (NeedWrapByExternalOptional(innerType)) {
+        ++depth;
+    }
+
+    auto innerArray = array;
+    NUdf::TUnboxedValue value;
+
+    for (ui32 i = 1; i < depth; ++i) {
+        YQL_ENSURE(innerArray->type_id() == arrow::Type::STRUCT, "Unexpected array type");
+        auto structArray = static_pointer_cast<arrow::StructArray>(innerArray);
+        YQL_ENSURE(structArray->num_fields() == 1, "Unexpected count of fields");
+
+        if (structArray->IsNull(row)) {
+            for (ui32 j = 1; j < i; ++j) {
+                value = value.MakeOptional();
+            }
+            return value;
+        }
+
+        innerArray = structArray->field(0);
+    }
+
+    if (!innerArray->IsNull(row)) {
+        value = NFormats::ExtractUnboxedValue(innerArray, row, innerType, holderFactory);
+    }
+
+    for (ui32 i = 1; i < depth; ++i) {
+        value = value.MakeOptional();
+    }
+    return value;
 }
 
 NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array, ui64 row,

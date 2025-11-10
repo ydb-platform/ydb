@@ -818,6 +818,18 @@ struct TTestContext {
         return values;
     }
 
+    TType* GetOptionalOptionalVariantType() {
+        return TOptionalType::Create(GetOptionalVariantValueType(), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalsOptionalVariantValue(ui32 quantity) {
+        TUnboxedValueVector values = CreateOptionalsVariantValue(quantity);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 4 != 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
     TType* GetTaggedType() {
         return TTaggedType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv), "tag", TypeEnv);
     }
@@ -2336,6 +2348,40 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto structArray = static_pointer_cast<arrow::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
         UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
+    Y_UNIT_TEST(NestedType_Optional_OptionalVariantValue) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalOptionalVariantType();
+        auto values = context.CreateOptionalsOptionalVariantValue(TEST_ARRAY_NESTED_SIZE);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRUCT);
+
+        auto innerStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(0));
+        UNIT_ASSERT_VALUES_EQUAL(innerStructArray->num_fields(), 1);
+        UNIT_ASSERT(innerStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+
+        auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(innerStructArray->field(0));
+        UNIT_ASSERT_VALUES_EQUAL(innerUnionArray->num_fields(), 4);
+        UNIT_ASSERT(innerUnionArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(innerUnionArray->field(1)->type_id() == arrow::Type::BINARY);
+        UNIT_ASSERT(innerUnionArray->field(2)->type_id() == arrow::Type::FLOAT);
+        UNIT_ASSERT(innerUnionArray->field(3)->type_id() == arrow::Type::UINT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);

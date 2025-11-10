@@ -187,6 +187,8 @@ UNIT_TEST_QUORUM_RESPONSE(Erasure4Plus2Block)
 UNIT_TEST_QUORUM_RESPONSE(Erasure3Plus2Block)
 UNIT_TEST_QUORUM_RESPONSE(ErasureMirror3dc)
 
+#undef UNIT_TEST_QUORUM_RESPONSE
+
 #define UNIT_TEST_FAIL_MODEL(ERASURE) \
     Y_UNIT_TEST(FailModelViolation##ERASURE) { \
         TestFailModelViolation(TBlobStorageGroupType::ERASURE); \
@@ -197,6 +199,8 @@ UNIT_TEST_FAIL_MODEL(Erasure4Plus2Block)
 UNIT_TEST_FAIL_MODEL(Erasure3Plus2Block)
 UNIT_TEST_FAIL_MODEL(ErasureMirror3dc)
 
+#undef UNIT_TEST_FAIL_MODEL
+
 #define UNIT_TEST_MAX_FAILURES(ERASURE) \
     Y_UNIT_TEST(MaxAllowedFailures##ERASURE) { \
         TestMaxAllowedFailures(TBlobStorageGroupType::ERASURE); \
@@ -206,5 +210,7 @@ UNIT_TEST_MAX_FAILURES(Erasure3Plus1Block)
 UNIT_TEST_MAX_FAILURES(Erasure4Plus2Block)
 UNIT_TEST_MAX_FAILURES(Erasure3Plus2Block)
 UNIT_TEST_MAX_FAILURES(ErasureMirror3dc)
+
+#undef UNIT_TEST_MAX_FAILURES
 
 }

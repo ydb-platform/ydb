@@ -736,7 +736,7 @@ TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr cons
     return ITopicParser::TPtr(parser);
 }
 
-TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool skipErrors) {
     TJsonParserConfig result = {.FunctionRegistry = functionRegistry};
     if (const auto batchSize = parserConfig.GetBatchSizeBytes()) {
         result.BatchSize = batchSize;
@@ -745,7 +745,7 @@ TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parse
         result.BufferCellCount = bufferCellCount;
     }
     result.LatencyLimit = TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs());
-    result.SkipErrors = parserConfig.GetSkipErrors();
+    result.SkipErrors = skipErrors;
     return result;
 }
 

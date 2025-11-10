@@ -263,7 +263,8 @@ private:
     const NYql::IPqGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     const NConfig::TRowDispatcherConfig Config;
-    const TFormatHandlerConfig FormatHandlerConfig;
+    const TActorId CompileServiceActorId;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     const i64 BufferSize;
     TString LogPrefix;
 
@@ -281,6 +282,7 @@ private:
     ui64 QueuedBytes = 0;
     TMaybe<TString> ConsumerName;
     TInstant StartingMessageTimestamp;
+    TMaybe<bool> SkipJsonErrors;
 
     // Metrics
     TInstant WaitEventStartedAt;
@@ -401,7 +403,8 @@ TTopicSession::TTopicSession(
     , PqGateway(pqGateway)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Config(config)
-    , FormatHandlerConfig(CreateFormatHandlerConfig(config, functionRegistry, compileServiceActorId))
+    , CompileServiceActorId(compileServiceActorId)
+    , FunctionRegistry(functionRegistry)
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Counters(counters)
@@ -767,9 +770,10 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset)}).first->second;
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
+        auto config = CreateFormatHandlerConfig(Config, FunctionRegistry, CompileServiceActorId, source.GetSkipJsonErrors());
         formatIt = FormatHandlers.emplace(handlerSettings, CreateTopicFormatHandler(
             ActorContext(),
-            FormatHandlerConfig,
+            config,
             handlerSettings,
             {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup}
         )).first;
@@ -781,6 +785,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     }
 
     ConsumerName = source.GetConsumerName();
+    SkipJsonErrors = source.GetSkipJsonErrors();
     SendStatistics();
 }
 
@@ -965,6 +970,11 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
         return false;
     }
 
+    if (SkipJsonErrors && SkipJsonErrors != source.GetSkipJsonErrors()) {
+        LOG_ROW_DISPATCHER_INFO("Different skip json errors mode, expected " <<  SkipJsonErrors << ", actual " << source.GetSkipJsonErrors() << ", send error");
+        SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors settings in all queries via RD (current mode " << SkipJsonErrors << ")"), false);
+        return false;
+    }
     return true;
 }
 

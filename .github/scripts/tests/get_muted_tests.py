@@ -98,9 +98,9 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         
         # Determine query name based on mode
         if job_id and branch:
-            query_name = "get_all_tests_extend_main_with_pr"
+            query_name = f"get_all_tests_extend_main_with_pr_{branch}"
         else:
-            query_name = "get_all_tests_with_run_timestamp_last"
+            query_name = f"get_all_tests_with_run_timestamp_last_{branch}" if branch else "get_all_tests_with_run_timestamp_last"
         
         print(f'⏱️  Starting query execution...')
         results = ydb_wrapper.execute_scan_query(tests_query, query_name=query_name)

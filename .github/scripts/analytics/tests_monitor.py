@@ -283,7 +283,7 @@ def main():
         """
         
         try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name="get_max_monitor_date")
+            results = ydb_wrapper.execute_scan_query(query_last_exist_day, query_name=f"get_max_monitor_date_{branch}")
             last_exist_day = results[0]['last_exist_day'] if results else None
         except Exception as e:
             print(f"Error during fetching last existing day: {e}")
@@ -304,7 +304,7 @@ def main():
             """
             
             try:
-                results = ydb_wrapper.execute_scan_query(query_branch_creation, query_name="get_branch_creation_date")
+                results = ydb_wrapper.execute_scan_query(query_branch_creation, query_name=f"get_branch_creation_date_{branch}")
                 branch_creation_date = None
                 
                 if results and results[0]['earliest_run']:
@@ -358,7 +358,7 @@ def main():
             """
             
             try:
-                results = ydb_wrapper.execute_scan_query(query_last_exist_data, query_name="get_monitor_data_for_date")
+                results = ydb_wrapper.execute_scan_query(query_last_exist_data, query_name=f"get_monitor_data_for_date_{branch}")
                 last_exist_data = []
 
                 for row in results:
@@ -470,7 +470,7 @@ def main():
                         AND hist.date_window = owners_t.date;
                 """
                 # Execute query using ydb_wrapper
-                results = ydb_wrapper.execute_scan_query(query_get_history, query_name="get_monitor_history_for_date")
+                results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_monitor_history_for_date_{branch}")
 
                 # Check if new data was found
                 if results:

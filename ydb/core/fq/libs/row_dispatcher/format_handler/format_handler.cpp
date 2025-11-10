@@ -678,7 +678,7 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors)) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors) {
     return {
         .FunctionRegistry = functionRegistry,
         .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry, skipJsonErrors),

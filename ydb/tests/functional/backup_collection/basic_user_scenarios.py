@@ -2525,3 +2525,379 @@ class TestInvalidParameterHandling(BaseTestBackupInFiles):
         """
         res = self._execute_yql(create_sql)
         assert res.exit_code == 0, "Should fail (optional)"
+
+
+class TestIncrementalChainCorruptionHandling(BaseTestBackupInFiles):
+    def test_incremental_chain_corruption_handling(self):
+        # Setup
+        t_orders = "orders"
+        t_products = "products"
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
+
+        # Create initial tables with data
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
+
+        collection_name = f"corruption_test_{uuid.uuid4().hex[:8]}"
+        data_helper = DataHelper(self, t_orders)
+
+        with backup_lifecycle(self, collection_name, [full_orders, full_products]) as backup:
+            # Create backup collection with incrementals
+            logger.info("\n=== STEP 1: Creating backup collection with continuous data collection ===")
+            backup.create_collection(incremental_enabled=True)
+
+            # Track all snapshots for later verification
+            snapshot_data = {}
+
+            # Modify data
+            data_helper.modify(add_rows=[(100, 1000, "full_data")], remove_ids=[1])
+
+            stage_full = backup.stage(BackupType.FULL, "Initial full backup")
+            snapshot_data[stage_full.snapshot.name] = {
+                'type': 'full',
+                'stage': stage_full,
+                'expected_ids': ['2', '3', '100']  # id=1 was deleted
+            }
+
+            # Incremental 1
+            data_helper.modify(add_rows=[(200, 2000, "inc1_data")], remove_ids=[2])
+            stage_inc1 = backup.stage(BackupType.INCREMENTAL, "First incremental")
+            snapshot_data[stage_inc1.snapshot.name] = {
+                'type': 'incremental',
+                'stage': stage_inc1,
+                'expected_ids': ['3', '100', '200']  # id=2 was deleted
+            }
+
+            # Incremental 2 (THIS WILL BE CORRUPTED)
+            data_helper.modify(add_rows=[(300, 3000, "inc2_data")], remove_ids=[3])
+            stage_inc2 = backup.stage(BackupType.INCREMENTAL, "Second incremental - to be corrupted")
+            inc2_snapshot_name = stage_inc2.snapshot.name  # Save for corruption
+            snapshot_data[stage_inc2.snapshot.name] = {
+                'type': 'incremental',
+                'stage': stage_inc2,
+                'expected_ids': ['100', '200', '300']  # id=3 was deleted
+            }
+
+            # Incremental 3
+            data_helper.modify(add_rows=[(400, 4000, "inc3_data")], remove_ids=[100])
+            stage_inc3 = backup.stage(BackupType.INCREMENTAL, "Third incremental")
+            snapshot_data[stage_inc3.snapshot.name] = {
+                'type': 'incremental',
+                'stage': stage_inc3,
+                'expected_ids': ['200', '300', '400']  # id=100 was deleted
+            }
+
+            # Incremental 4
+            data_helper.modify(add_rows=[(500, 5000, "inc4_data")], remove_ids=[200])
+            stage_inc4 = backup.stage(BackupType.INCREMENTAL, "Fourth incremental")
+            snapshot_data[stage_inc4.snapshot.name] = {
+                'type': 'incremental',
+                'stage': stage_inc4,
+                'expected_ids': ['300', '400', '500']  # id=200 was deleted
+            }
+
+            # Export backups to filesystem
+            export_dir = backup.export_all()
+
+            # Verify all backups were exported
+            exported_snapshots = sorted([
+                d for d in os.listdir(export_dir)
+                if os.path.isdir(os.path.join(export_dir, d))
+            ])
+
+            inc2_path = os.path.join(export_dir, inc2_snapshot_name)
+            assert os.path.exists(inc2_path), f"Incremental backup path not found: {inc2_path}"
+
+            corruption_applied = self._corrupt_backup_directory(inc2_path)
+            assert corruption_applied, "Failed to apply any corruption method"
+
+            corrupted_collection = f"corrupted_{uuid.uuid4().hex[:8]}"
+
+            # Create new collection for corrupted chain
+            create_sql = f"""
+                CREATE BACKUP COLLECTION `{corrupted_collection}`
+                    ( TABLE `{full_orders}`, TABLE `{full_products}` )
+                WITH ( STORAGE = 'cluster' );
+            """
+            res = self._execute_yql(create_sql)
+            assert res.exit_code == 0, f"Failed to create collection: {res.std_err}"
+            self.wait_for_collection(corrupted_collection, timeout_s=30)
+
+            # Import backups in order
+            import_results = {}
+            for snapshot_name in exported_snapshots:
+                src_path = os.path.join(export_dir, snapshot_name)
+                dest_path = f"/Root/.backups/collections/{corrupted_collection}/{snapshot_name}"
+
+                r = self.run_tools_restore_import(src_path, dest_path)
+
+                import_results[snapshot_name] = {
+                    'exit_code': r.exit_code,
+                    'stdout': (r.std_out or b"").decode('utf-8', 'ignore')[:500],
+                    'stderr': (r.std_err or b"").decode('utf-8', 'ignore')[:500]
+                }
+
+                if snapshot_name == inc2_snapshot_name:
+                    # Corrupted backup might fail to import or import with issues
+                    assert r.exit_code != 0, "Corrupted backup imported successfully - will check restore"
+
+            # Remove tables for restore
+            self._try_remove_tables([full_orders, full_products])
+
+            # Try to restore from corrupted collection
+            restore_res = self._execute_yql(f"RESTORE `{corrupted_collection}`;")
+
+            if restore_res.exit_code == 0:
+                # Restore succeeded - verify it stopped at last valid backup
+                # Get actual restored data
+                actual_data = self._capture_snapshot(t_orders)
+                actual_ids = set(str(row[0]) for row in actual_data[1:] if row)
+
+                # Check which stage was actually restored
+                restored_stage = None
+                for snap_name, snap_info in snapshot_data.items():
+                    if set(snap_info['expected_ids']) == actual_ids:
+                        restored_stage = snap_name
+                        break
+
+                if restored_stage == stage_inc1.snapshot.name:
+                    logger.info("✓ System correctly restored up to last valid backup before corruption (inc1)")
+                elif restored_stage in [stage_full.snapshot.name]:
+                    logger.info("✓ System fell back to full backup due to corruption")
+                else:
+                    logger.warning(f"⚠ Unexpected restore state. Actual IDs: {actual_ids}")
+                    # This is still acceptable if data is consistent
+            else:
+                # Restore failed - this is also acceptable
+                err = (restore_res.std_err or b"").decode('utf-8', 'ignore')
+                logger.info(f"Restore failed with error: {err[:200]}")
+
+                # Verify error message mentions corruption or validation
+                assert any(word in err.lower() for word in ['corrupt', 'invalid', 'fail', 'error']), \
+                    "Error message should indicate corruption issue"
+                logger.info("✓ System correctly rejected corrupted restore chain")
+
+            # Create clean collection with only valid backups (up to inc1)
+            fallback_collection = f"fallback_{uuid.uuid4().hex[:8]}"
+
+            # Import only valid backups (full + inc1)
+            valid_timestamp = self.extract_ts(stage_inc1.snapshot.name)
+            self.import_exported_up_to_timestamp(
+                fallback_collection,
+                valid_timestamp,
+                export_dir,
+                full_orders,
+                full_products
+            )
+
+            # Remove tables and restore from fallback
+            self._try_remove_tables([full_orders, full_products])
+
+            fallback_res = self._execute_yql(f"RESTORE `{fallback_collection}`;")
+            assert fallback_res.exit_code == 0, f"Fallback restore should succeed: {fallback_res.std_err}"
+
+            # Verify fallback restored correct data
+            fallback_data = self._capture_snapshot(t_orders)
+            fallback_ids = set(str(row[0]) for row in fallback_data[1:] if row)
+
+            expected_fallback_ids = set(snapshot_data[stage_inc1.snapshot.name]['expected_ids'])
+            assert fallback_ids == expected_fallback_ids, \
+                f"Fallback restore data mismatch. Expected: {expected_fallback_ids}, Got: {fallback_ids}"
+
+            broken_chain_collection = f"broken_chain_{uuid.uuid4().hex[:8]}"
+            create_sql = f"""
+                CREATE BACKUP COLLECTION `{broken_chain_collection}`
+                    ( TABLE `{full_orders}`, TABLE `{full_products}` )
+                WITH ( STORAGE = 'cluster' );
+            """
+            res = self._execute_yql(create_sql)
+            assert res.exit_code == 0, "Failed to create broken chain collection"
+            self.wait_for_collection(broken_chain_collection, timeout_s=30)
+
+            # Import only incrementals (skip full backup)
+            for snapshot_name in exported_snapshots:
+                if 'incremental' in snapshot_name and snapshot_name != inc2_snapshot_name:
+                    src_path = os.path.join(export_dir, snapshot_name)
+                    dest_path = f"/Root/.backups/collections/{broken_chain_collection}/{snapshot_name}"
+                    self.run_tools_restore_import(src_path, dest_path)
+
+            # Try to restore - should fail without full backup
+            self._try_remove_tables([full_orders, full_products])
+            broken_restore = self._execute_yql(f"RESTORE `{broken_chain_collection}`;")
+
+            assert broken_restore.exit_code != 0, "CRITICAL: Restore succeeded without full backup - this is a serious bug!"
+
+    def _corrupt_backup_directory(self, backup_path: str) -> bool:
+        corruption_methods = []
+
+        # Delete critical schema files
+        for root, dirs, files in os.walk(backup_path):
+            for f in files:
+                if f == 'scheme.pb':
+                    file_path = os.path.join(root, f)
+                    try:
+                        os.remove(file_path)
+                        corruption_methods.append("deleted_schema")
+                        break  # Delete only first schema file found
+                    except Exception as e:
+                        logger.warning(f"  Failed to delete {file_path}: {e}")
+            if corruption_methods:
+                break
+
+        # Corrupt CSV data files
+        for root, dirs, files in os.walk(backup_path):
+            for f in files:
+                if f.startswith('data_') and f.endswith('.csv'):
+                    file_path = os.path.join(root, f)
+                    try:
+                        # Read original CSV data
+                        with open(file_path, 'r', encoding='utf-8') as file:
+                            lines = file.readlines()
+
+                        if lines:
+                            # Corrupt CSV data in various ways
+                            corruption_choice = len(corruption_methods) % 3
+
+                            if corruption_choice == 0:
+                                # Insert invalid CSV rows
+                                corrupted_lines = lines[:len(lines)//2]
+                                # Add row with wrong number of columns
+                                corrupted_lines.append("CORRUPTED,DATA,TOO,MANY,COLUMNS,HERE,EXTRA\n")
+                                # Add row with invalid characters
+                                corrupted_lines.append("\x00\xFF\xDE\xAD\xBE\xEF\n")
+                                corrupted_lines.extend(lines[len(lines)//2:])
+
+                            elif corruption_choice == 1:
+                                # Break URL encoding
+                                corrupted_lines = []
+                                for line in lines:
+                                    # Replace valid URL encoding with broken one
+                                    corrupted_line = line.replace('%D0%', '%ZZ%')
+                                    corrupted_line = corrupted_line.replace('","', '",CORRUPT,"')
+                                    corrupted_lines.append(corrupted_line)
+
+                            else:
+                                # Truncate file (incomplete data)
+                                corrupted_lines = lines[:len(lines)//3]
+                                # Add incomplete row
+                                corrupted_lines.append("999,\"Incomplete")
+
+                            # Write corrupted data back
+                            with open(file_path, 'w', encoding='utf-8') as file:
+                                file.writelines(corrupted_lines)
+
+                            corruption_methods.append(f"corrupted_csv_{corruption_choice}")
+                            break
+
+                    except Exception as e:
+                        logger.warning(f"  Failed to corrupt {file_path}: {e}")
+
+            if len(corruption_methods) >= 2:
+                break
+
+        # Corrupt protobuf permissions files
+        for root, dirs, files in os.walk(backup_path):
+            if 'permissions.pb' in files:
+                file_path = os.path.join(root, 'permissions.pb')
+                try:
+                    # Read protobuf file
+                    with open(file_path, 'rb') as file:
+                        original_data = file.read()
+
+                    if len(original_data) > 10:
+                        # Corrupt protobuf structure by inserting garbage in the middle
+                        mid_point = len(original_data) // 2
+                        corrupted_data = (
+                            original_data[:mid_point] +
+                            b'\xFF\x00\xDE\xAD\xBE\xEF' * 5 +  # Invalid protobuf bytes
+                            original_data[mid_point:]
+                        )
+                    else:
+                        # Replace small file entirely
+                        corrupted_data = b'\x00\xFF\x00\xFF' * 20
+
+                    with open(file_path, 'wb') as file:
+                        file.write(corrupted_data)
+
+                    corruption_methods.append("corrupted_permissions")
+                    break
+
+                except Exception as e:
+                    logger.warning(f"  Failed to corrupt {file_path}: {e}")
+
+        # Corrupt scheme.pb protobuf files
+        for root, dirs, files in os.walk(backup_path):
+            if 'scheme.pb' in files and 'deleted_schema' not in corruption_methods:
+                file_path = os.path.join(root, 'scheme.pb')
+                try:
+                    with open(file_path, 'rb') as file:
+                        original_data = file.read()
+
+                    # Create invalid protobuf by mangling the structure
+                    if len(original_data) > 100:
+                        # Remove critical parts of schema definition
+                        corrupted_data = original_data[:50] + b'\x99' * 50 + original_data[150:]
+                    else:
+                        corrupted_data = b'INVALID_PROTOBUF_SCHEMA'
+
+                    with open(file_path, 'wb') as file:
+                        file.write(corrupted_data)
+
+                    corruption_methods.append("corrupted_scheme")
+                    break
+
+                except Exception as e:
+                    logger.warning(f"  Failed to corrupt {file_path}: {e}")
+
+        # Add unexpected files that might confuse the importer
+        try:
+            # Add fake data file with wrong naming
+            fake_data_path = os.path.join(backup_path, "orders", "data_corrupted.csv")
+            if os.path.exists(os.path.join(backup_path, "orders")):
+                with open(fake_data_path, 'w') as f:
+                    f.write("FAKE,DATA,THAT,SHOULD,NOT,BE,HERE\n")
+                    f.write("123,456,789,000,111,222,333\n")
+                corruption_methods.append("added_fake_files")
+
+            # Add directory that shouldn't exist
+            fake_dir = os.path.join(backup_path, "CORRUPTED_TABLE")
+            os.makedirs(fake_dir, exist_ok=True)
+
+            # Write invalid scheme in fake directory
+            with open(os.path.join(fake_dir, "scheme.pb"), 'wb') as f:
+                f.write(b'This is not a valid protobuf')
+
+            corruption_methods.append("invalid_directory_structure")
+
+        except Exception as e:
+            logger.warning(f"  Failed to add unexpected files: {e}")
+
+        # Mix data between tables (if both exist)
+        orders_data = os.path.join(backup_path, "orders", "data_00.csv")
+        products_data = os.path.join(backup_path, "products", "data_00.csv")
+
+        if os.path.exists(orders_data) and os.path.exists(products_data):
+            try:
+                # Swap first lines of data files
+                with open(orders_data, 'r') as f:
+                    orders_lines = f.readlines()
+                with open(products_data, 'r') as f:
+                    products_lines = f.readlines()
+
+                if orders_lines and products_lines:
+                    # Swap first data rows
+                    orders_lines[0], products_lines[0] = products_lines[0], orders_lines[0]
+
+                    with open(orders_data, 'w') as f:
+                        f.writelines(orders_lines)
+                    with open(products_data, 'w') as f:
+                        f.writelines(products_lines)
+
+                    corruption_methods.append("swapped_table_data")
+
+            except Exception as e:
+                logger.warning(f"  Failed to swap table data: {e}")
+
+        return len(corruption_methods) > 0

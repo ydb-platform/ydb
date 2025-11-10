@@ -30,6 +30,7 @@ def get_failed_uids(muted_path: str, report_path: str) -> set[str]:
     return result
 
 
+# See https://nda.ya.ru/t/pjXsFHg-7Mj5ty
 def _strip_graph(graph: dict, uids_filter: set[str]) -> dict:
     result = {uid for uid in graph['result'] if uid in uids_filter}
     nodes = _strip_unused_nodes(graph['graph'], result)
@@ -40,6 +41,7 @@ def _strip_graph(graph: dict, uids_filter: set[str]) -> dict:
     return {'conf': conf, 'inputs': graph.get('inputs', {}), 'result': [uid for uid in result], 'graph': nodes}
 
 
+# See https://nda.ya.ru/t/SnKqrM137Mj5kA
 def _strip_unused_nodes(graph_nodes: list, result: set[str]) -> list[dict]:
     by_uid = {n['uid']: n for n in graph_nodes}
 
@@ -60,6 +62,7 @@ def _strip_unused_nodes(graph_nodes: list, result: set[str]) -> list[dict]:
     return result_nodes
 
 
+# See https://nda.ya.ru/t/NGk-S38S7Mj5q5
 def _filter_duplicate_resources(resources: list[dict]) -> list[dict]:
     v = set()
     result = []
@@ -71,6 +74,7 @@ def _filter_duplicate_resources(resources: list[dict]) -> list[dict]:
 
 
 def process_graph(in_graph_path: str, out_graph_path: str, uids_filter: set[str]) -> None:
+    # This method loads graph from file, strips it using uids_filter, and saves to another file
     print('Load graph...')
     with open(in_graph_path) as f:
         in_graph = json.load(f)
@@ -83,6 +87,7 @@ def process_graph(in_graph_path: str, out_graph_path: str, uids_filter: set[str]
 
 
 def process_context(in_context_path: str, out_context_path: str, uids_filter: set[str]) -> None:
+    # This method loads context from file, strips it using uids_filter, and saves to another file
     print('Load context...')
     with open(in_context_path) as f:
         in_context = json.load(f)

@@ -537,10 +537,14 @@ runs:
             break
           fi
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+              NEW_GRAPH_PATH=$(realpath "graph-$RETRY.json")
+              NEW_CONTEXT_PATH=$(realpath "context-$RETRY.json")
               .github/scripts/graph_patch.py \
-                --in-graph="$GRAPH_PATH" --in-context="$CONTEXT_PATH" \
-                --out-graph="$GRAPH_PATH" --out-context="$CONTEXT_PATH" \
+                --in-graph "$GRAPH_PATH" --in-context "$CONTEXT_PATH" \
+                --out-graph "$NEW_GRAPH_PATH" --out-context "$NEW_GRAPH_PATH" \
                 --report="$CURRENT_REPORT"
+              GRAPH_PATH=$NEW_GRAPH_PATH
+              CONTEXT_PATH=$NEW_CONTEXT_PATH
           fi
         done;
 

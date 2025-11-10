@@ -49,11 +49,11 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--result-graph-path', '-g', type=str, dest='graph_path', required=True,
+        '--result-graph-path', '-g', type=str, dest='result_graph_path', required=True,
         help='Path to result graph'
     )
     parser.add_argument(
-        '--result-context-path', '-c', type=str, dest='context_path', required=True,
+        '--result-context-path', '-c', type=str, dest='result_context_path', required=True,
         help='Path to result context'
     )
     parser.add_argument(
@@ -65,8 +65,8 @@ if __name__ == '__main__':
     opts = parser.parse_args()
     main(
         ya_make_command=opts.ya_make_command,
-        graph_path=opts.graph_path,
-        context_path=opts.context_path,
+        graph_path=opts.result_graph_path,
+        context_path=opts.result_context_path,
         base_commit=opts.base_commit,
         head_commit=opts.head_commit
     )

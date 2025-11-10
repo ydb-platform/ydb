@@ -80,7 +80,7 @@ struct TSkiffStructField
     std::shared_ptr<TSkiffSchema> Type;
 };
 
-template<EWireType wireType>
+template <EWireType wireType>
 constexpr EYsonItemType WireTypeToYsonItemType()
 {
     if constexpr (

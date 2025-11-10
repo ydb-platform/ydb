@@ -112,6 +112,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
+    Counters->Queries      = group->GetCounter("Queries",      false);
     Counters->Usage        = group->GetCounter("Usage",        true);
     Counters->UsageResume  = group->GetCounter("UsageResume",  true);
     Counters->Throttle     = group->GetCounter("Throttle",     true);
@@ -143,6 +144,9 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     }
 
     if (IsLeaf()) {
+        if (Counters) {
+            Counters->Queries->Set(ChildrenSize());
+        }
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             newPool->AddQuery(NSnapshot::TQueryPtr(query->TakeSnapshot()));
         });

@@ -327,28 +327,31 @@ def main():
             # Upload to main table
             upload_to_table(wrapper, test_table_path, main_rows, main_column_types, "main table")
             
-            # Dual write to backup table if configured
-            try:
-                backup_table_path = wrapper.get_table_path("test_results_backup")
-                print(f'Dual write: checking backup table {backup_table_path}')
-                
-                # Check backup table schema
-                backup_has_full_name, backup_has_metadata = check_table_schema(wrapper, backup_table_path)
-                print(f'Backup table schema: full_name={backup_has_full_name}, metadata={backup_has_metadata}')
-                
-                # Filter rows and prepare column types for backup table
-                backup_rows = filter_rows_for_schema(prepared_rows, backup_has_full_name, backup_has_metadata)
-                backup_column_types = prepare_column_types(backup_has_full_name, backup_has_metadata)
-                
-                # Upload to backup table
-                upload_to_table(wrapper, backup_table_path, backup_rows, backup_column_types, "backup table")
-                
-            except KeyError:
-                # Backup table not in config - this is normal for old branches
-                pass
-            except Exception as e:
-                # Log but don't fail - backup write is optional
-                print(f'Warning: Failed to write to backup table (this is non-critical): {e}')
+            # Dual write to backup table if enabled in config
+            enable_backup_write = wrapper.get_flag('enable_backup_write', False)
+            
+            if enable_backup_write:
+                try:
+                    backup_table_path = wrapper.get_table_path("test_results_backup")
+                    print(f'Dual write: checking backup table {backup_table_path}')
+                    
+                    # Check backup table schema
+                    backup_has_full_name, backup_has_metadata = check_table_schema(wrapper, backup_table_path)
+                    print(f'Backup table schema: full_name={backup_has_full_name}, metadata={backup_has_metadata}')
+                    
+                    # Filter rows and prepare column types for backup table
+                    backup_rows = filter_rows_for_schema(prepared_rows, backup_has_full_name, backup_has_metadata)
+                    backup_column_types = prepare_column_types(backup_has_full_name, backup_has_metadata)
+                    
+                    # Upload to backup table
+                    upload_to_table(wrapper, backup_table_path, backup_rows, backup_column_types, "backup table")
+                    
+                except KeyError:
+                    # Backup table not in config - this is normal for old branches
+                    pass
+                except Exception as e:
+                    # Log but don't fail - backup write is optional
+                    print(f'Warning: Failed to write to backup table (this is non-critical): {e}')
                 
     except Exception as e:
         print(f"Warning: Failed to upload test results to YDB: {e}")

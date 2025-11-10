@@ -50,7 +50,7 @@ public:
     }
 
     constexpr bool Valid() const noexcept {
-        return PlanStep && TxId;
+        return PlanStep != 0 && TxId != 0;
     }
 
     static constexpr TSnapshot Zero() noexcept {
@@ -105,6 +105,15 @@ public:
 
     explicit operator size_t() const {
         return CombineHashes(PlanStep, TxId);
+    }
+
+    TSnapshot GetPreviousSnapshot() const {
+        AFL_VERIFY(Valid());
+        if (TxId == 0) {
+            return TSnapshot(PlanStep - 1, ::Max<ui64>());
+        } else {
+            return TSnapshot(PlanStep, TxId - 1);
+        }
     }
 };
 

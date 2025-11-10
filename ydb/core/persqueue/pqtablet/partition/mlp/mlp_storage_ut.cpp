@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/join.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -22,6 +23,174 @@ struct MockTimeProvider : public ITimeProvider {
     }
 
     TInstant Value;
+};
+
+struct TUtils {
+    TUtils()
+        : TimeProvider(TIntrusivePtr<MockTimeProvider>(new MockTimeProvider()))
+        , Storage(TimeProvider, 1, 8)
+        , BaseWriteTimestamp(TimeProvider->Now() - TDuration::Seconds(8))
+    {
+        Storage.SetKeepMessageOrder(true);
+        Storage.SetMaxMessageProcessingCount(1);
+        Storage.SetRetentionPeriod(TDuration::Seconds(10));
+    }
+
+    TIntrusivePtr<MockTimeProvider> TimeProvider;
+    TStorage Storage;
+
+    TInstant BaseWriteTimestamp;
+    ui64 Offset = 0;
+
+    NKikimrPQ::TMLPStorageSnapshot BeginSnapshot;
+    NKikimrPQ::TMLPStorageSnapshot EndSnapshot;
+    NKikimrPQ::TMLPStorageWAL WAL;
+
+    void AddMessage(size_t count) {
+        for (size_t i = 0; i < count; ++i) {
+            Storage.AddMessage(Offset, true, Offset, BaseWriteTimestamp + TDuration::Seconds(Offset));
+            ++Offset;
+        }
+    }
+
+    void Begin() {
+        BeginSnapshot = CreateSnapshot();
+    }
+
+    void End() {
+        WAL = CreateWAL();
+        EndSnapshot = CreateSnapshot();
+    }
+
+    void AssertLoad() {
+        {
+            TUtils utils;
+            utils.LoadSnapshot(BeginSnapshot);
+            utils.LoadWAL(WAL);
+
+            utils.AssertEquals(*this);
+        }
+        {
+            TUtils utils;
+            utils.LoadSnapshot(EndSnapshot);
+
+            utils.AssertEquals(*this);
+        }
+    } 
+
+    NKikimrPQ::TMLPStorageSnapshot CreateSnapshot() {
+        // Clear batch
+        auto batch = Storage.GetBatch();
+        Y_UNUSED(batch);
+
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        Storage.SerializeTo(snapshot);
+        Cerr << "CREATE" << Endl;
+        Cerr << "> STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "> SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
+        return snapshot;
+    }
+
+    NKikimrPQ::TMLPStorageWAL CreateWAL() {
+        NKikimrPQ::TMLPStorageWAL wal;
+        Storage.GetBatch().SerializeTo(wal);
+        Cerr << "CREATE" << Endl;
+        Cerr << "> STORAGE DUMP: " << Storage.DebugString() << Endl;
+        Cerr << "> WAL: " << wal.ShortDebugString() << Endl;
+        return wal;
+    }
+
+    void LoadSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
+        Cerr << "LOAD" << Endl;
+        Cerr << "< SNAPSHOT: " << snapshot.ShortDebugString() << Endl;
+        Storage.Initialize(snapshot);
+        Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
+    }
+
+    void LoadWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
+        Cerr << "LOAD" << Endl;
+        Cerr << "< WAL: " << wal.ShortDebugString() << Endl;
+        Storage.ApplyWAL(wal);
+        Cerr << "< STORAGE DUMP: " << Storage.DebugString() << Endl;
+    }
+
+    void AssertSlowZone(std::vector<ui64> expectedOffsets) {
+        auto i = expectedOffsets.begin();
+        auto m = Storage.begin();
+
+        while (i != expectedOffsets.end() && m != Storage.end()) {
+            UNIT_ASSERT_VALUES_EQUAL(*i, (*m).Offset);
+            UNIT_ASSERT((*m).SlowZone);
+            ++i;
+            ++m;
+        }
+
+        UNIT_ASSERT(i == expectedOffsets.end());
+        if (m != Storage.end()) {
+            UNIT_ASSERT(!(*m).SlowZone);
+        }
+    }
+
+    std::optional<TStorage::TMessageWrapper> GetMessage(ui64 offset) {
+        for (auto it = Storage.begin(); it != Storage.end(); ++it) {
+            if ((*it).Offset == offset) {
+                return *it;
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    ui64 Next(TDuration timeout = TDuration::Seconds(8)) {
+        TStorage::TPosition position;
+        return Storage.Next(TimeProvider->Now() + timeout, position).value();
+    }
+
+    bool Commit(ui64 offset) {
+        return Storage.Commit(offset);
+    }
+
+    bool Unlock(ui64 offset) {
+        return Storage.Unlock(offset);
+    }
+
+    void AssertEquals(TUtils& other) {
+        auto i = other.Storage.begin();
+        auto m = Storage.begin();
+
+        while (i != other.Storage.end() && m != Storage.end()) {
+            UNIT_ASSERT_VALUES_EQUAL((*i).Offset, (*m).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).SlowZone, (*m).SlowZone, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).Status, (*m).Status, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).ProcessingCount, (*m).ProcessingCount, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).ProcessingDeadline, (*m).ProcessingDeadline, (*i).Offset);
+            UNIT_ASSERT_VALUES_EQUAL_C((*i).WriteTimestamp, (*m).WriteTimestamp, (*i).Offset);
+
+            ++i;
+            ++m;
+        }
+
+        UNIT_ASSERT(i == other.Storage.end());
+        UNIT_ASSERT(m == Storage.end());
+
+        auto join = [](const auto& vs) {
+            return JoinRange(",", vs.begin(), vs.end());
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetDLQMessages()), join(Storage.GetDLQMessages()));
+        UNIT_ASSERT_VALUES_EQUAL(join(other.Storage.GetLockedMessageGroupsId()), join(Storage.GetLockedMessageGroupsId()));
+
+        auto ometrics = other.Storage.GetMetrics();
+        auto metrics = Storage.GetMetrics();
+
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.InflyMessageCount, metrics.InflyMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageCount, metrics.LockedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.CommittedMessageCount, metrics.CommittedMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
+        UNIT_ASSERT_VALUES_EQUAL(ometrics.DLQMessageCount, metrics.DLQMessageCount);
+    }
 };
 
 Y_UNIT_TEST(NextFromEmptyStorage) {
@@ -247,18 +416,18 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
-Y_UNIT_TEST(NextWithWriteReteintion) {
+Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 
     TStorage storage(timeProvider);
-    storage.SetReteintion(TDuration::Seconds(5));
+    storage.SetRetentionPeriod(TDuration::Seconds(5));
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
     storage.AddMessage(4, true, 5, timeProvider->Now() + TDuration::Seconds(7));
 
     timeProvider->Tick(TDuration::Seconds(6));
 
-    // skip message by reteintion
+    // skip message by retention
     TStorage::TPosition position;
     auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
@@ -267,6 +436,30 @@ Y_UNIT_TEST(NextWithWriteReteintion) {
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    TStorage storage(timeProvider);
+    storage.SetRetentionPeriod(std::nullopt);
+
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+
+    // skip message by retention
+    TStorage::TPosition position;
+    auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
+    UNIT_ASSERT(result.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+
+    auto& metrics = storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
@@ -949,7 +1142,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
     {
         TStorage storage(timeProvider);
         storage.SetKeepMessageOrder(true);
-        storage.SetMaxMessageReceiveCount(1);
+        storage.SetMaxMessageProcessingCount(1);
         storage.SerializeTo(snapshot);
 
         storage.AddMessage(3, true, 5, writeTimestamp);
@@ -979,7 +1172,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
 
         auto batch = storage.GetBatch();
         UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(batch.DLQMessageCount(), 1);
         batch.SerializeTo(wal);
     }
@@ -1235,18 +1428,18 @@ Y_UNIT_TEST(CompactStorage_ByCommittedOffset) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
-Y_UNIT_TEST(CompactStorage_ByReteintion) {
+Y_UNIT_TEST(CompactStorage_ByRetention) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(12);
 
     TStorage storage(timeProvider);
-    storage.SetReteintion(TDuration::Seconds(1));
+    storage.SetRetentionPeriod(TDuration::Seconds(1));
 
     storage.AddMessage(3, true, 5, timeProvider->Now());
     storage.AddMessage(4, true, 7, timeProvider->Now() + TDuration::Seconds(11));
     storage.AddMessage(5, true, 11, writeTimestamp);
 
-    timeProvider->Tick(TDuration::Seconds(13));
+    timeProvider->Tick(TDuration::Seconds(12));
 
     auto result = storage.Compact();
     Cerr << storage.DebugString() << Endl;
@@ -1280,7 +1473,7 @@ Y_UNIT_TEST(CompactStorage_ByReteintion) {
 
 Y_UNIT_TEST(CompactStorage_WithDLQ) {
     TStorage storage(CreateDefaultTimeProvider());
-    storage.SetMaxMessageReceiveCount(1);
+    storage.SetMaxMessageProcessingCount(1);
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
 
@@ -1403,268 +1596,267 @@ Y_UNIT_TEST(MoveBaseDeadline) {
     }
 }
 
-Y_UNIT_TEST(SlowZone_LongScenario) {
-    const size_t maxMessages = 8;
+Y_UNIT_TEST(SlowZone_MoveUnprocessedToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    utils.Begin();
+    utils.AddMessage(1);
+    utils.End();
 
-    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
-    auto now = timeProvider->Now();
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TStorage storage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
-    storage.SetKeepMessageOrder(true);
-    storage.SetMaxMessageReceiveCount(1);
-    storage.SetReteintion(TDuration::Seconds(7 * 13));
+    utils.AssertLoad();
+}
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    storage.SerializeTo(snapshot);
+Y_UNIT_TEST(SlowZone_MoveLockedToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    utils.Begin();
+    utils.AddMessage(1);
+    utils.End();
 
-    {
-        UNIT_ASSERT(storage.AddMessage(0, true, 100, now - TDuration::Seconds(7 * 12)));
-        TStorage::TPosition position;
-        auto r = storage.Next(now + TDuration::Seconds(50), position);
-        UNIT_ASSERT_VALUES_EQUAL(r.value(), 0);
-    }
-    {
-        UNIT_ASSERT(storage.AddMessage(1, true, 101, now - TDuration::Seconds(7 * 11)));
-        storage.Commit(1);
-    }
-    {
-        UNIT_ASSERT(storage.AddMessage(2, true, 102, now - TDuration::Seconds(7 * 10)));
-    }
-    {
-        UNIT_ASSERT(storage.AddMessage(3, true, 103, now - TDuration::Seconds(7 * 9)));
-    }
-    {
-        UNIT_ASSERT(storage.AddMessage(4, true, 104, now - TDuration::Seconds(7 * 8)));
-    }
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    Cerr << "DUMP 1: " << storage.DebugString() << Endl;
+    utils.AssertLoad();
+}
 
-    NKikimrPQ::TMLPStorageWAL wal1;
-    auto batch1 = storage.GetBatch();
-    batch1.SerializeTo(wal1);
+Y_UNIT_TEST(SlowZone_MoveCommittedToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    UNIT_ASSERT(utils.Commit(0));
+    utils.Begin();
+    utils.AddMessage(1);
+    utils.End();
 
-    {
-        UNIT_ASSERT(storage.AddMessage(5, true, 105, now - TDuration::Seconds(7 * 7)));
-    }
-    {
-        // Fast zone is end Move message with offset 0 to the slow zone
-        UNIT_ASSERT(storage.AddMessage(6, true, 106, now - TDuration::Seconds(7 * 6)));
-    }
+    // Committed message isn't moved to SlowZone
+    utils.AssertSlowZone({ });
 
-    Cerr << "DUMP 2: " << storage.DebugString() << Endl;
+    utils.AssertLoad();
+}
 
-    NKikimrPQ::TMLPStorageWAL wal2;
-    auto batch2 = storage.GetBatch();
-    batch2.SerializeTo(wal2);
+Y_UNIT_TEST(SlowZone_MoveDLQToSlowZone) {
+    TUtils utils;
+    utils.AddMessage(6);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    UNIT_ASSERT(utils.Unlock(0));
+    utils.Begin();
+    utils.AddMessage(1);
+    utils.End();
 
-    {
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-        }
-        {
-            UNIT_ASSERT(++it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 1);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Committed);
-        }
-    }
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    {
-        // Fast zone is end Move message with 1 offset to the slow zone but it is committed. Skip it.
-        UNIT_ASSERT(storage.AddMessage(7, true, 107, now - TDuration::Seconds(7 * 6)));
-    }
+    utils.AssertLoad();
+}
 
-    {
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-        }
-        {
-            // offset 1 is commited and didn`t moved to slow zone
-            UNIT_ASSERT(++it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 2);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
-        }
-    }
+Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndLock) {
+    TUtils utils;
+    utils.AddMessage(6);
+    utils.Begin();
+    utils.AddMessage(1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    utils.End();
 
-    {
-        // Fast zone is end Move message with offset 2 to the slow zone
-        UNIT_ASSERT(storage.AddMessage(8, true, 108, now - TDuration::Seconds(7 * 5)));
-    }
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    {
-        // Now 2 messages in the slow zone
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-        }
-        {
-            UNIT_ASSERT(++it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 2);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
-        }
-        {
-            UNIT_ASSERT(++it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-        }
-    }
+    utils.AssertLoad();
+}
 
-    {
-        UNIT_ASSERT(storage.Commit(2));
-    }
+Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndCommit) {
+    TUtils utils;
+    utils.AddMessage(6);
+    utils.Begin();
+    utils.AddMessage(1);
+    UNIT_ASSERT(utils.Commit(0));
+    utils.End();
 
-    {
-        // Committed message removed from the slow zone
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-        }
-        {
-            UNIT_ASSERT(++it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-        }
-    }
+    utils.AssertSlowZone({ });
 
-    Cerr << "DUMP 3: " << storage.DebugString() << Endl;
-    NKikimrPQ::TMLPStorageWAL wal3;
-    auto batch3 = storage.GetBatch();
-    batch3.SerializeTo(wal3);
+    utils.AssertLoad();
+}
 
-    {
-        UNIT_ASSERT(storage.Commit(0));
-    }
+Y_UNIT_TEST(SlowZone_MoveToSlowZoneAndDLQ) {
+    TUtils utils;
+    utils.AddMessage(6);
+    utils.Begin();
+    utils.AddMessage(1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    UNIT_ASSERT(utils.Unlock(0));
+    utils.End();
 
-    {
-        // Committed message removed from the slow zone
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-        }
-    }
+    utils.AssertSlowZone({ 0 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    Cerr << "DUMP 4: " << storage.DebugString() << Endl;
-    NKikimrPQ::TMLPStorageWAL wal4;
-    auto batch4 = storage.GetBatch();
-    batch4.SerializeTo(wal4);
+    utils.AssertLoad();
+}
 
-    auto metrics = storage.GetMetrics();
+Y_UNIT_TEST(SlowZone_Lock) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    utils.End();
 
+    utils.AssertSlowZone({ 0, 1 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(13));
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    TStorage restoredStorage(timeProvider, 1, maxMessages); // fast zone = 6, slow zone = 2
-    restoredStorage.SetKeepMessageOrder(true);
-    restoredStorage.SetMaxMessageReceiveCount(1);
-    restoredStorage.SetReteintion(TDuration::Seconds(7 * 13));
+    utils.AssertLoad();
+}
 
-    restoredStorage.Initialize(snapshot);
+Y_UNIT_TEST(SlowZone_Commit_First) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+    UNIT_ASSERT(utils.Commit(0));
+    utils.End();
 
-    restoredStorage.ApplyWAL(wal1);
-    Cerr << "RESTORED DUMP 1: " << restoredStorage.DebugString() << Endl;
+    utils.AssertSlowZone({1});
 
-    {
-        // Committed message removed from the slow zone
-        auto it = restoredStorage.begin();
-        {
-            UNIT_ASSERT(it != restoredStorage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-        }
-    }
+    utils.AssertLoad();
+}
 
-    restoredStorage.ApplyWAL(wal2);
-    Cerr << "RESTORED DUMP 2: " << restoredStorage.DebugString() << Endl;
+Y_UNIT_TEST(SlowZone_Commit) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+    UNIT_ASSERT(utils.Commit(1));
+    utils.End();
 
-    {
-        // Committed message removed from the slow zone
-        auto it = restoredStorage.begin();
-        {
-            UNIT_ASSERT(it != restoredStorage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-        }
-        {
-            UNIT_ASSERT(++it != restoredStorage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 1);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Committed);
-        }
-    }
+    utils.AssertSlowZone({0});
 
-    restoredStorage.ApplyWAL(wal3);
-    Cerr << "RESTORED DUMP 3: " << restoredStorage.DebugString() << Endl;
+    utils.AssertLoad();
+}
 
-    {
-        // Committed message removed from the slow zone
-        auto it = restoredStorage.begin();
-        {
-            UNIT_ASSERT(it != restoredStorage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, true);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 0);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
-        }
-        {
-            UNIT_ASSERT(++it != restoredStorage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-        }
-    }
+Y_UNIT_TEST(SlowZone_DLQ) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(TDuration::Seconds(13)), 0);
+    UNIT_ASSERT(utils.Unlock(0));
+    utils.End();
 
-    restoredStorage.ApplyWAL(wal4);
-    Cerr << "RESTORED DUMP 4: " << restoredStorage.DebugString() << Endl;
+    utils.AssertSlowZone({ 0, 1 });
+    auto message = utils.GetMessage(0);
+    UNIT_ASSERT(message);
+    UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::DLQ);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(message->ProcessingDeadline, TInstant::Zero());
+    UNIT_ASSERT_VALUES_EQUAL(message->WriteTimestamp, utils.BaseWriteTimestamp);
 
-    {
-        // Committed message removed from the slow zone
-        auto it = restoredStorage.begin();
-        {
-            UNIT_ASSERT(it != restoredStorage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.SlowZone, false);
-        }
-    }
+    utils.AssertLoad();
+}
 
-    auto restoredMetrics = restoredStorage.GetMetrics();
+Y_UNIT_TEST(SlowZone_CommitToFast) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+    UNIT_ASSERT(utils.Commit(2));
+    utils.Storage.Compact();
+    utils.End();
 
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.InflyMessageCount, metrics.InflyMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.UnprocessedMessageCount, metrics.UnprocessedMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageCount, metrics.LockedMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.LockedMessageGroupCount, metrics.LockedMessageGroupCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.CommittedMessageCount, metrics.CommittedMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DeadlineExpiredMessageCount, metrics.DeadlineExpiredMessageCount);
-    UNIT_ASSERT_VALUES_EQUAL(restoredMetrics.DLQMessageCount, metrics.DLQMessageCount);
+    utils.AssertSlowZone({0, 1});
+    // Compaction removed the message with offset 2
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_CommitAndAdd) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+    UNIT_ASSERT(utils.Commit(1));
+    utils.AddMessage(1);
+    utils.End();
+
+    utils.AssertSlowZone({0, 2});
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_Retention_1message) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(2));
+    utils.Storage.Compact();
+
+    utils.End();
+
+    utils.AssertSlowZone({1});
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 7);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_Retention_2message) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(3));
+    utils.Storage.Compact();
+
+    utils.End();
+
+    utils.AssertSlowZone({});
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 6);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(SlowZone_Retention_3message) {
+    TUtils utils;
+    utils.AddMessage(8);
+    utils.Begin();
+
+    utils.TimeProvider->Tick(TDuration::Seconds(4));
+    utils.Storage.Compact();
+
+    utils.End();
+
+    utils.AssertSlowZone({});
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 5);
+
+    utils.AssertLoad();
 }
 
 }

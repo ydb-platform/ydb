@@ -743,13 +743,13 @@ TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr cons
     return ITopicParser::TPtr(parser);
 }
 
-TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonParserSettings& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry) {
+TJsonParserConfig CreateJsonParserConfig(const TRowDispatcherSettings::TJsonParserSettings& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool skipErrors) {
     return {
         .FunctionRegistry = functionRegistry,
         .BatchSize = parserConfig.GetBatchSizeBytes(),
         .LatencyLimit = parserConfig.GetBatchCreationTimeout(),
         .BufferCellCount = parserConfig.GetBufferCellCount(),
-        .SkipErrors = parserConfig.GetSkipErrors()
+        .SkipErrors = skipErrors
     };
 }
 

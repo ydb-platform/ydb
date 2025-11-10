@@ -105,7 +105,7 @@ class TErrorCodicils
 public:
     using TGetter = std::function<std::string()>;
 
-    class TGuard
+    class [[nodiscard]] TGuard
         : public TNonCopyable
     {
     public:
@@ -130,7 +130,7 @@ public:
     // Evaluates the codicil for the key if one was set.
     static std::optional<std::string> MaybeEvaluate(const std::string& key);
 
-    // Sets the getter and returns an RAII object to restore the previous value on desctruction.
+    // Sets the getter and returns an RAII object to restore the previous value on destruction.
     static TGuard Guard(std::string key, TGetter getter);
 
     // Adds error attributes.

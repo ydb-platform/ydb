@@ -274,7 +274,7 @@ def normalize_domain(domain_name):
 
 
 class ClusterDetailsProvider(object):
-    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False, enable_modules=False):
 
         if not validator:
             validator = validation.default_validator()
@@ -325,6 +325,7 @@ class ClusterDetailsProvider(object):
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
 
+        self._enable_modules = self.__cluster_description.get("enable_modules", enable_modules)
         self._hosts = None
         self._thread_pool = ThreadPoolExecutor(max_workers=8)
 
@@ -423,6 +424,10 @@ class ClusterDetailsProvider(object):
         module = host_description.get("location", {}).get("module", None)
         if module is not None:
             return str(module)
+
+        # Only call the provider if modules are enabled
+        if not self._enable_modules:
+            return ""
 
         module_from_provider = self._host_info_provider.get_module(host_description.get("name", host_description.get("host")))
         return str(module_from_provider) if module_from_provider else ""

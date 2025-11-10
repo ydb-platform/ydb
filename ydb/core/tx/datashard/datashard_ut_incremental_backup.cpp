@@ -3012,6 +3012,89 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(!indexBackupExists, "Index backup should NOT exist when OmitIndexes flag is set");
     }
 
+    Y_UNIT_TEST(CdcVersionSync) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+            .SetEnableRealSystemViewPaths(false)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        // Create first table with index
+        CreateShardedTable(server, edgeActor, "/Root", "Table1",
+            TShardedTableOptions()
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"val1", "Uint32", false, false}
+                })
+                .Indexes({
+                    {"idx1", {"val1"}, {}, NKikimrSchemeOp::EIndexTypeGlobal}
+                }));
+
+        // Create second table with different index
+        CreateShardedTable(server, edgeActor, "/Root", "Table2",
+            TShardedTableOptions()
+                .Columns({
+                    {"key", "Uint32", true, false},
+                    {"val2", "Uint32", false, false}
+                })
+                .Indexes({
+                    {"idx2", {"val2"}, {}, NKikimrSchemeOp::EIndexTypeGlobal}
+                }));
+
+        // Insert data into both tables
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table1` (key, val1) VALUES (1, 100), (2, 200);
+            UPSERT INTO `/Root/Table2` (key, val2) VALUES (1, 1000), (2, 2000);
+        )");
+
+        // Create backup collection with both tables
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `MultiTableCollection`
+              ( TABLE `/Root/Table1`
+              , TABLE `/Root/Table2`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+        )", false);
+
+        // Full backup
+        ExecSQL(server, edgeActor, R"(BACKUP `MultiTableCollection`;)", false);
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        // Modify both tables
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table1` (key, val1) VALUES (3, 300);
+            UPSERT INTO `/Root/Table2` (key, val2) VALUES (3, 3000);
+        )");
+
+        // Incremental backup
+        ExecSQL(server, edgeActor, R"(BACKUP `MultiTableCollection` INCREMENTAL;)", false);
+        SimulateSleep(server, TDuration::Seconds(5));
+
+        // Capture expected states
+        ExecSQL(server, edgeActor, R"(
+            SELECT key, val1 FROM `/Root/Table1` ORDER BY key
+        )");
+        
+        ExecSQL(server, edgeActor, R"(
+            SELECT key, val2 FROM `/Root/Table2` ORDER BY key
+        )");
+
+        // Drop both tables
+        ExecSQL(server, edgeActor, R"(DROP TABLE `/Root/Table1`;)", false);
+    }
+
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

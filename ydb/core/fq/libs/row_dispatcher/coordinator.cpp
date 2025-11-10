@@ -33,14 +33,14 @@ struct TCoordinatorMetrics {
         : Counters(counters) {
         IncomingRequests = Counters->GetCounter("IncomingRequests", true);
         LeaderChanged = Counters->GetCounter("LeaderChanged", true);
-        PartitionsLimitPerNode = Counters->GetCounter("PartitionsLimitPerNode");
+        KnownRowDispatchers = Counters->GetCounter("KnownRowDispatchers");
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
     ::NMonitoring::TDynamicCounters::TCounterPtr IsActive;
-    ::NMonitoring::TDynamicCounters::TCounterPtr PartitionsLimitPerNode;
+    ::NMonitoring::TDynamicCounters::TCounterPtr KnownRowDispatchers;
 };
 
 struct TEvPrivate {
@@ -318,6 +318,9 @@ void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, boo
         return;
     }
     auto nodeState = State == ENodeState::Initializing ? ENodeState::Started : ENodeState::Initializing;
+    if (PartitionLocations.empty()) {
+        nodeState = ENodeState::Started;
+    }
 
     LOG_ROW_DISPATCHER_TRACE("Add new row dispatcher to map (state " << static_cast<int>(nodeState) << ")");
     RowDispatchers.emplace(actorId, RowDispatcherInfo{true, nodeState, isLocal});
@@ -330,6 +333,7 @@ void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, boo
     }
 
     UpdatePendingReadActors();
+    Metrics.KnownRowDispatchers->Set(RowDispatchers.size());
 }
 
 void TActorCoordinator::UpdateInterconnectSessions(const NActors::TActorId& interconnectSession) {
@@ -401,9 +405,6 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
             Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
             RebalancingScheduled = true;
         }
-        // if (info.State == ENodeState::Connected) {
-        //     info.State = ENodeState::Disconnected;
-        // }
     }
 }
 
@@ -427,9 +428,6 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
             RebalancingScheduled = true;
         }
-        // if (info.State == ENodeState::Connected) {
-        //     info.State = ENodeState::Disconnected;
-        // }
         return;
     }
 }
@@ -451,7 +449,6 @@ TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TTo
 }
 
 std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds) {
-    LOG_ROW_DISPATCHER_INFO("GetAndUpdateLocation");
     Y_ENSURE(!PartitionLocations.contains(key));
 
     auto& topicInfo = GetOrCreateTopicInfo(key.Topic);
@@ -465,11 +462,9 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
     ui64 bestNumberPartitions = std::numeric_limits<ui64>::max();
     for (auto& [location, info] : RowDispatchers) {
         if (info.State != ENodeState::Started) {
-            LOG_ROW_DISPATCHER_INFO("  State  not connected");
             continue;
         }
         if (!filteredNodeIds.empty() && !filteredNodeIds.contains(location.NodeId())) {
-            LOG_ROW_DISPATCHER_INFO("  filteredNodeIds");
             continue;
         }
         ui64 numberPartitions = 0;
@@ -483,8 +478,6 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         }
     }
     if (!bestLocation) {
-        LOG_ROW_DISPATCHER_INFO("Not found location");
-
         return std::nullopt;
     }
 

@@ -1231,13 +1231,14 @@ class TestPqRowDispatcher(TestYdsBase):
     def test_redistribute_partition_after_timeout(self, kikimr, client):
         partitions_count = 3
         self.init(client, "redistribute", partitions=partitions_count)
+        wait_row_dispatcher_sensor_value(kikimr, "KnownRowDispatchers", 2 * COMPUTE_NODE_COUNT - 1)
+        
         sql = Rf'''
             PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
 
-        time.sleep(10)
         query_id = start_yds_query(kikimr, client, sql)
         session_node_index = wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
         kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)

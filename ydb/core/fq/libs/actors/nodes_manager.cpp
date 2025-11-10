@@ -347,8 +347,6 @@ private:
     }
 
     void HandleResponse(NFq::TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
-        LOG_T("Received TEvHealthCheckResponse");
-
         try {
             const auto& status = ev->Get()->Status.GetStatus();
             if (!ev->Get()->Status.IsSuccess()) {
@@ -358,8 +356,6 @@ private:
 
             auto nodesInfo = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
             nodesInfo->reserve(res.nodes().size());
-            LOG_T("Nodes count " << res.nodes().size());
-
 
             Peers.clear();
             std::set<ui32> nodeIds; // may be not unique

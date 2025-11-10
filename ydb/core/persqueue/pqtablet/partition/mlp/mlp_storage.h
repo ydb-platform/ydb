@@ -210,6 +210,8 @@ private:
 
     void RemoveMessage(const TMessage& message);
 
+    std::optional<ui32> GetRetentionDeadlineDelta() const;
+
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 

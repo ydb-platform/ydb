@@ -1268,4 +1268,6 @@ inline ui64 TPartition::GetEndOffset() const {
     return BlobEncoder.EndOffset;
 }
 
+bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer);
+
 } // namespace NKikimr::NPQ

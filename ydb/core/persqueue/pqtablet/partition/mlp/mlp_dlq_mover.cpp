@@ -34,6 +34,8 @@ void TDLQMoverActor::PassAway() {
         Send(Settings.ParentActorId, new TEvPQ::TEvMLPDLQMoverResponse(Ydb::StatusIds::SUCCESS, std::move(Processed)));
     }
 
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
     TActor::PassAway();
 }
 
@@ -117,68 +119,45 @@ void TDLQMoverActor::ProcessQueue() {
        return ReplySuccess();
     }
 
-    Send(Settings.PartitionActorId,MakeEvRead(SelfId(), CLIENTID_WITHOUT_CONSUMER, Queue.front(), 1, ++FetchCookie, NextPartNo));
+    auto request = std::make_unique<TEvPersQueue::TEvRequest>();
+    auto* partitionRequest = request->Record.MutablePartitionRequest();
+    partitionRequest->SetPartition(Settings.PartitionId);
+    auto* read = partitionRequest->MutableCmdRead();
+    read->SetClientId(CLIENTID_WITHOUT_CONSUMER);
+    read->SetOffset(Queue.front());
+    read->SetTimeoutMs(0);
+    read->SetCount(1);
+
+    SendToPQTablet(std::move(request));
 }
 
-void TDLQMoverActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvProxyResponse");
-    if (FetchCookie != GetCookie(ev)) {
-        // TODO MLP
-        LOG_D("Cookie mismatch: " << FetchCookie << " != " << GetCookie(ev));
-        //return;
-    }
+void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvResponse");
 
     if (!IsSucess(ev)) {
-        return ReplyError(TStringBuilder() << "Fetch message failed: " << ev->Get()->Response->DebugString());
+        return ReplyError(TStringBuilder() << "Fetch message failed: " << ev->Get()->Record.DebugString());
     }
 
-    auto& response = ev->Get()->Response;
-    AFL_ENSURE(response->GetPartitionResponse().HasCmdReadResult())("t", Settings.TabletId)("p", Settings.PartitionId)("c", Settings.ConsumerName);
+    auto& response = ev->Get()->Record;
+    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
+    auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
 
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
     request->SetTopic(Settings.DestinationTopic);
 
-    auto currentOffset = Queue.front();
-    for (auto& result : *response->MutablePartitionResponse()->MutableCmdReadResult()->MutableResult()) {
-        if (currentOffset > result.GetOffset()) {
-            continue;
-        } else if (currentOffset < result.GetOffset()) {
-            break;
-        }
-        AFL_ENSURE(currentOffset == result.GetOffset())("l", currentOffset)("r", result.GetOffset());
-
-        if (NextPartNo > result.GetPartNo()) {
-            continue;
-        }
-        AFL_ENSURE(NextPartNo == result.GetPartNo())("l", NextPartNo)("r", result.GetPartNo());
-
-        auto* write = request->AddCmdWrite();
-        write->SetSourceId(ProducerId);
-        write->SetSeqNo(SeqNo);
-        if (result.GetTotalParts() > 0) {
-            write->SetPartNo(result.GetPartNo());
-            write->SetTotalParts(result.GetTotalParts());
-            write->SetTotalSize(result.GetTotalSize());
-        }
-        write->SetCreateTimeMS(result.GetCreateTimestampMS());
-        write->SetDisableDeduplication(false);
-        write->SetUncompressedSize(result.GetUncompressedSize());
-        if (result.HasPartitionKey()) {
-            write->SetPartitionKey(std::move(*result.MutablePartitionKey()));
-            write->SetExplicitHash(std::move(*result.MutableExplicitHash()));
-        }
-
-        write->SetData(std::move(*result.MutableData()));
-
-        ++NextPartNo;
-        TotalPartNo = result.GetTotalParts();
+    auto* write = request->AddCmdWrite();
+    write->SetSourceId(ProducerId);
+    write->SetSeqNo(SeqNo);
+    write->SetData(std::move(*result->MutableData()));
+    write->SetCreateTimeMS(result->GetCreateTimestampMS());
+    write->SetUncompressedSize(result->GetUncompressedSize());
+    if (result->HasPartitionKey()) {
+        write->SetPartitionKey(std::move(*result->MutablePartitionKey()));
+        write->SetExplicitHash(std::move(*result->MutableExplicitHash()));
     }
 
-    LOG_D("Write message: " << writeRequest->Record.ShortDebugString());
-
     Send(PartitionWriterActorId, std::move(writeRequest));
-
     WaitWrite();
 }
 
@@ -224,7 +203,7 @@ void TDLQMoverActor::ReplyError(TString&& error) {
     PassAway();
 }
 
-void TDLQMoverActor::SendToTablet(std::unique_ptr<IEventBase> ev) {
+void TDLQMoverActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), Settings.TabletId, FirstRequest, CacheSubscribeCookie);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
     FirstRequest = false;
@@ -253,7 +232,7 @@ STFUNC(TDLQMoverActor::StateInit) {
 
 STFUNC(TDLQMoverActor::StateRead) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);

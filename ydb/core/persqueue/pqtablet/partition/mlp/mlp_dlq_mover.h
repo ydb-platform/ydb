@@ -32,7 +32,7 @@ private:
     STFUNC(StateInit);
 
     void ProcessQueue();
-    void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvResponse::TPtr&);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(StateRead);
 
@@ -44,7 +44,7 @@ private:
     void ReplySuccess();
     void ReplyError(TString&& error);
 
-    void SendToTablet(std::unique_ptr<IEventBase> ev);
+    void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
 private:
     TDLQMoverSettings Settings;
@@ -61,7 +61,6 @@ private:
     TActorId PartitionWriterActorId;
 
     bool FirstRequest = true;
-    ui64 FetchCookie = 0;
 
     ui64 NextPartNo = 0;
     ui64 TotalPartNo = 0;

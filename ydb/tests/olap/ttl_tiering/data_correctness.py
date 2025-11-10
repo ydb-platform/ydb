@@ -37,6 +37,7 @@ class TestDataCorrectness(TllTieringTestBase):
                     "ts": timestamp_from_ms + i,
                     "s": random.randbytes(1024 * 10),
                     "val": value,
+                    "flag": (i % 2) == 0,
                 }
                 for i in range(current_chunk_size)
             ]
@@ -94,6 +95,7 @@ class TestDataCorrectness(TllTieringTestBase):
                 ts Timestamp NOT NULL,
                 s String,
                 val Uint64,
+                flag Bool,
                 PRIMARY KEY(ts),
             )
             WITH (
@@ -110,6 +112,7 @@ class TestDataCorrectness(TllTieringTestBase):
         self.column_types.add_column("ts", ydb.PrimitiveType.Timestamp)
         self.column_types.add_column("s", ydb.PrimitiveType.String)
         self.column_types.add_column("val", ydb.PrimitiveType.Uint64)
+        self.column_types.add_column("flag", ydb.PrimitiveType.Bool)
 
         logger.info(f"Table {table_path} created")
 

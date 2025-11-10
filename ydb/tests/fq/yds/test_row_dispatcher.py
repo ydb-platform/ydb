@@ -76,7 +76,6 @@ def wait_actor_count(kikimr, activity, expected_count):
                 return node_index  # return any node
         assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
         time.sleep(1)
-    return None
 
 
 def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match=True):

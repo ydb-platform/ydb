@@ -26,6 +26,8 @@ using NYql::TIssues;
 
 namespace {
 
+const ui64 DefaultRebalancingTimeoutSec = 60;
+    
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCoordinatorMetrics {
@@ -115,8 +117,8 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         Started
     };
 
-    struct RowDispatcherInfo {
-        RowDispatcherInfo(bool connected, ENodeState state, bool isLocal) 
+    struct TRowDispatcherInfo {
+        TRowDispatcherInfo(bool connected, ENodeState state, bool isLocal) 
             : Connected(connected)
             , State(state)
             , IsLocal(isLocal) {}
@@ -193,7 +195,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
-    TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
+    TMap<NActors::TActorId, TRowDispatcherInfo> RowDispatchers;
     THashMap<TPartitionKey, TActorId, TPartitionKeyHash> PartitionLocations;
     THashMap<TTopicKey, TTopicInfo, TTopicKeyHash> TopicsInfo;
     std::unordered_map<TActorId, TCoordinatorRequest> PendingReadActors;
@@ -204,6 +206,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     NActors::TActorId NodesManagerId;
     bool RebalancingScheduled = false;
     ENodeState State = ENodeState::Initializing;
+    TDuration RebalancingTimeout;
 
 public:
     TActorCoordinator(
@@ -274,6 +277,7 @@ TActorCoordinator::TActorCoordinator(
     , Tenant(tenant)
     , Metrics(counters)
     , NodesManagerId(nodesManagerId)
+    , RebalancingTimeout(Config.GetRebalancingTimeout() ? Config.GetRebalancingTimeout() : DefaultRebalancingTimeoutSec)
 {
     UpdateKnownRowDispatchers(localRowDispatcherId, true);
 }
@@ -282,11 +286,11 @@ void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     ScheduleNodeInfoRequest();
-    Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvStartingTimeout());
+    Schedule(RebalancingTimeout, new TEvPrivate::TEvStartingTimeout());
     // Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());  // Logs (InternalState) is too big
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId() 
         << ", NodesManagerId " << NodesManagerId
-        << ", rebalancing timeout " << Config.GetRebalancingTimeout());
+        << ", rebalancing timeout " << RebalancingTimeout);
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
     Metrics.IsActive = nodeGroup->GetCounter("IsActive");
 }
@@ -323,12 +327,12 @@ void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, boo
     }
 
     LOG_ROW_DISPATCHER_TRACE("Add new row dispatcher to map (state " << static_cast<int>(nodeState) << ")");
-    RowDispatchers.emplace(actorId, RowDispatcherInfo{true, nodeState, isLocal});
+    RowDispatchers.emplace(actorId, TRowDispatcherInfo{true, nodeState, isLocal});
     UpdateGlobalState();
 
     if (nodeState == ENodeState::Initializing && !RebalancingScheduled) {
         LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
-        Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
+        Schedule(RebalancingTimeout, new TEvPrivate::TEvRebalancing());
         RebalancingScheduled = true;
     }
 
@@ -402,7 +406,7 @@ void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected:
 
         if (!RebalancingScheduled) {
             LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
-            Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
+            Schedule(RebalancingTimeout, new TEvPrivate::TEvRebalancing());
             RebalancingScheduled = true;
         }
     }
@@ -425,7 +429,7 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
         if (!RebalancingScheduled) {
             LOG_ROW_DISPATCHER_TRACE("Schedule TEvRebalancing");
-            Schedule(Config.GetRebalancingTimeout(), new TEvPrivate::TEvRebalancing());
+            Schedule(RebalancingTimeout, new TEvPrivate::TEvRebalancing());
             RebalancingScheduled = true;
         }
         return;

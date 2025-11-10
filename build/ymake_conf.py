@@ -696,11 +696,6 @@ class Build(object):
         elif self.build_system != 'ymake':
             raise ConfigureError()
 
-        python_bin = preset('BUILD_PYTHON_BIN', '$(PYTHON)/python')
-
-        emit('YMAKE_PYTHON', python_bin)
-        emit('YMAKE_UNPICKLER', python_bin, '$ARCADIA_ROOT/build/plugins/_unpickler.py')
-
     @property
     def is_release(self):
         # TODO(somov): Проверить, бывают ли тут суффиксы на самом деле

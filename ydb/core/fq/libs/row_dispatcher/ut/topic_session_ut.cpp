@@ -159,7 +159,6 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
 
             UNIT_ASSERT_VALUES_EQUAL(1, eventHolder->Get()->Record.MessagesSize());
-            
             NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(0);
             UNIT_ASSERT(message.OffsetsSize() <= expected.size());
 

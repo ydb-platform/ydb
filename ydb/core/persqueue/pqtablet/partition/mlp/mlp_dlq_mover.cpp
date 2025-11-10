@@ -20,8 +20,7 @@ TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
 void TDLQMoverActor::Bootstrap() {
     Become(&TDLQMoverActor::StateDescribe);
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { Settings.DestinationTopic }));
-
-    LOG_E("QUEUE: " << Queue.size());
+    LOG_D("QUEUE: " << Queue.size());
 }
 
 void TDLQMoverActor::PassAway() {
@@ -80,7 +79,6 @@ void TDLQMoverActor::CreateWriter() {
         .WithDatabase(Settings.Database)
         .WithTopicPath(TopicInfo.RealPath)
         .WithSessionId(sessionId);
-        //.WithInitialSeqNo(Settings.FirstMessageSeqNo);
 
     PartitionWriterActorId = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), TargetPartition->TabletId, TargetPartition->PartitionId, opts));
 }
@@ -100,8 +98,8 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
         Queue.pop_front();
     }
 
-    LOG_E("targetSeqNo == SeqNo " << targetSeqNo << " == " << SeqNo);
-    AFL_ENSURE(targetSeqNo == SeqNo)("t", targetSeqNo)("s", SeqNo);
+    // targetSeqNo can be eq to 0 if the topic has been recreated
+    AFL_ENSURE(targetSeqNo <= SeqNo)("t", targetSeqNo)("s", SeqNo);
 
     ProcessQueue();
 }
@@ -140,12 +138,13 @@ void TDLQMoverActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
     request->SetTopic(Settings.DestinationTopic);
-    //request->SetPartition(TargetPartition->PartitionId);
 
     auto currentOffset = Queue.front();
     for (auto& result : *response->MutablePartitionResponse()->MutableCmdReadResult()->MutableResult()) {
         if (currentOffset > result.GetOffset()) {
             continue;
+        } else if (currentOffset < result.GetOffset()) {
+            break;
         }
         AFL_ENSURE(currentOffset == result.GetOffset())("l", currentOffset)("r", result.GetOffset());
 
@@ -206,7 +205,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    if (NextPartNo == TotalPartNo) {
+    if (NextPartNo >= TotalPartNo) {
         Processed.push_back(Queue.front());
         Queue.pop_front();
 

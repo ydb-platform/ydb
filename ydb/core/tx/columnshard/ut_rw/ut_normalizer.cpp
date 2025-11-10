@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -8,6 +9,7 @@
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr {
 
@@ -101,6 +103,12 @@ public:
 };
 
 class TInsertedPortionsCleaner: public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext&) const override {
+    }
+};
+
+class TSubColumnsPortionsCleaner: public NYDBTest::ILocalDBModifier {
 public:
     virtual void Apply(NTabletFlatExecutor::TTransactionContext&) const override {
     }
@@ -335,7 +343,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         };
         TestNormalizerImpl<TPortionsCleaner>(TLocalNormalizerChecker());
     }
-    
+
     Y_UNIT_TEST(InsertedPortionsCleanerNormalizer) {
         class TLocalNormalizerChecker: public TNormalizerChecker {
         public:
@@ -451,6 +459,110 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         TChecker checker;
         TestNormalizerImpl<TExtraColumnsInjector<NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX>>(checker);
+    }
+
+    Y_UNIT_TEST_TWIN(SubColumnsPortionsCleanerNormalizer, useSubcolumns) {
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual ui64 RecordsCountAfterReboot(const ui64 count) const override {
+                return count;
+            }
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags& /* featuresFlags */) const override {
+            }
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("CleanSubColumnsPortions");
+                    repair->SetDescription("Removing SubColumns portions");
+                }
+            }
+        };
+
+        TLocalNormalizerChecker checker;
+
+        using namespace NArrow;
+        auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TSubColumnsPortionsCleaner>>();
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetColumnChunksV0Usage(false);
+
+        checker.CorrectConfigurationOnStart(runtime.GetAppData().ColumnShardConfig);
+        checker.CorrectFeatureFlagsOnStart(runtime.GetAppData().FeatureFlags);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("id", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("json_payload", TTypeInfo(NTypeIds::JsonDocument)) };
+        const std::vector<ui32> columnsIds = { 1, 2 };
+        const ui64 keySize = 1;
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        TestTableDescription tableDescription;
+        tableDescription.Schema = schema;
+        tableDescription.Pk = {};
+
+        for (ui64 i = 0; i < keySize; ++i) {
+            Y_ABORT_UNLESS(i < schema.size());
+            tableDescription.Pk.push_back(schema[i]);
+        }
+        TActorId sender = runtime.AllocateEdgeActor();
+        TString codec = "none";
+        auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
+
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath("/Root/olap");
+        tx.MutableInitShard()->SetOwnerPathId(tableId);
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(tableId).ToProto(*table);
+        auto mSchema = table->MutableSchema();
+
+        NTxUT::TTestSchema::InitSchema(tableDescription.Schema, tableDescription.Pk, specials, mSchema);
+        if (useSubcolumns) {
+            mSchema->MutableColumns(1)->MutableDataAccessorConstructor()->SetClassName("SUB_COLUMNS");
+        }
+        NTxUT::TTestSchema::InitTiersAndTtl(specials, table->MutableTtlSettings());
+
+        Cerr << "CreateStandaloneTable: " << tx << "\n";
+
+        TString txBody;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        auto planStep = SetupSchema(runtime, sender, txBody, 10);
+        const ui64 txId = 111;
+
+        class TJsonSeqFiller {
+            TString Data = HexDecode("01030000410000001C00000020000000040500000406000002000000C0040000000500006100620000000000000010400000000000001440");
+        public:
+            using TValue = arrow::BinaryType;
+            arrow::util::string_view GetValue(const ui32) const {
+                return arrow::util::string_view(Data.data(), Data.size());
+            };
+        };
+
+        NConstruction::IArrayBuilder::TPtr idColumn =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("id");
+        NConstruction::IArrayBuilder::TPtr jsonColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<TJsonSeqFiller>>(
+            "json_payload", TJsonSeqFiller());
+
+        auto batch = NConstruction::TRecordBatchConstructor({ idColumn, jsonColumn }).BuildBatch(20048);
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        planStep = writer.StartCommit(txId);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
+
+        {
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
+        }
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
+
+        {
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
+            UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(useSubcolumns ? 0 : 20048));
+        }
     }
 }
 }   // namespace NKikimr

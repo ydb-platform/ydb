@@ -189,10 +189,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
                     && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
                 {
-                    AFL_ENSURE(tx.GetHasEffects());
                     AFL_ENSURE(tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
                     NKikimrKqp::TKqpTableSinkSettings sinkSettings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
+                    AFL_ENSURE(tx.GetHasEffects() || sinkSettings.GetInconsistentTx());
                     if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
                         // Insert operations create new read phases,
                         // so in presence of other reads we have to acquire snapshot.

@@ -148,6 +148,22 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             }
             break;
 
+        case NKikimrExport::TCreateExportRequest::kExportToFsSettings:
+            {
+                const auto& settings = request.GetRequest().GetExportToFsSettings();
+                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
+                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
+                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+                TString explain;
+                if (!FillItems(*exportInfo, settings, explain)) {
+                    return Reply(
+                        std::move(response),
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Failed item check: " << explain
+                    );
+                }
+            }
+            break;
         default:
             Y_DEBUG_ABORT("Unknown export kind");
         }

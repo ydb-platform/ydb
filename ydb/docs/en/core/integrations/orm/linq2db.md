@@ -70,25 +70,30 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 
 ### .NET ↔ {{ ydb-short-name }} type mapping {#types}
 
-| .NET type(s)                | Linq To DB `DataType`                  | {{ ydb-short-name }} type | Notes |
-|----------------------------|----------------------------------------|---------------------------|-------|
-| `bool`                     | `Boolean`                              | `Bool`                    | — |
-| `string`                   | `NVarChar`/`VarChar`/`Char`/`NChar`    | `Utf8`                    | UTF-8 string. |
-| `byte[]`                   | `VarBinary`/`Binary`/`Blob`            | `String`                  | Binary data. |
-| `Guid`                     | `Guid`                                 | `Uuid`                    | — |
-| `DateOnly` / `DateTime`    | `Date`                                 | `Date`                    | Time is ignored. |
-| `DateTime`                 | `DateTime`                             | `Datetime`                | Second precision. |
-| `DateTime`/`DateTimeOffset`| `DateTime2`                            | `Timestamp`               | Microsecond precision. |
-| `TimeSpan`                 | `Interval`                             | `Interval`                | Duration. |
-| `decimal`                  | `Decimal`                              | `Decimal(22,9)`           | Defaults to 22,9 in DDL. |
-| `float`                    | `Single`                               | `Float`                   | — |
-| `double`                   | `Double`                               | `Double`                  | — |
-| `sbyte` / `byte`           | `SByte` / `Byte`                       | `Int8` / `Uint8`          | — |
-| `short` / `ushort`         | `Int16` / `UInt16`                     | `Int16` / `Uint16`        | — |
-| `int` / `uint`             | `Int32` / `UInt32`                     | `Int32` / `Uint32`        | — |
-| `long` / `ulong`           | `Int64` / `UInt64`                     | `Int64` / `Uint64`        | — |
-| `string`                   | `Json`                                 | `Json`                    | Text JSON. |
-| `byte[]`                   | `BinaryJson`                           | `JsonDocument`            | Binary JSON. |
+| .NET type(s)                   | Linq To DB `DataType`               | {{ ydb-short-name }} type | Notes                                  |
+|--------------------------------|-------------------------------------|---------------------------|----------------------------------------|
+| `bool`                         | `Boolean`                           | `Bool`                    | —                                      |
+| `string`                       | `NVarChar`/`VarChar`/`Char`/`NChar` | `Utf8`                    | UTF-8 string.                          |
+| `byte[]`                       | `VarBinary`/`Binary`/`Blob`         | `String`                  | Binary data.                           |
+| `Guid`                         | `Guid`                              | `Uuid`                    | —                                      |
+| `DateOnly` / `DateTime`        | `Date`                              | `Date`                    | Time is ignored.                       |
+| `DateTime`                     | `DateTime`                          | `Datetime`                | Second precision.                      |
+| `DateTime`/`DateTimeOffset`    | `DateTime2`                         | `Timestamp`               | Microsecond precision.                 |
+| `TimeSpan`                     | `Interval`                          | `Interval`                | Duration.                              |
+| `decimal`                      | `Decimal`                           | `Decimal(p,s)`            | Defaults to `Decimal(22,9)`            |
+| `float`                        | `Single`                            | `Float`                   | —                                      |
+| `double`                       | `Double`                            | `Double`                  | —                                      |
+| `sbyte` / `byte`               | `SByte` / `Byte`                    | `Int8` / `Uint8`          | —                                      |
+| `short` / `ushort`             | `Int16` / `UInt16`                  | `Int16` / `Uint16`        | —                                      |
+| `int` / `uint`                 | `Int32` / `UInt32`                  | `Int32` / `Uint32`        | —                                      |
+| `long` / `ulong`               | `Int64` / `UInt64`                  | `Int64` / `Uint64`        | —                                      |
+| `string`                       | `Json`                              | `Json`                    | Text JSON.                             |
+| `byte[]`                       | `BinaryJson`                        | `JsonDocument`            | Binary JSON.                           |
+| `DateOnly` / `DateTime`        | `Date`                              | `Date32`                  | Extended date range.                   |
+| `DateTime`                     | `DateTime`                          | `Datetime64`              | Second precision, extended range.      |
+| `DateTime` / `DateTimeOffset`  | `DateTime2`                         | `Timestamp64`             | Microsecond precision, extended range. |
+| `TimeSpan`                     | `Interval`                          | `Interval64`              | Extended interval range.               |
+
 
 > * You can set exact `Precision`/`Scale` with attributes:  
     >   `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`  

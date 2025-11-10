@@ -13,7 +13,9 @@
 ## Диагностика
 
 <!-- The include is added to allow partial overrides in overlays  -->
+{% if audience == "tech" %}
 {% include notitle [#](_includes/overloaded-errors.md) %}
+{% endif %}
 
 ## Рекомендации
 

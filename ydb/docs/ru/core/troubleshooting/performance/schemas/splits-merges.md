@@ -23,7 +23,9 @@
 ## Диагностика
 
 <!-- The include is added to allow partial overrides in overlays  -->
+{% if audience == "tech" %}
 {% include notitle [#](_includes/splits-merges.md) %}
+{% endif %}
 
 ## Рекомендации
 

@@ -1,3 +1,4 @@
+{% if audience == "tech" %}
 1. Откройте панель мониторинга **[Distributed Storage Overview](../../../../reference/observability/metrics/grafana-dashboards.md)** в Grafana.
 
 1. На графике **DiskTimeAvailable and total Cost relation** проверьте, пересекают ли всплески **Total Cost** уровень **DiskTimeAvailable**.
@@ -15,3 +16,4 @@
     Этот график может выявить микровсплески нагрузки, которые не проявляются на графике со средней стоимостью использования **Cost and DiskTimeAvailable relation**.
 
     {% endnote %}
+{% endif %}

@@ -35,7 +35,9 @@
 ## Диагностика
 
 <!-- The include is added to allow partial overrides in overlays  -->
+{% if audience == "tech" %}
 {% include notitle [#](_includes/tablets-moved.md) %}
+{% endif %}
 
 ## Рекомендации
 

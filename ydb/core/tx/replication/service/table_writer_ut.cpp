@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
             },
         }));
 
-        auto writer = env.GetRuntime().Register(CreateLocalTableWriter(env.GetPathId("/Root/Table")));
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {

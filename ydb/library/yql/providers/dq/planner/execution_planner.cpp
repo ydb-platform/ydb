@@ -267,7 +267,7 @@ namespace NYql::NDqs {
         }
 
         // TODO switch from `PRAGMA dq.WatermarksIdleTimeoutMs` to `... WITH Watermarks IDLE TIMEOUT ....`
-        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default", Settings->WatermarksIdleTimeoutMs.Get() ? TMaybe<ui64>(TDuration::MilliSeconds(*Settings->WatermarksIdleTimeoutMs.Get()).MicroSeconds()) : Nothing());
+        TasksGraph.BuildCheckpointingAndWatermarksMode(true, Settings->WatermarksMode.Get().GetOrElse("") == "default", Settings->WatermarksIdleTimeoutMs.Get().Transform([](auto t) { return TDuration::MilliSeconds(t).MicroSeconds();}));
 
         return TasksGraph.GetTasks().size() <= maxTasksPerOperation;
     }

@@ -43,17 +43,17 @@ def get_failed_uids(opts) -> set[str]:
     result = set()
     mute_check = MuteTestCheck(opts.muted) if opts.muted else None
     with open(opts.report) as report_file:
-        for line in report_file.readlines():
-            record = json.loads(line).get('data', {})
-            if record.get('status', 'OK') == 'OK' or record.get('suite', False):
+        report = json.load(report_file).get('results', [])
+    for record in report:
+        if record.get('status', 'OK') == 'OK' or record.get('suite', False):
+            continue
+        if mute_check is not None:
+            test_name = f'{record.get("path", "")} {record.get("name", "")}.{record.get("subtest_name", "")}'
+            if mute_check(test_name):
                 continue
-            if mute_check is not None:
-                test_name = f'{record.get("path", "")} {record.get("name", "")}.{record.get("subtest_name", "")}'
-                if mute_check(test_name):
-                    continue
-            uid = record.get('uid')
-            if uid:
-                result.add(uid)
+        uid = record.get('uid')
+        if uid:
+            result.add(uid)
     print(f'{len(result)} uids loaded')
     return result
 
@@ -116,11 +116,7 @@ def process_context(opts, uids_filter: set[str]) -> None:
     print('Strip context...')
     for k, v in in_context.items():
         if k == 'tests':
-            new_tests = {}
-            for uid in v.keys():
-                if uid in uids_filter:
-                    new_tests[uid] = v[uid]
-            out_context[k] = new_tests
+            out_context[k] = {uid: v[uid] for uid in v.keys() if uid in uids_filter}
         elif k == 'graph':
             out_context[k] = _strip_graph(v, uids_filter)
         else:
@@ -151,7 +147,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '--report', '-r', type=str, dest='report', required=True,
-        help='Path to jsonl report'
+        help='Path to json build report'
     )
     parser.add_argument('--muted', '-m', type=str, help='Path to muted tests', dest='muted')
     opts = parser.parse_args()

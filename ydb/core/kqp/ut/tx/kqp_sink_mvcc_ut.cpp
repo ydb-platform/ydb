@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     
             // tx1 writes (1, 1)
             auto result = session1.ExecuteQuery(Q1_(R"(
-                upsert into KV2 (Key, Value) values (1u, "2");
+                upsert into KV2 (Key, Value) values (1u, "1");
                 )"), TTxControl::BeginTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             auto tx1 = result.GetTransaction();

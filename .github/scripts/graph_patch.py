@@ -3,48 +3,29 @@
 from __future__ import annotations
 import argparse
 import json
-import re
+import importlib.util
+import sys
+import os
 
 
-class MuteTestCheck:
-    def __pattern_to_re(self, pattern):
-        res = []
-        for c in pattern:
-            if c == '*':
-                res.append('.*')
-            else:
-                res.append(re.escape(c))
-
-        return f"(?:^{''.join(res)}$)"
-
-    def __init__(self, fn):
-        self.regexps = []
-
-        with open(fn, 'r') as fp:
-            for line in fp:
-                line = line.strip()
-                if not line:
-                    continue
-                pattern = self.__pattern_to_re(line)
-
-                try:
-                    self.regexps.append(re.compile(pattern))
-                except re.error:
-                    print(f"Unable to compile regex {pattern!r}")
-                    raise
-
-    def __call__(self, fullname):
-        for r in self.regexps:
-            if r.match(fullname):
-                return True
-        return False
+def __import_from_path(module_name, file_path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-def get_failed_uids(opts) -> set[str]:
+self_path = os.path.dirname(__file__)
+sys.path.append(os.path.join(self_path, 'tests'))
+mute_utils = __import_from_path('mute_util', os.path.join(self_path, 'tests', 'mute_utils.py'))
+
+
+def get_failed_uids(muted_path: str, report_path: str) -> set[str]:
     print('Load failed uids..')
     result = set()
-    mute_check = MuteTestCheck(opts.muted) if opts.muted else None
-    with open(opts.report) as report_file:
+    mute_check = mute_utils.MuteTestCheck(muted_path) if muted_path else None
+    with open(report_path) as report_file:
         report = json.load(report_file).get('results', [])
     for record in report:
         if record.get('status', 'OK') == 'OK' or record.get('suite', False):
@@ -100,21 +81,21 @@ def _filter_duplicate_resources(resources: list[dict]) -> list[dict]:
     return result
 
 
-def process_graph(opts, uids_filter: set[str]) -> None:
+def process_graph(in_graph_path: str, out_graph_path: str, uids_filter: set[str]) -> None:
     print('Load graph...')
-    with open(opts.in_graph) as f:
+    with open(in_graph_path) as f:
         in_graph = json.load(f)
     print('Strip graph...')
     out_graph = _strip_graph(in_graph, uids_filter)
     print('Save graph...')
-    with open(opts.out_graph, 'w') as f:
+    with open(out_graph_path, 'w') as f:
         json.dump(out_graph, f, indent=2)
     print('Process graph...OK')
 
 
-def process_context(opts, uids_filter: set[str]) -> None:
+def process_context(in_context_path: str, out_context_path: str, uids_filter: set[str]) -> None:
     print('Load context...')
-    with open(opts.in_context) as f:
+    with open(in_context_path) as f:
         in_context = json.load(f)
     out_context = {}
     print('Strip context...')
@@ -126,7 +107,7 @@ def process_context(opts, uids_filter: set[str]) -> None:
         else:
             out_context[k] = v
     print('Save context...')
-    with open(opts.out_context, 'w') as f:
+    with open(out_context_path, 'w') as f:
         json.dump(out_context, f, indent=2)
     print('Process context...OK')
 
@@ -155,6 +136,6 @@ if __name__ == '__main__':
     )
     parser.add_argument('--muted', '-m', type=str, help='Path to muted tests', dest='muted')
     opts = parser.parse_args()
-    uids = get_failed_uids(opts)
-    process_graph(opts, uids)
-    process_context(opts, uids)
+    uids = get_failed_uids(muted_path=opts.muted, report_path=opts.report)
+    process_graph(in_graph_path=opts.in_graph, out_graph_path=opts.out_graph, uids_filter=uids)
+    process_context(in_context_path=opts.in_context, out_context_path=opts.out_context, uids_filter=uids)

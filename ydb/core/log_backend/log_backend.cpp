@@ -159,28 +159,34 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
         const TKikimrRunConfig& runConfig,
         NMonitoring::TDynamicCounterPtr counters)
 {
+    const auto& appConfig = runConfig.AppConfig;
     TAutoPtr<TLogBackend> logBackend;
-    if (!runConfig.AppConfig.HasAuditConfig())
+    if (!appConfig.HasAuditConfig() || !appConfig.GetAuditConfig().HasUnifiedAgentBackend()) {
         return logBackend;
+    }
 
-    const auto& auditConfig = runConfig.AppConfig.GetAuditConfig();
-    if (auditConfig.HasUnifiedAgentBackend() && runConfig.AppConfig.HasLogConfig() && runConfig.AppConfig.GetLogConfig().HasUAClientConfig()) {
-        const auto& logConfig = runConfig.AppConfig.GetLogConfig();
-        const auto& dnConfig = runConfig.AppConfig.GetDynamicNameserviceConfig();
-        const auto& uaClientConfig = logConfig.GetUAClientConfig();
+    const auto& uaBackend = appConfig.GetAuditConfig().GetUnifiedAgentBackend();
+    auto createUaLogBackend = [&](const auto& uaClientConfig) -> TAutoPtr<TLogBackend> {
+        auto clusterName = appConfig.HasLogConfig() && appConfig.GetLogConfig().HasClusterName() ? appConfig.GetLogConfig().GetClusterName() : "";
+        const auto& dnConfig = appConfig.GetDynamicNameserviceConfig();
         auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
-        auto logName = runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().HasLogName()
-            ? runConfig.AppConfig.GetAuditConfig().GetUnifiedAgentBackend().GetLogName()
-            : uaClientConfig.GetLogName();
+        auto logName = uaBackend.HasLogName() ? uaBackend.GetLogName() : uaClientConfig.GetLogName();
         auto maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
-        logBackend = TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+
+        return TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
             uaClientConfig,
             uaCounters,
             logName,
             runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
             runConfig.TenantName,
-            logConfig.HasClusterName() ? logConfig.GetClusterName() : ""
+            clusterName
         );
+    };
+
+    if (uaBackend.HasUAClientConfig()) {
+        logBackend = createUaLogBackend(uaBackend.GetUAClientConfig());
+    } else if (appConfig.HasLogConfig() && appConfig.GetLogConfig().HasUAClientConfig()) {
+        logBackend = createUaLogBackend(appConfig.GetLogConfig().GetUAClientConfig());
     }
 
     return logBackend;

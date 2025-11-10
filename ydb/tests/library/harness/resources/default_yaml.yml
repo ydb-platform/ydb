@@ -194,6 +194,8 @@ pqconfig:
 pqcluster_discovery_config:
   enabled: false
 table_service_config:
+  filter_pushdown_over_join_optional_side: false
+  enable_kqp_data_query_stream_idx_lookup_join: true
   resource_manager:
     mkql_light_program_memory_limit: 65536
     mkql_heavy_program_memory_limit: 1048576

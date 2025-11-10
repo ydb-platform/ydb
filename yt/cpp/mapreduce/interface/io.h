@@ -10,6 +10,7 @@
 
 #include "client_method_options.h"
 #include "common.h"
+#include "distributed_session.h"
 #include "format.h"
 #include "node.h"
 #include "mpl.h"
@@ -119,6 +120,14 @@ public:
     {
         return 0;
     }
+};
+
+class IFileFragmentWriter
+    : public TThrRefBase
+    , public IOutputStream
+{
+public:
+    virtual TWriteFileFragmentResult GetWriteFragmentResult() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -396,6 +405,32 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Class template for distributed table API fragment writer.
+///
+/// Write fragment result may be obtained after writer is closed.
+/// NB(achains): TTableFragmentWriter is not a derivative of TTableWriter on purpose.
+///              Due to different semantics and the necessity of closing writer.
+template <class T>
+class ITableFragmentWriter
+    : public TThrRefBase
+{
+public:
+    /// @brief Get object with session-specific table fragment write information.
+    ///
+    /// Only use after Finish() is called.
+    virtual TWriteTableFragmentResult GetWriteFragmentResult() const = 0;
+
+    /// @brief Submit a row for writing.
+    virtual void AddRow(const T& row) = 0;
+
+    /// @brief Completes writing and makes write fragment result available.
+    ///
+    /// No other data can be written after Finish is called.
+    virtual void Finish() = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 /// @brief Type representing YaMR table row.
 ///
 /// @deprecated
@@ -429,6 +464,13 @@ public:
         const TRichYPath& path,
         const TFileWriterOptions& options = TFileWriterOptions()) = 0;
 
+    /// @brief Create a fragment writer for given distributed file session cookie.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#write_file_fragment)
+    virtual IFileFragmentWriterPtr CreateFileFragmentWriter(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = TFileFragmentWriterOptions()) = 0;
+
     /// Create a typed reader for table at `path`.
     template <class T>
     TTableReaderPtr<T> CreateTableReader(
@@ -446,6 +488,14 @@ public:
         const TRichYPath& path,
         const ::google::protobuf::Descriptor& descriptor,
         const TTableWriterOptions& options = TTableWriterOptions()) = 0;
+
+    /// @brief Create a fragment table writer for given distributed table session cookie.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#write_fragment)
+    template <class T>
+    ITableFragmentWriterPtr<T> CreateTableFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options = {});
 
     /// Create a reader to read a table using specified format.
     virtual TRawTableReaderPtr CreateRawReader(
@@ -547,6 +597,10 @@ private:
         const TRichYPath& path,
         const TTableWriterOptions& options,
         const ::google::protobuf::Message* prototype) = 0;
+
+    virtual ::TIntrusivePtr<ITableFragmentWriter<TNode>> CreateNodeFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1426,6 +1426,71 @@ TCheckPermissionResponse ParseCheckPermissionResponse(const NApi::TCheckPermissi
     return result;
 }
 
+TDistributedWriteTableSessionWithCookies TRpcRawClient::StartDistributedWriteTableSession(
+    TMutationId& /*mutationId*/,
+    const TRichYPath& /*richPath*/,
+    i64 /*cookieCount*/,
+    const TStartDistributedWriteTableOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+void TRpcRawClient::PingDistributedWriteTableSession(
+    const TDistributedWriteTableSession& /*session*/,
+    const TPingDistributedWriteTableOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+void TRpcRawClient::FinishDistributedWriteTableSession(
+    TMutationId& /*mutationId*/,
+    const TDistributedWriteTableSession& /*session*/,
+    const TVector<TWriteTableFragmentResult>& /*results*/,
+    const TFinishDistributedWriteTableOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteTableFragment(
+    const TDistributedWriteTableCookie& /*cookie*/,
+    const TMaybe<TFormat>& /*format*/,
+    const TTableFragmentWriterOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+TDistributedWriteFileSessionWithCookies TRpcRawClient::StartDistributedWriteFileSession(
+    TMutationId& /*mutationId*/,
+    const TRichYPath& /*richPath*/,
+    i64 /*cookieCount*/,
+    const TStartDistributedWriteFileOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+void TRpcRawClient::PingDistributedWriteFileSession(
+    const TDistributedWriteFileSession& /*session*/,
+    const TPingDistributedWriteFileOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+void TRpcRawClient::FinishDistributedWriteFileSession(
+    TMutationId& /*mutationId*/,
+    const TDistributedWriteFileSession& /*session*/,
+    const TVector<TWriteFileFragmentResult>& /*results*/,
+    const TFinishDistributedWriteFileOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
+std::unique_ptr<IOutputStreamWithResponse> TRpcRawClient::WriteFileFragment(
+    const TDistributedWriteFileCookie& /*cookie*/,
+    const TFileFragmentWriterOptions& /*options*/)
+{
+    ythrow TApiUsageError() << "Not implemented";
+}
+
 TCheckPermissionResponse TRpcRawClient::CheckPermission(
     const TString& user,
     EPermission permission,

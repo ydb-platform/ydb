@@ -592,6 +592,13 @@ struct TFileWriterOptions
     FLUENT_FIELD_OPTION(TWriterOptions, WriterOptions);
 };
 
+///
+/// @brief Options for writing file fragment in distributed session.
+///
+/// @see NYT::IIOClient::CreateFileFragmentWriter
+struct TFileFragmentWriterOptions
+{ };
+
 class TSkiffRowHints
 {
 public:
@@ -775,6 +782,13 @@ struct TTableWriterOptions
     /// @see NYT::TWriterOptions
     FLUENT_FIELD_OPTION(TWriterOptions, WriterOptions);
 };
+
+///
+/// @brief Options for writing table fragment in distributed session.
+///
+/// @see NYT::IIOClient::CreateTableFragmentWriter
+struct TTableFragmentWriterOptions
+{ };
 
 ///
 /// @brief Options for @ref NYT::IClient::StartTransaction

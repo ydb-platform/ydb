@@ -31,6 +31,7 @@
 #include "constants.h"
 #include "batch_request.h"
 #include "cypress.h"
+#include "distributed_session.h"
 #include "init.h"
 #include "io.h"
 #include "node.h"
@@ -574,6 +575,64 @@ public:
     virtual void ResumeOperation(
         const TOperationId& operationId,
         const TResumeOperationOptions& options = TResumeOperationOptions()) = 0;
+
+    ///
+    /// Distributed table write API
+    /// @{
+
+    /// @brief Initialize distributed session and request cookies for participants.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_distributed_write_session)
+    virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) = 0;
+
+    /// @brief Ping distributed session to prolong its main transaction lifetime.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#ping_distributed_write_session)
+    virtual void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) = 0;
+
+    /// @brief Merge all write fragments results into table and close distributed session.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#finish_distributed_write_session)
+    virtual void FinishDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) = 0;
+
+    /// @}
+
+    ///
+    /// Distributed file write API
+    /// @{
+
+    /// @brief Initialize distributed session and request cookies for participants.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_distributed_write_file_session)
+    virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) = 0;
+
+    /// @brief Ping distributed session to prolong its main transaction lifetime.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#ping_distributed_write_file_session)
+    virtual void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) = 0;
+
+    /// @brief Merge all write fragments results into file and close distributed session.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#finish_distributed_write_file_session)
+    virtual void FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) = 0;
+
+    /// @}
 
     ///
     /// @brief Synchronously terminates all client's background activities

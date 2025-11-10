@@ -3,7 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 
 #include <ydb/library/actors/core/log.h>
 

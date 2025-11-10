@@ -90,9 +90,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
-        if (GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
-        }
         if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
@@ -100,9 +97,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
-        }
-        if (GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
         }
         if (needConflictDetector) {
             acc.AddStep(std::make_shared<TConflictDetector>());

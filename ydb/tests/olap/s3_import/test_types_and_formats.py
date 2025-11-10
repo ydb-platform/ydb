@@ -71,7 +71,8 @@ class TestTypesAndFormats(S3ImportTestBase):
             c_json Json,
             c_date Date,
             c_datetime Datetime,
-            c_timestamp Timestamp
+            c_timestamp Timestamp,
+            c_bool Bool
         """
 
         self.ydb_client.query(f"""
@@ -85,10 +86,14 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         self.ydb_client.query(f"""
             UPSERT INTO {olap_table_name} (
-                c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64, c_float, c_double, c_string, c_utf8, c_json, c_date, c_datetime, c_timestamp
+                c_int8, c_int16, c_int32, c_int64, c_uint8, c_uint16, c_uint32, c_uint64,
+                c_float, c_double, c_string, c_utf8, c_json, c_date, c_datetime, c_timestamp, c_bool
             ) VALUES
-                (1, 1, 1, 1, 1, 1, 1, 1, Float("0.5"), Double("-0.5"), "hello", "world", Json("[10, 20, 30]"), Date("2025-08-25"), Datetime("2025-08-25T10:00:00Z"), Timestamp("2025-08-25T10:00:00Z")),
-                (NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+                (1, 1, 1, 1, 1, 1, 1, 1, Float("0.5"), Double("-0.5"), "hello", "world",
+                 Json("[10, 20, 30]"), Date("2025-08-25"), Datetime("2025-08-25T10:00:00Z"),
+                 Timestamp("2025-08-25T10:00:00Z"), true),
+                (NULL, NULL, 2, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                 NULL, NULL, NULL, NULL, false);
         """)
 
         test_bucket = f"{format}_{compression}_bucket"
@@ -136,10 +141,10 @@ class TestTypesAndFormats(S3ImportTestBase):
 
     @link_test_case("#18784")
     def test_parquet_format(self):
-        olap_table_name = "olap_table"
-        s3_source_name = "s3_source"
-        s3_table_name = "s3_table"
-        from_s3_table_name = "from_s3"
+        olap_table_name = "olap_table_parquet"
+        s3_source_name = "s3_source_parquet"
+        s3_table_name = "s3_table_parquet"
+        from_s3_table_name = "from_s3_parquet"
 
         table_schema = """
             c_int8 Int8,
@@ -161,7 +166,8 @@ class TestTypesAndFormats(S3ImportTestBase):
             c_datetime64 Datetime64,
             c_timestamp Timestamp,
             c_timestamp64 Timestamp64,
-            c_decimal Decimal(22, 9)
+            c_decimal Decimal(22, 9),
+            c_bool Bool
         """
 
         self.ydb_client.query(f"""
@@ -194,7 +200,8 @@ class TestTypesAndFormats(S3ImportTestBase):
                 c_datetime64,
                 c_timestamp,
                 c_timestamp64,
-                c_decimal
+                c_decimal,
+                c_bool
             ) VALUES
                 (
                     1,
@@ -216,7 +223,8 @@ class TestTypesAndFormats(S3ImportTestBase):
                     Datetime64("2025-08-25T10:00:00Z"),
                     Timestamp("2025-08-25T10:00:00Z"),
                     Timestamp64("2025-08-25T10:00:00Z"),
-                    CAST("12.34" AS Decimal(22, 9))
+                    CAST("12.34" AS Decimal(22, 9)),
+                    true
                 ),
                 (
                     NULL,
@@ -238,7 +246,8 @@ class TestTypesAndFormats(S3ImportTestBase):
                     NULL,
                     NULL,
                     NULL,
-                    NULL
+                    NULL,
+                    false
                 )
         """)
 
@@ -290,10 +299,10 @@ class TestTypesAndFormats(S3ImportTestBase):
 
     @link_test_case("#18784")
     def test_parquet_datetime_types(self):
-        olap_table_name = "olap_table"
-        s3_source_name = "s3_source"
-        s3_table_name = "s3_table"
-        from_s3_table_name = "from_s3"
+        olap_table_name = "olap_table_datetime"
+        s3_source_name = "s3_source_datetime"
+        s3_table_name = "s3_table_datetime"
+        from_s3_table_name = "from_s3_datetime"
 
         table_schema = """
             c_int32 Int32 NOT NULL,
@@ -364,7 +373,7 @@ class TestTypesAndFormats(S3ImportTestBase):
                 )
         """)
 
-        test_bucket = "parquet_bucket"
+        test_bucket = "parquet_datetime_bucket"
         self.s3_client.create_bucket(test_bucket)
 
         access_key_id_secret_name = f"{test_bucket}_key_id"

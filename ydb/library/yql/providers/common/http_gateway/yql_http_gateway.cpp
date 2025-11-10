@@ -686,8 +686,8 @@ public:
     }
 
     ~THTTPMultiGateway() {
-        curl_multi_wakeup(Handle.get());
         IsStopped = true;
+        curl_multi_wakeup(Handle.get());
         if (Thread.joinable()) {
             Thread.join();
         }

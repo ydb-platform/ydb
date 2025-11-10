@@ -274,6 +274,8 @@ message TKqpReadRangesSourceSettings {
 
     optional bool IsTableImmutable = 23 [default = false];
     optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
+
+    optional string Database = 25;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -307,6 +309,9 @@ message TKqpVectorResolveSettings {
 
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
+
+    // Database name for KqpReadActor
+    optional string Database = 17;
 }
 
 message TKqpTaskInfo {
@@ -2098,6 +2103,16 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
+
+    optional TReadVectorTopK VectorTopK = 905;
+}
+
+message TReadVectorTopK {
+    // Top-K pushdown by vector distance between Column and TargetVector
+    optional uint32 Column = 1;
+    optional Ydb.Table.VectorIndexSettings Settings = 2;
+    optional string TargetVector = 3;
+    optional uint32 Limit = 4;
 }
 
 message TReadContinuationToken {

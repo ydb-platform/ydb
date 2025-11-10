@@ -520,6 +520,7 @@ public:
             << ", attempt #" << state->ResolveAttempt);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings->GetDatabase();
         request->ResultSet.emplace_back(std::move(keyDesc));
 
         request->ResultSet.front().UserData = ResolveShardId;

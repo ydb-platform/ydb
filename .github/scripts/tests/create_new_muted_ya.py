@@ -108,7 +108,16 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     logging.info(f"Date range: {start_date} to {end_date}")
     
-    query_string = f'''
+    try:
+        with YDBWrapper() as ydb_wrapper:
+            # Check credentials
+            if not ydb_wrapper.check_credentials():
+                return []
+            
+            # Get table path from config
+            tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+            
+            query_string = f'''
     SELECT 
         test_name, 
         suite_folder, 
@@ -126,28 +135,18 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
         state, 
         days_in_state,
         is_test_chunk
-    FROM `test_results/analytics/tests_monitor`
+    FROM `{tests_monitor_table}`
     WHERE date_window >= CurrentUtcDate() - 7*Interval("P1D")
         AND branch = '{branch}' 
         AND build_type = '{build_type}'
     '''
-    
-    logging.info(f"SQL Query:\n{query_string}")
-    
-    try:
-        # Initialize YDB wrapper with context manager for automatic cleanup
-        script_name = os.path.basename(__file__)
-        with YDBWrapper(script_name=script_name) as ydb_wrapper:
-            script_name = os.path.basename(__file__)
             
-            # Check credentials
-            if not ydb_wrapper.check_credentials():
-                return []
+            logging.info(f"SQL Query:\n{query_string}")
             
             logging.info("Successfully connected to YDB")
             
             logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string)
+            results = ydb_wrapper.execute_scan_query(query_string, query_name="get_tests_monitor_data")
             
             logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
             return results
@@ -840,10 +839,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
 
 
 def mute_worker(args):
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1

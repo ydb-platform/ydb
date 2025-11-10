@@ -243,7 +243,7 @@ struct TEnvironmentSetup {
         char *end = p + len;
         TReallyFastRng32 rng(RandomNumber<ui64>());
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
-            *reinterpret_cast<ui32*>(p) = rng();
+            WriteUnaligned<ui32>(p, rng());
         }
         for (; p < end; ++p) {
             *p = rng();

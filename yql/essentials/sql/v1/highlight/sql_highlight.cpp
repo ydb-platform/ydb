@@ -58,9 +58,14 @@ TUnit MakeUnit<EUnitKind::Keyword>(Syntax& s) {
     using NSQLReflect::TLexerGrammar;
 
     TUnit unit = {.Kind = EUnitKind::Keyword};
+
     for (const auto& keyword : s.Grammar->KeywordNames) {
         const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
         unit.Patterns.push_back(CaseInsensitive(content));
+    }
+
+    for (const TString& type : LoadHints()) {
+        unit.Patterns.emplace_back(CaseInsensitive(type));
     }
 
     unit.Patterns = {Merged(std::move(unit.Patterns))};
@@ -105,11 +110,6 @@ TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
 
 template <>
 TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
-    TVector<NSQLTranslationV1::TRegexPattern> hints;
-    for (const TString& type : LoadHints()) {
-        hints.emplace_back(CaseInsensitive(type));
-    }
-
     return {
         .Kind = EUnitKind::OptionIdentifier,
         .Patterns = {
@@ -119,7 +119,6 @@ TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
                 .Before = TStringBuilder() << "PRAGMA" << s.Get("WS"),
                 .IsCaseInsensitive = true,
             },
-            {Merged(std::move(hints))},
         },
     };
 }
@@ -135,6 +134,7 @@ TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
         .Kind = EUnitKind::TypeIdentifier,
         .Patterns = {
             {s.Get("ID_PLAIN"), s.Get("LESS")},
+            {.Body = "DECIMAL", .IsCaseInsensitive = true},
             {Merged(std::move(types))},
         },
     };
@@ -182,6 +182,8 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
         .RangePatterns = {
             {R"(')", R"(')", R"re(\\.)re"},
             {R"(")", R"(")", R"re(\\.)re"},
+            {TRangePattern::EmbeddedPythonBegin, R"(@@)", R"re(\@\@\@\@)re"},
+            {TRangePattern::EmbeddedJavaScriptBegin, R"(@@)", R"re(\@\@\@\@)re"},
             {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
         },
         .Patterns = {{s.Get("STRING_VALUE")}},
@@ -240,8 +242,8 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
     h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::OptionIdentifier>(s));
-    h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));

@@ -63,8 +63,14 @@ const IComputationNode* TUnboxedImmutableComputationNode::GetSource() const {
     return nullptr;
 }
 
-IComputationNode* TUnboxedImmutableComputationNode::AddDependence(const IComputationNode*) {
+IComputationNode* TUnboxedImmutableComputationNode::AddDependent(const IComputationNode*) {
     return nullptr;
+}
+
+void TUnboxedImmutableComputationNode::AddDependency(const IComputationNode*) const {
+}
+
+void TUnboxedImmutableComputationNode::AddOwned(IComputationExternalNode*) const {
 }
 
 void TUnboxedImmutableComputationNode::RegisterDependencies() const {
@@ -78,14 +84,20 @@ void TUnboxedImmutableComputationNode::CollectDependentIndexes(const IComputatio
     THROW yexception() << "Failed to collect dependent indexes.";
 }
 
-ui32 TUnboxedImmutableComputationNode::GetDependencyWeight() const {
-    THROW yexception() << "Can't get dependency weight from const node.";
+ui32 TUnboxedImmutableComputationNode::GetDependentWeight() const {
+    THROW yexception() << "Can't get dependent weight from const node.";
 }
 
-ui32 TUnboxedImmutableComputationNode::GetDependencesCount() const {
-    THROW yexception() << "Can't get dependences count from const node.";
+void TUnboxedImmutableComputationNode::CollectUpvalues(TComputationExternalNodePtrSet&) const {
 }
 
+ui32 TUnboxedImmutableComputationNode::GetDependentsCount() const {
+    THROW yexception() << "Can't get dependents count from const node.";
+}
+
+TComputationExternalNodePtrSet TUnboxedImmutableComputationNode::GetUpvalues() const {
+    return {};
+}
 bool TUnboxedImmutableComputationNode::IsTemporaryValue() const {
     return false;
 }
@@ -113,25 +125,38 @@ Y_NO_INLINE TStatefulComputationNodeBase::~TStatefulComputationNodeBase()
 {
 }
 
-Y_NO_INLINE void TStatefulComputationNodeBase::AddDependenceImpl(const IComputationNode* node) {
+Y_NO_INLINE void TStatefulComputationNodeBase::AddDependentImpl(const IComputationNode* node) {
+    Dependents_.emplace_back(node);
+}
+
+Y_NO_INLINE void TStatefulComputationNodeBase::AddDependencyImpl(const IComputationNode* node) const {
     Dependencies_.emplace_back(node);
+}
+
+Y_NO_INLINE void TStatefulComputationNodeBase::AddOwnedImpl(IComputationExternalNode* node) const {
+    Owned_.emplace(node);
 }
 
 Y_NO_INLINE void TStatefulComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self, const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies, bool stateless) const {
+    IComputationNode::TIndexesMap& dependents, bool stateless) const {
     if (self == owner) {
         return;
     }
 
-    if (const auto ins = dependencies.emplace(ValueIndex_, RepresentationKind_); ins.second) {
-        std::for_each(Dependencies_.cbegin(), Dependencies_.cend(),
-                      std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies)));
+    if (const auto ins = dependents.emplace(ValueIndex_, RepresentationKind_); ins.second) {
+        std::for_each(Dependents_.cbegin(), Dependents_.cend(),
+                      std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependents)));
 
         if (stateless) {
-            dependencies.erase(ins.first);
+            dependents.erase(ins.first);
         }
     }
+}
+
+Y_NO_INLINE void TStatefulComputationNodeBase::CollectUpvaluesImpl(TComputationExternalNodePtrSet& upvalues) const {
+    std::for_each(Dependencies_.cbegin(), Dependencies_.cend(), std::bind(&IComputationNode::CollectUpvalues, std::placeholders::_1, std::ref(upvalues)));
+    std::erase_if(upvalues, [this](IComputationExternalNode* uv) { return Owned_.find(uv) != Owned_.cend(); });
 }
 
 Y_NO_INLINE TStatefulSourceComputationNodeBase::TStatefulSourceComputationNodeBase()
@@ -142,12 +167,12 @@ Y_NO_INLINE TStatefulSourceComputationNodeBase::~TStatefulSourceComputationNodeB
 {
 }
 
-Y_NO_INLINE void TStatefulSourceComputationNodeBase::PrepareStageOneImpl(const TConstComputationNodePtrVector& dependencies) {
+Y_NO_INLINE void TStatefulSourceComputationNodeBase::PrepareStageOneImpl(const TConstComputationNodePtrVector& dependents) {
     if (!Stateless_) {
         Stateless_ = std::accumulate(
-                         dependencies.cbegin(), dependencies.cend(), 0,
+                         dependents.cbegin(), dependents.cend(), 0,
                          std::bind(std::plus<i32>(), std::placeholders::_1,
-                                   std::bind(&IComputationNode::GetDependencyWeight, std::placeholders::_2))) <= 1;
+                                   std::bind(&IComputationNode::GetDependentWeight, std::placeholders::_2))) <= 1;
     }
 }
 
@@ -166,10 +191,20 @@ TStatefulComputationNode<IComputationNodeInterface, SerializableState>::TStatefu
 }
 
 template <class IComputationNodeInterface, bool SerializableState>
-IComputationNode* TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependence(
+IComputationNode* TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependent(
     const IComputationNode* node) {
-    AddDependenceImpl(node);
+    AddDependentImpl(node);
     return this;
+}
+
+template <class IComputationNodeInterface, bool SerializableState>
+void TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependency(const IComputationNode* node) const {
+    AddDependencyImpl(node);
+}
+
+template <class IComputationNodeInterface, bool SerializableState>
+void TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddOwned(IComputationExternalNode* node) const {
+    AddOwnedImpl(node);
 }
 
 template <class IComputationNodeInterface, bool SerializableState>
@@ -187,8 +222,8 @@ ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::Get
 }
 
 template <class IComputationNodeInterface, bool SerializableState>
-ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetDependencesCount() const {
-    return Dependencies_.size();
+ui32 TStatefulComputationNode<IComputationNodeInterface, SerializableState>::GetDependentsCount() const {
+    return Dependents_.size();
 }
 
 template class TStatefulComputationNode<IComputationNode, false>;
@@ -205,14 +240,14 @@ Y_NO_INLINE ui32 TStatelessFlowComputationNodeBase::GetIndexImpl() const {
 Y_NO_INLINE void TStatelessFlowComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self,
     const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies,
+    IComputationNode::TIndexesMap& dependents,
     const TConstComputationNodePtrVector& dependences) const {
     if (self == owner) {
         return;
     }
 
     for (auto& dependence : dependences) {
-        dependence->CollectDependentIndexes(owner, dependencies);
+        dependence->CollectDependentIndexes(owner, dependents);
     }
 }
 
@@ -225,16 +260,16 @@ Y_NO_INLINE TStatefulFlowComputationNodeBase::TStatefulFlowComputationNodeBase(u
 Y_NO_INLINE void TStatefulFlowComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self,
     const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies,
+    IComputationNode::TIndexesMap& dependents,
     const TConstComputationNodePtrVector& dependences) const {
     if (self == owner) {
         return;
     }
 
-    const auto ins = dependencies.emplace(StateIndex_, StateKind_);
+    const auto ins = dependents.emplace(StateIndex_, StateKind_);
     if (ins.second) {
         for (auto& dependence : dependences) {
-            dependence->CollectDependentIndexes(owner, dependencies);
+            dependence->CollectDependentIndexes(owner, dependents);
         }
     }
 }
@@ -250,17 +285,17 @@ Y_NO_INLINE TPairStateFlowComputationNodeBase::TPairStateFlowComputationNodeBase
 Y_NO_INLINE void TPairStateFlowComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self,
     const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies,
+    IComputationNode::TIndexesMap& dependents,
     const TConstComputationNodePtrVector& dependences) const {
     if (self == owner) {
         return;
     }
 
-    const auto ins1 = dependencies.emplace(StateIndex_, FirstKind_);
-    const auto ins2 = dependencies.emplace(StateIndex_ + 1U, SecondKind_);
+    const auto ins1 = dependents.emplace(StateIndex_, FirstKind_);
+    const auto ins2 = dependents.emplace(StateIndex_ + 1U, SecondKind_);
     if (ins1.second && ins2.second) {
         for (auto& dependence : dependences) {
-            dependence->CollectDependentIndexes(owner, dependencies);
+            dependence->CollectDependentIndexes(owner, dependents);
         }
     }
 }
@@ -272,14 +307,14 @@ Y_NO_INLINE ui32 TStatelessWideFlowComputationNodeBase::GetIndexImpl() const {
 Y_NO_INLINE void TStatelessWideFlowComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self,
     const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies,
+    IComputationNode::TIndexesMap& dependents,
     const TConstComputationNodePtrVector& dependences) const {
     if (self == owner) {
         return;
     }
 
     for (auto& dependence : dependences) {
-        dependence->CollectDependentIndexes(owner, dependencies);
+        dependence->CollectDependentIndexes(owner, dependents);
     }
 }
 
@@ -301,16 +336,16 @@ Y_NO_INLINE TStatefulWideFlowComputationNodeBase::TStatefulWideFlowComputationNo
 Y_NO_INLINE void TStatefulWideFlowComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self,
     const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies,
+    IComputationNode::TIndexesMap& dependents,
     const TConstComputationNodePtrVector& dependences) const {
     if (self == owner) {
         return;
     }
 
-    const auto ins = dependencies.emplace(StateIndex_, StateKind_);
+    const auto ins = dependents.emplace(StateIndex_, StateKind_);
     if (ins.second) {
         for (auto& dependence : dependences) {
-            dependence->CollectDependentIndexes(owner, dependencies);
+            dependence->CollectDependentIndexes(owner, dependents);
         }
     }
 }
@@ -325,16 +360,16 @@ Y_NO_INLINE TPairStateWideFlowComputationNodeBase::TPairStateWideFlowComputation
 
 Y_NO_INLINE void TPairStateWideFlowComputationNodeBase::CollectDependentIndexesImpl(
     const IComputationNode* self, const IComputationNode* owner,
-    IComputationNode::TIndexesMap& dependencies, const TConstComputationNodePtrVector& dependences) const {
+    IComputationNode::TIndexesMap& dependents, const TConstComputationNodePtrVector& dependences) const {
     if (self == owner) {
         return;
     }
 
-    const auto ins1 = dependencies.emplace(StateIndex_, FirstKind_);
-    const auto ins2 = dependencies.emplace(StateIndex_ + 1U, SecondKind_);
+    const auto ins1 = dependents.emplace(StateIndex_, FirstKind_);
+    const auto ins2 = dependents.emplace(StateIndex_ + 1U, SecondKind_);
     if (ins1.second && ins2.second) {
         for (auto& dependence : dependences) {
-            dependence->CollectDependentIndexes(owner, dependencies);
+            dependence->CollectDependentIndexes(owner, dependents);
         }
     }
 }
@@ -373,6 +408,10 @@ void TExternalComputationNode::CollectDependentIndexes(const IComputationNode*, 
     map.emplace(ValueIndex_, RepresentationKind_);
 }
 
+void TExternalComputationNode::CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const {
+    upvalues.emplace(const_cast<TExternalComputationNode*>(this));
+}
+
 TExternalComputationNode::TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind)
     : TStatefulComputationNode(mutables, kind)
 {
@@ -406,26 +445,30 @@ void TExternalComputationNode::SetOwner(const IComputationNode* owner) {
 }
 
 void TExternalComputationNode::PrepareStageOne() {
-    std::sort(Dependencies_.begin(), Dependencies_.end());
-    Dependencies_.erase(std::unique(Dependencies_.begin(), Dependencies_.end()), Dependencies_.cend());
-    if (const auto it = std::find(Dependencies_.cbegin(), Dependencies_.cend(), Owner_); Dependencies_.cend() != it) {
-        Dependencies_.erase(it);
+    std::sort(Dependents_.begin(), Dependents_.end());
+    Dependents_.erase(std::unique(Dependents_.begin(), Dependents_.end()), Dependents_.cend());
+    if (const auto it = std::find(Dependents_.cbegin(), Dependents_.cend(), Owner_); Dependents_.cend() != it) {
+        Dependents_.erase(it);
     }
 }
 
 void TExternalComputationNode::PrepareStageTwo() {
-    TIndexesMap dependencies;
-    std::for_each(Dependencies_.cbegin(), Dependencies_.cend(),
-                  std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, Owner_, std::ref(dependencies)));
-    InvalidationSet_.assign(dependencies.cbegin(), dependencies.cend());
+    TIndexesMap dependents;
+    std::for_each(Dependents_.cbegin(), Dependents_.cend(),
+                  std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, Owner_, std::ref(dependents)));
+    InvalidationSet_.assign(dependents.cbegin(), dependents.cend());
 }
 
 const IComputationNode* TExternalComputationNode::GetSource() const {
     return nullptr;
 }
 
-ui32 TExternalComputationNode::GetDependencyWeight() const {
+ui32 TExternalComputationNode::GetDependentWeight() const {
     return 0U;
+}
+
+TComputationExternalNodePtrSet TExternalComputationNode::GetUpvalues() const {
+    return {};
 }
 
 bool TExternalComputationNode::IsTemporaryValue() const {
@@ -678,17 +721,28 @@ ui32 TWideFlowProxyComputationNode::GetIndex() const {
     THROW yexception() << "Failed to get proxy node index.";
 }
 
-ui32 TWideFlowProxyComputationNode::GetDependencyWeight() const {
-    THROW yexception() << "Failed to get dependency weight.";
+ui32 TWideFlowProxyComputationNode::GetDependentWeight() const {
+    THROW yexception() << "Failed to get dependent weight.";
 }
 
-ui32 TWideFlowProxyComputationNode::GetDependencesCount() const {
-    return Dependences_.size();
+ui32 TWideFlowProxyComputationNode::GetDependentsCount() const {
+    return Dependents_.size();
 }
 
-IComputationNode* TWideFlowProxyComputationNode::AddDependence(const IComputationNode* node) {
-    Dependences_.push_back(node);
+TComputationExternalNodePtrSet TWideFlowProxyComputationNode::GetUpvalues() const {
+    THROW yexception() << "Failed to get proxy node upvalues.";
+}
+
+IComputationNode* TWideFlowProxyComputationNode::AddDependent(const IComputationNode* node) {
+    Dependents_.push_back(node);
     return this;
+}
+
+void TWideFlowProxyComputationNode::AddDependency(const IComputationNode* node) const {
+    Dependencies_.push_back(node);
+}
+
+void TWideFlowProxyComputationNode::AddOwned(IComputationExternalNode*) const {
 }
 
 const IComputationNode* TWideFlowProxyComputationNode::GetSource() const {
@@ -703,18 +757,18 @@ void TWideFlowProxyComputationNode::RegisterDependencies() const {
 }
 
 void TWideFlowProxyComputationNode::PrepareStageOne() {
-    std::sort(Dependences_.begin(), Dependences_.end());
-    Dependences_.erase(std::unique(Dependences_.begin(), Dependences_.end()), Dependences_.cend());
-    if (const auto it = std::find(Dependences_.cbegin(), Dependences_.cend(), Owner_); Dependences_.cend() != it) {
-        Dependences_.erase(it);
+    std::sort(Dependents_.begin(), Dependents_.end());
+    Dependents_.erase(std::unique(Dependents_.begin(), Dependents_.end()), Dependents_.cend());
+    if (const auto it = std::find(Dependents_.cbegin(), Dependents_.cend(), Owner_); Dependents_.cend() != it) {
+        Dependents_.erase(it);
     }
 }
 
 void TWideFlowProxyComputationNode::PrepareStageTwo() {
-    TIndexesMap dependencies;
-    std::for_each(Dependences_.cbegin(), Dependences_.cend(),
-                  std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, Owner_, std::ref(dependencies)));
-    InvalidationSet_.assign(dependencies.cbegin(), dependencies.cend());
+    TIndexesMap dependents;
+    std::for_each(Dependents_.cbegin(), Dependents_.cend(),
+                  std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, Owner_, std::ref(dependents)));
+    InvalidationSet_.assign(dependents.cbegin(), dependents.cend());
 }
 
 void TWideFlowProxyComputationNode::SetOwner(const IComputationNode* owner) {
@@ -724,6 +778,9 @@ void TWideFlowProxyComputationNode::SetOwner(const IComputationNode* owner) {
 
 void TWideFlowProxyComputationNode::CollectDependentIndexes(const IComputationNode*, TIndexesMap&) const {
     THROW yexception() << "Failed to collect dependent indexes.";
+}
+
+void TWideFlowProxyComputationNode::CollectUpvalues(TComputationExternalNodePtrSet&) const {
 }
 
 void TWideFlowProxyComputationNode::InvalidateValue(TComputationContext& ctx) const {

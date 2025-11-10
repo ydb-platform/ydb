@@ -181,6 +181,20 @@
             "uri": "https://{canondata_backend}/1599023/38ec9754770d90a028f92de4e0d6fc9f0a72c9ef/resource.tar.gz#test.test_aggregate-listbuiltin_constness-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[aggregate-random_value--Debug]": [
+        {
+            "checksum": "03e1fa43db449747df22b05f38e54fd0",
+            "size": 2297,
+            "uri": "https://{canondata_backend}/1936842/d7ce329590e04510f4c86d6d391a81346089791d/resource.tar.gz#test.test_aggregate-random_value--Debug_/opt.yql"
+        }
+    ],
+    "test.test[aggregate-random_value--Results]": [
+        {
+            "checksum": "f180a02478765a484db8277cb041ad4e",
+            "size": 888,
+            "uri": "https://{canondata_backend}/1784117/6023e39a505c193d0a487210868ad42246361239/resource.tar.gz#test.test_aggregate-random_value--Results_/results.txt"
+        }
+    ],
     "test.test[aggregate-yql-20197-default.txt-Debug]": [
         {
             "checksum": "eb0f0e300d22ca671394b50f2fa343d3",
@@ -1571,6 +1585,20 @@
             "checksum": "61ae8dd3f0eab22696355e1988037082",
             "size": 665,
             "uri": "https://{canondata_backend}/1871102/556270f0af98f8fae40497403628c0919bd7a5ac/resource.tar.gz#test.test_select_yql-from_anon_values-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-join_on_3-default.txt-Debug]": [
+        {
+            "checksum": "b67f2dd80b47afb8f2355b02bbaadf45",
+            "size": 1100,
+            "uri": "https://{canondata_backend}/1130705/6ac5284134b81cb0e01a30b575c897901d10db98/resource.tar.gz#test.test_select_yql-join_on_3-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-join_on_3-default.txt-Results]": [
+        {
+            "checksum": "638bd6173fc75759129802b17fba46e8",
+            "size": 1561,
+            "uri": "https://{canondata_backend}/1130705/6ac5284134b81cb0e01a30b575c897901d10db98/resource.tar.gz#test.test_select_yql-join_on_3-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-minimal-default.txt-Debug]": [

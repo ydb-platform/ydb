@@ -22,14 +22,19 @@ enum EAggregationPhase : ui32 {Intermediate, Final};
  * Currently we only record the name and alias of the column, but we will extend it in the future
  */
 struct TInfoUnit {
-    TInfoUnit(TString alias, TString column) : Alias(alias), ColumnName(column) {}
-    TInfoUnit(TString name);
+    TInfoUnit(TString alias, TString column, bool scalarContext=false) : 
+        Alias(alias), 
+        ColumnName(column), 
+        ScalarContext(scalarContext) {}
+
+    TInfoUnit(TString name, bool scalarContext=false);
     TInfoUnit() {}
 
     TString GetFullName() const { return ((Alias != "") ? ("_alias_" + Alias + ".") : "") + ColumnName; }
 
     TString Alias;
     TString ColumnName;
+    bool ScalarContext = false;
 
     bool operator==(const TInfoUnit &other) const { return Alias == other.Alias && ColumnName == other.ColumnName; }
 
@@ -37,11 +42,6 @@ struct TInfoUnit {
         size_t operator()(const TInfoUnit &c) const { return THash<TString>{}(c.Alias) ^ THash<TString>{}(c.ColumnName); }
     };
 };
-
-/**
- * Extract all into units from an expression in YQL
- */
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
 
 /**
  * The following structures are used to extract filter information in convenient form from a filter expression
@@ -93,6 +93,7 @@ struct TPhysicalOpProps {
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
+    bool EnsureAtMostOne = false;
 };
 
 /**
@@ -200,13 +201,47 @@ struct TStageGraph {
     void TopologicalSort();
 };
 
+class IOperator;
+
+struct TScalarSubplans {
+
+    void Add(TInfoUnit iu, std::shared_ptr<IOperator> op) {
+        OrderedList.push_back(iu);
+        PlanMap[iu] = op;
+    }
+
+    TVector<std::shared_ptr<IOperator>> Get() {
+        TVector<std::shared_ptr<IOperator>> result;
+        for (auto iu : OrderedList) {
+            result.push_back(PlanMap.at(iu));
+        }
+        return result;
+    }
+
+    void Remove(TInfoUnit iu) {
+        std::erase(OrderedList, iu);
+        PlanMap.erase(iu);
+    }
+
+    THashMap<TInfoUnit, std::shared_ptr<IOperator>, TInfoUnit::THashFunction> PlanMap;
+    TVector<TInfoUnit> OrderedList;
+};
+
 /**
  * Global plan properties
  */
 struct TPlanProps {
     TStageGraph StageGraph;
     int InternalVarIdx = 1;
+    TScalarSubplans ScalarSubplans;
 };
+
+
+/**
+ * Extract all into units from an expression in YQL
+ */
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs);
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, TPlanProps& props, bool withScalarContext=false);
 
 /**
  * Interface for the operator
@@ -227,6 +262,10 @@ class IOperator {
      * TODO: Add caching with the ability to invalidate
      */
     virtual TVector<TInfoUnit> GetOutputIUs() = 0;
+
+    virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) { Y_UNUSED(props); return {}; }
+
+    const TTypeAnnotationNode* GetIUType(TInfoUnit iu);
 
     /***
      * Rename information units of this operator using a specified mapping
@@ -301,6 +340,8 @@ class TOpMap : public IUnaryOperator {
     TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
            bool project);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
+
     bool HasRenames() const;
     bool HasLambdas() const;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
@@ -337,7 +378,7 @@ struct TOpAggregationTraits {
 class TOpAggregate : public IUnaryOperator {
   public:
     TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns,
-                 EAggregationPhase aggPhase, TPositionHandle pos);
+                 EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
 
     virtual TString ToString(TExprContext& ctx) override;
@@ -345,16 +386,18 @@ class TOpAggregate : public IUnaryOperator {
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
     EAggregationPhase AggregationPhase;
+    bool DistinctAll;
 };
 
 class TOpFilter : public IUnaryOperator {
   public:
     TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
+    virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
 
-    TVector<TInfoUnit> GetFilterIUs() const;
-    TConjunctInfo GetConjunctInfo() const;
+    TVector<TInfoUnit> GetFilterIUs(TPlanProps& props) const;
+    TConjunctInfo GetConjunctInfo(TPlanProps& props) const;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) override;
 
     TExprNode::TPtr FilterLambda;
@@ -374,9 +417,11 @@ class TOpJoin : public IBinaryOperator {
 
 class TOpUnionAll : public IBinaryOperator {
   public:
-    TOpUnionAll(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TPositionHandle pos);
+    TOpUnionAll(std::shared_ptr<IOperator> leftArg, std::shared_ptr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+
+    bool Ordered;
 };
 
 class TOpLimit : public IUnaryOperator {
@@ -391,7 +436,7 @@ class TOpLimit : public IUnaryOperator {
 
 class TOpRoot : public IUnaryOperator {
   public:
-    TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos);
+    TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TString> columnOrder);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     void ComputeParents();
@@ -403,6 +448,7 @@ class TOpRoot : public IUnaryOperator {
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
+    TVector<TString> ColumnOrder;
 
     struct Iterator {
         struct IteratorItem {
@@ -422,9 +468,13 @@ class TOpRoot : public IUnaryOperator {
                 CurrElement = -1;
                 return;
             }
+            Root = ptr;
 
-            auto child = ptr->Children[0];
             std::unordered_set<std::shared_ptr<IOperator>> visited;
+            for (auto scalarSubplan : Root->PlanProps.ScalarSubplans.Get()) {
+                BuildDfsList(scalarSubplan, {}, size_t(0), visited);
+            }
+            auto child = ptr->Children[0];
             BuildDfsList(child, {}, size_t(0), visited);
             CurrElement = 0;
         }
@@ -465,6 +515,7 @@ class TOpRoot : public IUnaryOperator {
         }
         TVector<IteratorItem> DfsList;
         size_t CurrElement;
+        TOpRoot *Root;
     };
 
     Iterator begin() { return Iterator(this); }

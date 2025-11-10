@@ -8,18 +8,20 @@ namespace NConsoleClient {
 
 class TProgressBar {
 public:
-    explicit TProgressBar(size_t capacity);
+    explicit TProgressBar(size_t capacity, size_t parts = 0);
 
     ~TProgressBar();
 
-    void SetProcess(size_t progress);
+    void SetProgress(size_t progress);
 
     void AddProgress(size_t value);
 
     YDB_READONLY(size_t, Capacity, 0);
     YDB_READONLY(size_t, CurProgress, 0);
+    YDB_READONLY(size_t, Parts, 0);
+
 private:
-    void Render();
+    void Render(bool newPart);
 
     bool Finished = false;
 };

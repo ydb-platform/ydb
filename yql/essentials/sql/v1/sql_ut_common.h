@@ -8490,6 +8490,9 @@ Y_UNIT_TEST(CreateTopicSimple) {
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
         )");
+    TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = 3);
+        )");
 }
 
 Y_UNIT_TEST(CreateTopicConsumer) {
@@ -8515,7 +8518,13 @@ Y_UNIT_TEST(AlterTopicSimple) {
             ALTER TOPIC topic1 SET (retention_storage_mb = 3, partition_count_limit = 50);
         )");
     TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = 2);
+        )");
+    TestQuery(R"(
             ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1 RESET (metrics_level);
         )");
     TestQuery(R"(
             ALTER TOPIC topic1 RESET (partition_write_speed_bytes_per_second),
@@ -8564,6 +8573,10 @@ Y_UNIT_TEST(TopicBadRequests) {
         )", false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = "1");
+        )", false,
+              {"3:55: Error: METRICS_LEVEL value should be an integer"});
+    TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
         )", false,
               {"3:59: Error: Consumer cons1 defined more than once"});
@@ -8575,6 +8588,10 @@ Y_UNIT_TEST(TopicBadRequests) {
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
         )", false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
+    TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = "1");
+        )", false,
+              {"3:53: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
         )", false,
@@ -10924,6 +10941,92 @@ Y_UNIT_TEST(FromSubquery) {
     };
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+}
+
+Y_UNIT_TEST(Join2) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(AsteriskJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT * FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect unsupported: JOIN with an asterisk projection");
+}
+
+Y_UNIT_TEST(QualifiedAsteriskJoin) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT xx.* FROM xx JOIN yy ON xx.id = yy.id;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect unsupported: an_id DOT ASTERISK");
+}
+
+Y_UNIT_TEST(Join2Alias) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM xx AS x
+        JOIN yy AS y ON x.id = y.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(Join3) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM xx AS x
+        JOIN yy AS y ON x.id = y.id
+        JOIN zz AS z ON y.id = z.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+}
+
+Y_UNIT_TEST(Join3Mix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        USE plato;
+        SELECT id
+        FROM (VALUES (1)) AS x(id)
+        JOIN (SELECT * FROM yy) AS y ON x.id = y.id
+        JOIN zz AS z ON y.id = z.id;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(OrderBy) {

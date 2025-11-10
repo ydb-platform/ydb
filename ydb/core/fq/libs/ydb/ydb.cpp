@@ -12,6 +12,7 @@ namespace NFq {
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using TTxControl = NFq::ISession::TTxControl;
 
 using NYql::TIssues;
 
@@ -36,18 +37,18 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
         context->Table.c_str(),
         context->PrimaryKeyColumn.c_str());
 
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$pk")
+    auto params = std::make_unique<NYdb::TParamsBuilder>();
+    params->
+         AddParam("$pk")
         .String(context->PrimaryKey)
         .Build();
 
-    auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW());
+    auto ttxControl = TTxControl::BeginTx();
     if (context->OperationType == TGenerationContext::Check && context->CommitTx) {
         ttxControl.CommitTx();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
+    return context->Session->ExecuteDataQuery(query, ttxControl, std::move(params));
 }
 
 TFuture<TStatus> CheckGeneration(
@@ -57,7 +58,6 @@ TFuture<TStatus> CheckGeneration(
     if (!selectResult.IsSuccess()) {
         return MakeFuture<TStatus>(selectResult);
     }
-
 
     TResultSetParser parser(selectResult.GetResultSet(0));
     if (parser.TryNextRow()) {
@@ -89,7 +89,7 @@ TFuture<TStatus> CheckGeneration(
     }
     }
 
-    context->Transaction = selectResult.GetTransaction();
+    context->Session->UpdateTransaction(selectResult.GetTransaction());
     selectResult.GetTransaction().reset();
 
     if (!isOk) {
@@ -105,7 +105,7 @@ TFuture<TStatus> CheckGeneration(
         return MakeFuture(MakeErrorStatus(EStatus::ALREADY_EXISTS, ss.Str()));
     }
 
-    if (requiresTransaction && !context->Transaction) {
+    if (requiresTransaction && !context->Session->HasActiveTransaction()) {
         // just sanity check, normally should not happen.
         // note that we use retriable error
         TStringStream ss;
@@ -143,22 +143,26 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->PrimaryKeyColumn.c_str(),
         context->GenerationColumn.c_str());
 
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$pk")
+    auto params = std::make_unique<NYdb::TParamsBuilder>();
+    params->
+         AddParam("$pk")
         .String(context->PrimaryKey)
         .Build()
         .AddParam("$generation")
         .Uint64(context->Generation)
         .Build();
 
-    auto ttxControl = TTxControl::Tx(*context->Transaction);
+    auto ttxControl = TTxControl::ContinueTx();
     if (context->CommitTx) {
-        ttxControl.CommitTx();
-        context->Transaction.reset();
+        ttxControl = TTxControl::ContinueAndCommitTx();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(
+    auto f = context->Session->ExecuteDataQuery(query, ttxControl, std::move(params), context->ExecDataQuerySettings);
+    if (context->CommitTx) {
+        context->Session->UpdateTransaction(std::nullopt);
+    }
+
+    return f.Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -194,12 +198,14 @@ TExternalStorageSettings::TExternalStorageSettings(const NConfig::TYdbStorageCon
     , UseSsl(config.GetUseSsl())
     , UseLocalMetadataService(config.GetUseLocalMetadataService())
     , IamEndpoint(config.GetIamEndpoint())
-    , ClientTimeout(TDuration::Seconds(config.GetClientTimeoutSec()))
     , OperationTimeout(TDuration::Seconds(config.GetOperationTimeoutSec()))
     , CancelAfter(TDuration::Seconds(config.GetCancelAfterSec()))
 {
     if (config.GetTableClientMaxActiveSessions()) {
         MaxActiveQuerySessions = config.GetTableClientMaxActiveSessions();
+    }
+    if (config.GetClientTimeoutSec()) {
+        ClientTimeout = TDuration::Seconds(config.GetClientTimeoutSec());
     }
 }
 
@@ -213,12 +219,14 @@ TExternalStorageSettings::TExternalStorageSettings(const NKikimrConfig::TStreami
     , UseSsl(config.GetDatabaseConnection().GetUseSsl())
     , UseLocalMetadataService(config.GetDatabaseConnection().GetUseLocalMetadataService())
     , IamEndpoint(config.GetDatabaseConnection().GetIamEndpoint())
-    , ClientTimeout(TDuration::Seconds(config.GetQueryTimeoutSec()))
     , OperationTimeout(TDuration::Seconds(config.GetQueryTimeoutSec()))
     , CancelAfter(TDuration::Seconds(config.GetQueryTimeoutSec()))
 {
     if (config.GetMaxActiveQuerySessions()) {
         MaxActiveQuerySessions = config.GetMaxActiveQuerySessions();
+    }
+    if (config.GetQueryTimeoutSec()) {
+        ClientTimeout = TDuration::Seconds(config.GetQueryTimeoutSec());
     }
 }
 
@@ -294,6 +302,18 @@ TFuture<TStatus> CreateTable(
         });
 }
 
+TFuture<TStatus> CreateTable(
+    const IYdbConnection::TPtr& ydbConnection,
+    const TString& name,
+    TTableDescription&& description)
+{
+    auto tablePath = JoinPath(ydbConnection->GetTablePathPrefixWithoutDb(), name.c_str());
+    return ydbConnection->GetTableClient()->RetryOperation(
+        [db = ydbConnection->GetDb(), tablePath = std::move(tablePath), description = std::move(description)] (ISession::TPtr session) mutable {
+            return session->CreateTable(db, tablePath, TTableDescription(description));
+        });
+}
+
 bool IsTableCreated(const NYdb::TStatus& status) {
     return status.IsSuccess() ||
         status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
@@ -353,13 +373,13 @@ TFuture<TStatus> CheckGeneration(const TGenerationContextPtr& context) {
 }
 
 TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
-    if (!context->Transaction || !context->Transaction->IsActive()) {
+
+    if (!context->Session->HasActiveTransaction()) {
         auto status = MakeErrorStatus(EStatus::INTERNAL_ERROR, "trying to rollback non-active transaction");
         return MakeFuture(status);
     }
 
-    auto future = context->Transaction->Rollback();
-    context->Transaction.reset();
+    auto future = context->Session->Rollback();
     return future;
 }
 

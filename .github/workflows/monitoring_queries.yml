@@ -1,0 +1,32 @@
+name: Monitoring-queries-executor
+on:
+  schedule:
+    - cron: "*/10 * * * *"  # Every 10 min
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+        
+defaults:
+  run:
+    shell: bash
+jobs:
+  main:
+    name: Execute monitoring queries
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.commit_sha }}
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    - name: Install dependencies
+      run: |
+        python3 -m pip install ydb ydb[yc]
+    - name: Execute monitoring queries
+      run: python3 .github/scripts/analytics/monitoring_queries_executor.py
+

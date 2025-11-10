@@ -1901,6 +1901,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -2021,6 +2022,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 

@@ -3,22 +3,11 @@
 from __future__ import annotations
 import argparse
 import json
-import importlib.util
 import sys
 import os
 
-
-def __import_from_path(module_name, file_path):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-self_path = os.path.dirname(__file__)
-sys.path.append(os.path.join(self_path, 'tests'))
-mute_utils = __import_from_path('mute_util', os.path.join(self_path, 'tests', 'mute_utils.py'))
+sys.path.append(os.path.join(os.path.dirname(__file__), 'tests'))
+import mute_utils
 
 
 def get_failed_uids(muted_path: str, report_path: str) -> set[str]:

@@ -87,7 +87,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
   collections:
     - name: git+https://github.com/ydb-platform/ydb-ansible
       type: git
-      version: main
+      version: latest
   EOF
   $ ansible-galaxy install -r requirements.yaml
   ```
@@ -95,7 +95,7 @@ Refer to [Ansible Installation Guide](https://docs.ansible.com/ansible/latest/in
 - One-time
 
   ```bash
-  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git
+  $ ansible-galaxy collection install git+https://github.com/ydb-platform/ydb-ansible.git,latest
   ```
 
 {% endlist %}

@@ -323,7 +323,7 @@ class TestStreamingInYdb(TestYdsBase):
         message_count = 20
         for i in range(message_count):
             self.write_stream(['{"time": "time to do it"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
-        self.read_stream(message_count, topic_path=self.output_topic)
+        assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to do it" for i in range(message_count)]
         self.wait_completed_checkpoints(kikimr, query_id)
 
         logging.debug(f"stopping query {name}")
@@ -347,10 +347,9 @@ class TestStreamingInYdb(TestYdsBase):
 
         kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
 
-        message = '{"time": "time to rest"}'
+        message = '{"time": "time to lunch"}'
         for i in range(message_count):
             self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
-        expected = [message for i in range(message_count)]
-        assert self.read_stream(message_count, topic_path=self.output_topic) == expected
+        assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to lunch" for i in range(message_count)]
 
         kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")

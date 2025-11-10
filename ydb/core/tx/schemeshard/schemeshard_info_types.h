@@ -2954,6 +2954,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     enum class EKind: ui8 {
         YT = 0,
         S3,
+        FS,
     };
 
     struct TItem {

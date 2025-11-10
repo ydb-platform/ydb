@@ -690,21 +690,26 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
     FetchMessagesIfNeeded();
     ProcessEventQueue();
+    MoveToDLQIfPossible();
+    Schedule(WakeupInterval, new TEvents::TEvWakeup());
+}
 
+void TConsumerActor::MoveToDLQIfPossible() {
     if (!DLQMoverActorId && !Storage->GetDLQMessages().empty()) {
-        std::deque<ui64> messages;
+        std::deque<ui64> messages(Storage->GetDLQMessages());
         DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover({
+            .ParentActorId = SelfId(),
             .Database = Database,
             .TabletId = TabletId,
             .PartitionId = PartitionId,
+            .PartitionActorId = PartitionActorId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
             .DestinationTopic = Config.GetDeadLetterQueue(),
-            .FirstMessageSeqNo = DLQMovedMessageCount,
+            .FirstMessageSeqNo = DLQMovedMessageCount + 1,
             .Messages = std::move(messages)
         }));
     }
-    Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
@@ -724,6 +729,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
+    MoveToDLQIfPossible();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 

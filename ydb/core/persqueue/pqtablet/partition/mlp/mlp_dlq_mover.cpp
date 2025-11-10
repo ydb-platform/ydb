@@ -1,5 +1,7 @@
 #include "mlp_dlq_mover.h"
 
+#include <ydb/core/persqueue/public/constants.h>
+
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
@@ -18,6 +20,8 @@ TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
 void TDLQMoverActor::Bootstrap() {
     Become(&TDLQMoverActor::StateDescribe);
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { Settings.DestinationTopic }));
+
+    LOG_E("QUEUE: " << Queue.size());
 }
 
 void TDLQMoverActor::PassAway() {
@@ -59,6 +63,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 }
 
 void TDLQMoverActor::CreateWriter() {
+    LOG_D("Writer creating");
     Become(&TDLQMoverActor::StateInit);
 
     ProducerId = TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << Settings.PartitionId << "/" << Settings.ConsumerGeneration << "/" << Settings.ConsumerName;
@@ -74,42 +79,47 @@ void TDLQMoverActor::CreateWriter() {
         .WithAutoRegister(true)
         .WithDatabase(Settings.Database)
         .WithTopicPath(TopicInfo.RealPath)
-        .WithSessionId(sessionId)
-        .WithInitialSeqNo(Settings.FirstMessageSeqNo);
+        .WithSessionId(sessionId);
+        //.WithInitialSeqNo(Settings.FirstMessageSeqNo);
 
     PartitionWriterActorId = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), TargetPartition->TabletId, TargetPartition->PartitionId, opts));
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
-    const auto* result = ev->Get();
+    LOG_D("Handle TEvPartitionWriter::TEvInitResult");
 
+    const auto* result = ev->Get();
     if (!result->IsSuccess()) {
+        LOG_E(TStringBuilder() << "The error of creating a writer: " << result->GetError().Reason);
         return ReplyError(TStringBuilder() << "The error of creating a writer: " << result->GetError().Reason);
     }
 
-    ui64 targetSeqNo = result->GetResult().SourceIdInfo.GetSeqNo();
+    ui64 targetSeqNo = result->GetResult().SourceIdInfo.GetSeqNo() + 1;
     for (SeqNo = Settings.FirstMessageSeqNo; SeqNo < targetSeqNo && !Queue.empty(); ++SeqNo) {
         Processed.push_back(Queue.front());
         Queue.pop_front();
     }
 
+    LOG_E("targetSeqNo == SeqNo " << targetSeqNo << " == " << SeqNo);
     AFL_ENSURE(targetSeqNo == SeqNo)("t", targetSeqNo)("s", SeqNo);
 
     ProcessQueue();
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
+    LOG_D("Handle TEvPartitionWriter::TEvDisconnected");
     ReplyError("The writer disconnected");
 }
 
 void TDLQMoverActor::ProcessQueue() {
+    LOG_D("ProcessQueue");
     Become(&TDLQMoverActor::StateRead);
 
     if (Queue.empty()) {
        return ReplySuccess();
     }
 
-    SendToTablet(MakeEvRead(SelfId(), "", Queue.front(), 1, ++FetchCookie, NextPartNo));
+    Send(Settings.PartitionActorId,MakeEvRead(SelfId(), CLIENTID_WITHOUT_CONSUMER, Queue.front(), 1, ++FetchCookie, NextPartNo));
 }
 
 void TDLQMoverActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
@@ -121,19 +131,16 @@ void TDLQMoverActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     }
 
     if (!IsSucess(ev)) {
-        ReplyError(TStringBuilder() << "Fetch message failed: " << ev->Get()->Response->DebugString());
-        return;
+        return ReplyError(TStringBuilder() << "Fetch message failed: " << ev->Get()->Response->DebugString());
     }
 
     auto& response = ev->Get()->Response;
     AFL_ENSURE(response->GetPartitionResponse().HasCmdReadResult())("t", Settings.TabletId)("p", Settings.PartitionId)("c", Settings.ConsumerName);
 
-    auto write = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
-    auto* request = write->Record.MutablePartitionRequest();
+    auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
+    auto* request = writeRequest->Record.MutablePartitionRequest();
     request->SetTopic(Settings.DestinationTopic);
-    request->SetPartition(TargetPartition->PartitionId);
-
-    auto writeTimeMs = TInstant::Now().MilliSeconds();
+    //request->SetPartition(TargetPartition->PartitionId);
 
     auto currentOffset = Queue.front();
     for (auto& result : *response->MutablePartitionResponse()->MutableCmdReadResult()->MutableResult()) {
@@ -150,35 +157,44 @@ void TDLQMoverActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         auto* write = request->AddCmdWrite();
         write->SetSourceId(ProducerId);
         write->SetSeqNo(SeqNo);
-        write->SetData(std::move(*result.MutableData()));
-        write->SetPartNo(result.GetPartNo());
-        write->SetTotalParts(result.GetTotalParts());
-        write->SetTotalSize(result.GetTotalSize());
+        if (result.GetTotalParts() > 0) {
+            write->SetPartNo(result.GetPartNo());
+            write->SetTotalParts(result.GetTotalParts());
+            write->SetTotalSize(result.GetTotalSize());
+        }
         write->SetCreateTimeMS(result.GetCreateTimestampMS());
         write->SetDisableDeduplication(false);
-        write->SetWriteTimeMS(writeTimeMs);
         write->SetUncompressedSize(result.GetUncompressedSize());
-        //write->SetClientDC(result.GetC);
         if (result.HasPartitionKey()) {
             write->SetPartitionKey(std::move(*result.MutablePartitionKey()));
             write->SetExplicitHash(std::move(*result.MutableExplicitHash()));
         }
 
+        write->SetData(std::move(*result.MutableData()));
+
         ++NextPartNo;
         TotalPartNo = result.GetTotalParts();
     }
 
-    Send(PartitionWriterActorId, std::move(write));
+    LOG_D("Write message: " << writeRequest->Record.ShortDebugString());
+
+    Send(PartitionWriterActorId, std::move(writeRequest));
 
     WaitWrite();
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     ReplyError("Source topic unavailable");
 }
 
 void TDLQMoverActor::WaitWrite() {
+    LOG_D("WaitWrite");
     Become(&TDLQMoverActor::StateWrite);
+}
+
+void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&) {
+    LOG_D("Handle TEvPartitionWriter::TEvWriteAccepted");
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
@@ -186,6 +202,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
 
     auto* result = ev->Get();
     if (!result->IsSuccess()) {
+        LOG_E("Write error: " << result->GetError().Reason);
         return ReplyError(TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
@@ -242,20 +259,21 @@ STFUNC(TDLQMoverActor::StateRead) {
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateDescribe", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateDescribe", ev));
+            LOG_E("Unexpected " << EventStr("StateRead", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateRead", ev));
     }
 }
 
 STFUNC(TDLQMoverActor::StateWrite) {
     switch (ev->GetTypeRewrite()) {
+        hFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
         hFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateDescribe", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateDescribe", ev));
+            LOG_E("Unexpected " << EventStr("StateWrite", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
     }
 }
 

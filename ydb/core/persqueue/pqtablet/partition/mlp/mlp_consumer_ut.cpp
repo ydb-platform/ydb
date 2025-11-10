@@ -217,6 +217,82 @@ Y_UNIT_TEST(RetentionStorageAfterReload) {
     }
 }
 
+Y_UNIT_TEST(MoveToDLQ) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+            .EndAddConsumer());
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1)
+                    .EndCondition()
+                    .MoveAction("/Root/topic1-dlq")
+                .EndDeadLetterPolicy()
+            .EndAddConsumer());
+
+    Sleep(TDuration::Seconds(1));
+
+    WriteMany(setup, "/Root/topic1", 0, 1_KB, 2);
+
+    Sleep(TDuration::Seconds(2));
+
+    {
+        CreateReaderActor(runtime, TReaderSettings{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+    }
+
+    {
+        CreateUnlockerActor(runtime, TUnlockerSettings{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = {{0, 0}}
+        });
+
+        auto result = GetChangeResponse(runtime);
+
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Success, true);
+
+    }
+
+    Sleep(TDuration::Seconds(2));
+
+    {
+        // The message should appear in DQL
+        CreateReaderActor(runtime, TReaderSettings{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1-dlq",
+            .Consumer = "mlp-consumer",
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+    }
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

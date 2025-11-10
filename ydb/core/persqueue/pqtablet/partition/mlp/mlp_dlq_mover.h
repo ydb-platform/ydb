@@ -37,6 +37,7 @@ private:
     STFUNC(StateRead);
 
     void WaitWrite();
+    void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
     STFUNC(StateWrite);
 

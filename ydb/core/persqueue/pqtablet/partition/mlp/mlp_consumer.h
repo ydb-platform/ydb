@@ -66,6 +66,7 @@ private:
     bool FetchMessagesIfNeeded();
     void ReadSnapshot();
     void Persist();
+    void MoveToDLQIfPossible();
 
     void CommitIfNeeded();
     void UpdateStorageConfig();

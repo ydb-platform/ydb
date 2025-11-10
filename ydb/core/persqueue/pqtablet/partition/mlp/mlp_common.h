@@ -54,6 +54,7 @@ struct TDLQMoverSettings {
     TString Database;
     ui64 TabletId;
     ui32 PartitionId;
+    TActorId PartitionActorId;
     TString ConsumerName;
     ui64 ConsumerGeneration;
     TString DestinationTopic;

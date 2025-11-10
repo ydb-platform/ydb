@@ -889,8 +889,6 @@ public:
             co_return ReplyPrepareResult();
         }
 
-        Cerr << "COMPILED " << QueryState->CompileResult->PreparedQuery->GetPhysicalQuery().GetQueryAst() << Endl;
-
         if (!PrepareQueryContext()) {
             co_return;
         }

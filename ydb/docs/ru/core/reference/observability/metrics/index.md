@@ -1,6 +1,6 @@
 # Справка по метрикам
 
-{% if audience == "tech" %}
+{% if audience != "tech" %}
 
 {% note info %}
 

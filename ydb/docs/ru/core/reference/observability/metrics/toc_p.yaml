@@ -2,3 +2,7 @@ items:
 - name: Справка по метрикам
   href: index.md
 
+{% if audience != "tech" %}  
+- name: Дашборды Grafana
+  href: grafana-dashboards.md
+{% endif %}

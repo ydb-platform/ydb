@@ -9,7 +9,7 @@
     1. На вкладке **Info** нажмите на кнопку **CPU** и проверьте уровни загрузки процессора во всех пулах ресурсов.
 
         ![](../_assets/embedded-ui-cpu-system-pool.png)
-{% if audience == "tech" %}        
+{% if audience != "tech" %}        
 1. Проанализируйте загрузку процессора во всех пулах ресурсов на графиках Grafana:
 
     1. Откройте панель мониторинга **[CPU](../../../../reference/observability/metrics/grafana-dashboards.md#cpu)** в Grafana.

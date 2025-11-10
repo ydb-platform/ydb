@@ -18,7 +18,7 @@
 
 {% endnote %}
 
-{% if audience == "tech" %}
+{% if audience != "tech" %}
 
 Рассмотрим графики **Latency** на панели мониторинга Grafana [DB overview](../../../reference/observability/metrics/grafana-dashboards.md#dboverview) и определим, имеет ли отношение наша проблема к кластеру {{ ydb-short-name }}:
 

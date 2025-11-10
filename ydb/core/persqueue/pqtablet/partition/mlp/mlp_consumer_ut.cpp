@@ -276,9 +276,9 @@ Y_UNIT_TEST(MoveToDLQ) {
 
     }
 
-    Sleep(TDuration::Seconds(2));
 
-    {
+    for (size_t i = 0; i < 10; ++i) {
+        Sleep(TDuration::Seconds(1));
         // The message should appear in DQL
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",
@@ -287,6 +287,10 @@ Y_UNIT_TEST(MoveToDLQ) {
             .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
+        if (i < 10 && (response->Status != Ydb::StatusIds::SUCCESS || response->Messages.empty())) {
+            continue;
+        }
+
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);

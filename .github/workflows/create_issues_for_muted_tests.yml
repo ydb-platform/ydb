@@ -55,18 +55,53 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
       
-      - name: Process muted tests after merge
+      - name: Get muted_ya.txt from merge commit
+        id: get_file
+        run: |
+          python3 .github/scripts/tests/process_muted_tests_after_merge.py get-muted-file \
+            --merge_commit_sha="${{ github.event.pull_request.merge_commit_sha }}" \
+            --base_branch="${{ github.event.pull_request.base.ref }}" \
+            --output="muted_ya.txt"
+          echo "muted_ya_file=muted_ya.txt" >> $GITHUB_OUTPUT
+          echo "base_branch=${{ github.event.pull_request.base.ref }}" >> $GITHUB_OUTPUT
+          echo "is_main=$([ \"${{ github.event.pull_request.base.ref }}\" == \"main\" ] && echo \"true\" || echo \"false\")" >> $GITHUB_OUTPUT
+      
+      - name: Create issues for muted tests
+        if: steps.get_file.outputs.is_main == 'true'
+        id: create_issues
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          python3 .github/scripts/tests/create_new_muted_ya.py create_issues \
+            --file_path=muted_ya.txt \
+            --branch=${{ steps.get_file.outputs.base_branch }}
+          # Скрипт создает created_issues.txt и сохраняет путь в GITHUB_OUTPUT
+          if [ -f created_issues.txt ]; then
+            echo "issues_file=created_issues.txt" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Send Telegram notifications
+        if: steps.get_file.outputs.is_main == 'true' && steps.create_issues.outputs.issues_file != ''
+        env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
           TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+        run: |
+          python3 .github/scripts/telegram/parse_and_send_team_issues.py \
+            --on-mute-change-update \
+            --file "created_issues.txt" \
+            --bot-token "$TELEGRAM_BOT_TOKEN" \
+            --team-channels "$TEAM_CHANNELS" \
+            --include-plots \
+            --delay 2
+      
+      - name: Comment PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
-          python3 .github/scripts/tests/process_muted_tests_after_merge.py \
-            --event_name="${{ github.event_name }}" \
+          python3 .github/scripts/tests/process_muted_tests_after_merge.py comment-pr \
             --pr_number="${{ github.event.pull_request.number || github.event.inputs.pr_number }}" \
-            --merge_commit_sha="${{ github.event.pull_request.merge_commit_sha }}" \
-            --base_branch="${{ github.event.pull_request.base.ref }}" \
-            --build_type="${{ env.BUILD_TYPE }}"
+            --base_branch="${{ steps.get_file.outputs.base_branch }}" \
+            --issues_file="${{ steps.create_issues.outputs.issues_file || '' }}"

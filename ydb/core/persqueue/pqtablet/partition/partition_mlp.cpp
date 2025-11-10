@@ -89,6 +89,9 @@ void TPartition::InitializeMLPConsumers() {
         }
         if (consumer.HasAvailabilityPeriodMs()) {
             return TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+        } else if (Config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
+            // retention by storage is not supported yet
+            return std::nullopt;
         } else {
             return TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
         }

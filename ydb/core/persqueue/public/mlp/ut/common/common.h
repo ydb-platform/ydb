@@ -40,5 +40,6 @@ void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& top
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& database, const TString& topic, const TString& consumer, ui32 partitionId = 0);
+void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId = 0);
 
 }

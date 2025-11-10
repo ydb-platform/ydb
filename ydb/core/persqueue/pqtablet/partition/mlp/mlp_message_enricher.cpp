@@ -60,7 +60,12 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
                     reply.Offsets.pop_front();
                 }
                 if (reply.Offsets.empty()) {
-                    Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
+                    if (PendingResponse->Record.MessageSize() > 0) {
+                        Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
+                    } else {
+                        auto r = std::make_unique<TEvPQ::TEvMLPErrorResponse>(Ydb::StatusIds::INTERNAL_ERROR, "Messages was not found");
+                        Send(reply.Sender, std::move(r), 0, reply.Cookie);
+                    }
                     PendingResponse = std::make_unique<TEvPQ::TEvMLPReadResponse>();
                     Queue.pop_front();
                     continue;

@@ -1,4 +1,4 @@
-{%- macro JavacFlags(task, target_javac_flags, has_errorprone) -%}
+{%- macro JavacFlags(task, target_javac_flags, has_errorprone, dis_errorprone) -%}
 {%-     set target_javac_flags = target_javac_flags|unique -%}
 {%-     set javac_flags = [] -%}
 {%-     set compiler_jvm_flags = [] -%}
@@ -71,11 +71,13 @@ tasks.{{ task }}.configure {
 {%-                     endif -%}
 {%-                 endfor -%}
 {%-             endif -%}
+{%-         elif dis_errorprone %}
+    options.errorprone.isEnabled.set(false)
 {%-         endif %}
 }
 {%      endif -%}
 {%  endmacro -%}
 {#- glue -#}
-{{ JavacFlags("compileJava", target.javac.flags, with_errorprone) }}
+{{ JavacFlags("compileJava", target.javac.flags, with_errorprone, false) }}
 {#- glue -#}
-{{ JavacFlags("compileTestJava", all_targets|selectattr('javac')|map(attribute='javac')|selectattr('flags')|map(attribute='flags')|sum, with_errorprone or with_test_errorprone) }}
+{{ JavacFlags("compileTestJava", all_targets|selectattr('javac')|map(attribute='javac')|selectattr('flags')|map(attribute='flags')|sum, with_test_errorprone, with_errorprone) }}

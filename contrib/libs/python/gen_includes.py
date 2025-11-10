@@ -15,7 +15,7 @@ def headers_set(directory):
         f
         for f in files(directory)
         if f.endswith(".h")
-        and (not f.startswith("internal/") or f.startswith("internal/pycore_frame.h"))
+        and (not f.startswith("internal/") or f.startswith(("internal/pycore_genobject.h", "internal/pycore_frame.h")))
         and not re.match(r"^pyconfig[.-].+\.h$", f)
     }
 

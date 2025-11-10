@@ -65,6 +65,7 @@ public:
         TMaybe<ui64> WatermarksGranularityMs;
         TMaybe<ui64> WatermarksLateArrivalDelayMs;
         TMaybe<bool> WatermarksEnableIdlePartitions;
+        TMaybe<ui64> WatermarksIdleTimeoutMs;
     };
 
     virtual TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& settings) = 0;

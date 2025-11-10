@@ -5,10 +5,12 @@
 
 #include <util/system/types.h>
 
-namespace NKikimr::NPQ::NMLP {
+#include <optional>
 
-// the offset of the message
-using TMessageId = ui64;
+
+class TDuration;
+
+namespace NKikimr::NPQ::NMLP {
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
 NActors::IActor* CreateConsumerActor(
@@ -16,7 +18,8 @@ NActors::IActor* CreateConsumerActor(
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
-    const NKikimrPQ::TPQTabletConfig_TConsumer& config
+    const NKikimrPQ::TPQTabletConfig_TConsumer& config,
+    const std::optional<TDuration> retentionPeriod
 );
 
 } // namespace NKikimr::NPQ::NMLP

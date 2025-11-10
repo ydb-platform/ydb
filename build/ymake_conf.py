@@ -257,7 +257,7 @@ class Platform(object):
 
     @property
     def library_path_variables(self):
-        return ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']
+        return ['DYLD_LIBRARY_PATH']
 
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
@@ -1807,7 +1807,7 @@ class LD(Linker):
         dwarf_tool = self.tc.dwarf_tool
         if dwarf_tool is None and self.tc.is_clang and (self.target.is_macos or self.target.is_ios):
             dsymutil = '{}/bin/{}dsymutil'.format(self.tc.name_marker, '' if self.tc.version_at_least(7) else 'llvm-')
-            dwarf_tool = '${YMAKE_PYTHON} ${input:"build/scripts/run_llvm_dsymutil.py"} ' + dsymutil
+            dwarf_tool = '${YMAKE_PYTHON3} ${input:"build/scripts/run_llvm_dsymutil.py"} ' + dsymutil
             if self.tc.version_at_least(5, 0):
                 dwarf_tool += ' -flat'
 
@@ -2363,7 +2363,7 @@ class Cuda(object):
         self.cuda_host_msvc_version = Setting('CUDA_HOST_MSVC_VERSION')
         self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[])
 
-        self.peerdirs = ['build/platform/cuda']
+        self.peerdirs = ['build/internal/platform/cuda']
 
         self.nvcc_flags = [
             # Compress fatbinary to reduce size of .nv_fatbin and prevent problems with linking
@@ -2453,7 +2453,7 @@ class Cuda(object):
             mtime = ' --mtime ${tool:"tools/mtime0"} '
             custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/internal/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 

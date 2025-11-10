@@ -1,6 +1,9 @@
 #include "link_manager.h"
 #include "ctx.h"
 #include "ctx_impl.h"
+#include <mutex>
+
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -13,6 +16,16 @@
 #include <memory>
 
 #include <util/network/address.h>
+
+#if defined(__APPLE__) || defined(_darwin_)
+/* OSX seems not to define these. */
+#ifndef s6_addr16
+#define s6_addr16 __u6_addr.__u6_addr16
+#endif
+#ifndef s6_addr32
+#define s6_addr32 __u6_addr.__u6_addr32
+#endif
+#endif
 
 template <>
 struct std::less<ibv_gid> {
@@ -37,6 +50,10 @@ public:
         return CtxMap;
     }
 
+    bool IsLoadFail() const noexcept {
+        return LoadFail;
+    }
+
     TRdmaCtx* GetCtx(const ibv_gid& gid) {
         auto it = std::lower_bound(
             CtxMap.begin(), CtxMap.end(),
@@ -57,13 +74,16 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
+            LoadFail = true;
             return;
         }
     }
-private:
-    TCtxsMap CtxMap;
 
     void ScanDevices() {
+        std::lock_guard<std::mutex> lock(Mtx);
+        if (Inited) {
+            return;
+        }
         int numDevices = 0;
         int err;
         ibv_device** deviceList = ibv_get_device_list(&numDevices);
@@ -130,10 +150,16 @@ private:
                 }
             }
         }
+        Inited = true;
     }
 
+private:
+    TCtxsMap CtxMap;
     int ErrNo = 0;
     TString Err;
+    std::mutex Mtx;
+    bool Inited = false;
+    bool LoadFail = false;
 
 } RdmaLinkManager;
 
@@ -159,4 +185,48 @@ const TCtxsMap& GetAllCtxs() {
     return RdmaLinkManager.GetAllCtxs();
 }
 
+bool Init() {
+    if (RdmaLinkManager.IsLoadFail()) {
+        return false;
+    }
+    RdmaLinkManager.ScanDevices();
+    return true;
+}
+
+#if not defined(_win32_)
+in6_addr GetV6CompatAddr(const NInterconnect::TAddress& a) noexcept {
+    switch (a.GetFamily()) {
+        case AF_INET: {
+            TAddress::TV6Addr addr;
+            addr.s6_addr16[0] = 0;
+            addr.s6_addr16[1] = 0;
+            addr.s6_addr16[2] = 0;
+            addr.s6_addr16[3] = 0;
+            addr.s6_addr16[4] = 0;
+            addr.s6_addr16[5] = Max<ui16>();
+            addr.s6_addr16[6] = Max<ui16>();
+            addr.s6_addr32[3] = a.Addr.Ipv4.sin_addr.s_addr;
+            return addr;
+        }
+        case AF_INET6:
+            return a.Addr.Ipv6.sin6_addr;
+        default: {
+            TAddress::TV6Addr addr;
+            memset(&addr, 0, sizeof(addr));
+            return addr;
+        }
+        break;
+    }
+}
+#endif
+
+TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr) {
+#if not defined(_win32_)
+    return GetCtx(GetV6CompatAddr(addr));
+#else
+    return nullptr;
+#endif
+
 } 
+
+}

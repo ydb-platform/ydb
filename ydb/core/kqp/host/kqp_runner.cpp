@@ -82,7 +82,7 @@ public:
             TKqpPhysicalQuery physicalQuery(input);
 
             YQL_ENSURE(TransformCtx.DataQueryBlocks);
-            auto compiler = CreateKqpQueryCompiler(Cluster, Database, OptimizeCtx.Tables, FuncRegistry, TypesCtx, Config);
+            auto compiler = CreateKqpQueryCompiler(Cluster, Database, FuncRegistry, TypesCtx, OptimizeCtx, Config);
             auto ret = compiler->CompilePhysicalQuery(physicalQuery, *TransformCtx.DataQueryBlocks, *preparedQuery.MutablePhysicalQuery(), ctx);
             if (!ret) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Failed to compile physical query."));

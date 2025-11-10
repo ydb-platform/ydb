@@ -80,7 +80,7 @@ TString ToTextMateGroup(EUnitKind kind) {
         case EUnitKind::BindParameterIdentifier:
             return "variable.parameter";
         case EUnitKind::OptionIdentifier:
-            return "support.constant";
+            return "identifier";
         case EUnitKind::TypeIdentifier:
             return "entity.name.type";
         case EUnitKind::FunctionIdentifier:
@@ -149,6 +149,18 @@ NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
     return language;
 }
 
+TMaybe<TString> EmbeddedLanguage(const NTextMate::TRange& range) {
+    if (range.Begin.StartsWith(RE2::QuoteMeta(TRangePattern::EmbeddedPythonBegin))) {
+        return "source.python";
+    }
+
+    if (range.Begin.StartsWith(RE2::QuoteMeta(TRangePattern::EmbeddedJavaScriptBegin))) {
+        return "source.js";
+    }
+
+    return Nothing();
+}
+
 NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
     NJson::TJsonMap json = {{"name", matcher.Group}};
     std::visit([&](const auto& pattern) {
@@ -159,6 +171,10 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
         } else if constexpr (std::is_same_v<T, NTextMate::TRange>) {
             json["begin"] = pattern.Begin;
             json["end"] = pattern.End;
+            if (auto embedded = EmbeddedLanguage(pattern)) {
+                json["patterns"].AppendValue(NJson::TJsonMap{{"include", *embedded}});
+                json.EraseValue("name"); // Do not use string as a default style
+            }
             if (pattern.Escape) {
                 json["patterns"].AppendValue(NJson::TJsonMap{
                     {"name", "constant.character.escape.untitled"},
@@ -179,24 +195,6 @@ NJson::TJsonValue ToJson(const NTextMate::TLanguage& language) {
     root["scopeName"] = language.ScopeName;
     root["scope"] = language.ScopeName;
     root["fileTypes"] = NJson::TJsonArray({language.FileType});
-
-    root["patterns"].AppendValue(NJson::TJsonMap({
-        {"begin", "@@#py"},
-        {"end", "@@"},
-        {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.python"}}})},
-    }));
-
-    root["patterns"].AppendValue(NJson::TJsonMap({
-        {"begin", "@@//js"},
-        {"end", "@@"},
-        {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.js"}}})},
-    }));
-
-    root["patterns"].AppendValue(NJson::TJsonMap({
-        {"begin", "@@{"},
-        {"end", "@@"},
-        {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.json"}}})},
-    }));
 
     THashSet<TString> visited;
     for (const NTextMate::TMatcher& matcher : language.Matchers) {

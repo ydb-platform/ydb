@@ -12,7 +12,7 @@ TVersionedPresetSchemas::TVersionedPresetSchemas(const ui64 defaultPresetId, con
     AFL_VERIFY(SchemaObjectsCache);
     RegisterPreset(defaultPresetId);
     for (auto&& key : NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::GetRegisteredKeys()) {
-        if (key.StartsWith("store_")) {
+        if (get<1>(key).StartsWith("store_")) {
             continue;
         }
         auto obj = NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(key);

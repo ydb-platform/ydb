@@ -11,6 +11,7 @@ IF (OS_LINUX)
     )
 
     PEERDIR(
+        ydb/library/actors/interconnect/address
         contrib/libs/ibdrv
         contrib/libs/protobuf
     )
@@ -24,6 +25,7 @@ ELSE()
     )
 
     PEERDIR(
+        ydb/library/actors/interconnect/address
         contrib/libs/protobuf
     )
 
@@ -35,6 +37,6 @@ RECURSE(
     cq_actor
 )
 
-#RECURSE_FOR_TESTS(
-#    ut
-#)
+RECURSE_FOR_TESTS(
+    ut
+)

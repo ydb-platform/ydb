@@ -1597,14 +1597,16 @@ struct TEvPQ {
 
     struct TEvMLPDLQMoverResponse : TEventLocal<TEvMLPDLQMoverResponse, EvMLPDLQMoverResponse> {
 
-        TEvMLPDLQMoverResponse(Ydb::StatusIds::StatusCode status, std::vector<ui64>&& movedMessages)
+        TEvMLPDLQMoverResponse(Ydb::StatusIds::StatusCode status, std::vector<ui64>&& movedMessages, TString&& errorDescription = "")
             : Status(status)
             , MovedMessages(std::move(movedMessages))
+            , ErrorDescription(std::move(errorDescription))
         {
         }
 
         Ydb::StatusIds::StatusCode Status;
         std::vector<ui64> MovedMessages;
+        TString ErrorDescription;
     };
 };
 

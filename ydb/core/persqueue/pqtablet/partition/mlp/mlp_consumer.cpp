@@ -407,6 +407,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -426,6 +427,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -703,6 +705,21 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
         }));
     }
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPDLQMoverResponse");
+
+    if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+        LOG_W("Error moving messages to the DLQ queue: " << ev->Get()->ErrorDescription);
+    }
+
+    DLQMoverActorId = {};
+    for (auto offset : ev->Get()->MovedMessages) {
+        AFL_VERIFY(Storage->MarkDLQMoved(offset))("o", offset);
+    }
+
+    DLQMovedMessageCount += ev->Get()->MovedMessages.size();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {

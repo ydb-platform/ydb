@@ -341,6 +341,19 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     return true;
 }
 
+bool TStorage::MarkDLQMoved(ui64 offset) {
+    if (DLQQueue.empty() || DLQQueue.front() != offset) {
+        return false;
+    }
+
+    Commit(offset);
+
+    DLQQueue.pop_front();
+    Batch.DeleteFromDLQ(offset);
+
+    return true;
+}
+
 std::pair<const TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset) const {
     if (auto it = SlowMessages.find(offset); it != SlowMessages.end()) {
         return {&it->second,  true};
@@ -730,6 +743,7 @@ bool TStorage::TBatch::Empty() const {
     return ChangedMessages.empty()
         && !FirstNewMessage.has_value()
         && DLQ.empty()
+        && DeletedFromDLQ == 0
         && !BaseDeadline.has_value()
         && !BaseWriteTimestamp.has_value()
         && MovedToSlowZone.empty()

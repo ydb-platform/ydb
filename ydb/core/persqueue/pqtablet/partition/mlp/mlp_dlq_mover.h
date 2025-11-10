@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/util/backoff.h>
 
@@ -14,36 +15,56 @@ namespace NKikimr::NPQ::NMLP {
 class TDLQMoverActor : public TBaseActor<TDLQMoverActor>
                      , public TConstantLogPrefix {
 
-    static constexpr TDuration Timeout = TDuration::Seconds(5);
-
 public:
     TDLQMoverActor(TDLQMoverSettings&& settings);
 
     void Bootstrap();
     void PassAway() override;
+    TString BuildLogPrefix() const override;
 
 private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);
     STFUNC(StateDescribe);
 
     void CreateWriter();
-
-    void Handle(TEvPersQueue::TEvResponse::TPtr&);
-    void Handle(TEvPQ::TEvError::TPtr&);
-    void Handle(TEvents::TEvWakeup::TPtr&);
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
-
-    STFUNC(StateWork);
+    void Handle(TEvPartitionWriter::TEvInitResult::TPtr&);
+    void Handle(TEvPartitionWriter::TEvDisconnected::TPtr&);
+    STFUNC(StateInit);
 
     void ProcessQueue();
+    void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    STFUNC(StateRead);
 
+    void WaitWrite();
+    void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
+    STFUNC(StateWrite);
+
+    void ReplySuccess();
     void ReplyError(TString&& error);
+
+    void SendToTablet(std::unique_ptr<IEventBase> ev);
 
 private:
     TDLQMoverSettings Settings;
+
+    TString ProducerId;
+    ui64 SeqNo;
     std::deque<ui64> Queue;
 
+    TString Error;
+    std::vector<ui64> Processed;
+
     NDescriber::TTopicInfo TopicInfo;
+    const IPartitionChooser::TPartitionInfo* TargetPartition;
+    TActorId PartitionWriterActorId;
+
+    bool FirstRequest = true;
+    ui64 FetchCookie = 0;
+
+    ui64 NextPartNo = 0;
+    ui64 TotalPartNo = 0;
+    ui64 WriteCookie = 0;
 };
 
 } // namespace NKikimr::NPQ::NMLP

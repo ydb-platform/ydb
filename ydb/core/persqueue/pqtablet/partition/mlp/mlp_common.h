@@ -50,6 +50,7 @@ NActors::IActor* CreateMessageEnricher(const NActors::TActorId& tabletActorId,
                                        std::deque<TReadResult>&& replies);
 
 struct TDLQMoverSettings {
+    TActorId ParentActorId;
     TString Database;
     ui64 TabletId;
     ui32 PartitionId;

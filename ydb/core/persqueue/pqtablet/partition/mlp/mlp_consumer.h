@@ -54,6 +54,8 @@ private:
     void HandleOnWork(TEvents::TEvWakeup::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
 
+    void Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr&);
+
     STFUNC(StateInit);
     STFUNC(StateWork);
     STFUNC(StateWrite);

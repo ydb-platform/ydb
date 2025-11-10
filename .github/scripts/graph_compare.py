@@ -43,7 +43,7 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
     exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {graph_path} --dump-uids {workdir}/uids.json --no-cache-for-affected-nodes')
 
     log('Generate diff context...')
-    exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {context_path} {workdir}/uids.json {opts.graph_path}')
+    exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {context_path} {workdir}/uids.json {graph_path}')
 
 
 if __name__ == '__main__':

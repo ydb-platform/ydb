@@ -6,6 +6,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/ydb_convert/compression.h>
 
 #include <util/string/builder.h>
@@ -254,6 +255,24 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 encryptionSettings.SetIV(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
                 *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
             }
+        }
+        break;
+    case TExportInfo::EKind::FS:
+        {
+            Ydb::Export::ExportToFsSettings exportSettings;
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+
+            task.SetNumberOfRetries(exportSettings.number_of_retries());
+            auto& backupSettings = *task.MutableFSSettings();
+            backupSettings.SetBasePath(exportSettings.base_path());
+            backupSettings.SetPath(exportSettings.items(itemIdx).destination_path());
+
+            if (const auto compression = exportSettings.compression()) {
+                Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));
+            }
+
+            task.SetEnableChecksums(exportInfo.EnableChecksums);
+            task.SetEnablePermissions(exportInfo.EnablePermissions);
         }
         break;
     }

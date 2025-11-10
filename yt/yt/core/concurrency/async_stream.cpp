@@ -792,8 +792,12 @@ private:
     TSharedRef OnPrefetched()
     {
         auto guard = Guard(SpinLock_);
-        YT_ASSERT(PrefetchedSize_ != 0);
-        return CopyPrefetched(&guard);
+        if (PrefetchedSize_ >  0) {
+            return CopyPrefetched(&guard);
+        }
+        Error_.ThrowOnError();
+        YT_ASSERT(EndOfStream_);
+        return TSharedRef();
     }
 
     void AppendPrefetched(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<size_t>& result)

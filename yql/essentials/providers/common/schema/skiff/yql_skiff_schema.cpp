@@ -223,6 +223,12 @@ struct TSkiffTypeLoader {
         underlyingType["wire_type"] = altCount < 256 ? "variant8" : "variant16";
         return underlyingType;
     }
+    TMaybe<TType> LoadBlockType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Block";
+    }
+    TMaybe<TType> LoadScalarType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Scalar";
+    }
     void Error(const TString& info) {
         ythrow yexception() << info;
     }

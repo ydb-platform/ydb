@@ -21,7 +21,9 @@ class TConsumerActor : public TBaseTabletActor<TConsumerActor>
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
 
 public:
-    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config, std::optional<TDuration> reteintion);
+    TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
+        const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+        std::optional<TDuration> retentionPeriod);
 
     void Bootstrap();
     void PassAway() override;
@@ -40,6 +42,7 @@ private:
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
+    void Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
@@ -64,11 +67,13 @@ private:
     void Persist();
 
     void CommitIfNeeded();
+    void UpdateStorageConfig();
     
 private:
     const ui32 PartitionId;
     const TActorId PartitionActorId;
-    const NKikimrPQ::TPQTabletConfig::TConsumer Config;
+    NKikimrPQ::TPQTabletConfig::TConsumer Config;
+    std::optional<TDuration> RetentionPeriod;
 
     bool FetchInProgress = false;
     ui64 FetchCookie = 0;

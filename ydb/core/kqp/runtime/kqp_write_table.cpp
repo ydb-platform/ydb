@@ -717,7 +717,7 @@ public:
             return res;
         }
 
-        auto poolAlloc = CreateOffloadedPoolAllocator(std::move(Alloc));
+        auto poolAlloc = CreateOffloadedPoolAllocator(Alloc);
         return MakeIntrusive<TRowBatch>(TOwnedCellVecBatch(poolAlloc->CreateMemoryPool()), poolAlloc);
     }
 
@@ -729,7 +729,7 @@ public:
         if (Batches.empty() || (MaxBytesPerBatch && newMemorySerialized + Batches.back()->GetMemorySerialized() > *MaxBytesPerBatch)) {
             Batches.emplace_back(std::make_unique<TBatch>(Alloc));
         }
-        
+
         AFL_ENSURE(newMemory == Batches.back()->AddRow(std::move(row)));
         Memory += newMemory;
     }
@@ -1364,8 +1364,9 @@ class TShardsInfo {
 public:
     class TShardInfo {
         friend class TShardsInfo;
-        TShardInfo(i64& memory, ui64& nextCookie, bool& closed)
+        TShardInfo(i64& memory, ui64& pendingBatches, ui64& nextCookie, bool& closed)
             : Memory(memory)
+            , PendingBatches(pendingBatches)
             , NextCookie(nextCookie)
             , Cookie(NextCookie++)
             , Closed(closed) {
@@ -1420,6 +1421,7 @@ public:
                     const i64 batchMemory = Batches.front().GetMemory();
                     result.DataSize += batchMemory;
                     Memory -= batchMemory;
+                    PendingBatches--;
                     Batches.pop_front();
                 }
 
@@ -1436,6 +1438,7 @@ public:
             AFL_ENSURE(!IsClosed());
             Batches.emplace_back(std::move(batch));
             Memory += Batches.back().GetMemory();
+            PendingBatches++;
             HasReadInBatch |= Batches.back().HasRead;
         }
 
@@ -1474,6 +1477,7 @@ public:
     private:
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
+        ui64& PendingBatches;
         bool HasReadInBatch = false;
 
         ui64& NextCookie;
@@ -1492,7 +1496,7 @@ public:
             return it->second;
         }
 
-        auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory, NextCookie, Closed));
+        auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory, PendingBatches, NextCookie, Closed));
         return insertIt->second;
     }
 
@@ -1512,12 +1516,7 @@ public:
     }
 
     bool IsEmpty() const {
-        for (const auto& [_, shard] : ShardsInfo) {
-            if (!shard.IsEmpty()) {
-                return false;
-            }
-        }
-        return true;
+        return PendingBatches == 0;
     }
 
     bool IsFinished() const {
@@ -1555,6 +1554,7 @@ private:
     THashMap<ui64, TShardInfo> ShardsInfo;
     i64 Memory = 0;
     ui64 NextCookie = 1;
+    ui64 PendingBatches = 0;
     bool Closed = false;
 };
 

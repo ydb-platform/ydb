@@ -378,7 +378,7 @@ struct TOpAggregationTraits {
 class TOpAggregate : public IUnaryOperator {
   public:
     TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns,
-                 EAggregationPhase aggPhase, TPositionHandle pos);
+                 EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
 
     virtual TString ToString(TExprContext& ctx) override;
@@ -386,6 +386,7 @@ class TOpAggregate : public IUnaryOperator {
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
     EAggregationPhase AggregationPhase;
+    bool DistinctAll;
 };
 
 class TOpFilter : public IUnaryOperator {

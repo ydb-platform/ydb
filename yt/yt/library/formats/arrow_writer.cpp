@@ -56,24 +56,12 @@ struct TTypedBatchColumn
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TArrowSchemaType
+struct TArrowSchemaType
 {
-public:
     flatbuf::Type Type;
     flatbuffers::Offset<void> Offset;
     std::vector<flatbuffers::Offset<flatbuf::Field>> ChildrenFields;
     std::vector<flatbuffers::Offset<flatbuf::KeyValue>> CustomMetadata;
-
-    TArrowSchemaType(
-        flatbuf::Type type,
-        flatbuffers::Offset<void> offset,
-        std::vector<flatbuffers::Offset<flatbuf::Field>> childrenFields = {},
-        std::vector<flatbuffers::Offset<flatbuf::KeyValue>> customMetadata = {})
-        : Type(type)
-        , Offset(offset)
-        , ChildrenFields(std::move(childrenFields))
-        , CustomMetadata(std::move(customMetadata))
-    { }
 };
 
 // Create non-dictionary field from |TArrowSchemaType|.
@@ -162,10 +150,10 @@ TArrowSchemaType SerializeTzType(
         childrenOffset.push_back(std::move(tzNameField));
     }
 
-    return {
-        flatbuf::Type_Struct_,
-        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
-        std::move(childrenOffset)
+    return TArrowSchemaType{
+        .Type = flatbuf::Type_Struct_,
+        .Offset = flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        .ChildrenFields = std::move(childrenOffset),
     };
 }
 
@@ -177,11 +165,11 @@ TArrowSchemaType SerializeLeafColumnType(
     switch (simpleType) {
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
-            return {
-                flatbuf::Type_Null,
-                flatbuf::CreateNull(*flatbufBuilder)
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Null,
+                .Offset = flatbuf::CreateNull(*flatbufBuilder)
                     .Union(),
-                std::vector<flatbuffers::Offset<flatbuf::Field>>()
+                .ChildrenFields = std::vector<flatbuffers::Offset<flatbuf::Field>>(),
             };
 
         case ESimpleLogicalValueType::Int64:
@@ -192,9 +180,9 @@ TArrowSchemaType SerializeLeafColumnType(
         case ESimpleLogicalValueType::Uint16:
         case ESimpleLogicalValueType::Int32:
         case ESimpleLogicalValueType::Uint32:
-            return {
-                flatbuf::Type_Int,
-                flatbuf::CreateInt(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Int,
+                .Offset = flatbuf::CreateInt(
                     *flatbufBuilder,
                     GetIntegralTypeBitWidth(simpleType),
                     IsIntegralTypeSigned(simpleType))
@@ -202,9 +190,9 @@ TArrowSchemaType SerializeLeafColumnType(
             };
 
         case ESimpleLogicalValueType::Interval:
-            return {
-                flatbuf::Type_Int,
-                flatbuf::CreateInt(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Int,
+                .Offset = flatbuf::CreateInt(
                     *flatbufBuilder,
                     /*bitWidth*/ 64,
                     /*is_signed*/ true)
@@ -212,63 +200,63 @@ TArrowSchemaType SerializeLeafColumnType(
             };
 
         case ESimpleLogicalValueType::Date:
-            return {
-                flatbuf::Type_Date,
-                flatbuf::CreateDate(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Date,
+                .Offset = flatbuf::CreateDate(
                     *flatbufBuilder,
                     flatbuf::DateUnit_DAY)
                     .Union()
             };
 
         case ESimpleLogicalValueType::Datetime:
-            return {
-                flatbuf::Type_Timestamp,
-                flatbuf::CreateTimestamp(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Timestamp,
+                .Offset = flatbuf::CreateTimestamp(
                     *flatbufBuilder,
                     flatbuf::TimeUnit_SECOND)
-                    .Union()
+                    .Union(),
             };
 
         case ESimpleLogicalValueType::Timestamp:
-            return {
-                flatbuf::Type_Timestamp,
-                flatbuf::CreateTimestamp(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Timestamp,
+                .Offset = flatbuf::CreateTimestamp(
                     *flatbufBuilder,
                     flatbuf::TimeUnit_MICROSECOND)
-                    .Union()
+                    .Union(),
             };
 
         case ESimpleLogicalValueType::Double:
-            return {
-                flatbuf::Type_FloatingPoint,
-                flatbuf::CreateFloatingPoint(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_FloatingPoint,
+                .Offset = flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
                     flatbuf::Precision_DOUBLE)
-                    .Union()
+                    .Union(),
             };
 
         case ESimpleLogicalValueType::Float:
-            return {
-                flatbuf::Type_FloatingPoint,
-                flatbuf::CreateFloatingPoint(
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_FloatingPoint,
+                .Offset = flatbuf::CreateFloatingPoint(
                     *flatbufBuilder,
                     flatbuf::Precision_SINGLE)
-                    .Union()
+                    .Union(),
             };
 
         case ESimpleLogicalValueType::Boolean:
-            return {
-                flatbuf::Type_Bool,
-                flatbuf::CreateBool(*flatbufBuilder)
-                    .Union()
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Bool,
+                .Offset = flatbuf::CreateBool(*flatbufBuilder)
+                    .Union(),
             };
 
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Any:
-            return {
-                flatbuf::Type_Binary,
-                flatbuf::CreateBinary(*flatbufBuilder)
-                    .Union()
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Binary,
+                .Offset = flatbuf::CreateBinary(*flatbufBuilder)
+                    .Union(),
             };
 
         case ESimpleLogicalValueType::TzDate:
@@ -281,10 +269,10 @@ TArrowSchemaType SerializeLeafColumnType(
 
         case ESimpleLogicalValueType::Utf8:
         case ESimpleLogicalValueType::Json:
-            return {
-                flatbuf::Type_Utf8,
-                flatbuf::CreateUtf8(*flatbufBuilder)
-                    .Union()
+            return TArrowSchemaType{
+                .Type = flatbuf::Type_Utf8,
+                .Offset = flatbuf::CreateUtf8(*flatbufBuilder)
+                    .Union(),
             };
 
         default:
@@ -324,8 +312,8 @@ TArrowSchemaType SerializeStructColumnType(
     if (fields.empty()) {
         customFieldMetadata.push_back(flatbuf::CreateKeyValue(
             *flatbufBuilder,
-            SerializeString(flatbufBuilder, YtTypeMetadataKey),
-            SerializeString(flatbufBuilder, YtTypeMetadataValueEmptyStruct)));
+            SerializeString(flatbufBuilder, YTTypeMetadataKey),
+            SerializeString(flatbufBuilder, YTTypeMetadataValueEmptyStruct)));
 
         auto fieldOffset = flatbuf::CreateField(
             *flatbufBuilder,
@@ -340,11 +328,11 @@ TArrowSchemaType SerializeStructColumnType(
         fieldOffsets.push_back(fieldOffset);
     }
 
-    return {
-        flatbuf::Type_Struct_,
-        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
-        std::move(fieldOffsets),
-        std::move(customFieldMetadata)
+    return TArrowSchemaType{
+        .Type = flatbuf::Type_Struct_,
+        .Offset = flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        .ChildrenFields = std::move(fieldOffsets),
+        .CustomMetadata = std::move(customFieldMetadata),
     };
 }
 
@@ -361,10 +349,10 @@ TArrowSchemaType SerializeListColumnType(
         /*name*/ 0,
         elementType->IsNullable());
 
-    return {
-        flatbuf::Type_List,
-        flatbuf::CreateList(*flatbufBuilder).Union(),
-        {childOffset}
+    return TArrowSchemaType{
+        .Type = flatbuf::Type_List,
+        .Offset = flatbuf::CreateList(*flatbufBuilder).Union(),
+        .ChildrenFields = {childOffset},
     };
 }
 
@@ -399,10 +387,10 @@ TArrowSchemaType SerializeDictColumnType(
         /*dictionary*/ 0,
         flatbufBuilder->CreateVector(pairElementsOffsets.data(), pairElementsOffsets.size()));
 
-    return {
-        flatbuf::Type_Map,
-        flatbuf::CreateMap(*flatbufBuilder).Union(),
-        {pairOffset}
+    return TArrowSchemaType{
+        .Type = flatbuf::Type_Map,
+        .Offset = flatbuf::CreateMap(*flatbufBuilder).Union(),
+        .ChildrenFields = {pairOffset},
     };
 }
 
@@ -419,8 +407,8 @@ TArrowSchemaType SerializeOptionalColumnType(
     std::vector<flatbuffers::Offset<flatbuf::KeyValue>> customFieldMetadata;
     customFieldMetadata.push_back(flatbuf::CreateKeyValue(
         *flatbufBuilder,
-        SerializeString(flatbufBuilder, YtTypeMetadataKey),
-        SerializeString(flatbufBuilder, YtTypeMetadataValueNestedOptional)));
+        SerializeString(flatbufBuilder, YTTypeMetadataKey),
+        SerializeString(flatbufBuilder, YTTypeMetadataValueNestedOptional)));
 
 
     auto elementOffset = CreateRegularField(
@@ -429,11 +417,11 @@ TArrowSchemaType SerializeOptionalColumnType(
         /*name*/ 0,
         elementType->IsNullable());
 
-    return {
-        flatbuf::Type_Struct_,
-        flatbuf::CreateStruct_(*flatbufBuilder).Union(),
-        {elementOffset},
-        std::move(customFieldMetadata)
+    return TArrowSchemaType{
+        .Type = flatbuf::Type_Struct_,
+        .Offset = flatbuf::CreateStruct_(*flatbufBuilder).Union(),
+        .ChildrenFields = {elementOffset},
+        .CustomMetadata = std::move(customFieldMetadata),
     };
 }
 
@@ -1154,7 +1142,7 @@ void SerializeStringLikeColumn(
         });
 }
 
-template<ESimpleLogicalValueType type>
+template <ESimpleLogicalValueType type>
 void SerializeTzColumnImpl(
     const TTypedBatchColumn& typedColumn,
     TRecordBatchSerializationContext* context,
@@ -1374,7 +1362,7 @@ public:
     }
 
     template <typename T>
-    T LastValue() const
+    T GetLastValue() const
     {
         T result;
         ::memcpy(&result, End() - sizeof(T), sizeof(T));
@@ -1382,7 +1370,7 @@ public:
     }
 
     template <typename T>
-    int ValueCount() const
+    int GetValueCount() const
     {
         return Size() / sizeof(T);
     }
@@ -1675,7 +1663,7 @@ void AppendSimpleTypeToBuffer(
             auto value = cursor->UncheckedAsUint64();                                               \
             if (value > std::numeric_limits<cppType>::max()) {                                      \
                 THROW_ERROR_EXCEPTION(                                                              \
-                    "Date value cannot be represented in arrow (Value: %v, MaxAllowedValue: %v)",   \
+                    "Date value %v cannot be represented in arrow, maximum allowed value is %v",    \
                     value,                                                                          \
                     std::numeric_limits<cppType>::max());                                           \
             }                                                                                       \
@@ -1829,7 +1817,7 @@ void FillBuffersForComplexTypeWithNulls(
         case ELogicalMetatype::Dict: {
             auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex++]);
 
-            ui32 previousOffset = offsetsBuffer.LastValue<ui32>();
+            ui32 previousOffset = offsetsBuffer.GetLastValue<ui32>();
             offsetsBuffer.AppendValue<ui32>(previousOffset);
 
             currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
@@ -1973,7 +1961,7 @@ void FillBuffersForComplexType(
                 currentBufferIndex += CalculateBufferIndexIncrement(type, config) - 1;
             }
 
-            ui32 previousOffset = offsetsBuffer.LastValue<ui32>();
+            ui32 previousOffset = offsetsBuffer.GetLastValue<ui32>();
             offsetsBuffer.AppendValue<ui32>(previousOffset + elementCount);
 
             break;
@@ -2130,7 +2118,7 @@ void WriteBuffersForComplexType(
             if (IsStringLikeType(simpleType)) {
                 const auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex]);
 
-                YT_VERIFY(elementCount + 1 == offsetsBuffer.ValueCount<ui32>());
+                YT_VERIFY(elementCount + 1 == offsetsBuffer.GetValueCount<ui32>());
 
                 // Write offsets buffer.
                 WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
@@ -2193,7 +2181,7 @@ void WriteBuffersForComplexType(
         case ELogicalMetatype::List: {
             const auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex]);
 
-            YT_VERIFY(elementCount + 1 == offsetsBuffer.ValueCount<ui32>());
+            YT_VERIFY(elementCount + 1 == offsetsBuffer.GetValueCount<ui32>());
 
             // Write offsets buffer.
             WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
@@ -2205,7 +2193,7 @@ void WriteBuffersForComplexType(
                 buffers,
                 currentBufferIndex,
                 /*shouldWriteValidityBitmap*/ true,
-                offsetsBuffer.LastValue<ui32>());
+                offsetsBuffer.GetLastValue<ui32>());
             break;
         }
 
@@ -2231,12 +2219,12 @@ void WriteBuffersForComplexType(
         case ELogicalMetatype::Dict: {
             const auto& offsetsBuffer = std::get<TTypedBlob>(buffers[currentBufferIndex]);
 
-            YT_VERIFY(elementCount + 1 == offsetsBuffer.ValueCount<ui32>());
+            YT_VERIFY(elementCount + 1 == offsetsBuffer.GetValueCount<ui32>());
 
             // Write offsets buffer.
             WriteBufferFromTypedBlob(context, buffers, currentBufferIndex++);
 
-            int flattenedElementCount = offsetsBuffer.LastValue<ui32>();
+            int flattenedElementCount = offsetsBuffer.GetLastValue<ui32>();
 
             WriteEmptyValidityBitmap(context, flattenedElementCount);
 
@@ -2833,8 +2821,8 @@ private:
             if (CastToV1Type(columnSchema.LogicalType()).first == ESimpleLogicalValueType::Any) {
                 customMetadata.push_back(flatbuf::CreateKeyValue(
                     flatbufBuilder,
-                    flatbufBuilder.CreateString(YtTypeMetadataKey),
-                    flatbufBuilder.CreateString(YtTypeMetadataValueYson)));
+                    flatbufBuilder.CreateString(YTTypeMetadataKey),
+                    flatbufBuilder.CreateString(YTTypeMetadataValueYson)));
             }
 
             flatbuffers::Offset<flatbuf::DictionaryEncoding> dictionaryEncodingOffset;

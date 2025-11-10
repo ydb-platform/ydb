@@ -173,6 +173,7 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
             json["end"] = pattern.End;
             if (auto embedded = EmbeddedLanguage(pattern)) {
                 json["patterns"].AppendValue(NJson::TJsonMap{{"include", *embedded}});
+                json.EraseValue("name"); // Do not use string as a default style
             }
             if (pattern.Escape) {
                 json["patterns"].AppendValue(NJson::TJsonMap{

@@ -90,6 +90,10 @@ summary: YDB Health Issue in /Root (Status: RED)
       sum by (instance, execpool) (
         rate(utils_ElapsedMicrosec[1m])
       ) / 1000000
+    ) / (
+      sum by(instance, execpool) (
+        utils_CurrentThreadCount
+      ) 
     ) > 0.9
   for: 1m
   labels:

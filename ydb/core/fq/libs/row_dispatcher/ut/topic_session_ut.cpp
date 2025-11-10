@@ -164,7 +164,7 @@ public:
 
             if (!expectedLastOffset.empty()) {
                 UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset.size(), message.OffsetsSize());
-                for (size_t i =0; i < message.OffsetsSize(); ++i) {
+                for (size_t i = 0; i < message.OffsetsSize(); ++i) {
                     UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset[i], message.GetOffsets().Get(i));
                 }
                 expectedLastOffset.erase(expectedLastOffset.begin(), expectedLastOffset.begin() + message.OffsetsSize());

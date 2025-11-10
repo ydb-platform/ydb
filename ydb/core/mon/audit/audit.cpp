@@ -86,7 +86,7 @@ void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const {
+bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) {
     // modifying methods are always audited
     const TString method(request->Method);
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
@@ -152,8 +152,6 @@ void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
     }
     // TODO: refactor so that all the parts are logged
     static const THashSet<TString> ALLOWED_PARTS = {
-        "subject",
-        "sanitized_token",
         // "start_time",
         // "end_time",
         // "database",
@@ -165,6 +163,10 @@ void TAuditCtx::AddAuditLogParts(const TAuditParts& parts) {
     for (const auto& [k, v] : parts) {
         if (IsIn(ALLOWED_PARTS, k)) {
             Parts.emplace_back(k, v);
+        } else if (k == "subject") {
+            Subject = v;
+        } else if (k == "sanitized_token") {
+            SanitizedToken = v;
         }
     }
 }
@@ -182,7 +184,8 @@ void TAuditCtx::LogAudit(ERequestStatus status, const TString& reason, NKikimrCo
         for (const auto& [name, value] : Parts) {
             AUDIT_PART(name, (!value.empty() ? value : EMPTY_VALUE));
         }
-
+        AUDIT_PART("subject", (!Subject.empty() ? Subject : EMPTY_VALUE));
+        AUDIT_PART("sanitized_token", (!SanitizedToken.empty() ? SanitizedToken : EMPTY_VALUE));
         AUDIT_PART("status", ToString(status));
         AUDIT_PART("reason", reason, !reason.empty());
     );

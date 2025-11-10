@@ -61,6 +61,32 @@ class TestDataCorrectness(TllTieringTestBase):
             or 0
         )
 
+    def _create_column_types(self):
+        """Create column types for table with ts, s, val, flag columns"""
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("ts", ydb.PrimitiveType.Timestamp)
+        column_types.add_column("s", ydb.PrimitiveType.String)
+        column_types.add_column("val", ydb.PrimitiveType.Uint64)
+        column_types.add_column("flag", ydb.PrimitiveType.Bool)
+        return column_types
+
+    def _create_table_schema(self, table_path: str):
+        """Create table with standard schema (ts, s, val, flag)"""
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                ts Timestamp NOT NULL,
+                s String,
+                val Uint64,
+                flag Bool,
+                PRIMARY KEY(ts),
+            ) WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.n_shards}
+            )
+            """
+        )
+
     def wait_eviction(self, table: ColumnTableHelper):
         deadline = datetime.datetime.now() + datetime.timedelta(seconds=120)
         while (
@@ -92,30 +118,12 @@ class TestDataCorrectness(TllTieringTestBase):
         if self.s3_client.get_bucket_stat(self.cold_bucket) != (0, 0):
             raise Exception("Bucket for cold data is not empty")
 
-        self.ydb_client.query(
-            f"""
-            CREATE TABLE `{table_path}` (
-                ts Timestamp NOT NULL,
-                s String,
-                val Uint64,
-                flag Bool,
-                PRIMARY KEY(ts),
-            )
-            WITH (
-                STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.n_shards}
-            )
-            """
-        )
+        self._create_table_schema(table_path)
 
         table = ColumnTableHelper(self.ydb_client, table_path)
         table.set_fast_compaction()
 
-        self.column_types = ydb.BulkUpsertColumns()
-        self.column_types.add_column("ts", ydb.PrimitiveType.Timestamp)
-        self.column_types.add_column("s", ydb.PrimitiveType.String)
-        self.column_types.add_column("val", ydb.PrimitiveType.Uint64)
-        self.column_types.add_column("flag", ydb.PrimitiveType.Bool)
+        self.column_types = self._create_column_types()
 
         logger.info(f"Table {table_path} created")
 
@@ -204,47 +212,15 @@ class TestDataCorrectness(TllTieringTestBase):
         test_dir = f"{self.ydb_client.database}/{self.test_name}_export_import"
         source_table_path = f"{test_dir}/source_table"
 
-        self.ydb_client.query(
-            f"""
-            CREATE TABLE `{source_table_path}` (
-                ts Timestamp NOT NULL,
-                s String,
-                val Uint64,
-                flag Bool,
-                PRIMARY KEY(ts),
-            ) WITH (
-                STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {self.n_shards}
-            )
-            """
-        )
-
-        self.column_types = ydb.BulkUpsertColumns()
-        self.column_types.add_column("ts", ydb.PrimitiveType.Timestamp)
-        self.column_types.add_column("s", ydb.PrimitiveType.String)
-        self.column_types.add_column("val", ydb.PrimitiveType.Uint64)
-        self.column_types.add_column("flag", ydb.PrimitiveType.Bool)
+        self._create_table_schema(source_table_path)
+        self.column_types = self._create_column_types()
 
         ts_start = int(datetime.datetime.now().timestamp() * 1000000)
         rows = 100
-        test_data = [
-            {
-                "ts": ts_start + i,
-                "s": f"string_{i}".encode('utf-8'),
-                "val": i + 1,
-                "flag": i % 2 == 0,
-            }
-            for i in range(rows)
-        ]
-
-        self.ydb_client.bulk_upsert(
-            source_table_path,
-            self.column_types,
-            test_data,
-        )
+        self.write_data(source_table_path, ts_start, rows, value=1)
 
         source_total = self.total_values(source_table_path)
-        assert source_total == sum(i + 1 for i in range(rows)), f"Expected {sum(i + 1 for i in range(rows))}, got {source_total}"
+        assert source_total == rows, f"Expected {rows}, got {source_total}"
 
         result = self.ydb_client.query(f"SELECT COUNT(*) as cnt FROM `{source_table_path}`")
         actual_rows = result[0].rows[0]["cnt"]

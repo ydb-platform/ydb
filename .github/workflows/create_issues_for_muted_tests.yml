@@ -107,7 +107,7 @@ jobs:
           echo "muted_ya_file=muted_ya.txt" >> $GITHUB_OUTPUT
           echo "base_branch=${BASE_BRANCH}" >> $GITHUB_OUTPUT
           echo "is_main=$([ \"${BASE_BRANCH}\" == \"main\" ] && echo \"true\" || echo \"false\")" >> $GITHUB_OUTPUT
-      
+
       - name: DEBUG: Stop before create_issues
         if: steps.get_file.outputs.is_main == 'true'
         run: |
@@ -115,7 +115,7 @@ jobs:
           echo "muted_ya.txt content preview:"
           head -20 muted_ya.txt || echo "File not found"
           exit 1
-      
+
       - name: Create issues for muted tests
         if: steps.get_file.outputs.is_main == 'true'
         id: create_issues

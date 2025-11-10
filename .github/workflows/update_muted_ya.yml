@@ -56,6 +56,9 @@ jobs:
   update-ydb:
     needs: [setup, collect-testowners]
     uses: ./.github/workflows/reusable/update_ydb_for_muted_tests.yml
+    secrets:
+      CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -63,9 +66,6 @@ jobs:
     with:
       branch: ${{ matrix.BASE_BRANCH }}
       build_type: ${{ env.BUILD_TYPE }}
-    secrets:
-      CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
   update-muted-tests:
     needs: [setup, update-ydb]

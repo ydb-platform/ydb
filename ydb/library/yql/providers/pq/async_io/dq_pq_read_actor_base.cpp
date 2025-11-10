@@ -144,12 +144,12 @@ const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
 }
 
-void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleDelay) {
+void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout) {
     const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
     SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
         << " late arrival delay: " << lateArrivalDelay
         << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
-        << " idle delay: " << idleDelay
+        << " idle timeout: " << idleTimeout
         );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
@@ -160,7 +160,7 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
         granularity,
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
         lateArrivalDelay,
-        idleDelay,
+        idleTimeout,
         LogPrefix
     );
 }

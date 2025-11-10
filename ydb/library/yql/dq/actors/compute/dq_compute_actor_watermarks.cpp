@@ -23,18 +23,18 @@ TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
     : LogPrefix(logPrefix), Impl(logPrefix) {
 }
 
-void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleDelay, TInstant systemTime) {
-    RegisterInput(inputId, true, idleDelay, systemTime);
+void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
+    RegisterInput(inputId, true, idleTimeout, systemTime);
 }
 
-void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId, TDuration idleDelay, TInstant systemTime) {
-    RegisterInput(inputId, false, idleDelay, systemTime);
+void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId, TDuration idleTimeout, TInstant systemTime) {
+    RegisterInput(inputId, false, idleTimeout, systemTime);
 }
 
-void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleDelay, TInstant systemTime)
+void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime)
 {
-    LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle delay: " << idleDelay);
-    auto registered = Impl.RegisterInput(std::make_pair(inputId, isChannel), systemTime, idleDelay);
+    LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle timeout: " << idleTimeout);
+    auto registered = Impl.RegisterInput(std::make_pair(inputId, isChannel), systemTime, idleTimeout);
     if (!registered) {
         LOG_E("Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
     }

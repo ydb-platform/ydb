@@ -11,15 +11,15 @@ class TDqComputeActorWatermarks
 public:
     TDqComputeActorWatermarks(const TString& logPrefix);
 
-    void RegisterAsyncInput(ui64 inputId, TDuration idleDelay = TDuration::Max()) {
-        RegisterAsyncInput(inputId, idleDelay, TInstant::Now());
+    void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout = TDuration::Max()) {
+        RegisterAsyncInput(inputId, idleTimeout, TInstant::Now());
     }
-    void RegisterInputChannel(ui64 inputId, TDuration idleDelay = TDuration::Max()) {
-        RegisterInputChannel(inputId, idleDelay, TInstant::Now());
+    void RegisterInputChannel(ui64 inputId, TDuration idleTimeout = TDuration::Max()) {
+        RegisterInputChannel(inputId, idleTimeout, TInstant::Now());
     }
 
-    void RegisterAsyncInput(ui64 inputId, TDuration idleDelay, TInstant systemTime);
-    void RegisterInputChannel(ui64 inputId, TDuration idleDelay, TInstant systemTime);
+    void RegisterAsyncInput(ui64 inputId, TDuration idleTimeout, TInstant systemTime);
+    void RegisterInputChannel(ui64 inputId, TDuration idleTimeout, TInstant systemTime);
 
     void UnregisterAsyncInput(ui64 inputId);
     void UnregisterInputChannel(ui64 inputId);
@@ -56,7 +56,7 @@ public:
     void SetLogPrefix(const TString& logPrefix);
 
 private:
-    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleDelay, TInstant systemTime);
+    void RegisterInput(ui64 inputId, bool isChannel, TDuration idleTimeout, TInstant systemTime);
     void UnregisterInput(ui64 inputId, bool isChannel);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime);
 

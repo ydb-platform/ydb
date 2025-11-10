@@ -1,8 +1,6 @@
 #include "position.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
-#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <util/string/join.h>
@@ -305,34 +303,6 @@ void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBui
 TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns)
     : Position(position) {
     PositionAddress = TSortableScanData(position, table, columns).GetPositionAddress();
-}
-
-NJson::TJsonValue TSortableScanData::DebugJson(const ui64 position, const NOlap::ISnapshotSchema& schema) const {
-    TDebugTypesMapping mapping;
-    const auto pkNames = schema.GetPKColumnNames();
-    const auto& pkColumns = schema.GetIndexInfo().GetPrimaryKeyColumns();
-    for (ui32 i = 0; i < pkNames.size() && i < pkColumns.size(); ++i) {
-        const auto typeId = pkColumns[i].second.GetTypeId();
-        if (typeId == NScheme::NTypeIds::Bool) {
-            mapping.BoolColumns.insert(pkNames[i]);
-            mapping.TypeOverrideByName.emplace(pkNames[i], std::string("bool"));
-            mapping.ForceScalarColumns.insert(pkNames[i]);
-        } else if (typeId == NScheme::NTypeIds::Timestamp) {
-            mapping.ForceScalarColumns.insert(pkNames[i]);
-            mapping.TypeOverrideByName.emplace(pkNames[i], std::string("timestamp"));
-        } else if (typeId == NScheme::NTypeIds::Datetime) {
-            mapping.ForceScalarColumns.insert(pkNames[i]);
-            mapping.TypeOverrideByName.emplace(pkNames[i], std::string("datetime"));
-        } else if (typeId == NScheme::NTypeIds::Date) {
-            mapping.ForceScalarColumns.insert(pkNames[i]);
-            mapping.TypeOverrideByName.emplace(pkNames[i], std::string("date"));
-        } else if (typeId == NScheme::NTypeIds::Interval) {
-            mapping.ForceScalarColumns.insert(pkNames[i]);
-            mapping.TypeOverrideByName.emplace(pkNames[i], std::string("interval"));
-        }
-    }
-
-    return DebugJson(position, &mapping);
 }
 
 }   // namespace NKikimr::NArrow::NMerger

@@ -43,9 +43,34 @@ class TInsertMerger: public IMerger {
 private:
     using TBase = IMerger;
     virtual TYdbConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
+        NArrow::NMerger::TDebugTypesMapping mapping;
+        const auto pkNames = Schema->GetPKColumnNames();
+        const auto& pkColumns = Schema->GetIndexInfo().GetPrimaryKeyColumns();
+        for (ui32 i = 0; i < pkNames.size() && i < pkColumns.size(); ++i) {
+            const auto typeId = pkColumns[i].second.GetTypeId();
+            const auto& name = pkNames[i];
+            if (typeId == NScheme::NTypeIds::Bool) {
+                mapping.BoolColumns.insert(name);
+                mapping.ForceScalarColumns.insert(name);
+                mapping.TypeOverrideByName.emplace(name, std::string("bool"));
+            } else if (typeId == NScheme::NTypeIds::Timestamp) {
+                mapping.ForceScalarColumns.insert(name);
+                mapping.TypeOverrideByName.emplace(name, std::string("timestamp"));
+            } else if (typeId == NScheme::NTypeIds::Datetime) {
+                mapping.ForceScalarColumns.insert(name);
+                mapping.TypeOverrideByName.emplace(name, std::string("datetime"));
+            } else if (typeId == NScheme::NTypeIds::Date) {
+                mapping.ForceScalarColumns.insert(name);
+                mapping.TypeOverrideByName.emplace(name, std::string("date"));
+            } else if (typeId == NScheme::NTypeIds::Interval) {
+                mapping.ForceScalarColumns.insert(name);
+                mapping.TypeOverrideByName.emplace(name, std::string("interval"));
+            }
+        }
+
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::PRECONDITION_FAILED,
             TStringBuilder() << "Conflict with existing key. "
-                             << exists.GetSorting()->DebugJson(exists.GetPosition(), *Schema).GetStringRobust());
+                             << exists.GetSorting()->DebugJson(exists.GetPosition(), &mapping).GetStringRobust());
     }
     virtual TYdbConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& /*incoming*/) override {
         return TYdbConclusionStatus::Success();

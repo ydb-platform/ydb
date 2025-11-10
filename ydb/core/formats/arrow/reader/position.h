@@ -15,10 +15,6 @@
 #include <unordered_set>
 #include <unordered_map>
 
-namespace NKikimr::NOlap {
-class ISnapshotSchema;
-}
-
 namespace NKikimr::NArrow::NMerger {
 
 class TRecordBatchBuilder;
@@ -281,8 +277,6 @@ public:
         }
         return result;
     }
-
-    NJson::TJsonValue DebugJson(const ui64 position, const NOlap::ISnapshotSchema& schema) const;
 
     std::vector<std::string> GetFieldNames() const {
         std::vector<std::string> result;

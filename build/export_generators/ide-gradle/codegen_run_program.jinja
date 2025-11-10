@@ -10,14 +10,22 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ 
     workingDir({{ PatchRoots(custom_run.cwd, false, custom_run['_object_index']) }})
 {%-        else %}
     workingDir({{ PatchRoots(codegenBindir, false, custom_run['_object_index']) }})
+{%-        endif -%}
+
+{%-        set args = custom_run.command -%}
+{%-        if args|first == "run_antlr4" -%}
+{%-            set args = [ jdk_path + "/bin/java", "-jar", custom_run.jar ] + args|reject('eq', "run_antlr4") -%}
 {%-        endif %}
 
     commandLine("bash", "-c", listOf(
-{%-        for arg in custom_run.command %}
+{%-        for arg in args %}
         {{ PatchArg(arg, custom_run['_object_index'], custom_run.depends, custom_run.outputs) }},
 {%-        endfor %}
     ).joinToString(" "))
 
+{%-        if custom_run.command|first == "run_antlr4" and custom_run.jar %}
+    inputs.files({{ PatchRoots(custom_run.jar, true) }})
+{%-        endif -%}
 {%-        if custom_run.depends|length -%}
 {%-            for depend in custom_run.depends|unique %}
     inputs.files({{ PatchRoots(depend, true) }})

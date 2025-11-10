@@ -4,7 +4,7 @@
 
 ## Диагностика
 
-{% if audience == "tech" %}
+{% if audience != "tech" %}
 
 1. Проверьте наличие скачков на графиках панели мониторинга **[DB overview > Storage](../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** в Grafana.
 

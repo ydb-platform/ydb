@@ -1,6 +1,6 @@
 1. Используйте Встроенный UI {% if audience == "tech"%} или Grafana, {% endif %} чтобы проверить, не перегружены ли узлы {{ ydb-short-name }}:
 
-{% if audience == "tech"%}
+{% if audience != "tech"%}
     - На панели мониторинга Grafana **[DB overview](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** проанализируйте диаграмму **Overloaded shard count**.
 
         ![](../_assets/overloaded-shards-dashboard.png)

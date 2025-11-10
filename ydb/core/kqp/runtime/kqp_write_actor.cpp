@@ -2148,7 +2148,7 @@ private:
                 DataBuffer.pop();
 
                 if (std::holds_alternative<IDataBatchPtr>(variant)) {
-                    WriteTableActor->Write(WriteToken, GetOperation(Settings.GetType()), std::get<IDataBatchPtr>(std::move(variant)));
+                    WriteTableActor->Write(WriteToken, std::get<IDataBatchPtr>(std::move(variant)));
                 } else if (std::holds_alternative<NYql::NDqProto::TCheckpoint>(variant)) {
                     CheckpointInProgress = std::get<NYql::NDqProto::TCheckpoint>(std::move(variant));
                     WriteTableActor->FlushBuffers();

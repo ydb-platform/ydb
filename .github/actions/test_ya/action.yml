@@ -278,10 +278,6 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          params+=(
-            --build-custom-json=$GRAPH_PATH
-            --custom-context=$CONTEXT_PATH
-          )
           YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
@@ -392,9 +388,14 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
+          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
+            GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
+          else
+            GRAPH_OPTS=""
+          fi
 
           set +e
-          (./ya make ${params[@]} ${CACHE_OPTS[@]} $YA_MAKE_TARGET \
+          (./ya make ${params[@]} ${CACHE_OPTS[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT

@@ -389,7 +389,7 @@ runs:
           monitor_memory &
           MONITOR_PID=$!
 
-          if [ -z "$GRAPH_PATH" ]; then
+          if [ -n "$GRAPH_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
             GRAPH_OPTS=""

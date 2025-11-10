@@ -81,8 +81,6 @@ def _strip_unused_nodes(graph_nodes: list, result: set[str]) -> list[dict]:
     result_nodes: list[dict] = []
     for uid in result:
         for node in visit(uid):
-            if uid in result:
-                node['cache'] = False
             result_nodes.append(node)
 
     return result_nodes

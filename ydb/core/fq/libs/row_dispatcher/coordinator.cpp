@@ -26,7 +26,7 @@ using NYql::TIssues;
 
 namespace {
 
-const ui64 DefaultRebalancingTimeoutSec = 60;
+const ui64 DefaultRebalancingTimeoutSec = 120;
     
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -277,7 +277,7 @@ TActorCoordinator::TActorCoordinator(
     , Tenant(tenant)
     , Metrics(counters)
     , NodesManagerId(nodesManagerId)
-    , RebalancingTimeout(Config.GetRebalancingTimeout() ? Config.GetRebalancingTimeout() : DefaultRebalancingTimeoutSec)
+    , RebalancingTimeout(Config.GetRebalancingTimeout() ? Config.GetRebalancingTimeout() : TDuration::Seconds(DefaultRebalancingTimeoutSec))
 {
     UpdateKnownRowDispatchers(localRowDispatcherId, true);
 }

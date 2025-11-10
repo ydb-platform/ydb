@@ -275,6 +275,67 @@ message ListObjectsInS3ExportResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ListObjectsInFsExportSettings {
+    message Item {
+        // Database object path
+        // Recursive for directories
+        string path = 1;
+    }
+
+    string endpoint = 1 [(required) = true];
+    string base_path = 2 [(required) = true];
+    repeated Item items = 3;
+    uint32 number_of_retries = 4;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 5;
+}
+
+message ListObjectsInFsExportResult {
+    message Item {
+        /* YDB database objects in S3 are stored in one or more S3 objects (see ydb_export.proto).
+          The S3 object name begins with a prefix, followed by:
+            * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+            * '/scheme.pb' - object with information about scheme, indexes, etc;
+            * '/permissions.pb' - object with information about ACL and owner;
+            * '/metadata.json' - object with metadata about the backup.
+        */
+        string fs_path = 1;
+        string db_path = 2;
+    }
+
+    repeated Item items = 1;
+
+    // This token allows you to get the next page of results for ListObjectsInFsExport requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListObjectsInFsExport request. Subsequent ListObjectsInFsExport
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
+}
+
+message ListObjectsInFsExportRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ListObjectsInFsExportSettings settings = 2 [(required) = true];
+
+    // The maximum number of results per page that should be returned. If the number of available
+    // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+    // to get the next page of results in subsequent ListObjectsInFsExport requests.
+    // 0 means that server returns all objects.
+    int64 page_size = 3 [(value) = "<= 10000"];
+
+    // Page token. Set `page_token` to the `next_page_token` returned by a previous ListObjectsInFsExport
+    // request to get the next page of results.
+    string page_token = 4;
+}
+
+message ListObjectsInFsExportResponse {
+    // operation.result = ListObjectsInFsExportResult
+    Ydb.Operations.Operation operation = 1;
+}
+
 /// Data
 message YdbDumpFormat {
     repeated string columns = 1;

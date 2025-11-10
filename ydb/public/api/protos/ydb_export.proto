@@ -126,7 +126,7 @@ message ExportToS3Settings {
     // it is especially useful for custom s3 implementations
     bool disable_virtual_addressing = 12;
 
-    // Database root if not provided.
+    // Defaults to database root if not provided.
     // All object names are calculated and written relative to this path.
     string source_path = 13;
 
@@ -222,7 +222,7 @@ message ExportToFsSettings {
     // the resulting data will not be encrypted.
     EncryptionSettings encryption_settings = 6;
 
-    // Database root if not provided.
+    // Defaults to database root if not provided.
     // All object names are calculated and written relative to this path.
     string source_path = 7;
 }

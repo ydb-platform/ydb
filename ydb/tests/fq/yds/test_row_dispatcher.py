@@ -6,8 +6,6 @@ import pytest
 import logging
 import time
 import json
-import random
-import string
 
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -75,7 +73,7 @@ def wait_actor_count(kikimr, activity, expected_count):
         for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
             count = count + kikimr.compute_plane.get_actor_count(node_index, activity)
             if count == expected_count:
-                return node_index  #  return any node
+                return node_index  # return any node
         assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
         time.sleep(1)
     return None
@@ -1243,7 +1241,7 @@ class TestPqRowDispatcher(TestYdsBase):
         query_id = start_yds_query(kikimr, client, sql)
         session_node_index = wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", partitions_count)
         kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
-        
+
         message_count = 10
         expected = "hello"
         for i in range(message_count):

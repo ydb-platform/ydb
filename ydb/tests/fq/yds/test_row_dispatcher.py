@@ -1247,7 +1247,7 @@ class TestPqRowDispatcher(TestYdsBase):
         expected = "hello"
         for i in range(message_count):
             self.write_stream(['{"time": 100, "data": "hello"}'], topic_path=None, partition_key=str(i))
-        self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
+        assert self.read_stream(message_count, topic_path=self.output_topic) == [expected] * message_count
         kikimr.compute_plane.wait_completed_checkpoints(query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2)
 
         logging.debug(f"Stopping node: {session_node_index}")

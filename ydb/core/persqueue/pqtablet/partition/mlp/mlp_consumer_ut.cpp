@@ -241,7 +241,7 @@ Y_UNIT_TEST(MoveToDLQ) {
 
     Sleep(TDuration::Seconds(1));
 
-    WriteMany(setup, "/Root/topic1", 0, 1_KB, 2);
+    setup->Write("/Root/topic1", "short-message", 0);
 
     Sleep(TDuration::Seconds(2));
 
@@ -284,12 +284,14 @@ Y_UNIT_TEST(MoveToDLQ) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1-dlq",
             .Consumer = "mlp-consumer",
+            .UncompressMessages = true
         });
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "short-message");
     }
 }
 

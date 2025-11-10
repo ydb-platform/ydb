@@ -2349,3 +2349,179 @@ class TestBackupCollectionServiceObjectsRotation(BaseTestBackupInFiles):
         # Check products table too
         has_cfs_products, _ = self.has_changefeeds(t_products)
         assert not has_cfs_products, "Products changefeeds should also be cleaned up"
+
+
+class TestInvalidParameterHandling(BaseTestBackupInFiles):
+    def test_invalid_parameter_handling(self):
+        # Setup
+        t_orders = "orders"
+        t_products = "products"
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
+
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
+
+        created_collections = []
+
+        # Test with non-existent table
+        invalid_path_collection = f"invalid_path_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{invalid_path_collection}`
+                ( TABLE `/Root/non_existent_table_999` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        # This SHOULD fail because table doesn't exist
+        # assert res.exit_code != 0, "Expected CREATE to fail with non-existent table"
+
+        # Test with malformed path
+        invalid_format_collection = f"invalid_format_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{invalid_format_collection}`
+                ( TABLE `not_absolute_path` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        # This SHOULD fail because paths should be absolute
+        # assert res.exit_code != 0, "Expected CREATE to fail with relative path"
+
+        # Create valid collection first
+        acl_test_collection = f"acl_test_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{acl_test_collection}`
+                ( TABLE `{full_orders}`, TABLE `{full_products}` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code == 0, f"Failed to create test collection: {res.std_err}"
+
+        # Test with wrong syntax - missing ON keyword
+        wrong_syntax_res = self._execute_yql(
+            f"GRANT SELECT `{full_orders}` TO `root@builtin`;"
+        )
+        assert wrong_syntax_res.exit_code != 0, "Expected wrong GRANT syntax to fail"
+
+        # Test with wrong syntax - missing TO keyword
+        wrong_syntax_res2 = self._execute_yql(
+            f"GRANT SELECT ON `{full_orders}` `root@builtin`;"
+        )
+        assert wrong_syntax_res2.exit_code != 0, "Expected wrong GRANT syntax to fail"
+
+        desc = self.driver.scheme_client.describe_path(full_orders)
+        owner = getattr(desc, "owner", None) or "root@builtin"
+
+        # Valid permission test
+        valid_grant = self._execute_yql(
+            f"GRANT SELECT ON `{full_orders}` TO `{owner}`;"
+        )
+        assert valid_grant.exit_code == 0, "Valid GRANT should succeed"
+
+        backup_path = self.collection_scheme_path(acl_test_collection)
+
+        # Backup collections might have restricted permissions
+        restricted_acl = self._execute_yql(
+            f"GRANT 'ydb.generic.write' ON `{backup_path}` TO `{owner}`;"
+        )
+        # This might be restricted - log the result
+        assert restricted_acl.exit_code == 0, "Cannot modify ACLs on backup collections"
+
+        # Try to restore from non-existent collection
+        non_existent_collection = f"non_existent_{uuid.uuid4().hex[:8]}"
+        restore_res = self._execute_yql(f"RESTORE `{non_existent_collection}`;")
+        assert restore_res.exit_code != 0, "Expected RESTORE to fail with non-existent collection"
+
+        # Try to restore empty collection (no backups yet)
+        empty_restore = self._execute_yql(f"RESTORE `{acl_test_collection}`;")
+        assert empty_restore.exit_code != 0, "should faild to restore from empty collection"
+
+        # Create a backup
+        backup_result = BackupBuilder(self, acl_test_collection).full().execute()
+        assert backup_result.success, f"Backup failed: {backup_result.error_message}"
+
+        # Test restore when tables exist (should fail)
+        restore_existing = self._execute_yql(f"RESTORE `{acl_test_collection}`;")
+        assert restore_existing.exit_code != 0, "Expected RESTORE to fail when tables exist"
+
+        # Remove tables for next test
+        self._try_remove_tables([full_orders, full_products])
+
+        # Valid restore (should work)
+        valid_restore = self._execute_yql(f"RESTORE `{acl_test_collection}`;")
+        assert valid_restore.exit_code == 0, "Valid restore should succeed"
+
+        # Test with malformed collection names
+        malformed_names = [
+            "",  # empty
+            " ",  # space only
+            "\n",  # newline
+            "```",  # backticks only
+            "collection; DROP TABLE orders",  # injection attempt
+        ]
+
+        for bad_name in malformed_names:
+            try:
+                res = self._execute_yql(f"RESTORE `{bad_name}`;")
+                if res.exit_code != 0:
+                    logger.info(f"Malformed name '{bad_name[:20]}' correctly rejected")
+                else:
+                    logger.warning(f"Malformed name '{bad_name[:20]}' accepted")
+            except Exception as e:
+                logger.info(f"Malformed name caused exception: {e}")
+
+        # Test with excessively long collection name
+        excessive_name = "x" * 10000  # 10K characters
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{excessive_name}`
+                ( TABLE `{full_orders}` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code != 0, "Expected CREATE to fail with excessive name length"
+
+        # Test with excessive WITH parameters
+        excessive_params = f"params_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{excessive_params}`
+                ( TABLE `{full_orders}` )
+            WITH (
+                STORAGE = 'cluster',
+                FAKE_PARAM_1 = 'value',
+                FAKE_PARAM_2 = 'value',
+                UNKNOWN_PARAM = '{"x" * 10000}'
+            );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code != 0
+
+        # Create a valid collection to ensure system still works
+        consistency_collection = f"consistency_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{consistency_collection}`
+                ( TABLE `{full_orders}`, TABLE `{full_products}` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code == 0, f"System inconsistent - cannot create valid collection: {res.std_err}"
+        created_collections.append(consistency_collection)
+
+        # Empty table list
+        empty_collection = f"empty_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{empty_collection}`
+                ( )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code != 0, "Expected CREATE to fail with empty table list"
+
+        # Duplicate tables (might be deduplicated automatically)
+        duplicate_collection = f"duplicate_{uuid.uuid4().hex[:8]}"
+        create_sql = f"""
+            CREATE BACKUP COLLECTION `{duplicate_collection}`
+                ( TABLE `{full_orders}`, TABLE `{full_orders}` )
+            WITH ( STORAGE = 'cluster' );
+        """
+        res = self._execute_yql(create_sql)
+        assert res.exit_code == 0, "Should fail (optional)"

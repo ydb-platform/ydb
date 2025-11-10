@@ -381,10 +381,6 @@ public:
             return;
         }
         Y_ENSURE(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);
-        if (!PendingBarriers.empty() && PendingBarriers.back().Barrier >= watermark) {
-            // must be idle channel; TODO verify
-            return;
-        }
         if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
             Y_ENSURE(PendingBarriers.back().Rows == 0);
             Y_ENSURE(PendingBarriers.back().Bytes == 0);

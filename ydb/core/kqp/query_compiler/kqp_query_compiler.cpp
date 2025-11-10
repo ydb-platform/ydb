@@ -609,11 +609,11 @@ TStringBuf RemoveJoinAliases(TStringBuf keyName) {
 
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
-    TKqpQueryCompiler(const TString& cluster, const TString& database, const TIntrusivePtr<TKikimrTablesData> tablesData,
-        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
+    TKqpQueryCompiler(const TString& cluster,
+        const NMiniKQL::IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx,
+        NOpt::TKqpOptimizeContext& optimizeCtx, NYql::TKikimrConfiguration::TPtr config)
         : Cluster(cluster)
-        , Database(database)
-        , TablesData(tablesData)
+        , TablesData(optimizeCtx.Tables)
         , FuncRegistry(funcRegistry)
         , Alloc(__LOCATION__, TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
         , TypeEnv(Alloc)
@@ -1933,11 +1933,11 @@ private:
 
 } // namespace
 
-TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, const TString& database,
-    const TIntrusivePtr<TKikimrTablesData> tablesData, const IFunctionRegistry& funcRegistry,
-    TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config)
+TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
+    const IFunctionRegistry& funcRegistry, TTypeAnnotationContext& typesCtx,
+    NOpt::TKqpOptimizeContext& optimizeCtx, NYql::TKikimrConfiguration::TPtr config)
 {
-    return MakeIntrusive<TKqpQueryCompiler>(cluster, database, tablesData, funcRegistry, typesCtx, config);
+    return MakeIntrusive<TKqpQueryCompiler>(cluster, funcRegistry, typesCtx, optimizeCtx, config);
 }
 
 } // namespace NKqp

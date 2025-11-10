@@ -290,17 +290,6 @@ runs:
           done
         fi
 
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-        fi
-
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
           params+=(--retest)
@@ -349,9 +338,20 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
+          CACHE_OPTS=""
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
+            if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+              CACHE_OPTS+=(--bazel-remote-store)
+              CACHE_OPTS+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+            fi
+
+            if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+              CACHE_OPTS+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+              CACHE_OPTS+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+              CACHE_OPTS+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+            fi
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
@@ -379,7 +379,7 @@ runs:
           MONITOR_PID=$!
 
           set +e
-          (./ya make ${params[@]} $YA_MAKE_TARGET \
+          (./ya make ${params[@]} $CACHE_OPTS $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --jsonl-report "$CURRENT_JSONL_REPORT" \

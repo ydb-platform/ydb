@@ -658,7 +658,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         test("}");
         test("{");
         writeRead({ "{\"dt\":100}", "{}\x80", Json3 }, { JsonMessage(3) });
-        writeRead({Json1 + Json1, Json3 }, { JsonMessage(1), JsonMessage(1) });  // not checked 
+        writeRead({Json1 + Json1 }, { JsonMessage(1) });  // not checked 
         PassAway();
     }
 

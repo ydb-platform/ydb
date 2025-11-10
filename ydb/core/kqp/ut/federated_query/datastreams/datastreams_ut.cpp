@@ -1,3 +1,4 @@
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/external_sources/external_source.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -560,7 +561,7 @@ public:
         const auto edgeActor = runtime.AllocateEdgeActor();
         runtime.Register(CreateGetScriptExecutionPhysicalGraphActor(edgeActor, TEST_DATABASE, executionId));
 
-        const auto graph = runtime.GrabEdgeEvent<TEvGetScriptPhysicalGraphResponse>(edgeActor, TDuration::Seconds(10));
+        const auto graph = runtime.GrabEdgeEvent<TEvGetScriptPhysicalGraphResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
         UNIT_ASSERT_C(graph, "Empty graph response");
         UNIT_ASSERT_VALUES_EQUAL_C(graph->Get()->Status, Ydb::StatusIds::SUCCESS, graph->Get()->Issues.ToOneLineString());
 
@@ -2418,7 +2419,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
-        SetupAppConfig().MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
+        auto& appConfig = SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
         GetRuntime().GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(true);
 
         constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
@@ -2481,7 +2483,50 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
         }
 
-        ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`", EStatus::SCHEME_ERROR, "Cannot find table");
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
+
+        const auto testNoAccess = [&]() {
+            ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`", EStatus::SCHEME_ERROR, "Cannot find table");
+        };
+        const auto testAccessAllowed = [&]() {
+            const auto& result = ExecQuery("SELECT COUNT(*) FROM `.metadata/streaming/queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            CheckScriptResult(result[0], 1, 1, [](TResultSetParser& parser) {
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 1);
+            });
+        };
+        const auto switchAccess = [&](bool allowed) {
+            auto& runtime = GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableSecureScriptExecutions(!allowed);
+
+            auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
+            *ev->Record.MutableConfig() = appConfig;
+
+            const auto edgeActor = runtime.AllocateEdgeActor();
+            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
+            const auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT(response);
+            Sleep(TDuration::Seconds(1));
+
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (
+                    RUN = FALSE
+                ))",
+                "query_name"_a = queryName
+            ));
+        };
+
+        testNoAccess();
+
+        switchAccess(/* allowed */ true);
+        testAccessAllowed();
+
+        switchAccess(/* allowed */ false);
+        testNoAccess();
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {

@@ -39,7 +39,7 @@ public:
         const TString& database = {},
         bool isSystemUser = false,
         TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
-        TMaybe<NACLib::TDiffACL> newTableAcl = Nothing())
+        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
@@ -48,7 +48,7 @@ public:
         , Database(database)
         , IsSystemUser(isSystemUser)
         , PartitioningPolicy(std::move(partitioningPolicy))
-        , NewTableAcl(std::move(newTableAcl))
+        , TableAclDiff(std::move(tableAclDiff))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -77,6 +77,8 @@ public:
     )
 
     void Bootstrap() {
+        LogPrefix = TStringBuilder() << LogPrefix << " SelfId: " << SelfId() << " Owner: " << Owner << ". ";
+
         Become(&TTableCreator::StateFuncCheck);
         if (!Database) {
             Database = AppData()->TenantName;
@@ -93,53 +95,82 @@ public:
     void RunTableRequest() {
         auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetDatabaseName(Database);
-        NKikimrSchemeOp::TModifyScheme& modifyScheme = *request->Record.MutableTransaction()->MutableModifyScheme();
-        auto pathComponents = SplitPath(Database);
-        for (size_t i = 0; i < PathComponents.size() - 1; ++i) {
-            pathComponents.emplace_back(PathComponents[i]);
-        }
-        modifyScheme.SetWorkingDir(CanonizePath(pathComponents));
-        TString fullPath = modifyScheme.GetWorkingDir() + "/" + TableName();
-        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Full table path:" << fullPath);
-        modifyScheme.SetOperationType(OperationType);
-        modifyScheme.SetInternal(true);
-        modifyScheme.SetAllowAccessToPrivatePaths(true);
-        NKikimrSchemeOp::TTableDescription* tableDesc;
-        if (OperationType == NKikimrSchemeOp::ESchemeOpCreateTable) {
-            tableDesc = modifyScheme.MutableCreateTable();
-            for (const TString& k : KeyColumns) {
-                tableDesc->AddKeyColumnNames(k);
-            }
 
-            if (NewTableAcl) {
-                auto& acl = *modifyScheme.MutableModifyACL();
-                acl.SetName(TableName());
-                acl.SetDiffACL(NewTableAcl->SerializeAsString());
-
-                if (IsSystemUser) {
-                    acl.SetNewOwner(BUILTIN_ACL_METADATA);
-                }
-            }
-        } else {
-            Y_DEBUG_ABORT_UNLESS(OperationType == NKikimrSchemeOp::ESchemeOpAlterTable);
-            tableDesc = modifyScheme.MutableAlterTable();
-        }
-        tableDesc->SetName(TableName());
-        for (const NKikimrSchemeOp::TColumnDescription& col : Columns) {
-            *tableDesc->AddColumns() = col;
-        }
-        if (TtlSettings) {
-            tableDesc->MutableTTLSettings()->CopyFrom(*TtlSettings);
-        }
         if (IsSystemUser) {
             request->Record.SetUserToken(NACLib::TSystemUsers::Metadata().SerializeAsString());
         }
-        if (PartitioningPolicy) {
-            auto* partitioningPolicy = tableDesc->MutablePartitionConfig()->MutablePartitioningPolicy();
-            partitioningPolicy->CopyFrom(*PartitioningPolicy);
+
+        auto pathComponents = SplitPath(Database);
+        if (!PathComponents.empty()) {
+            pathComponents.insert(pathComponents.end(), PathComponents.begin(), PathComponents.end() - 1);
+        }
+
+        const auto getModifyScheme = [&](NKikimrSchemeOp::EOperationType operationType) {
+            auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
+            modifyScheme->SetWorkingDir(CanonizePath(pathComponents));
+            LOG_DEBUG_S(*TlsActivationContext, LogService, 
+                LogPrefix << "Created " << NKikimrSchemeOp::EOperationType_Name(OperationType) << " transaction for path: " << modifyScheme->GetWorkingDir() << "/" << TableName());
+
+            modifyScheme->SetOperationType(operationType);
+            modifyScheme->SetInternal(true);
+            modifyScheme->SetAllowAccessToPrivatePaths(true);
+
+            return modifyScheme;
+        };
+
+        switch (OperationType) {
+            case NKikimrSchemeOp::ESchemeOpCreateTable: {
+                auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateTable);
+                BuildCreateTable(modifyScheme);
+
+                if (TableAclDiff) {
+                    BuildModifyACL(modifyScheme);
+                }
+
+                break;
+            }
+            case NKikimrSchemeOp::ESchemeOpAlterTable: {
+                BuildAlterTable(*getModifyScheme(NKikimrSchemeOp::ESchemeOpAlterTable));
+                break;
+            }
+            case NKikimrSchemeOp::ESchemeOpModifyACL: {
+                BuildModifyACL(*getModifyScheme(NKikimrSchemeOp::ESchemeOpModifyACL));
+                break;
+            }
+            default: {
+                LOG_CRIT_S(*TlsActivationContext, LogService, LogPrefix << "Unexpected operation type: " << NKikimrSchemeOp::EOperationType_Name(OperationType));
+                Y_ABORT("Unexpected operation type");
+            }
         }
 
         Send(MakeTxProxyID(), std::move(request));
+    }
+
+    void RunTableModification(const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns, TIntrusivePtr<TSecurityObject> securityObject) {
+        ExcludeExistingColumns(existingColumns);
+        bool aclChanged = false;
+
+        if (TableAclDiff && securityObject) {
+            auto changedObject = *securityObject;
+            changedObject.ApplyDiff(*TableAclDiff);
+            aclChanged = changedObject != *securityObject || (IsSystemUser && securityObject->GetOwnerSID() != BUILTIN_ACL_METADATA);
+        }
+
+        if (Columns.empty() && !aclChanged) {
+            Success();
+            return;
+        }
+
+        if (!Columns.empty()) {
+            OperationType = NKikimrSchemeOp::ESchemeOpAlterTable;
+            PartialModification = aclChanged;
+        } else {
+            OperationType = NKikimrSchemeOp::ESchemeOpModifyACL;
+            PartialModification = false;
+        }
+
+        Become(&TTableCreator::StateFuncUpgrade);
+        RunTableRequest();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -186,14 +217,9 @@ public:
                 Retry();
                 break;
             case EStatus::Ok:
-                ExcludeExistingColumns(result.Columns);
-                if (!Columns.empty()) {
-                    OperationType = NKikimrSchemeOp::ESchemeOpAlterTable;
-                    Become(&TTableCreator::StateFuncUpgrade);
-                    RunTableRequest();
-                } else {
-                    Success();
-                }
+                LOG_DEBUG_S(*TlsActivationContext, LogService,
+                    LogPrefix << "Table already exists, number of columns: " << result.Columns.size() << ", has SecurityObject: " << (result.SecurityObject ? "true" : "false"));
+                RunTableModification(result.Columns, result.SecurityObject);
                 break;
         }
     }
@@ -207,7 +233,12 @@ public:
                 [[fallthrough]];
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    Success(ev);
+                    if (PartialModification) {
+                        // Apply next modification
+                        FallBack();
+                    } else {
+                        Success(ev);
+                    }
                 } else {
                     Fail(ev);
                 }
@@ -270,8 +301,7 @@ public:
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
-        LOG_DEBUG_S(*TlsActivationContext, LogService,
-            LogPrefix << "Subscribe on create table tx: " << txId);
+        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Subscribe on create table tx: " << txId);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -295,7 +325,8 @@ public:
         PipeClientClosedByUs = false;
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev) {
+        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Subscribe on tx: " << ev->Get()->Record.GetTxId() << " registered");
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
@@ -348,6 +379,42 @@ public:
     }
 
 private:
+    void BuildTableOperation(NKikimrSchemeOp::TTableDescription& tableDesc) const {
+        tableDesc.SetName(TableName());
+        tableDesc.MutableColumns()->Assign(Columns.begin(), Columns.end());
+
+        if (TtlSettings) {
+            *tableDesc.MutableTTLSettings() = *TtlSettings;
+        }
+
+        if (PartitioningPolicy) {
+            *tableDesc.MutablePartitionConfig()->MutablePartitioningPolicy() = *PartitioningPolicy;
+        }
+    }
+
+    void BuildCreateTable(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
+        auto& tableDesc = *modifyScheme.MutableCreateTable();
+        tableDesc.MutableKeyColumnNames()->Assign(KeyColumns.begin(), KeyColumns.end());
+
+        BuildTableOperation(tableDesc);
+    }
+
+    void BuildAlterTable(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
+        BuildTableOperation(*modifyScheme.MutableAlterTable());
+    }
+
+    void BuildModifyACL(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
+        Y_ABORT_UNLESS(TableAclDiff);
+
+        auto& acl = *modifyScheme.MutableModifyACL();
+        acl.SetName(TableName());
+        acl.SetDiffACL(TableAclDiff->SerializeAsString());
+
+        if (IsSystemUser) {
+            acl.SetNewOwner(BUILTIN_ACL_METADATA);
+        }
+    }
+
     void ExcludeExistingColumns(const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns) {
         THashSet<TString> existingNames;
         TStringBuilder columns;
@@ -412,12 +479,13 @@ private:
     TString Database;
     bool IsSystemUser = false;
     const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
-    const TMaybe<NACLib::TDiffACL> NewTableAcl;
+    const TMaybe<NACLib::TDiffACL> TableAclDiff;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
+    bool PartialModification = false;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;
     bool PipeClientClosedByUs = false;
-    const TString LogPrefix;
+    TString LogPrefix;
     TTableCreatorRetryPolicy::IRetryState::TPtr RetryState;
 };
 
@@ -516,11 +584,11 @@ NActors::IActor* CreateTableCreator(
     const TString& database,
     bool isSystemUser,
     TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy,
-    TMaybe<NACLib::TDiffACL> newTableAcl)
+    TMaybe<NACLib::TDiffACL> tableAclDiff)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
         std::move(keyColumns), logService, std::move(ttlSettings), database,
-        isSystemUser, std::move(partitioningPolicy), std::move(newTableAcl));
+        isSystemUser, std::move(partitioningPolicy), std::move(tableAclDiff));
 }
 
 } // namespace NKikimr

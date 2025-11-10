@@ -1,10 +1,15 @@
 #include "utils.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <yql/essentials/sql/v1/node.h>
 
 namespace NKikimr::NKqp {
+
+TString TStreamingQueryMeta::GetTablesPath() {
+    return JoinPath({".metadata", InternalTablesPath});
+}
 
 TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeOp::TStreamingQueryProperties& info) {
     for (const auto& [name, value] : info.GetProperties()) {

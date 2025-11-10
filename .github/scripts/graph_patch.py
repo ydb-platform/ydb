@@ -23,6 +23,8 @@ class MuteTestCheck:
         with open(fn, 'r') as fp:
             for line in fp:
                 line = line.strip()
+                if not line:
+                    continue
                 pattern = self.__pattern_to_re(line)
 
                 try:
@@ -81,12 +83,14 @@ def _strip_unused_nodes(graph_nodes: list, result: set[str]) -> list[dict]:
     result_nodes: list[dict] = []
     for uid in result:
         for node in visit(uid):
+            if node['uid'] in result:
+                node['cache'] = False
             result_nodes.append(node)
 
     return result_nodes
 
 
-def _filter_duplicate_resources(resources):
+def _filter_duplicate_resources(resources: list[dict]) -> list[dict]:
     v = set()
     result = []
     for x in resources:

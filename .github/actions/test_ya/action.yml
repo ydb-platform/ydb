@@ -352,7 +352,7 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
-          CACHE_OPTS=""
+          CACHE_OPTS=()
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
@@ -370,6 +370,8 @@ runs:
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
               RERUN_FAILED_OPT="-X"
+            else
+              RERUN_FAILED_OPT=""
             fi
           fi
 
@@ -392,7 +394,7 @@ runs:
           MONITOR_PID=$!
 
           set +e
-          (./ya make ${params[@]} $CACHE_OPTS $YA_MAKE_TARGET \
+          (./ya make ${params[@]} ${CACHE_OPTS[@]} $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT

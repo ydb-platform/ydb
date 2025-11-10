@@ -53,8 +53,22 @@ jobs:
       - name: Collect testowners
         run: python3 .github/scripts/analytics/upload_testowners.py
 
-  update-muted-tests:
+  update-ydb:
     needs: [setup, collect-testowners]
+    uses: ./.github/workflows/reusable/update_ydb_for_muted_tests.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        BASE_BRANCH: ${{ fromJson(needs.setup.outputs.matrix_branches) }}
+    with:
+      branch: ${{ matrix.BASE_BRANCH }}
+      build_type: ${{ env.BUILD_TYPE }}
+    secrets:
+      CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+  update-muted-tests:
+    needs: [setup, update-ydb]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     strategy:
       fail-fast: false
@@ -91,15 +105,6 @@ jobs:
           git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
           git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
           echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
-    
-      - name: Update YDB for muted tests
-        uses: ./.github/workflows/reusable/update_ydb_for_muted_tests.yml
-        with:
-          branch: ${{ env.BASE_BRANCH }}
-          build_type: ${{ env.BUILD_TYPE }}
-        secrets:
-          CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
       - name: Generate new muted_ya.txt
         run: |

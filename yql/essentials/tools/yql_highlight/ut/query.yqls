@@ -28,5 +28,6 @@
         return x + y.a + z
 @@))
     (let func (Udf 'SimpleUdf.Repeat))
+    (let func (Udf 'Yson.Parse))
     (return world)
 )

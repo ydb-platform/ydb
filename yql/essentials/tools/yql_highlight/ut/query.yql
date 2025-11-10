@@ -87,6 +87,8 @@ FROM my_table AS t;
 SELECT ListCreate(OptionalType(DataType("String")));
 $match = Re2::Match("[ax]+\\d");
 
+SELECT Yson::Parse("");
+
 $py = Python3::foo(@@#py
 from yql.typing import *
 
@@ -102,3 +104,18 @@ def foo(
 @@);
 
 SELECT 1;
+
+$r = (
+    PROCESS $r USING Streaming::ProcessInline(
+        TableRows(),
+        @@#!/usr/bin/env bash
+        # Feel free to use any other common interpreter in she-bang or bring
+        # your own in attached file
+
+        awk $1 '{ printf "%05d %s\n", NF-1, $0; }' | sed -e 's/n/N/g'
+        # Prepends zero-padded count of "n" letters to each row
+        # then replaces all "n" with "N"
+        @@,
+        ["-Fn"]
+    )
+);

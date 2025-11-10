@@ -53,7 +53,8 @@
     ["Math::Sin", "FFFFFFFFF"],
     ["Math", "IIII"],
     ["Math::", "IIII#PP"],
-    ["::Sin", "PP#III"]
+    ["::Sin", "PP#III"],
+    ["Yson::Parse", "FFFFFFFFFFF"]
   ],
   "SQL": [
     ["SELECT id, alias from users", "KKKKKK#_#II#P#_#IIIII#_#KKKK#_#IIIII"],

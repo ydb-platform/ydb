@@ -419,7 +419,6 @@ class ClusterDetailsProvider(object):
         return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _get_module(self, host_description):
-    # Try to get module from host description or location
         module = (
             host_description.get("module") or
             host_description.get("location", {}).get("module")

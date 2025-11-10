@@ -419,17 +419,25 @@ class ClusterDetailsProvider(object):
         return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _get_module(self, host_description):
-        if host_description.get("module") is not None:
-            return str(host_description.get("module"))
-        module = host_description.get("location", {}).get("module", None)
+    # Try to get module from host description or location
+        module = (
+            host_description.get("module") or
+            host_description.get("location", {}).get("module")
+        )
         if module is not None:
             return str(module)
 
-        # Only call the provider if modules are enabled
+        hostname = host_description.get("name", host_description.get("host"))
+
+        # module is optional - check if it's enabled
         if not self._enable_modules:
             return ""
 
-        module_from_provider = self._host_info_provider.get_module(host_description.get("name", host_description.get("host")))
+        # Don't call provider if it's NopHostsInformationProvider
+        if isinstance(self._host_info_provider, walle.NopHostsInformationProvider):
+            return ""
+
+        module_from_provider = self._host_info_provider.get_module(hostname)
         return str(module_from_provider) if module_from_provider else ""
 
     def _collect_drives_info(self, host_description):

@@ -538,7 +538,7 @@ runs:
               .github/scripts/graph_patch.py \
                 --in-graph="$GRAPH_PATH" --in-context="$CONTEXT_PATH" \
                 --out-graph="$GRAPH_PATH" --out-context="$CONTEXT_PATH" \
-                --report="$CURRENT_REPORT" --muted=.github/config/muted_ya.txt
+                --report="$CURRENT_REPORT"
           fi
         done;
 

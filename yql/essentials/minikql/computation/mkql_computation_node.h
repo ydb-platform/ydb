@@ -257,6 +257,9 @@ public:
     TComputationUpvalues(TComputationContext& ctx, IComputationNode* lambdaNode,
                          const TComputationExternalNodePtrVector& argNodes);
 
+    inline explicit operator bool() const {
+        return !UpvalueNodes_.empty();
+    }
     void SetUpvalues(TComputationContext& ctx) const;
     void RestoreUpvalues(TComputationContext& ctx) const;
 

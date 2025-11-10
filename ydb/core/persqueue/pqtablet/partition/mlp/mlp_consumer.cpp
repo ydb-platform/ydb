@@ -406,6 +406,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
@@ -426,6 +427,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
@@ -598,6 +600,17 @@ void TConsumerActor::Persist() {
     }
 }
 
+size_t TConsumerActor::RequireInflyMessageCount() const {
+    auto& metrics = Storage->GetMetrics();
+
+    auto maxMessages = Storage->MinMessages;
+    if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
+        maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
+    }
+
+    return std::min(maxMessages, Storage->MaxMessages - metrics.InflyMessageCount);
+}
+
 bool TConsumerActor::FetchMessagesIfNeeded() {
     if (FetchInProgress) {
         return false;
@@ -617,12 +630,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     FetchInProgress = true;
 
-    auto maxMessages = Storage->MinMessages;
-    if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
-        maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
-    }
-    maxMessages = std::min(maxMessages, Storage->MaxMessages - metrics.InflyMessageCount);
-
+    auto maxMessages = RequireInflyMessageCount();
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
@@ -680,7 +688,17 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         if (CurrentStateFunc() == &TConsumerActor::StateWork) {
             ProcessEventQueue();
         }
+
+        if (!HasDataInProgress && RequireInflyMessageCount()) {
+            HasDataInProgress = true;
+            Send(TabletActorId, MakeEvHasData(SelfId(), PartitionId,Storage->GetLastOffset(), Config));
+        }
     }
+}
+
+void TConsumerActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&) {
+    LOG_D("Handle TEvPersQueue::TEvHasDataInfo");
+    FetchMessagesIfNeeded();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {

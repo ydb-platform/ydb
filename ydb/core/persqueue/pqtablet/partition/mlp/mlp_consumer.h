@@ -49,6 +49,7 @@ private:
 
     void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
 
     void HandleOnWork(TEvents::TEvWakeup::TPtr&);
@@ -71,6 +72,8 @@ private:
     void CommitIfNeeded();
     void UpdateStorageConfig();
     
+    size_t RequireInflyMessageCount() const;
+
 private:
     const TString Database;
     const ui32 PartitionId;
@@ -78,6 +81,7 @@ private:
     NKikimrPQ::TPQTabletConfig::TConsumer Config;
     std::optional<TDuration> RetentionPeriod;
 
+    bool HasDataInProgress = false;
     bool FetchInProgress = false;
     ui64 FetchCookie = 0;
     ui64 LastCommittedOffset = 0;

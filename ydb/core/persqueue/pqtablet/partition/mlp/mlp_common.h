@@ -35,9 +35,16 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
 );
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
-    const NKikimrPQ::TPQTabletConfig::TConsumer consumer,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     ui64 offset,
     ui64 cookie = 0
+);
+
+std::unique_ptr<TEvPersQueue::TEvHasDataInfo> MakeEvHasData(
+    const TActorId& selfId,
+    ui32 partitionId,
+    ui64 offset,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer
 );
 
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);

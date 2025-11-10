@@ -99,6 +99,7 @@ jobs:
           build_type: ${{ env.BUILD_TYPE }}
         secrets:
           CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
       - name: Generate new muted_ya.txt
         run: |

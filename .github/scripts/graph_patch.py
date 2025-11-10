@@ -4,8 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import pickle
-import six
 
 
 class MuteTestCheck:
@@ -39,8 +37,6 @@ class MuteTestCheck:
                 return True
         return False
 
-def _patch_uid(uid: str) -> str:
-    return uid # f'{uid}-I'
 
 def get_failed_uids(opts) -> set[str]:
     print('Load failed uids..')
@@ -69,7 +65,7 @@ def _strip_graph(graph: dict, uids_filter: set[str]) -> dict:
     conf = graph.get('conf', {}).copy()
     conf['resources'] = _filter_duplicate_resources(conf.get('resources', []))
 
-    return {'conf': conf, 'inputs': graph.get('inputs', {}), 'result': [_patch_uid(uid) for uid in result], 'graph': nodes}
+    return {'conf': conf, 'inputs': graph.get('inputs', {}), 'result': [uid for uid in result], 'graph': nodes}
 
 
 def _strip_unused_nodes(graph_nodes: list, result: set[str]) -> list[dict]:
@@ -85,8 +81,7 @@ def _strip_unused_nodes(graph_nodes: list, result: set[str]) -> list[dict]:
     result_nodes: list[dict] = []
     for uid in result:
         for node in visit(uid):
-            if node['uid'] == uid:
-                node['uid'] = _patch_uid(uid)
+            if uid in result:
                 node['cache'] = False
             result_nodes.append(node)
 
@@ -126,16 +121,7 @@ def process_context(opts, uids_filter: set[str]) -> None:
             new_tests = {}
             for uid in v.keys():
                 if uid in uids_filter:
-                    pathced_uid = _patch_uid(uid)
-#                    replaces = {uid: pathced_uid}
-#                    test = pickle.loads(six.ensure_binary(v[uid], encoding='latin-1'), encoding='utf-8')
-#                    test.uid = pathced_uid
-#                    test._result_uids = [replaces.get(dep_uid, dep_uid) for dep_uid in test._result_uids]
-#                    test._output_uids = [replaces.get(dep_uid, dep_uid) for dep_uid in test._output_uids]
-#                    test.dep_uids = [replaces.get(dep_uid, dep_uid) for dep_uid in test.dep_uids]
-#                    test.change_build_dep_uids({uid: pathced_uid})
-#                    new_tests[pathced_uid] = six.ensure_str(pickle.dumps(test), encoding='latin-1')
-                    new_tests[pathced_uid] = v[uid]
+                    new_tests[uid] = v[uid]
             out_context[k] = new_tests
         elif k == 'graph':
             out_context[k] = _strip_graph(v, uids_filter)
@@ -149,11 +135,26 @@ def process_context(opts, uids_filter: set[str]) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in-graph', '-G', type=str, help='Path to input graph', dest='in_graph', required=True)
-    parser.add_argument('--in-context', '-C', type=str, help='Path to input context', dest='in_context', required=True)
-    parser.add_argument('--out-graph', '-g', type=str, help='Path to result graph', dest='out_graph', required=True)
-    parser.add_argument('--out-context', '-c', type=str, help='Path to result context', dest='out_context', required=True)
-    parser.add_argument('--report', '-r', type=str, help='Path to jsonl report', dest='report', required=True)
+    parser.add_argument(
+        '--in-graph', '-G', type=str, dest='in_graph', required=True,
+        help='Path to input graph'
+    )
+    parser.add_argument(
+        '--in-context', '-C', type=str, dest='in_context', required=True,
+        help='Path to input context'
+    )
+    parser.add_argument(
+        '--out-graph', '-g', type=str, dest='out_graph', required=True,
+        help='Path to result graph'
+    )
+    parser.add_argument(
+        '--out-context', '-c', type=str, dest='out_context', required=True,
+        help='Path to result context'
+    )
+    parser.add_argument(
+        '--report', '-r', type=str, dest='report', required=True,
+        help='Path to jsonl report'
+    )
     parser.add_argument('--muted', '-m', type=str, help='Path to muted tests', dest='muted')
     opts = parser.parse_args()
     uids = get_failed_uids(opts)

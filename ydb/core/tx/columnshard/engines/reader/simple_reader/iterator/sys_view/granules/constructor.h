@@ -15,14 +15,21 @@ private:
     std::shared_ptr<const TGranuleMeta> Granule;
     NColumnShard::TSchemeShardLocalPathId ExternalPathId;
     ui32 PortionsCount;
+    
+private:
+    TDataSourceConstructor(const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
+        : TBase(tabletId, 
+                granule->GetPathId().GetRawValue(), 
+                TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId),
+                TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId))
+        , Granule(granule)
+        , ExternalPathId(externalPathId)
+        , PortionsCount(Granule->GetPortions().size()) {
+    }
 
 public:
     TDataSourceConstructor(const IPathIdTranslator& translator, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
-        : TBase(tabletId, granule->GetPathId().GetRawValue(), TSchemaAdapter::GetPKSimpleRow(ExternalPathId, tabletId),
-              TSchemaAdapter::GetPKSimpleRow(ExternalPathId, tabletId))
-        , Granule(std::move(granule))
-        , ExternalPathId(translator.ResolveSchemeShardLocalPathIdVerified(Granule->GetPathId()))
-        , PortionsCount(Granule->GetPortions().size()) {
+        : TDataSourceConstructor(translator.ResolveSchemeShardLocalPathIdVerified(granule->GetPathId()), tabletId, granule) {
     }
 
     std::shared_ptr<NReader::NSimple::IDataSource> Construct(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context) {

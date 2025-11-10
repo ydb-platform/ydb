@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/util/backoff.h>
 
@@ -16,17 +17,17 @@ class TDLQMoverActor : public TBaseActor<TDLQMoverActor>
     static constexpr TDuration Timeout = TDuration::Seconds(5);
 
 public:
-    TDLQMoverActor(const TString& database,
-                   const ui64 tabletId,
-                   const ui32 partitionId,
-                   const TString& consumerName,
-                   const TString& destinationTopic,
-                   std::deque<ui64>&& offsets);
+    TDLQMoverActor(TDLQMoverSettings&& settings);
 
     void Bootstrap();
     void PassAway() override;
 
 private:
+    void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);
+    STFUNC(StateDescribe);
+
+    void CreateWriter();
+
     void Handle(TEvPersQueue::TEvResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
@@ -36,15 +37,13 @@ private:
 
     void ProcessQueue();
 
+    void ReplyError(TString&& error);
+
 private:
-    const TString Database;
-    const ui64 TabletId;
-    const ui32 PartitionId;
-    const TString ConsumerName;
-    const ui64 ConsumerGeneration;
-    const TString DestinationTopic;
-    ui64 FirstMessageSeqNo;
+    TDLQMoverSettings Settings;
     std::deque<ui64> Queue;
+
+    NDescriber::TTopicInfo TopicInfo;
 };
 
 } // namespace NKikimr::NPQ::NMLP

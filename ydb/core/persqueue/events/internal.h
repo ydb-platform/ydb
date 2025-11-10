@@ -213,6 +213,7 @@ struct TEvPQ {
         EvGetMLPConsumerStateRequest,
         EvGetMLPConsumerStateResponse,
         EvMLPConsumerUpdateConfig,
+        EvMLPDLQMoverResponse,
         EvEnd
     };
 
@@ -1592,6 +1593,18 @@ struct TEvPQ {
 
         NKikimrPQ::TPQTabletConfig::TConsumer Config;
         std::optional<TDuration> RetentionPeriod;
+    };
+
+    struct TEvMLPDLQMoverResponse : TEventLocal<TEvMLPDLQMoverResponse, EvMLPDLQMoverResponse> {
+
+        TEvMLPDLQMoverResponse(Ydb::StatusIds::StatusCode status, std::vector<ui64>&& movedMessages)
+            : Status(status)
+            , MovedMessages(std::move(movedMessages))
+        {
+        }
+
+        Ydb::StatusIds::StatusCode Status;
+        std::vector<ui64> MovedMessages;
     };
 };
 

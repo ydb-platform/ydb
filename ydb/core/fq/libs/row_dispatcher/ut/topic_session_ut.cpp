@@ -154,7 +154,6 @@ public:
                 ExpectNewDataArrived({readActorId});
             }
             Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
-            
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);

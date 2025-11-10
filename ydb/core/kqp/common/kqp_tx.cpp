@@ -186,11 +186,10 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
         for (const auto &stage : tx.GetStages()) {
             for (const auto &sink : stage.GetSinks()) {
-                AFL_ENSURE(tx.GetHasEffects());
-
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
                     && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
                 {
+                    AFL_ENSURE(tx.GetHasEffects());
                     AFL_ENSURE(tx.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE);
                     NKikimrKqp::TKqpTableSinkSettings sinkSettings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));

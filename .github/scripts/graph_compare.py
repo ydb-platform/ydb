@@ -43,7 +43,7 @@ def do_compare(opts):
     exec(f'{opts.ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 
     log('Generate diff graph...')
-    exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {opts.graph_path} --dump-uids {workdir}/uids.json')
+    exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {opts.graph_path} --dump-uids {workdir}/uids.json --no-cache-for-affected-nodes')
 
     log('Generate diff context...')
     exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {opts.context_path} {workdir}/uids.json {opts.graph_path}')

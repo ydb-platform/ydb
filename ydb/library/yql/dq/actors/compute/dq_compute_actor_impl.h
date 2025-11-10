@@ -1652,10 +1652,15 @@ protected:
             Y_ABORT_UNLESS(!inputDesc.HasSource() || inputDesc.ChannelsSize() == 0); // HasSource => no channels
 
             if (inputDesc.HasSource()) {
-                watermarksMode = inputDesc.GetSource().GetWatermarksMode();
+                auto& source = inputDesc.GetSource();
+                watermarksMode = source.GetWatermarksMode();
+                TDuration watermarksIdleTimeout = TDuration::Max();
+                if (source.HasWatermarksIdleTimeoutUs()) {
+                    watermarksIdleTimeout = TDuration::MicroSeconds(source.GetWatermarksIdleTimeoutUs());
+                }
                 auto result = SourcesMap.emplace(
                     i,
-                    static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode)
+                    static_cast<TDerived*>(this)->CreateInputHelper(LogPrefix, i, watermarksMode, watermarksIdleTimeout)
                 );
                 YQL_ENSURE(result.second);
             } else {
@@ -1685,8 +1690,9 @@ protected:
             if (inputDesc.HasTransform()) {
                 auto result = InputTransformsMap.emplace(
                     i,
-                    TAsyncInputTransformHelper(LogPrefix, i, watermarksMode)
+                    TAsyncInputTransformHelper(LogPrefix, i, watermarksMode, TDuration::Max())
                 );
+                // TODO: watermarksIdleTimeout (currently unused)
                 YQL_ENSURE(result.second);
             }
         }

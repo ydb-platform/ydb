@@ -24,10 +24,11 @@ public:
         const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode,
+        TDuration watermarksIdleTimeout,
         ui64& cookie,
         int& inflight
     )
-    : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode)
+    : TComputeActorAsyncInputHelper(logPrefix, index, watermarksMode, watermarksIdleTimeout)
     , TaskRunnerActor(nullptr)
     , Cookie(cookie)
     , Inflight(inflight)
@@ -127,10 +128,11 @@ public:
 
     TComputeActorAsyncInputHelperAsync CreateInputHelper(const TString& logPrefix,
         ui64 index,
-        NDqProto::EWatermarksMode watermarksMode
+        NDqProto::EWatermarksMode watermarksMode,
+        TDuration watermarksIdleTimeout
     )
     {
-        return TComputeActorAsyncInputHelperAsync(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
+        return TComputeActorAsyncInputHelperAsync(logPrefix, index, watermarksMode, watermarksIdleTimeout, Cookie, ProcessSourcesState.Inflight);
     }
 
     const IDqAsyncInputBuffer* GetInputTransform(ui64 inputIdx, const TComputeActorAsyncInputHelperSync&) const {

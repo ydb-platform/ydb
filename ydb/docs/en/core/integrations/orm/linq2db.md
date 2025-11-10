@@ -70,36 +70,38 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 
 ### .NET ↔ {{ ydb-short-name }} type mapping {#types}
 
-| .NET type(s)                   | Linq To DB `DataType`               | {{ ydb-short-name }} type | Notes                                  |
-|--------------------------------|-------------------------------------|---------------------------|----------------------------------------|
-| `bool`                         | `Boolean`                           | `Bool`                    | —                                      |
-| `string`                       | `NVarChar`/`VarChar`/`Char`/`NChar` | `Utf8`                    | UTF-8 string.                          |
-| `byte[]`                       | `VarBinary`/`Binary`/`Blob`         | `String`                  | Binary data.                           |
-| `Guid`                         | `Guid`                              | `Uuid`                    | —                                      |
-| `DateOnly` / `DateTime`        | `Date`                              | `Date`                    | Time is ignored.                       |
-| `DateTime`                     | `DateTime`                          | `Datetime`                | Second precision.                      |
-| `DateTime`/`DateTimeOffset`    | `DateTime2`                         | `Timestamp`               | Microsecond precision.                 |
-| `TimeSpan`                     | `Interval`                          | `Interval`                | Duration.                              |
-| `decimal`                      | `Decimal`                           | `Decimal(p,s)`            | Defaults to `Decimal(22,9)`            |
-| `float`                        | `Single`                            | `Float`                   | —                                      |
-| `double`                       | `Double`                            | `Double`                  | —                                      |
-| `sbyte` / `byte`               | `SByte` / `Byte`                    | `Int8` / `Uint8`          | —                                      |
-| `short` / `ushort`             | `Int16` / `UInt16`                  | `Int16` / `Uint16`        | —                                      |
-| `int` / `uint`                 | `Int32` / `UInt32`                  | `Int32` / `Uint32`        | —                                      |
-| `long` / `ulong`               | `Int64` / `UInt64`                  | `Int64` / `Uint64`        | —                                      |
-| `string`                       | `Json`                              | `Json`                    | Text JSON.                             |
-| `byte[]`                       | `BinaryJson`                        | `JsonDocument`            | Binary JSON.                           |
-| `DateOnly` / `DateTime`        | `Date`                              | `Date32`                  | Extended date range.                   |
-| `DateTime`                     | `DateTime`                          | `Datetime64`              | Second precision, extended range.      |
-| `DateTime` / `DateTimeOffset`  | `DateTime2`                         | `Timestamp64`             | Microsecond precision, extended range. |
-| `TimeSpan`                     | `Interval`                          | `Interval64`              | Extended interval range.               |
+| .NET type(s)                  | Linq To DB `DataType`                     | YDB type           | Notes                                                                 |
+| ----------------------------- | ----------------------------------------- | ------------------ | --------------------------------------------------------------------- |
+| `bool`                        | `Boolean`                                 | `Bool`             | —                                                                     |
+| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`             | UTF-8 string.                                                         |
+| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`            | Binary data.                                                          |
+| `Guid`                        | `Guid`                                    | `Uuid`             | —                                                                     |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date`             | Time component ignored.                                               |
+| `DateTime`                    | `DateTime`                                | `Datetime`         | Second precision.                                                     |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`        | Microseconds.                                                         |
+| `TimeSpan`                    | `Interval`                                | `Interval`         | Duration.                                                             |
+| `decimal`                     | `Decimal`                                 | `Decimal(p,s)`     | Defaults to `Decimal(22,9)`. Use `Decimal(p,s)` when feature enabled. |
+| `float`                       | `Single`                                  | `Float`            | —                                                                     |
+| `double`                      | `Double`                                  | `Double`           | —                                                                     |
+| `sbyte` / `byte`              | `SByte` / `Byte`                          | `Int8` / `Uint8`   | —                                                                     |
+| `short` / `ushort`            | `Int16` / `UInt16`                        | `Int16` / `Uint16` | —                                                                     |
+| `int` / `uint`                | `Int32` / `UInt32`                        | `Int32` / `Uint32` | —                                                                     |
+| `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64` | —                                                                     |
+| `string`                      | `Json`                                    | `Json`             | Text JSON.                                                            |
+| `byte[]`                      | `BinaryJson`                              | `JsonDocument`     | Binary JSON.                                                          |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | **New type.** Wider date range. Use `DbType = "Date32"`.              |
+| `DateTime`                    | `DateTime`                                | `Datetime64`       | **New type.** Second precision, wider range. `DbType = "Datetime64"`. |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | **New type.** Microseconds, wider range. `DbType = "Timestamp64"`.    |
+| `TimeSpan`                    | `Interval`                                | `Interval64`       | **New type.** Wider interval range. `DbType = "Interval64"`.          |
 
-
-> * You can set exact `Precision`/`Scale` with attributes:  
+> You can set exact `Precision`/`Scale` with attributes:  
     >   `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`  
     >   or globally via `YdbOptions(UseParametrizedDecimal: true)`.
+
 > Time zone types (`TzDate`/`TzDatetime`/`TzTimestamp`) are **not used as column types**. When creating tables they will be reduced to `Date`/`Datetime`/`Timestamp`. They are allowed in expressions/literals.
 
+> By default (when DbType is not specified on a column) the provider uses the legacy YDB temporal types: Date, Datetime, Timestamp, Interval.
+To opt in to the new temporal types per column, set DbType on that column, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
 ---
 
 ### Schema generation from attributes

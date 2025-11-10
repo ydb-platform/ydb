@@ -70,31 +70,36 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 
 ### Таблица соответствия .NET типов с типами {{ ydb-short-name }} {#types}
 
-| .NET тип(ы)                | Linq To DB `DataType`               | Тип в {{ ydb-short-name }} | Примечание                                |
-|----------------------------|-------------------------------------|----------------------------|-------------------------------------------|
-| `bool`                     | `Boolean`                           | `Bool`                     | —                                         |
-| `string`                   | `NVarChar`/`VarChar`/`Char`/`NChar` | `Text`                     | Строка UTF‑8.                             |
-| `byte[]`                   | `VarBinary`/`Binary`/`Blob`         | `Bytes`                    | Бинарные данные.                          |
-| `Guid`                     | `Guid`                              | `Uuid`                     | —                                         |
-| `DateOnly` / `DateTime`    | `Date`                              | `Date`                     | Время игнорируется.                       |
-| `DateTime`                 | `DateTime`                          | `Datetime`                 | Секундная точность.                       |
-| `DateTime`/`DateTimeOffset`| `DateTime2`                         | `Timestamp`                | Микросекунды.                             |
-| `TimeSpan`                 | `Interval`                          | `Interval`                 | Длительность.                             |
-| `decimal`                  | `Decimal`                           | `Decimal(p,s)`             | По умолчанию `Decimal(22,9)`              |
-| `float`                    | `Single`                            | `Float`                    | —                                         |
-| `double`                   | `Double`                            | `Double`                   | —                                         |
-| `sbyte` / `byte`           | `SByte` / `Byte`                    | `Int8` / `Uint8`           | —                                         |
-| `short` / `ushort`         | `Int16` / `UInt16`                  | `Int16` / `Uint16`         | —                                         |
-| `int` / `uint`             | `Int32` / `UInt32`                  | `Int32` / `Uint32`         | —                                         |
-| `long` / `ulong`           | `Int64` / `UInt64`                  | `Int64` / `Uint64`         | —                                         |
-| `string`                   | `Json`                              | `Json`                     | Текстовый JSON.                           |
-| `byte[]`                   | `BinaryJson`                        | `JsonDocument`             | Бинарный JSON.                            |
-| `DateOnly` / `DateTime`    | `Date`                              | `Date32`                   | Расширенный диапазон даты.                |
-| `DateTime`                 | `DateTime`                          | `Datetime64`               | Секундная точность, расширенный диапазон. |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                         | `Timestamp64`              | Микросекунды, расширенный диапазон.       |
-| `TimeSpan`                 | `Interval`                          | `Interval64`               | Расширенный диапазон интервалов.          |
+| .NET тип(ы)                   | Linq To DB `DataType`                     | Тип в YDB          | Примечание                                |
+| ----------------------------- | ----------------------------------------- | ------------------ |-------------------------------------------|
+| `bool`                        | `Boolean`                                 | `Bool`             | —                                         |
+| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`             | Строка UTF-8.                             |
+| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`            | Бинарные данные.                          |
+| `Guid`                        | `Guid`                                    | `Uuid`             | —                                         |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date`             | Время игнорируется.                       |
+| `DateTime`                    | `DateTime`                                | `Datetime`         | Секундная точность.                       |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`        | Микросекунды.                             |
+| `TimeSpan`                    | `Interval`                                | `Interval`         | Длительность.                             |
+| `decimal`                     | `Decimal`                                 | `Decimal(p,s)`     | По умолчанию `Decimal(22,9)`              |
+| `float`                       | `Single`                                  | `Float`            | —                                         |
+| `double`                      | `Double`                                  | `Double`           | —                                         |
+| `sbyte` / `byte`              | `SByte` / `Byte`                          | `Int8` / `Uint8`   | —                                         |
+| `short` / `ushort`            | `Int16` / `UInt16`                        | `Int16` / `Uint16` | —                                         |
+| `int` / `uint`                | `Int32` / `UInt32`                        | `Int32` / `Uint32` | —                                         |
+| `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64` | —                                         |
+| `string`                      | `Json`                                    | `Json`             | Текстовый JSON.                           |
+| `byte[]`                      | `BinaryJson`                              | `JsonDocument`     | Бинарный JSON.                            |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | Расширенный диапазон даты.                |
+| `DateTime`                    | `DateTime`                                | `Datetime64`       | Секундная точность, расширенный диапазон. |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | Микросекунды, расширенный диапазон.       |
+| `TimeSpan`                    | `Interval`                                | `Interval64`       | Расширенный диапазон интервалов.          |
+
 > Точное `Precision`/`Scale` можно задать атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]` или глобально через `YdbOptions(UseParametrizedDecimal: true)`.
+ 
 > Типы с таймзоной (`TzDate`/`TzDatetime`/`TzTimestamp`) **не используются как типы колонок**. При создании таблиц будут сведены к `Date`/`Datetime`/`Timestamp`. В выражениях/литералах допустимы.
+
+> По умолчанию (если на колонке не задан DbType) провайдер создаёт и использует старые типы времени в YDB:
+Date, Datetime, Timestamp, Interval. Чтобы включить новые типы точечно, укажите DbType на колонке. Например  `[Column(DbType = "Date32")]`
 ---
 
 ### Генерация схемы из атрибутов

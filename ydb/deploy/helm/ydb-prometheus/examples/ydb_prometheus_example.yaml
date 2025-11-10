@@ -27,7 +27,11 @@ groups:
         sum by (instance, execpool) (
           rate(utils_ElapsedMicrosec[1m])
         ) / 1000000
-      ) > 0.9
+      ) / (
+        sum by(instance, execpool) (
+          utils_CurrentThreadCount
+        ) 
+      ) > 0.9      
     for: 1m
     labels:
       severity: critical

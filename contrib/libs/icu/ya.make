@@ -8,15 +8,16 @@ LICENSE(
     Custom-punycode AND
     ICU AND
     MIT AND
+    MIT-0 AND
     Public-Domain AND
     Unicode
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(77.1)
+VERSION(78.1)
 
-ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-77-1/icu4c-77_1-src.tgz)
+ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-78.1/icu4c-78.1-sources.tgz)
 
 ADDINCL(
     GLOBAL contrib/libs/icu/include
@@ -71,6 +72,7 @@ SRCS(
     common/errorcode.cpp
     common/filteredbrk.cpp
     common/filterednormalizer2.cpp
+    common/fixedstring.cpp
     common/icudataver.cpp
     common/icuplug.cpp
     common/loadednormalizer2impl.cpp
@@ -501,7 +503,7 @@ SRCS(
     i18n/zonemeta.cpp
     i18n/zrule.cpp
     i18n/ztrans.cpp
-    icudt77_dat.rodata
+    icudt78_dat.rodata
     io/locbund.cpp
     io/sprintf.cpp
     io/sscanf.cpp

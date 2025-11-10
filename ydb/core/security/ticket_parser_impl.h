@@ -31,6 +31,7 @@
 
 #include <util/string/join.h>
 
+
 namespace NKikimr {
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
@@ -350,6 +351,7 @@ private:
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
     std::unordered_map<TString, TString> ServiceTokens;
+    THashMap<TString, std::pair<TInstant, THashSet<TString>>> DeferredLoginTokens;
 
     TDerived* GetDerived() {
         return static_cast<TDerived*>(this);
@@ -783,6 +785,13 @@ private:
     template <typename TTokenRecord>
     bool CanInitLoginToken(const TString& key, TTokenRecord& record) {
         if (UseLoginProvider && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::Login)) {
+            if (record.TokenType == TDerived::ETokenType::Unknown) {
+                if (NLogin::TLoginProvider::CanDecodeToken(record.Ticket)) {
+                    record.TokenType = TDerived::ETokenType::Login;
+                } else {
+                    return false;
+                }
+            }
             // Lookup the token in the login provider for the target database, with the possible fallback to the root (domain) database.
             //
             // Target database could be unspecified (some anonymous or backward-compatible mode).
@@ -847,9 +856,15 @@ private:
                 }
             } else {
                 if (record.TokenType == TDerived::ETokenType::Login) {
-                    SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
-                    CounterTicketsLogin->Inc();
-                    BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 error");
+                    auto it = DeferredLoginTokens.find(database);
+                    if (it != DeferredLoginTokens.end()) {
+                        auto& tokenKeys = it->second.second;
+                        tokenKeys.insert(key);
+                    } else {
+                        static constexpr ui32 NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE = 2;
+                        DeferredLoginTokens.insert(std::make_pair(database, std::make_pair(TlsActivationContext->Now() + TDuration::Seconds(NUM_SECONDS_TO_WAIT_FOR_SECURITY_STATE_UPDATE), THashSet<TString>({key}))));
+                    }
+                    BLOG_TRACE("CanInitLoginToken, database " << database << ", login state is not available yet, deffer token (" << MaskTicket(record.Ticket) << ")");
                     return true;
                 }
                 BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
@@ -1525,6 +1540,22 @@ private:
         auto& loginProvider = LoginProviders[ev->Get()->SecurityState.GetAudience()];
         loginProvider.UpdateSecurityState(ev->Get()->SecurityState);
         BLOG_D("Updated state for " << loginProvider.Audience << " keys " << GetLoginProviderKeys(loginProvider));
+
+        auto it = DeferredLoginTokens.find(loginProvider.Audience);
+        if (it != DeferredLoginTokens.end()) {
+            BLOG_TRACE("Handle deferred tokens for database: " << loginProvider.Audience);
+            for (const TString& key : it->second.second) {
+                auto& userTokens = GetDerived()->GetUserTokens();
+                auto tokenIt = userTokens.find(key);
+                if (tokenIt == userTokens.end()) {
+                    continue;
+                }
+                auto& record = tokenIt->second;
+                CanInitLoginToken(key, record);
+                Respond(record);
+            }
+            DeferredLoginTokens.erase(it);
+        }
     }
 
     void Handle(TEvTokenManager::TEvUpdateToken::TPtr& ev);
@@ -1533,6 +1564,8 @@ private:
         auto& userTokens = GetDerived()->GetUserTokens();
         userTokens.erase(ev->Get()->Ticket);
     }
+
+    void RefreshDeferredLoginTokens(const TInstant& now);
 
     void HandleRefresh() {
         TInstant now = TlsActivationContext->Now();
@@ -1559,6 +1592,7 @@ private:
                 userTokens.erase(it);
             }
         }
+        RefreshDeferredLoginTokens(now);
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
     }
 
@@ -2268,6 +2302,37 @@ public:
         , CertificateChecker(settings.CertificateAuthValues)
     {}
 };
+
+template <typename TDerived>
+void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now) {
+    static constexpr ui32 DATABASE_DELETE_NUM = 10;
+    TVector<TString> keysToDelete;
+    keysToDelete.reserve(DATABASE_DELETE_NUM);
+    for (const auto& [database, record] : DeferredLoginTokens) {
+        if (record.first <= now) {
+            keysToDelete.push_back(database);
+            for (const TString& key : record.second) {
+                auto& userTokens = GetDerived()->GetUserTokens();
+                auto it = userTokens.find(key);
+                if (it == userTokens.end()) {
+                    continue;
+                }
+                auto& record = it->second;
+                SetError(key, record, {.Message = "Login state is not available", .Retryable = false});
+                CounterTicketsLogin->Inc();
+            }
+        }
+    }
+    TStringBuilder deferredLoginTokensMessage;
+    deferredLoginTokensMessage << "Finish waiting for login providers for db: ";
+    for (const TString& key : keysToDelete) {
+        deferredLoginTokensMessage << key;
+        DeferredLoginTokens.erase(key);
+    }
+    if (!keysToDelete.empty()) {
+        BLOG_TRACE(deferredLoginTokensMessage);
+    }
+}
 
 template <typename TDerived>
 void TTicketParserImpl<TDerived>::CreateServiceTokens() const {

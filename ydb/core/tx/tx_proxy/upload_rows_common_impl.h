@@ -602,6 +602,7 @@ private:
                 return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
             }
 
+            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
             UploadCounters.OnMissingDefaultColumns();
             LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
         }
@@ -623,7 +624,7 @@ private:
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        request->DatabaseName = std::move(GetDatabase());
+        request->DatabaseName = GetDatabase();
 
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = ::NKikimr::SplitPath(table);
@@ -1049,7 +1050,7 @@ private:
         auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));

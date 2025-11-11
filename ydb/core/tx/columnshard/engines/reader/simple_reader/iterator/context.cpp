@@ -40,7 +40,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
     }
 
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < portionState.MaxRecordSnapshot || portionState.Conflicting;
+    const bool needConflictDetector = portionState.Conflicting;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -54,13 +54,13 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
 
     const bool preventDuplicates = NeedDuplicateFiltering() && !portionState.Conflicting;
     {
-        auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+        auto& result = CacheFetchingScripts[needConflictDetector ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
                 gInit->InitializationFinished(BuildColumnsFetchingPlan(
-                    needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
+                    needConflictDetector, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }
@@ -68,7 +68,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     }
 }
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
+std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needConflictDetector, const bool partialUsageByPredicateExt,
     const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates,
     const bool isFinalSyncPoint) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
@@ -90,9 +90,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
-        }
         if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
@@ -101,9 +98,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
-            acc.AddStep(std::make_shared<TSnapshotFilter>());
+        if (needConflictDetector) {
+            acc.AddStep(std::make_shared<TConflictDetector>());
         }
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());

@@ -170,6 +170,7 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `topic.write.message_size_bytes`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in bytes. It shows the number of messages which size falls within the boundaries of the interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the write time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 
+
 ## Aggregated metrics of topic partitions {#topics_partitions}
 
 The following table shows aggregated partition metrics for the topic. The maximum and minimum values ​​are calculated for all partitions of a given topic.
@@ -197,3 +198,14 @@ The following table shows aggregated partition metrics for the topic. The maximu
 | `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last hour, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
 | `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last minute, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
 | `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum time the partition is idle for recording.br/>Label:<br/>- _topic_ – topic name |
+
+## Resource pool metrics {#resource_pools}
+
+| Metric name<br/>Type, units of measurement | Description<br/>Tags |
+| ----- | ----- |
+| `kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, pieces | Average database load, the `DATABASE_LOAD_CPU_THRESHOLD` works based on this metric. |
+| `kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, pieces | Limit on the number of simultaneously running requests. |
+| `kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, pieces | The current number of simultaneously running requests. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |
+| `kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, pieces | Queue size of pending requests. |
+| `kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, pieces | The number of requests waiting in the execution queue. Only visible for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled . |
+

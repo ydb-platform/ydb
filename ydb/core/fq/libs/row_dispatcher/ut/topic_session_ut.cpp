@@ -49,13 +49,12 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool skipErrors = false) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
         TopicPath = topicPath;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
-        Config.MutableJsonParser()->SetSkipErrors(skipErrors);
         Config.MutableJsonParser()->SetBatchCreationTimeoutMs(100);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
@@ -124,7 +123,7 @@ public:
         }
     }
 
-    NYql::NPq::NProto::TDqPqTopicSource BuildSource(bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
+    NYql::NPq::NProto::TDqPqTopicSource BuildSource(bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer, bool skipErrors = false) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetEndpoint(GetDefaultPqEndpoint());
         settings.SetTopicPath(TopicPath);
@@ -139,6 +138,7 @@ public:
         if (!emptyPredicate) {
             settings.SetPredicate("TRUE");
         }
+        settings.SetSkipJsonErrors(skipErrors);
         return settings;
     }
 
@@ -631,8 +631,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(WrongJson, TRealTopicFixture) {
         const TString topicName = "wrong_json";
         PQCreateStream(topicName);
-        Init(topicName, std::numeric_limits<ui64>::max(), true);
-        auto source = BuildSource();
+        Init(topicName);
+        auto source = BuildSource(false, DefaultPqConsumer, true);
         StartSession(ReadActorId1, source);
         
         auto writeRead = [&](const std::vector<TString>& input, const TBatch& output) {
@@ -669,8 +669,8 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     Y_UNIT_TEST_F(WrongJsonOffset, TRealTopicFixture) {
         const TString topicName = "wrong_json_offset";
         PQCreateStream(topicName);
-        Init(topicName, std::numeric_limits<ui64>::max(), true);
-        auto source = BuildSource();
+        Init(topicName);
+        auto source = BuildSource(false, DefaultPqConsumer, true);
         StartSession(ReadActorId1, source);
 
         TString wrongJson{"wrong"};

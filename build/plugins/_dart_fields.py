@@ -33,27 +33,28 @@ class HaltDartConstruction(Exception):
     pass
 
 
-def create_dart_record(fields, *args) -> dict[str, str] | None:
+def create_dart_record(field_methods, *args) -> dict[str, str] | None:
     try:
         rec = {}
-        for field in fields:
-            value = field(*args)
+        for field_meth in field_methods:
+            field = field_meth.__self__.KEY
+            value = field_meth(*args)
             if not value:
-                if getattr(field.__self__, 'required', False):
-                    raise DartValueError(f'dart field {field.__self__.KEY} must not be empty')
+                if getattr(field_meth.__self__, 'required', False):
+                    raise DartValueError(f'dart field {field} must not be empty')
             else:
                 if isinstance(value, dict):
                     # For TsResources field
                     rec |= value
                 else:
-                    rec[field.__self__.KEY] = value
+                    rec[field] = value
         return rec
     except HaltDartConstruction:
         pass
     except DartValueError as e:
         ymake.report_configure_error(f'Invalid dart field value {e!r}')
     except Exception as e:
-        ymake.report_configure_error(f'Unexpected error while creating dart record {e!r}')
+        ymake.report_configure_error(f'Unexpected error while creating dart record {e!r}, field {field}')
 
 
 def with_fields(fields):
@@ -430,22 +431,37 @@ class EslintConfigPath:
 
 
 class ParallelTestsInSingleNode:
-    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
+    KEY = 'PARALLEL-TESTS-WITHIN-NODE-WORKERS'
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        value = unit.get('PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS')
+        return cls.get_value(unit, "PARALLEL_TESTS_WITHIN_NODE_WORKERS")
+
+    @classmethod
+    def get_value(cls, unit, key):
+        value = unit.get(key)
 
         if value:
             value = value.lower()
-            if value != 'all' and not (value.isnumeric() and int(value) > 0):
+            if value == 'all':
+                value = 'auto'
+            if value != 'auto' and not (value.isnumeric() and int(value) > 0):
                 raise DartValueError(
-                    'Incorrect value of PARALLEL_TESTS_ON_YT_WITHIN_NODE. Expected either "all" or a positive integer value, got: {}'.format(
+                    'Incorrect value of PARALLEL_TESTS_WITHIN_NODE. Expected either "auto" or a positive integer value, got: {}'.format(
                         value,
                     ),
                 )
 
         return value
+
+
+# TODO(bulatman) Temporary class for backward compatibility.
+class ParallelTestsInSingleNodeOnYt:
+    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return ParallelTestsInSingleNode.get_value(unit, "PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS")
 
 
 class ForkMode:
@@ -647,7 +663,7 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args['CONFIGS'][0]
+        default_configs_path = spec_args['DEFAULT_CONFIGS'][0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
@@ -669,7 +685,7 @@ class LintConfigs:
 
         # default config
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args.get('CONFIGS')[0]
+        default_configs_path = spec_args.get('DEFAULT_CONFIGS')[0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
@@ -681,9 +697,10 @@ class LintConfigs:
 
     @classmethod
     def custom_explicit_configs(cls, unit, flat_args, spec_args):
-        # default global config only
         linter_name = spec_args['NAME'][0]
-        default_configs_path = spec_args.get('CONFIGS')[0]
+        if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
+            return
+        default_configs_path = default_configs_path[0]
         assert_file_exists(unit, default_configs_path)
         config = get_linter_configs(unit, default_configs_path).get(linter_name)
         if not config:
@@ -697,6 +714,10 @@ class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
     _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps')
+    # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
+    # it makes it difficult to run ruff checks in build root - it complains
+    # about unsorted imports a lot. Let them run in source root instead.
+    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro')
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):
@@ -709,6 +730,11 @@ class LintExtraParams:
                 upath = unit.path()[3:]
                 if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_ALLOWED_PATHS):
                     message = f'Custom clang-format is not allowed in upath: {upath}'
+                    raise DartValueError(message)
+            if 'run_in_source_root=yes' == arg:
+                upath = unit.path()[3:]
+                if not upath.startswith(cls._RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS):
+                    message = f'Running ruff in source root instead of build root is not allowed in upath: {upath}'
                     raise DartValueError(message)
         return serialize_list(extra_params)
 
@@ -1246,8 +1272,8 @@ class TestFiles:
         'maps/b2bgeo/mvrp_solver/aws_docker',
     )
 
-    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON macro
-    _TAXI_JSON_PREFIX = 'taxi'
+    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON and STYLE_YAML macro
+    _TAXI_PREFIX = 'taxi'
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -1375,8 +1401,11 @@ class TestFiles:
             upath = unit.path()[3:]
             lint_name = spec_args['NAME'][0]
 
-            if lint_name == 'clang_format_json' and not upath.startswith(cls._TAXI_JSON_PREFIX):
-                raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
+            if not upath.startswith(cls._TAXI_PREFIX):
+                if lint_name == 'clang_format_json':
+                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
+                if lint_name == 'yamlfmt_format_yaml':
+                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_YAML")
             resolved_files = []
             for path in files:
                 if path.endswith('ya.make'):

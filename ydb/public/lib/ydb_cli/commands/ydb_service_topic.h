@@ -280,6 +280,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
         TMaybe<TString> MessageGroupId_;
+        TMaybe<ui32> PartitionId_;
         TMaybe<TDuration> MessagesWaitTimeout_;
 
         ui64 MessageSizeLimit_ = 0;

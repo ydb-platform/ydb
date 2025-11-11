@@ -378,17 +378,19 @@ struct IOptimizerNew {
 
 struct TExprContext;
 
-class IOptimizerFactory : private TNonCopyable {
+struct TCBOSettings {
+    ui32 MaxDPhypDPTableSize = 100000;
+    bool ForceShuffleElimination = false;
+};
+
+class IOptimizerFactory: private TNonCopyable {
 public:
     using TPtr = std::shared_ptr<IOptimizerFactory>;
     using TLogger = std::function<void(const TString&)>;
 
     virtual ~IOptimizerFactory() = default;
 
-    struct TNativeSettings {
-        ui32 MaxDPhypDPTableSize = 100000;
-    };
-    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const = 0;
+    virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TCBOSettings& settings) const = 0;
 
     struct TPGSettings {
         TLogger Logger = [](const TString&){};

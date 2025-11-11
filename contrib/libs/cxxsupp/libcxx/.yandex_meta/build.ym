@@ -4,6 +4,7 @@
 {% block current_date %}2024-09-20{% endblock %}
 
 {% block keep_sources %}
+.yandex_meta/scripts/fixlic.py
 .yandex_meta/scripts/sysincls.py
 include/__config_site
 include/__config_epilogue.h
@@ -286,8 +287,17 @@ echo "no version update"
 rsync --recursive --delete --perms ${SRC}/ ${OUTPUT}
 {% endblock %}
 
-
 {% block step_install %}
 {{super()}}
 rsync ${SYSINCLS}/stl-to-libcxx.yml ${ARCADIA_ROOT}/build/sysincl/stl-to-libcxx.yml
+{% endblock %}
+
+{% block run_license_analyzer %}
+{{super()}}
+base64 -d << EOF > ${BIN}/fixlic
+{% include 'scripts/fixlic.py/base64' %}
+
+EOF
+cat ${OUTPUT}/.yandex_meta/licenses.list.txt | python3 ${BIN}/fixlic > _
+mv _ ${OUTPUT}/.yandex_meta/licenses.list.txt
 {% endblock %}

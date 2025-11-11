@@ -39,6 +39,8 @@ RESOURCE(
     ${TEST_DATA_DIR}/rpc_server_key.pem /testdata/rpc_server_key.pem
     ${TEST_DATA_DIR}/rpc_client_cert.pem /testdata/rpc_client_cert.pem
     ${TEST_DATA_DIR}/rpc_client_key.pem /testdata/rpc_client_key.pem
+    # For publishing generate script to OpenSource.
+    ${TEST_DATA_DIR}/generate.sh /testdata/generate.sh
 )
 
 END()

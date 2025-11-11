@@ -542,7 +542,7 @@ runs:
               NEW_CONTEXT_PATH=$(realpath "context-$RETRY.json")
               .github/scripts/graph_patch.py \
                 --in-graph "$GRAPH_PATH" --in-context "$CONTEXT_PATH" \
-                --out-graph "$NEW_GRAPH_PATH" --out-context "$NEW_GRAPH_PATH" \
+                --out-graph "$NEW_GRAPH_PATH" --out-context "$NEW_CONTEXT_PATH" \
                 --report="$CURRENT_REPORT"
               GRAPH_PATH=$NEW_GRAPH_PATH
               CONTEXT_PATH=$NEW_CONTEXT_PATH

@@ -1,5 +1,9 @@
+ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_1_1_VdiskErrors
+ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
+ydb/core/blobstorage/pdisk/ut TPDiskTest.ChunkWriteDifferentOffsetAndSize
 ydb/core/blobstorage/ut_blobstorage Acceleration.TestThresholdPutMirror3dc1Slow
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
 ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chunk
@@ -25,15 +29,20 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,1024,10,1000,0,BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,false,1,10,1000,0.5,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[10,true,1,0,100,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,true,1024,1000,100,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[1,false,1,10,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[10,false,0,0,0,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[10,true,1,0,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeVariants[10,true,0,0,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants[1,false,0,0,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants[10,false,1,1000,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariantsCount[10,true,1,1000,0,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,false,0,10,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,false,0,1000,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.OrFilterVariants[10,true,1024,1000,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.OrFilterVariants[2,false,0,1000,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1,0,0,0]
+ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1,10,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFullJsonVariants[2,false,1024,1000,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreJsonArrayVariants[10,true,1,0,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
@@ -42,6 +51,7 @@ ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert-UseSink+UseDataQuery
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
+ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/scheme KqpAcl.AlterDatabasePrivilegesRequiredToChangeSchemeLimits-AsClusterAdmin
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpScheme.AddChangefeed
@@ -54,6 +64,7 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/statistics/service/ut BasicStatistics.NotFullStatisticsDatashard
+ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access
 ydb/core/sys_view/ut SystemView.AuthGroups_Access
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
@@ -85,6 +96,7 @@ ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[rest
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_stable-25-2-1_to_prestable-25-3-row]
 ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicRestartToAnotherVersion.test_workload[restart_prestable-25-3_to_stable-25-2-1]
+ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_prestable-25-3_to_current-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-2-1_to_prestable-25-3-column]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_prestable-25-3_to_current]
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-2-1_to_prestable-25-3]
@@ -128,6 +140,7 @@ ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_d
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap test_cs_many_updates.py.TestCSManyUpdates.test_many_updates[bulk_upsert]
 ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_bulk_upsert[2-10000-8]
+ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[2-2]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]

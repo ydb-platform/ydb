@@ -20,7 +20,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
     const TString& poolId,
-    std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings)
+    std::optional<NKqp::NFormats::TArrowFormatSettings> arrowFormatSettings)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))

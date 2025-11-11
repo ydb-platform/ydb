@@ -127,6 +127,30 @@ Y_UNIT_TEST_SUITE(LocalTableWriter) {
         }));
     }
 
+    Y_UNIT_TEST(StringEscaping) {
+        TEnv env;
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+        }));
+
+        auto writer = env.GetRuntime().Register(CreateLocalTableWriter("/Root", env.GetPathId("/Root/Table")));
+        env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
+
+        env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {
+            TRecord(1, R"({"key":[1], "update":{"value":"\n \r \t \b \f"}})"),
+        }));
+
+        auto content = ReadShardedTable(env.GetRuntime(), "/Root/Table");
+        UNIT_ASSERT_STRINGS_EQUAL(content, "key = 1, value = \n \r \t \b \f\n"); // trailing \n from debug printer
+    }
+
     Y_UNIT_TEST(DecimalKeys) {
         TEnv env(TFeatureFlags().SetEnableParameterizedDecimal(true));
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);

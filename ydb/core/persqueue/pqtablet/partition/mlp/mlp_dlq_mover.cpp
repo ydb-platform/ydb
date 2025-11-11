@@ -40,7 +40,7 @@ void TDLQMoverActor::PassAway() {
 }
 
 TString TDLQMoverActor::BuildLogPrefix() const  {
-    return TStringBuilder() << "[" << Settings.TabletId<< "][" << Settings.PartitionId << "][DLQ][" << Settings.ConsumerName << "] ";
+    return TStringBuilder() << "[" << Settings.TabletId << "][" << Settings.PartitionId << "][DLQ][" << Settings.ConsumerName << "] ";
 }
 
 void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
@@ -223,8 +223,8 @@ STFUNC(TDLQMoverActor::StateInit) {
         hFunc(TEvPartitionWriter::TEvDisconnected, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateDescribe", ev));
-            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateDescribe", ev));
+            LOG_E("Unexpected " << EventStr("StateInit", ev));
+            AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
     }
 }
 

@@ -3845,8 +3845,8 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
 
 bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString skipNullFlags = to_lower(TString("EarlyExpandSkipNull"));
-    return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
+    static const char optName[] = "EarlyExpandSkipNull";
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

@@ -1432,22 +1432,6 @@ public:
             return false;
         }
     }
-
-    static bool ValidateChecksum(const TString& content, const TString& expectedChecksum, TString& error) {
-        if (expectedChecksum.empty()) {
-            return true;
-        }
-
-        TString actualChecksum = NBackup::MakeChecksum(content);
-        if (actualChecksum != expectedChecksum) {
-            error = TStringBuilder() 
-                << "Checksum mismatch. Expected: " << expectedChecksum 
-                << ", Got: " << actualChecksum;
-            return false;
-        }
-
-        return true;
-    }
 };
 
 class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
@@ -1456,13 +1440,6 @@ class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
         NJson::TJsonValue json;
         if (!NJson::ReadJsonTree(content, &json)) {
             error = "Failed to parse metadata json";
-            return false;
-        }
-
-        NBackup::TMetadata& metadata = ImportInfo->Items[ItemIdx].Metadata;
-        TString parseError;
-        if (!metadata.Deserialize(content, parseError)) {
-            error = TStringBuilder() << "Failed to parse metadata: " << parseError;
             return false;
         }
 

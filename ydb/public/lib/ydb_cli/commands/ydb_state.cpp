@@ -37,7 +37,7 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
         "If set to zero or omitted, only a single collection is done.")
     .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
-    config.Opts->AddLongOption('f', "filename", "File name to save the results in .tar.bz2 format\n")
+    config.Opts->AddLongOption('o', "output", "Path to the output .tar.bz2 file")
     .DefaultValue("out.tar.bz2")
         .OptionalArgument("PATH").StoreResult(&FileName);
     config.AllowEmptyDatabase = true;

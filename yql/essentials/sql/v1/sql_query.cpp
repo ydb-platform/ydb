@@ -2491,7 +2491,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction19: {
+            // ALTER COLUMN id SET COMPRESSION(...)
+            const auto& alterRule = node.GetAlt_alter_table_action19().GetRule_alter_table_alter_column_set_compression1();
 
+            if (!AlterTableAlterColumnSetCompression(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -2575,12 +2584,17 @@ bool TSqlQuery::AlterTableDropColumn(const TRule_alter_table_drop_column& node, 
 bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node,
                                       TAlterTableParameters& params)
 {
-    TString name = Id(node.GetRule_an_id3(), *this);
+    const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
     TVector<TIdentifier> families;
     const auto& familyRelation = node.GetRule_family_relation5();
     families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr, TColumnSchema::ETypeOfChange::SetFamily);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .Families = std::move(families),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetFamily,
+    });
     return true;
 }
 
@@ -2827,16 +2841,37 @@ bool TSqlQuery::AlterSequenceAction(const TRule_alter_sequence_action& node, TSe
 }
 
 bool TSqlQuery::AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params) {
-    TString name = Id(node.GetRule_an_id3(), *this);
+    const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::DropNotNullConstraint);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::DropNotNullConstraint,
+    });
     return true;
 }
 
 bool TSqlQuery::AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params) {
-    TString name = Id(node.GetRule_an_id3(), *this);
+    const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNotNullConstraint);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetNotNullConstraint,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    const auto compression = ColumnCompression(node.GetRule_compression5(), *this);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .Compression = std::move(compression),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetCompression,
+    });
     return true;
 }
 

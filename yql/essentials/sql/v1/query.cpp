@@ -1261,6 +1261,14 @@ public:
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
+                if (col.Compression) {
+                    auto columnCompression = Y();
+                    for (const auto& [key, value] : col.Compression->Entries) {
+                        columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnCompression"), Q(columnCompression))));
+                }
+
                 auto familiesDesc = Y();
 
                 if (col.Families) {
@@ -1598,6 +1606,23 @@ public:
                         }
 
                         columnDesc = L(columnDesc, Q(Y(Q("setFamily"), Q(familiesDesc))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
+                    case TColumnSchema::ETypeOfChange::SetCompression: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        auto columnCompression = Y();
+
+                        if (col.Compression) {
+                            for (const auto& [key, value] : col.Compression->Entries) {
+                                columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                            }
+                        }
+
+                        columnDesc = L(columnDesc, Q(Y(Q("changeCompression"), Q(columnCompression))));
                         columns = L(columns, Q(columnDesc));
 
                         break;

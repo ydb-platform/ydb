@@ -38,19 +38,6 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 {
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-                             TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
-    : Pos(pos)
-    , Name(name)
-    , Type(type)
-    , Nullable(nullable)
-    , Families(families)
-    , Serial(serial)
-    , DefaultExpr(defaultExpr)
-    , TypeOfChange(typeOfChange)
-{
-}
-
 INode::INode(TPosition pos)
     : Pos_(pos)
 {

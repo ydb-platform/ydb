@@ -31,7 +31,6 @@
 
 #include <util/string/join.h>
 
-
 namespace NKikimr {
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
@@ -885,6 +884,7 @@ private:
     template <typename TTokenRecord>
     void SendRequestToLdap(const TString& key, TTokenRecord& record, const TString& user) {
         if (Config.HasLdapAuthentication()) {
+            ++record.ResponsesLeft;
             Send(MakeLdapAuthProviderID(), new TEvLdapAuthProvider::TEvEnrichGroupsRequest(key, user));
         } else {
             SetError(key, record, {.Message = "LdapAuthProvider is not initialized", .Retryable = false});
@@ -901,6 +901,7 @@ private:
         } else {
             const auto& key = it->first;
             auto& record = it->second;
+            record.ResponsesLeft--;
             if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
                 const TString domain {"@" + Config.GetLdapAuthenticationDomain()};
                 TVector<NACLib::TSID> groups(response->Groups.cbegin(), response->Groups.cend());
@@ -916,7 +917,9 @@ private:
             } else {
                 SetError(key, record, response->Error);
             }
-            Respond(record);
+            if (record.ResponsesLeft == 0) {
+                Respond(record);
+            }
         }
     }
 
@@ -1552,7 +1555,9 @@ private:
                 }
                 auto& record = tokenIt->second;
                 CanInitLoginToken(key, record);
-                Respond(record);
+                if (record.ResponsesLeft == 0) {
+                    Respond(record);
+                }
             }
             DeferredLoginTokens.erase(it);
         }
@@ -2308,10 +2313,10 @@ void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now
     static constexpr ui32 DATABASE_DELETE_NUM = 10;
     TVector<TString> keysToDelete;
     keysToDelete.reserve(DATABASE_DELETE_NUM);
-    for (const auto& [database, record] : DeferredLoginTokens) {
-        if (record.first <= now) {
+    for (const auto& [database, deferredTokens] : DeferredLoginTokens) {
+        if (deferredTokens.first <= now) {
             keysToDelete.push_back(database);
-            for (const TString& key : record.second) {
+            for (const TString& key : deferredTokens.second) {
                 auto& userTokens = GetDerived()->GetUserTokens();
                 auto it = userTokens.find(key);
                 if (it == userTokens.end()) {
@@ -2320,6 +2325,7 @@ void TTicketParserImpl<TDerived>::RefreshDeferredLoginTokens(const TInstant& now
                 auto& record = it->second;
                 SetError(key, record, {.Message = "Login state is not available", .Retryable = false});
                 CounterTicketsLogin->Inc();
+                Respond(record);
             }
         }
     }

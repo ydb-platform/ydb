@@ -20,6 +20,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#include <util/stream/file.h>
+#include <util/system/fs.h>
 #include <util/string/subst.h>
 
 #include <algorithm>
@@ -1403,8 +1405,178 @@ private:
     TPathFilter PathFilter;
 };
 
+class TFSHelper {
+public:
+    static TString GetFullPath(const TString& basePath, const TString& relativePath) {
+        if (basePath.empty()) {
+            return "/" + relativePath;
+        }
+        if (basePath.EndsWith('/')) {
+            return basePath + relativePath;
+        }
+        return basePath + "/" + relativePath;
+    }
+
+    static bool ReadFile(const TString& path, TString& content, TString& error) {
+        try {
+            if (!NFs::Exists(path)) {
+                error = TStringBuilder() << "File does not exist: " << path;
+                return false;
+            }
+
+            TFileInput file(path);
+            content = file.ReadAll();
+            return true;
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Failed to read file " << path << ": " << e.what();
+            return false;
+        }
+    }
+
+    static bool ValidateChecksum(const TString& content, const TString& expectedChecksum, TString& error) {
+        if (expectedChecksum.empty()) {
+            return true;
+        }
+
+        TString actualChecksum = NBackup::MakeChecksum(content);
+        if (actualChecksum != expectedChecksum) {
+            error = TStringBuilder() 
+                << "Checksum mismatch. Expected: " << expectedChecksum 
+                << ", Got: " << actualChecksum;
+            return false;
+        }
+
+        return true;
+    }
+};
+
+class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
+
+    bool ProcessMetadata(const TString& content, TString& error) {
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(content, &json)) {
+            error = "Failed to parse metadata json";
+            return false;
+        }
+
+        NBackup::TMetadata& metadata = ImportInfo->Items[ItemIdx].Metadata;
+        TString parseError;
+        if (!metadata.Deserialize(content, parseError)) {
+            error = TStringBuilder() << "Failed to parse metadata: " << parseError;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ProcessScheme(const TString& content, TString& error) {
+        auto& item = ImportInfo->Items[ItemIdx];
+
+        Ydb::Table::CreateTableRequest table;
+        if (table.ParseFromString(content)) {
+            item.Table = table;
+            return true;
+        }
+
+        error = "Failed to parse scheme as table";
+        return false;
+    }
+
+    void ProcessPermissions(const TString& content) {
+        auto& item = ImportInfo->Items[ItemIdx];
+        Ydb::Scheme::ModifyPermissionsRequest permissions;
+        if (permissions.ParseFromString(content)) {
+            item.Permissions = permissions;
+        }
+    }
+
+    void Reply(bool success, const TString& errorMessage = {}) {
+        LOG_I("TSchemeGetterFS: Reply"
+            << ": self# " << SelfId()
+            << ", importId# " << ImportInfo->Id
+            << ", itemIdx# " << ItemIdx
+            << ", success# " << success
+            << ", error# " << errorMessage);
+
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, errorMessage));
+        PassAway();
+    }
+
+public:
+    explicit TSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
+        : ReplyTo(replyTo)
+        , ImportInfo(std::move(importInfo))
+        , ItemIdx(itemIdx)
+    {
+        Y_ABORT_UNLESS(ImportInfo->Kind == TImportInfo::EKind::FS);
+    }
+
+    void Bootstrap() {
+        const auto settings = ImportInfo->GetFsSettings();
+        const TString basePath = settings.base_path();
+        
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& item = ImportInfo->Items[ItemIdx];
+        
+        TString sourcePath = item.SrcPath;
+        if (sourcePath.empty()) {
+            Reply(false, "Source path is empty for import item");
+            return;
+        }
+
+        const TString metadataPath = TFSHelper::GetFullPath(basePath, sourcePath + "/metadata.json");
+        TString metadataContent;
+        TString error;
+        
+        if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ProcessMetadata(metadataContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
+
+        const TString schemePath = TFSHelper::GetFullPath(basePath, sourcePath + "/" + schemeFileName);
+        TString schemeContent;
+        
+        if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ProcessScheme(schemeContent, error)) {
+            Reply(false, error);
+            return;
+        }
+
+        if (!ImportInfo->GetNoAcl()) {
+            const TString permissionsPath = TFSHelper::GetFullPath(basePath, sourcePath + "/permissions.pb");
+            TString permissionsContent;
+            
+            if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {
+                ProcessPermissions(permissionsContent);
+            }
+        }
+
+        Reply(true);
+    }
+
+private:
+    const TActorId ReplyTo;
+    TImportInfo::TPtr ImportInfo;
+    const ui32 ItemIdx;
+};
+
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
     return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
+}
+
+IActor* CreateSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    return new TSchemeGetterFS(replyTo, std::move(importInfo), itemIdx);
 }
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {

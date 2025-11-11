@@ -527,14 +527,20 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
                                         std::string state = TBenchState(ctx.RNG.GetSeed(), counterTopology, counterMCMC, counterKeys).toHex();
 
-                                        Cout << "\n\nReproduce: TOPOLOGY='";
+                                        Cout << "\n\n";
+                                        Cout << "Test #" << idx << "\n";
+                                        Cout << "Reproduce: TOPOLOGY='";
                                         Cout << "type=" << topologyName << "; "
-                                            << "N=" << n << "; "
-                                            << "alpha=" << alpha << "; "
-                                            << "theta=" << theta << "; "
-                                            << "sigma=" << sigma << "; "
-                                            << "mu=" << mu << "; "
-                                             << "state=" << state << "'\n";
+                                             << "N=" << n << "; "
+                                             << "alpha=" << alpha << "; "
+                                             << "theta=" << theta << "; ";
+
+                                        if (topologyName == "mcmc" || topologyName == "chung-lu") {
+                                            Cout << "sigma=" << sigma << "; "
+                                                 << "mu=" << mu << "; ";
+                                        }
+
+                                        Cout << "state=" << state << "'\n";
 
                                         try {
                                             auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);

@@ -1,13 +1,4 @@
 items:
-<<<<<<< Updated upstream
-- { name: Чтение из бакетов S3 через внешние источники данных, href: external_data_source.md }
-- { name: Чтение из бакетов S3 через внешние таблицы,          href: external_table.md }
-- { name: Запись данных в бакеты S3,                           href: write_data.md }
-- { name: Форматы данных и алгоритмы сжатия,                   href: formats.md }
-- { name: Отображение типов при импорте и экспорте данных,     href: types_mapping.md }
-- { name: Партицирование данных,                               href: partitioning.md }
-- { name: Расширенное партицирование,                          href: partition_projection.md }
-=======
 - { name: Чтение из бакетов S3 через внешние источники данных,     href: external_data_source.md }
 - { name: Чтение из бакетов S3 через внешние таблицы,              href: external_table.md }
 - { name: Запись данных в бакеты S3,                               href: write_data.md }
@@ -15,4 +6,3 @@ items:
 - { name: Отображение типов при чтении и записи в формате parquet, href: types_mapping.md }
 - { name: Партицирование данных,                                   href: partitioning.md }
 - { name: Расширенное партицирование,                              href: partition_projection.md }
->>>>>>> Stashed changes

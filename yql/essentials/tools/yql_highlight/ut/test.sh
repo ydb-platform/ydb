@@ -4,6 +4,9 @@ set -e
 
 cd "$(dirname "$0")"
 
+MODE="${1:-yql}"
+THEME="${2:-light}"
+
 echo "Generating highlighting configurations..."
 ya make ..
 
@@ -14,6 +17,7 @@ function copy() {
     cp "$1" "$DIR/$2"
 }
 
+cp "monarch.template.ts" "$DIR/monarch.template.ts"
 cp "test.template.html" "$DIR/test.template.html"
 cp "test.py" "$DIR/test.py"
 cp "query.yql" "$DIR/query.yql"
@@ -30,5 +34,11 @@ cd "$DIR"
 echo "Generating playground..."
 python3 test.py
 
-echo "Openning in a web-browser..."
-python3 -m webbrowser -t "file://$DIR/test.patched.html"
+if [ "$MODE" == "monarch" ]; then
+    echo "Openning Monarch Playground template..."
+    python3 -m webbrowser -t "file://$DIR/monarch.patched.ts"
+    python3 -m webbrowser -t "https://microsoft.github.io/monaco-editor/playground.html"
+else
+    echo "Openning in a web-browser..."
+    python3 -m webbrowser -t "file://$DIR/test.patched.html?syntax=$MODE&theme=$THEME"
+fi

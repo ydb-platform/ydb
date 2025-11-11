@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             )";
             auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: Fulltext column 'Text' expected type 'String' but got Uint64");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: Fulltext column 'Text' expected type 'String' or 'Utf8' but got Uint64");
         }
     }
 

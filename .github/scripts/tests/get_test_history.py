@@ -12,14 +12,14 @@ from ydb_wrapper import YDBWrapper
 
 
 def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch):
-    script_name = os.path.basename(__file__)
-    
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return {}
 
+        # Get table paths from config
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        
         results = {}
         batch_size = 500
         
@@ -52,7 +52,7 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
             job_name,
             ROW_NUMBER() OVER (PARTITION BY test_name ORDER BY run_timestamp DESC) AS rn
         FROM 
-            `test_results/test_runs_column` AS t
+            `{test_runs_table}` AS t
         WHERE 
             t.build_type = $build_type
             AND t.branch = $branch

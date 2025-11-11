@@ -17,6 +17,7 @@ namespace NFq {
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
+using TTxControl = NFq::ISession::TTxControl;
 
 using NYql::TIssues;
 
@@ -172,7 +173,7 @@ struct TContext : public TThrRefBase {
     const TString TablePathPrefix;
     const TString GraphId;
     const TCheckpointId CheckpointId;
-    TMaybe<TSession> Session;
+    TMaybe<ISession::TPtr> Session;
     size_t CurrentProcessingTaskIndex = 0;
     std::vector<TaskInfo> Tasks;
     std::function<void(TFuture<TStatus>)> Callback;    
@@ -183,7 +184,7 @@ struct TContext : public TThrRefBase {
         const std::vector<ui64>& taskIds,
         TString graphId,
         const TCheckpointId& checkpointId,
-        TMaybe<TSession> session = {})
+        TMaybe<ISession::TPtr> session = {})
         : ActorSystem(actorSystem)
         , TablePathPrefix(tablePathPrefix)
         , GraphId(std::move(graphId))
@@ -201,7 +202,7 @@ struct TContext : public TThrRefBase {
         ui64 taskId,
         TString graphId,
         const TCheckpointId& checkpointId,
-        TMaybe<TSession> session = {},
+        TMaybe<ISession::TPtr> session = {},
         const std::list<TString>& rows = {},
         EStateType type = EStateType::Snapshot)
         : TContext(actorSystem, tablePathPrefix, std::vector{taskId}, std::move(graphId), checkpointId, std::move(session))
@@ -283,14 +284,15 @@ TStatus ProcessRowState(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStateStorage : public IStateStorage {
-    TYdbConnectionPtr YdbConnection;
+    IYdbConnection::TPtr YdbConnection;
     const TExternalStorageSettings StorageConfig;
     const TCheckpointStorageSettings Config;
 
 public:
     explicit TStateStorage(
         const TCheckpointStorageSettings& config,
-        const TYdbConnectionPtr& ydbConnection);
+        const IYdbConnection::TPtr& ydbConnection);
+
     ~TStateStorage() = default;
 
     TFuture<TIssues> Init() override;
@@ -356,7 +358,7 @@ private:
 
 TStateStorage::TStateStorage(
     const TCheckpointStorageSettings& config,
-    const TYdbConnectionPtr& ydbConnection)
+    const IYdbConnection::TPtr& ydbConnection)
     : YdbConnection(ydbConnection)
     , StorageConfig(config.GetExternalStorage())
     , Config(config)
@@ -364,27 +366,6 @@ TStateStorage::TStateStorage(
 }
 
 TFuture<TIssues> TStateStorage::Init() {
-    TIssues issues;
-
-    // TODO: list at first?
-    if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
-        //LOG_STREAMS_STORAGE_SERVICE_INFO("Creating directory: " << YdbConnection->TablePathPrefix);
-        auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
-        if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-
-            TStringStream ss;
-            ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
-            if (issues) {
-                ss << ", issues: ";
-                issues.PrintTo(ss);
-            }
-
-            //LOG_STREAMS_STORAGE_SERVICE_DEBUG(ss.Str());
-            return MakeFuture(std::move(issues));
-        }
-    }
-
     auto stateDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("task_id", EPrimitiveType::Uint64)
@@ -396,19 +377,25 @@ TFuture<TIssues> TStateStorage::Init() {
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
         .Build();
 
-    auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
-    if (!IsTableCreated(status)) {
-        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+    auto promise = NThreading::NewPromise<TIssues>();
 
-        TStringStream ss;
-        ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
-        if (issues) {
-            ss << ", issues: ";
-            issues.PrintTo(ss);
-        }
-    }
-
-    return MakeFuture(std::move(issues));
+    CreateTable(YdbConnection, StatesTable, std::move(stateDesc))
+        .Subscribe([promise](const auto& f) mutable {
+            auto status = f.GetValue();
+            if (!IsTableCreated(status)) {
+                auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+                TStringStream ss;
+                ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
+                if (issues) {
+                    ss << ", issues: ";
+                    issues.PrintTo(ss);
+                }
+                promise.SetValue(std::move(issues));
+                return;
+            }
+            promise.SetValue(TIssues());
+        });
+    return promise.GetFuture();
 }
 
 EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext::TaskInfo& taskInfo) {
@@ -472,11 +459,11 @@ TFuture<IStateStorage::TSaveStateResult> TStateStorage::SaveState(
 
     auto context = MakeIntrusive<TContext>(
         NActors::TActivationContext::ActorSystem(),
-        YdbConnection->TablePathPrefix,
+        YdbConnection->GetTablePathPrefix(),
         taskId,
         graphId,
         checkpointId,
-        TMaybe<TSession>(), 
+        TMaybe<ISession::TPtr>(), 
         serializedState,
         type);
 
@@ -524,7 +511,7 @@ TFuture<IStateStorage::TGetStateResult> TStateStorage::GetState(
 
     auto context = MakeIntrusive<TContext>(
         NActors::TActivationContext::ActorSystem(),
-        YdbConnection->TablePathPrefix,
+        YdbConnection->GetTablePathPrefix(),
         taskIds,
         graphId,
         checkpointId);
@@ -561,16 +548,16 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
     const TCheckpointId& checkpointId) {
     auto context = MakeIntrusive<TCountStateContext>();
 
-    auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graphId, checkpointId, context, thisPtr = TIntrusivePtr(this)] (TSession session) {
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
+        [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointId, context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
-            NYdb::TParamsBuilder paramsBuilder;
-            paramsBuilder.AddParam("$graph_id").String(graphId).Build();
-            paramsBuilder.AddParam("$coordinator_generation").Uint64(checkpointId.CoordinatorGeneration).Build();
-            paramsBuilder.AddParam("$seq_no").Uint64(checkpointId.SeqNo).Build();
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
 
-            auto params = paramsBuilder.Build();
+            paramsBuilder->AddParam("$graph_id").String(graphId).Build();
+            paramsBuilder->AddParam("$coordinator_generation").Uint64(checkpointId.CoordinatorGeneration).Build();
+            paramsBuilder->AddParam("$seq_no").Uint64(checkpointId.SeqNo).Build();
+
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
@@ -586,10 +573,10 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
                 SELECT COUNT(*) as cnt FROM $tasks;
             )", prefix.c_str(), StatesTable);
 
-            auto future = session.ExecuteDataQuery(
+            auto future = session->ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -615,24 +602,24 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 }
 
 TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
-    return YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, context, thisPtr = TIntrusivePtr(this)] (TSession session) {
-            NYdb::TParamsBuilder paramsBuilder;
-            paramsBuilder.AddParam("$graph_id").String(context->GraphId).Build();
-            paramsBuilder.AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
-            paramsBuilder.AddParam("$seq_no").Uint64(context->CheckpointId.SeqNo).Build();
+    return YdbConnection->GetTableClient()->RetryOperation(
+        [prefix = YdbConnection->GetTablePathPrefix(), context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+
+            paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
+            paramsBuilder->AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
+            paramsBuilder->AddParam("$seq_no").Uint64(context->CheckpointId.SeqNo).Build();
 
             if (context->Tasks.size() == 1) {
-                paramsBuilder.AddParam("$task_id").Uint64(context->Tasks[0].TaskId).Build();
+                paramsBuilder->AddParam("$task_id").Uint64(context->Tasks[0].TaskId).Build();
             } else {
-                auto& taskIdsParam = paramsBuilder.AddParam("$task_ids").BeginList();
+                auto& taskIdsParam = paramsBuilder->AddParam("$task_ids").BeginList();
                 for (const auto& taskInfo : context->Tasks) {
                     taskIdsParam.AddListItem().Uint64(taskInfo.TaskId);
                 }
                 taskIdsParam.EndList().Build();
             }
 
-            auto params = paramsBuilder.Build();
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
@@ -651,10 +638,10 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
                 StatesTable,
                 context->Tasks.size() == 1 ? "task_id = $task_id" : "task_id IN $task_ids");
 
-            auto future = session.ExecuteDataQuery(
+            auto future = session->ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -699,20 +686,18 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(StorageConfig.GetClientTimeout() * multiplier)
+        .ClientTimeout(StorageConfig.GetClientTimeout() == TDuration::Max() ? TDuration::Max() : StorageConfig.GetClientTimeout() * multiplier)
         .OperationTimeout(StorageConfig.GetOperationTimeout() * multiplier)
         .CancelAfter(StorageConfig.GetCancelAfter() * multiplier);
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
-    auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graphId, thisPtr = TIntrusivePtr(this)] (TSession session) {
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
+        [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
-            NYdb::TParamsBuilder paramsBuilder;
-            paramsBuilder.AddParam("$graph_id").String(graphId).Build();
-
-            auto params = paramsBuilder.Build();
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+            paramsBuilder->AddParam("$graph_id").String(graphId).Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -725,10 +710,10 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
                 WHERE graph_id = $graph_id;
             )", prefix.c_str(), StatesTable);
 
-            auto future = session.ExecuteDataQuery(
+            auto future = session->ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
@@ -744,16 +729,14 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 TFuture<TIssues> TStateStorage::DeleteCheckpoints(
     const TString& graphId,
     const TCheckpointId& checkpointUpperBound) {
-    auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (TSession session) {
+    auto future = YdbConnection->GetTableClient()->RetryOperation(
+        [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
-            NYdb::TParamsBuilder paramsBuilder;
-            paramsBuilder.AddParam("$graph_id").String(graphId).Build();
-            paramsBuilder.AddParam("$coordinator_generation").Uint64(checkpointUpperBound.CoordinatorGeneration).Build();
-            paramsBuilder.AddParam("$seq_no").Uint64(checkpointUpperBound.SeqNo).Build();
-
-            auto params = paramsBuilder.Build();
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+            paramsBuilder->AddParam("$graph_id").String(graphId).Build();
+            paramsBuilder->AddParam("$coordinator_generation").Uint64(checkpointUpperBound.CoordinatorGeneration).Build();
+            paramsBuilder->AddParam("$seq_no").Uint64(checkpointUpperBound.SeqNo).Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -770,10 +753,10 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
                         (coordinator_generation = $coordinator_generation AND seq_no < $seq_no));
             )", prefix.c_str(), StatesTable);
 
-            auto future = session.ExecuteDataQuery(
+            auto future = session->ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings(DeleteStateTimeoutMultiplier));
 
             return future.Apply(
@@ -787,8 +770,8 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
 }
 
 TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
-    return YdbConnection->TableClient.RetryOperation(
-        [context, this] (TSession session) {
+    return YdbConnection->GetTableClient()->RetryOperation(
+        [context, this] (ISession::TPtr session) {
             context->Session = session;
             auto future = SelectState(context);
             return future.Apply(
@@ -804,19 +787,18 @@ TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
 }
 
 TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context) {
-    NYdb::TParamsBuilder paramsBuilder;
+    auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
     LOG_STORAGE_DEBUG(context, "SelectState: task_id " << taskInfo.TaskId << ", seq_no " 
         << taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo << ", blob_seq_num " << taskInfo.CurrentProcessingRow);
-    paramsBuilder.AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
-    paramsBuilder.AddParam("$graph_id").String(context->GraphId).Build();
-    paramsBuilder.AddParam("$coordinator_generation").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.CoordinatorGeneration).Build();
-    paramsBuilder.AddParam("$seq_no").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo).Build();
-    paramsBuilder.AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
-
-    auto params = paramsBuilder.Build();
+    paramsBuilder->AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
+    paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
+    paramsBuilder->AddParam("$coordinator_generation").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.CoordinatorGeneration).Build();
+    paramsBuilder->AddParam("$seq_no").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo).Build();
+    paramsBuilder->AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
 
     auto query = Sprintf(R"(
         --!syntax_v1
@@ -838,32 +820,31 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
         (taskInfo.CurrentProcessingRow == 0) ? " OR blob_seq_num is NULL" : "");
 
     Y_ENSURE(context->Session, "Session is empty");
-    return context->Session->ExecuteDataQuery(
+    return (*context->Session)->ExecuteDataQuery(
         query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-        params,
+        TTxControl::BeginAndCommitTx(),
+        paramsBuilder,
         GetExecDataQuerySettings());
 }
 
 TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 
-    return YdbConnection->TableClient.RetryOperation(
-        [context, thisPtr = TIntrusivePtr(this)] (TSession session) {
+    return YdbConnection->GetTableClient()->RetryOperation(
+        [context, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
             context->Session = session;
             // publish nodes
-            NYdb::TParamsBuilder paramsBuilder;
+            auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+
             Y_ENSURE(context->Tasks.size() == 1, "Tasks size != 1");
             auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
-            paramsBuilder.AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
-            paramsBuilder.AddParam("$graph_id").String(context->GraphId).Build();
-            paramsBuilder.AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
-            paramsBuilder.AddParam("$seq_no").Uint64(context->CheckpointId.SeqNo).Build();
-            paramsBuilder.AddParam("$blob").String(taskInfo.Rows.front()).Build();
-            paramsBuilder.AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
-            paramsBuilder.AddParam("$type").Uint8(static_cast<ui8>(taskInfo.Type)).Build();
-
-            auto params = paramsBuilder.Build();
+            paramsBuilder->AddParam("$task_id").Uint64(taskInfo.TaskId).Build();
+            paramsBuilder->AddParam("$graph_id").String(context->GraphId).Build();
+            paramsBuilder->AddParam("$coordinator_generation").Uint64(context->CheckpointId.CoordinatorGeneration).Build();
+            paramsBuilder->AddParam("$seq_no").Uint64(context->CheckpointId.SeqNo).Build();
+            paramsBuilder->AddParam("$blob").String(taskInfo.Rows.front()).Build();
+            paramsBuilder->AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
+            paramsBuilder->AddParam("$type").Uint8(static_cast<ui8>(taskInfo.Type)).Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -883,10 +864,10 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 
             Y_ENSURE(context->Session, "Session is empty");
 
-            auto future = context->Session->ExecuteDataQuery(
+            auto future = (*context->Session)->ExecuteDataQuery(
                 query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                params,
+                TTxControl::BeginAndCommitTx(),
+                paramsBuilder,
                 thisPtr->GetExecDataQuerySettings());
 
             return future.Apply(
@@ -1001,7 +982,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
 
 TStateStoragePtr NewYdbStateStorage(
     const TCheckpointStorageSettings& config,
-    const TYdbConnectionPtr& ydbConnection) {
+    const IYdbConnection::TPtr& ydbConnection) {
     return new TStateStorage(config, ydbConnection);
 }
 

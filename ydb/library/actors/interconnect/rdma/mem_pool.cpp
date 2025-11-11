@@ -65,20 +65,7 @@ namespace NInterconnect::NRdma {
     }
 
     ~TChunk() {
-        MemPool->NotifyDealocated();
-        if (Empty()) {
-            return;
-        }
-        auto addr = MRs.front()->addr;
-#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
-        for (auto& m: MRs) {
-            ibv_dereg_mr(m);
-        }
-#else
-        free(MRs.front());
-#endif
-        freeMemory(addr);
-        MRs.clear();
+        MemPool->DealocateMr(MRs);
     }
 
     ibv_mr* GetMr(size_t deviceIndex) noexcept {
@@ -265,30 +252,36 @@ namespace NInterconnect::NRdma {
 
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
         std::vector<ibv_mr*> res;
+
+// In case of windows windows we can't use ibv_dereg_mr - compile error
+// In case of linux but absent librray we can't register memory, but we need mem pool for tests - emulate registration
 #ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
-        res.reserve(ctxs.size());
-        for (const auto& [_, ctx]: ctxs) {
-            ibv_mr* mr = ibv_reg_mr(
-                ctx->GetProtDomain(), addr, size,
-                IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-            );
-            if (!mr) {
-                for (ibv_mr* tmp : res) {
-                    ibv_dereg_mr(tmp);
+        if (!ctxs.empty()) {
+            res.reserve(ctxs.size());
+            for (const auto& [_, ctx]: ctxs) {
+                ibv_mr* mr = ibv_reg_mr(
+                    ctx->GetProtDomain(), addr, size,
+                    IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+                );
+                if (!mr) {
+                    for (ibv_mr* tmp : res) {
+                        ibv_dereg_mr(tmp);
+                    }
+                    return {};
                 }
-                return {};
+                res.push_back(mr);
             }
-            res.push_back(mr);
-        }
-#else
-        Y_UNUSED(ctxs);
-        // Just emulate registration if platform is not support rdma code compilation.
-        // Probably ibdrv should be fixed to support compilation on windows 
-        struct ibv_mr* dummy = (struct ibv_mr*)calloc(1, sizeof(struct ibv_mr));
-        dummy->addr = addr;
-        dummy->length = size;
-        res.push_back(dummy);
+        } else
 #endif
+        {
+#ifdef MEM_POOL_DISABLE_RDMA_SUPPORT
+        Y_UNUSED(ctxs);
+#endif
+            struct ibv_mr* dummy = (struct ibv_mr*)calloc(1, sizeof(struct ibv_mr));
+            dummy->addr = addr;
+            dummy->length = size;
+            res.push_back(dummy);
+        }
         return res;
     }
 
@@ -316,10 +309,15 @@ namespace NInterconnect::NRdma {
         return counters;
     }
 
+    static const NInterconnect::NRdma::NLinkMgr::TCtxsMap& GetAllCtxs() {
+        NInterconnect::NRdma::NLinkMgr::Init();
+        return NInterconnect::NRdma::NLinkMgr::GetAllCtxs();
+    }
+
     class TMemPoolBase: public IMemPool {
     public:
         TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter)
-            : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
+            : Ctxs(GetAllCtxs())
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
@@ -356,10 +354,28 @@ namespace NInterconnect::NRdma {
             return MakeIntrusive<TChunk>(std::move(mrs), this);
         }
 
-        void NotifyDealocated() noexcept override {
-            const std::lock_guard<std::mutex> lock(Mutex);
-            AllocatedChunks--;
-            AllocatedChunksCounter->Dec();
+        void DealocateMr(std::vector<ibv_mr*>& mrs) noexcept override {
+            {
+                const std::lock_guard<std::mutex> lock(Mutex);
+                AllocatedChunks--;
+                AllocatedChunksCounter->Dec();
+            }
+            if (mrs.empty()) {
+                return;
+            }
+            auto addr = mrs.front()->addr;
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
+            if (!Ctxs.empty()) {
+                for (auto& m: mrs) {
+                    ibv_dereg_mr(m);
+                }
+            } else
+#endif
+            {
+                free(mrs.front());
+            }
+            freeMemory(addr);
+            mrs.clear();
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;

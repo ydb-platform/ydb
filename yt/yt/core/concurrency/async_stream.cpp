@@ -792,8 +792,12 @@ private:
     TSharedRef OnPrefetched()
     {
         auto guard = Guard(SpinLock_);
-        YT_ASSERT(PrefetchedSize_ != 0);
-        return CopyPrefetched(&guard);
+        if (PrefetchedSize_ >  0) {
+            return CopyPrefetched(&guard);
+        }
+        Error_.ThrowOnError();
+        YT_ASSERT(EndOfStream_);
+        return TSharedRef();
     }
 
     void AppendPrefetched(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<size_t>& result)
@@ -1025,9 +1029,11 @@ IAsyncZeroCopyInputStreamPtr CreateConcurrentAdapter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PipeInputToOutput(
-    const IAsyncZeroCopyInputStreamPtr& input,
-    const IAsyncOutputStreamPtr& output)
+namespace {
+
+void DoPipeInputToOutput(
+    const auto& input,
+    const auto& output)
 {
     while (true) {
         auto asyncBlock = input->Read();
@@ -1038,6 +1044,34 @@ void PipeInputToOutput(
         }
         WaitFor(output->Write(block))
             .ThrowOnError();
+    }
+}
+
+} // namespace
+
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncOutputStreamPtr& output)
+{
+    DoPipeInputToOutput(input, output);
+}
+
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncZeroCopyOutputStreamPtr& output)
+{
+    DoPipeInputToOutput(input, output);
+}
+
+void DrainInput(const IAsyncZeroCopyInputStreamPtr& input)
+{
+    while (true) {
+        auto asyncBlock = input->Read();
+        auto block = WaitFor(asyncBlock)
+            .ValueOrThrow();
+        if (!block || block.Empty()) {
+            break;
+        }
     }
 }
 

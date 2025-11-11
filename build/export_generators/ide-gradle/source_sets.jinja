@@ -92,18 +92,11 @@
 {%- endmacro %}
 
 sourceSets {
-{%- if target.source_sets|length or target.resource_sets|length or proto_template -%}
+{%- if target.source_sets|length or target.resource_sets|length -%}
 {%-     set varprefix = MAIN_VARPREFIX %}
     main {
 {#- glue -#}
 {{ TargetSets(target, "main") }}
-
-{%-     if proto_template %}
-        java.srcDir(layout.buildDirectory.dir("generated/source/proto/main/java")).include("**/*")
-{%-         if target.proto_grpc %}
-        java.srcDir(layout.buildDirectory.dir("generated/source/proto/main/grpc")).include("**/*")
-{%-         endif -%}
-{%-     endif %}
     }
 {%  endif -%}
 

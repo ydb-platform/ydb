@@ -6,7 +6,6 @@
 
 import os
 import tempfile
-import json
 import argparse
 
 
@@ -22,11 +21,8 @@ def log(msg: str):
     print(msg)
 
 
-def do_compare(opts):
-    if opts.ya_make_command:
-        print('--ya-make-command not set')
-        exit(1)
-    ya = opts.ya_make_command.split(' ')[0]
+def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: str, head_commit: str) -> None:
+    ya = ya_make_command.split(' ')[0]
 
     workdir = os.getenv('workdir')
     if not workdir:
@@ -36,26 +32,41 @@ def do_compare(opts):
     log('Checkout base commit...')
     exec(f'git checkout {opts.base_commit}')
     log('Build graph for base commit...')
-    exec(f'{opts.ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
+    exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
 
     log('Checkout head commit...')
     exec(f'git checkout {opts.head_commit}')
     log('Build graph for head commit...')
-    exec(f'{opts.ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
+    exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 
     log('Generate diff graph...')
-    exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {opts.result_graph_path} --dump-uids {workdir}/uids.json')
+    exec(f'{ya} tool ygdiff --old {workdir}/graph_base.json --new {workdir}/graph_head.json --cut {graph_path} --dump-uids {workdir}/uids.json --no-cache-for-affected-nodes')
 
     log('Generate diff context...')
-    exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {opts.result_context_path} {workdir}/uids.json {opts.result_graph_path}')
-    exit(0)
+    exec(f'{ya} tool context_difference {workdir}/context_base.json {workdir}/context_head.json {context_path} {workdir}/uids.json {graph_path}')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--result-graph-path', '-g', type=str, help='Path for result graph', dest='graph_path', required=True)
-    parser.add_argument('--result-context-path', '-c', type=str, help='Path for result context', dest='context_path', required=True)
-    parser.add_argument('--ya-make-command', '-y', type=str, help='Ya make command', dest='ya_make_command', required=True)
+    parser.add_argument(
+        '--result-graph-path', '-g', type=str, dest='result_graph_path', required=True,
+        help='Path to result graph'
+    )
+    parser.add_argument(
+        '--result-context-path', '-c', type=str, dest='result_context_path', required=True,
+        help='Path to result context'
+    )
+    parser.add_argument(
+        '--ya-make-command', '-y', type=str, dest='ya_make_command', required=True,
+        help='Ya make command'
+    )
     parser.add_argument(dest='base_commit', help='Base commit')
     parser.add_argument(dest='head_commit', help='Head commit')
-    do_compare(parser.parse_args())
+    opts = parser.parse_args()
+    main(
+        ya_make_command=opts.ya_make_command,
+        graph_path=opts.result_graph_path,
+        context_path=opts.result_context_path,
+        base_commit=opts.base_commit,
+        head_commit=opts.head_commit
+    )

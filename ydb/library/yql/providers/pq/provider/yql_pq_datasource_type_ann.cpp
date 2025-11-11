@@ -298,6 +298,19 @@ public:
             }
         }
 
+        if (const auto maybeSkipJsonErrorsSetting = FindSetting(settings, SkipJsonErrors)) {
+            const auto value = maybeSkipJsonErrorsSetting.Cast().Ptr();
+            if (!EnsureAtom(*value, ctx)) {
+                return TStatus::Error;
+            }
+            bool skipJsonErrorsSetting;
+            if (!TryFromString<bool>(value->Content(), skipJsonErrorsSetting)) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder()
+                    << "Expected bool, but got: " << value->Content()));
+                return TStatus::Error;
+            }
+        }
+
         if (const auto maybeSharedReadingSetting = FindSetting(settings, SharedReading)) {
             const auto value = maybeSharedReadingSetting.Cast().Ptr();
             if (!EnsureAtom(*value, ctx)) {

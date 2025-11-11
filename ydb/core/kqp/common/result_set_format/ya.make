@@ -13,7 +13,6 @@ PEERDIR(
     ydb/library/yql/dq/runtime
     yql/essentials/minikql
     yql/essentials/public/udf
-    yql/essentials/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

@@ -50,6 +50,7 @@ private:
     bool ParseTableStoreFeatures(std::map<TString, TDeferredAtom>& result, const TRule_alter_table_store_action& actions);
     bool AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params);
     bool AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params);
+    bool AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 

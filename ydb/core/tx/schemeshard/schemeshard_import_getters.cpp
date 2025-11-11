@@ -44,10 +44,11 @@ struct TGetterSettings {
 
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings));
-        settings.Retries = importInfo->Settings.number_of_retries();
-        if (importInfo->Settings.has_encryption_settings()) {
-            settings.Key = NBackup::TEncryptionKey(importInfo->Settings.encryption_settings().symmetric_key().key());
+        Y_ABORT_UNLESS(importInfo->Kind == TImportInfo::EKind::S3);
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->GetS3Settings()));
+        settings.Retries = importInfo->GetS3Settings().number_of_retries();
+        if (importInfo->GetS3Settings().has_encryption_settings()) {
+            settings.Key = NBackup::TEncryptionKey(importInfo->GetS3Settings().encryption_settings().symmetric_key().key());
         }
         settings.IV = std::move(iv);
         return settings;
@@ -772,8 +773,8 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , NeedDownloadPermissions(!ImportInfo->Settings.no_acl())
-        , NeedValidateChecksums(!ImportInfo->Settings.skip_checksum_validation())
+        , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
+        , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
     }
 
@@ -851,15 +852,15 @@ private:
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/metadata.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/metadata.json";
     }
 
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/mapping.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/mapping.json";
     }
 
     static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/metadata.json";
+        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/metadata.json";
     }
 
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {

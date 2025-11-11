@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -152,27 +153,29 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     task.SetTableName(dstPath.LeafName());
     *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), *item.Table);
 
-    if (importInfo.Settings.has_encryption_settings()) {
-        auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
-        *taskEncryptionSettings.MutableSymmetricKey() = importInfo.Settings.encryption_settings().symmetric_key();
-        if (item.ExportItemIV) {
-            taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
-        }
-    }
-
     switch (importInfo.Kind) {
     case TImportInfo::EKind::S3:
         {
-            task.SetNumberOfRetries(importInfo.Settings.number_of_retries());
-            auto& restoreSettings = *task.MutableS3Settings();
-            restoreSettings.SetEndpoint(importInfo.Settings.endpoint());
-            restoreSettings.SetBucket(importInfo.Settings.bucket());
-            restoreSettings.SetAccessKey(importInfo.Settings.access_key());
-            restoreSettings.SetSecretKey(importInfo.Settings.secret_key());
-            restoreSettings.SetObjectKeyPattern(importInfo.GetItemSrcPrefix(itemIdx));
-            restoreSettings.SetUseVirtualAddressing(!importInfo.Settings.disable_virtual_addressing());
+            auto settings = importInfo.GetS3Settings();
+            
+            if (settings.has_encryption_settings()) {
+                auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
+                *taskEncryptionSettings.MutableSymmetricKey() = settings.encryption_settings().symmetric_key();
+                if (item.ExportItemIV) {
+                    taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
+                }
+            }
 
-            switch (importInfo.Settings.scheme()) {
+            task.SetNumberOfRetries(settings.number_of_retries());
+            auto& restoreSettings = *task.MutableS3Settings();
+            restoreSettings.SetEndpoint(settings.endpoint());
+            restoreSettings.SetBucket(settings.bucket());
+            restoreSettings.SetAccessKey(settings.access_key());
+            restoreSettings.SetSecretKey(settings.secret_key());
+            restoreSettings.SetObjectKeyPattern(importInfo.GetItemSrcPrefix(itemIdx));
+            restoreSettings.SetUseVirtualAddressing(!settings.disable_virtual_addressing());
+
+            switch (settings.scheme()) {
             case Ydb::Import::ImportFromS3Settings::HTTP:
                 restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
                 break;
@@ -183,12 +186,26 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
                 Y_ABORT("Unknown scheme");
             }
 
-            if (const auto region = importInfo.Settings.region()) {
+            if (const auto region = settings.region()) {
                 restoreSettings.SetRegion(region);
             }
 
             if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
-                task.SetValidateChecksums(!importInfo.Settings.skip_checksum_validation());
+                task.SetValidateChecksums(!importInfo.GetSkipChecksumValidation());
+            }
+        }
+        break;
+
+    case TImportInfo::EKind::FS:
+        {
+            auto settings = importInfo.GetFsSettings();
+            task.SetNumberOfRetries(settings.number_of_retries());
+            auto& restoreSettings = *task.MutableFSSettings();
+            restoreSettings.SetBasePath(settings.base_path());
+            restoreSettings.SetPath(importInfo.GetItemSrcPrefix(itemIdx));
+
+            if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
+                task.SetValidateChecksums(!importInfo.GetSkipChecksumValidation());
             }
         }
         break;

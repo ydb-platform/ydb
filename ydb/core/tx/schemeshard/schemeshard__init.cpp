@@ -4541,9 +4541,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                 rowset.GetValue<Schema::Imports::DomainPathLocalId>());
                     TString peerName = rowset.GetValueOrDefault<Schema::Imports::PeerName>();
 
-                    Ydb::Import::ImportFromS3Settings settings;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(settings, rowset.GetValue<Schema::Imports::Settings>()));
-
+                    TString settings = rowset.GetValue<Schema::Imports::Settings>();
                     TImportInfo::TPtr importInfo = new TImportInfo(id, uid, kind, settings, domainPathId, peerName);
 
                     if (rowset.HaveValue<Schema::Imports::UserSID>()) {

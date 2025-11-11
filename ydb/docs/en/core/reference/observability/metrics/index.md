@@ -197,13 +197,3 @@ The following table shows aggregated partition metrics for the topic. The maximu
 | `topic.partition.write.bytes_per_hour_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last hour, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
 | `topic.partition.write.bytes_per_minute_max`<br/>`GAUGE`, bytes | The maximum number of bytes written in the last minute, across all partitions.<br/>Label:<br/>- _topic_ – topic name |
 | `topic.partition.write.idle_milliseconds_max`<br/>`GAUGE`, milliseconds | Maximum time the partition is idle for recording.br/>Label:<br/>- _topic_ – topic name |
-
-## Resource pool  metrics {#resource_pools}
-
-| Metric name<br/>Type<br/>units of measurement | Description<br/>Labels |
-| ----- | ----- |
-| `kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, pieces | Average database load, based on this metric `DATABASE_LOAD_CPU_THRESHOLD` works |
-| `kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, pieces | Limit on the number of simultaneously running requests |
-| `kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, pieces | The current number of concurrent requests. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |
-| `kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, pieces | The size of the queue of requests waiting to be executed |
-| `kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, pieces | The number of requests waiting in the execution queue. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |

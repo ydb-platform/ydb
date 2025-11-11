@@ -43,6 +43,7 @@ public:
     ui32 Requested = 0;
     ui32 Received = 0;
 
+    TVector<TVector<TString>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     NKikimrClusterStateInfoProto::TClusterStateInfo State;
     TInstant Started;
@@ -81,6 +82,7 @@ public:
             node->SetLocation(ni.Location.ToString());
             SendRequest(i);
         }
+        Counters.resize(Nodes.size());
         RequestCounters();
         Period = TDuration::Seconds(GetProtoRequest()->period_seconds());
         if (Period > TDuration::Zero()) {
@@ -132,7 +134,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        State.MutableNodeInfos(idx)->AddCountersInfo(std::move(ev->Get()->Record.GetResponse()));
+        Counters[idx].push_back(std::move(ev->Get()->Record.GetResponse()));
         NodeStateInfoReceived(idx);
     }
 
@@ -229,12 +231,24 @@ public:
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
-        Ydb::Monitoring::ClusterStateResult result;
         google::protobuf::util::JsonPrintOptions jsonOpts;
         jsonOpts.add_whitespace = true;
         TString data;
         google::protobuf::util::MessageToJsonString(State, &data, jsonOpts);
-        result.Setresult(data);
+        Ydb::Monitoring::ClusterStateResult result;
+        auto* block = result.Addblocks();
+        block->Setname("cluster_state.json");
+        block->Setcontent(data);
+
+        for (ui32 node : xrange(Counters.size())) {
+            for (ui32 i : xrange(Counters[node].size())) {
+                auto* counterBlock = result.Addblocks();
+                TStringBuilder sb;
+                sb << "node_" << node << "_counters_" << i << ".json";
+                counterBlock->Setname(sb);
+                block->Setcontent(Counters[node][i]);
+            }
+        }
         operation.mutable_result()->PackFrom(result);
         return Reply(response);
     }

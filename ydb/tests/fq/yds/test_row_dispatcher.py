@@ -1183,7 +1183,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @pytest.mark.parametrize("use_binding", [False, True], ids=["with_option", "bindings"])
     def test_json_errors(self, kikimr, client, use_binding):
         connection_response = client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
-        self.init_topics("test_json_errors", create_input=True, create_output=True, partitions_count=1)
+        self.init_topics(f"test_json_errors_{use_binding}", create_input=True, create_output=True, partitions_count=1)
 
         time_type = ydb_value.Column(name="time", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.INT32))
         data_type = ydb_value.Column(name="data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))

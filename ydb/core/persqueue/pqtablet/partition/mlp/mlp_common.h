@@ -51,7 +51,7 @@ bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
 bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev);
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 
-NActors::IActor* CreateMessageEnricher(const NActors::TActorId& tabletActorId,
+NActors::IActor* CreateMessageEnricher(ui64 tabletId,
                                        const ui32 partitionId,
                                        const TString& consumerName,
                                        std::deque<TReadResult>&& replies);
@@ -61,7 +61,6 @@ struct TDLQMoverSettings {
     TString Database;
     ui64 TabletId;
     ui32 PartitionId;
-    TActorId PartitionActorId;
     TString ConsumerName;
     ui64 ConsumerGeneration;
     TString DestinationTopic;

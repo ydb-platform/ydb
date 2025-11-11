@@ -142,13 +142,15 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
 
+    LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << SeqNo);
+
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
     request->SetTopic(Settings.DestinationTopic);
 
     auto* write = request->AddCmdWrite();
     write->SetSourceId(ProducerId);
-    write->SetSeqNo(SeqNo);
+    write->SetSeqNo(SeqNo++);
     write->SetData(std::move(*result->MutableData()));
     write->SetCreateTimeMS(result->GetCreateTimestampMS());
     write->SetUncompressedSize(result->GetUncompressedSize());

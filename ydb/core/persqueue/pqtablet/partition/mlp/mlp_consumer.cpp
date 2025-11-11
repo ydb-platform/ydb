@@ -317,7 +317,7 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
-        RegisterWithSameMailbox(CreateMessageEnricher(TabletActorId, PartitionId, Config.GetName(), std::move(msgs)));
+        RegisterWithSameMailbox(CreateMessageEnricher(TabletId, PartitionId, Config.GetName(), std::move(msgs)));
     }
     ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
@@ -720,7 +720,6 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .Database = Database,
             .TabletId = TabletId,
             .PartitionId = PartitionId,
-            .PartitionActorId = PartitionActorId,
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
             .DestinationTopic = Config.GetDeadLetterQueue(),
@@ -734,15 +733,18 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvMLPDLQMoverResponse");
 
     if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-        LOG_W("Error moving messages to the DLQ queue: " << ev->Get()->ErrorDescription);
+        LOG_W("Error moving messages to the DLQ: " << ev->Get()->ErrorDescription);
     }
 
+    auto& moved = ev->Get()->MovedMessages;
+    LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
+
     DLQMoverActorId = {};
-    for (auto offset : ev->Get()->MovedMessages) {
+    for (auto offset : moved) {
         AFL_VERIFY(Storage->MarkDLQMoved(offset))("o", offset);
     }
 
-    DLQMovedMessageCount += ev->Get()->MovedMessages.size();
+    DLQMovedMessageCount += moved.size();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {

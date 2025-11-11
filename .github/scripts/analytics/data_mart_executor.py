@@ -11,12 +11,6 @@ from ydb_wrapper import YDBWrapper
 dir = os.path.dirname(__file__)
 repo_path = os.path.abspath(f"{dir}/../../../")
 
-def get_data_from_query_with_metadata(ydb_wrapper, query):
-    """Get data from query using ydb_wrapper and extract column metadata"""
-    # Use the new method that returns both data and column metadata in one call
-    results, column_types = ydb_wrapper.execute_scan_query_with_metadata(query)
-    return results, column_types
-
 def ydb_type_to_str(ydb_type, store_type = 'ROW'):
     # Converts YDB type to string representation for table creation
     is_optional = False
@@ -102,6 +96,13 @@ def main():
 
     table_path = args.table_path
     batch_size = 1000
+    
+    # Extract query_name from table_path (last part after /)
+    query_name = table_path.split('/')[-1]
+    
+    # Read SQL query from file
+    sql_query_path = os.path.join(repo_path, args.query_path)
+    print(f'Query found: {sql_query_path}')
 
     with YDBWrapper() as ydb_wrapper:
         # Check credentials
@@ -109,13 +110,11 @@ def main():
             return 1
 
         # Read SQL query from file
-        sql_query_path = os.path.join(repo_path, args.query_path)
-        print(f'Query found: {sql_query_path}')
         with open(sql_query_path, 'r') as file:
             sql_query = file.read()
 
         # Run query to get sample data and column types
-        results, column_types = get_data_from_query_with_metadata(ydb_wrapper, sql_query)
+        results, column_types = ydb_wrapper.execute_scan_query_with_metadata(sql_query, query_name)
         if not results:
             print("No data to create table from.")
             return
@@ -133,7 +132,7 @@ def main():
             column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, args.store_type.upper())
             column_types_map.add_column(column_name, column_type_obj)
         
-        ydb_wrapper.bulk_upsert_batches(table_path, results, column_types_map, batch_size)
+        ydb_wrapper.bulk_upsert_batches(table_path, results, column_types_map, batch_size, query_name)
         
         print('Data uploaded')
 

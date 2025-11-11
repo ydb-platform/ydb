@@ -212,6 +212,7 @@ struct TEvPQ {
         EvMLPChangeMessageDeadlineResponse,
         EvGetMLPConsumerStateRequest,
         EvGetMLPConsumerStateResponse,
+        EvMLPConsumerUpdateConfig,
         EvEnd
     };
 
@@ -1563,6 +1564,10 @@ struct TEvPQ {
     // Response from the MLP consumer. Only for testing purposes.
     //
     struct TEvGetMLPConsumerStateResponse : TEventLocal<TEvGetMLPConsumerStateResponse, EvGetMLPConsumerStateResponse> {
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
+
         struct TMessage {
             ui64 Offset;
             ui32 Status;
@@ -1572,6 +1577,21 @@ struct TEvPQ {
         };
 
         std::vector<TMessage> Messages;
+    };
+
+    struct TEvMLPConsumerUpdateConfig : TEventLocal<TEvMLPConsumerUpdateConfig, EvMLPConsumerUpdateConfig> {
+
+        TEvMLPConsumerUpdateConfig(
+            const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+            std::optional<TDuration> retentionPeriod
+        )
+            : Config(config)
+            , RetentionPeriod(retentionPeriod)
+        {
+        }
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
     };
 };
 

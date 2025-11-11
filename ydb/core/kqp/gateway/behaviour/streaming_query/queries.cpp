@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1704,8 +1703,8 @@ private:
         if (!State.GetPreviousExecutionIds().empty() && !StateLoaded) {
             StateLoaded = true;
             const auto& executionId = *State.GetPreviousExecutionIds().rbegin();
-            const auto& fetcherId = Register(CreateGetScriptExecutionPhysicalGraphActor(SelfId(), Context.GetDatabase(), executionId));
-            LOG_D("Load previous query state from execution: " << executionId << " with fetcher " << fetcherId);
+            SendToKqpProxy(std::make_unique<TEvGetScriptExecutionPhysicalGraph>(Context.GetDatabase(), executionId));
+            LOG_D("Load previous query state from execution: " << executionId);
             return;
         }
 
@@ -2182,7 +2181,7 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_D("Bootstrap. Fetch config");
+        LOG_D("Bootstrap");
 
         TBase::Become(&TDerived::StateFunc);
         DescribeQuery("start handling");

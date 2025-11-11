@@ -29,13 +29,6 @@ Y_UNIT_TEST(Reload) {
 
     Cerr << ">>>>> BEGIN DESCRIBE" << Endl;
 
-    ui64 tabletId;
-    {
-        CreateDescriberActor(runtime, "/Root", "/Root/topic1");
-        auto result = GetDescriberResponse(runtime);
-        tabletId = result->Topics["/Root/topic1"].Info->PartitionGraph->GetPartition(0)->TabletId;
-    }
-
     Sleep(TDuration::Seconds(2));
     
     Cerr << ">>>>> BEGIN READ" << Endl;
@@ -82,20 +75,146 @@ Y_UNIT_TEST(Reload) {
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     }
 
-    Cerr << ">>>>> BEGIN REBOOT " << tabletId << Endl;
-
-    ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
+    Cerr << ">>>>> BEGIN REBOOT " << Endl;
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
 
     Sleep(TDuration::Seconds(2));
 
-    ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(),
-        new NKikimr::TEvPQ::TEvGetMLPConsumerStateRequest("/Root/topic1", "mlp-consumer", 0));
-    auto result = runtime.GrabEdgeEvent<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse>();
+    auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
 
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Locked);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, TStorage::EMessageStatus::Unprocessed);
+}
+
+Y_UNIT_TEST(AlterConsumer) {
+    auto setup = CreateSetup();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer());
+
+    Sleep(TDuration::Seconds(1));
+
+    {
+        auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+
+        UNIT_ASSERT_VALUES_EQUAL(result->RetentionPeriod.value(), TDuration::Seconds(3));
+        UNIT_ASSERT_VALUES_EQUAL(result->Config.GetDefaultProcessingTimeoutSeconds(), 13);
+        UNIT_ASSERT_VALUES_EQUAL(result->Config.GetMaxProcessingAttempts(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(result->Config.GetDeadLetterPolicy()),
+            ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE));
+    }
+
+    client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+            .SetRetentionPeriod(TDuration::Seconds(103))
+            .BeginAlterConsumer("mlp-consumer")
+                .DefaultProcessingTimeout(TDuration::Seconds(113))
+                .BeginAlterDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(117)
+                    .EndCondition()
+                    .SetMoveAction("dlq-queue")
+                .EndAlterDeadLetterPolicy()
+            .EndAlterConsumer());
+
+    Sleep(TDuration::Seconds(1));
+
+    {
+        auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+
+        UNIT_ASSERT_VALUES_EQUAL(result->RetentionPeriod.value(), TDuration::Seconds(103));
+        UNIT_ASSERT_VALUES_EQUAL(result->Config.GetDefaultProcessingTimeoutSeconds(), 113);
+        UNIT_ASSERT_VALUES_EQUAL(result->Config.GetMaxProcessingAttempts(), 117);
+        UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(result->Config.GetDeadLetterPolicy()),
+            ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+    }
+}
+
+Y_UNIT_TEST(RetentionStorage) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionStorageMb(8)
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+            .EndAddConsumer());
+
+    Sleep(TDuration::Seconds(1));
+
+    WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
+
+    Sleep(TDuration::Seconds(1));
+
+    {
+        // check that message with offset 0 wasn`t removed by retention
+        CreateReaderActor(runtime, TReaderSettings{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+    }
+}
+
+Y_UNIT_TEST(RetentionStorageAfterReload) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionStorageMb(8)
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+            .EndAddConsumer());
+
+    Sleep(TDuration::Seconds(1));
+
+    WriteMany(setup, "/Root/topic1", 0, 1_MB, 25);
+
+    Cerr << ">>>>> BEGIN REBOOT " << Endl;
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+    Sleep(TDuration::Seconds(2));
+
+    {
+        // check that message with offset 0 wasn`t removed by retention
+        CreateReaderActor(runtime, TReaderSettings{
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+    }
 }
 
 }

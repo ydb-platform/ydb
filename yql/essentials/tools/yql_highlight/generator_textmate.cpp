@@ -4,6 +4,7 @@
 
 #include <contrib/libs/re2/re2/re2.h>
 
+#include <library/cpp/iterator/enumerate.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/on_disk/tar_archive/archive_writer.h>
@@ -100,13 +101,13 @@ TString ToTextMateGroup(EUnitKind kind) {
     }
 }
 
-TString ToTextMateName(EUnitKind kind) {
-    return ToString(kind);
+TString ToTextMateName(EUnitKind kind, size_t index) {
+    return ToString(kind) + ToString(index);
 }
 
-NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, const TRangePattern& range) {
+NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, size_t index, const TRangePattern& range) {
     return NTextMate::TMatcher{
-        .Name = ToTextMateName(unit.Kind),
+        .Name = ToTextMateName(unit.Kind, index),
         .Group = ToTextMateGroup(unit.Kind),
         .Pattern = NTextMate::TRange{
             .Begin = RE2::QuoteMeta(range.BeginPlain),
@@ -116,9 +117,9 @@ NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, const TRangePatt
     };
 }
 
-NTextMate::TMatcher ToTextMatePattern(const TUnit& unit, const NSQLTranslationV1::TRegexPattern& pattern) {
+NTextMate::TMatcher ToTextMatePattern(const TUnit& unit, size_t index, const NSQLTranslationV1::TRegexPattern& pattern) {
     return NTextMate::TMatcher{
-        .Name = ToTextMateName(unit.Kind),
+        .Name = ToTextMateName(unit.Kind, index),
         .Group = ToTextMateGroup(unit.Kind),
         .Pattern = ToTextMateRegex(unit, pattern),
     };
@@ -133,16 +134,16 @@ NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
         .FileType = highlighting.Extension,
     };
 
-    for (const TUnit& unit : highlighting.Units) {
+    for (const auto& [index, unit] : Enumerate(highlighting.Units)) {
         if (unit.IsCodeGenExcluded) {
             continue;
         }
 
         for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
-            language.Matchers.emplace_back(ToTextMatePattern(unit, pattern));
+            language.Matchers.emplace_back(ToTextMatePattern(unit, index, pattern));
         }
         for (const TRangePattern& range : unit.RangePatterns) {
-            language.Matchers.emplace_back(TextMateMultilinePattern(unit, range));
+            language.Matchers.emplace_back(TextMateMultilinePattern(unit, index, range));
         }
     }
 
@@ -173,6 +174,7 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
             json["end"] = pattern.End;
             if (auto embedded = EmbeddedLanguage(pattern)) {
                 json["patterns"].AppendValue(NJson::TJsonMap{{"include", *embedded}});
+                json.EraseValue("name"); // Do not use string as a default style
             }
             if (pattern.Escape) {
                 json["patterns"].AppendValue(NJson::TJsonMap{

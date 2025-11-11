@@ -729,6 +729,43 @@ class BaseTestBackupInFiles(object):
                 except Exception as e:
                     logger.error(f"Failed to drop table {full}: {e}")
 
+    def try_drop_table_from_backup(self, collection_name: str, backup_type: str, table_name: str, snapshot_index: int = -1) -> bool:
+        try:
+            # Get all snapshots in the collection
+            children = self.get_collection_children(collection_name)
+            if not children:
+                return False
+
+            # Filter snapshots by type
+            backup_suffix = f"_{backup_type.lower()}"
+            matching_snapshots = [
+                child for child in children
+                if child.endswith(backup_suffix)
+            ]
+
+            if not matching_snapshots:
+                return False
+
+            # Sort to ensure consistent ordering
+            matching_snapshots.sort()
+
+            # Get the requested snapshot
+            try:
+                target_snapshot = matching_snapshots[snapshot_index]
+            except IndexError:
+                return False
+
+            # Construct full path to the table in backup
+            table_basename = os.path.basename(table_name) if "/" in table_name else table_name
+            full_path = self.root_dir + f"/.backups/collections/{collection_name}/{target_snapshot}/{table_basename}"
+
+            with self.session_scope() as session:
+                session.execute_scheme(f"DROP TABLE `{full_path}`;")
+                return True
+
+        except Exception:
+            return False
+
     def _capture_schema(self, table_path: str):
         desc = self.driver.scheme_client.describe_path(table_path)
         cols = self._get_columns_from_scheme_entry(desc, path_hint=table_path)
@@ -824,6 +861,54 @@ class BaseTestBackupInFiles(object):
     def drop_backup_collection(self, collection_name: str) -> None:
         res = self._execute_yql(f"DROP BACKUP COLLECTION `{collection_name}`;")
         assert res.exit_code == 0, f"Failed to drop backup collection '{collection_name}': {res.std_err}"
+
+    def wait_for_changefeed_state(self, table_name: str, expected_enabled: int = 1,
+                                  timeout: float = 5.0, poll_interval: float = 0.3) -> Tuple[bool, int, int]:
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            has_cfs, enabled_count = self.has_changefeeds(table_name)
+
+            # Count total changefeeds by checking the output directly
+            r = yatest.common.execute(
+                [
+                    backup_bin(),
+                    "--endpoint",
+                    f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                    "--database",
+                    self.root_dir,
+                    "scheme",
+                    "describe",
+                    table_name
+                ],
+                check_exit_code=False,
+            )
+            out = (r.std_out or b"").decode("utf-8", "ignore")
+            total_cfs = out.count("_continuousBackupImpl")
+
+            if enabled_count == expected_enabled:
+                return True, total_cfs, enabled_count
+
+            time.sleep(poll_interval)
+
+        has_cfs, enabled_count = self.has_changefeeds(table_name)
+        r = yatest.common.execute(
+            [
+                backup_bin(),
+                "--endpoint",
+                f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                "--database",
+                self.root_dir,
+                "scheme",
+                "describe",
+                table_name
+            ],
+            check_exit_code=False,
+        )
+        out = (r.std_out or b"").decode("utf-8", "ignore")
+        total_cfs = out.count("_continuousBackupImpl")
+
+        return False, total_cfs, enabled_count
 
 
 # ================ BUILDER AND HELPER CLASSES ================
@@ -2167,3 +2252,100 @@ class TestBackupCollectionServiceObjectsCleanup(BaseTestBackupInFiles):
         )
         assert enabled_orders == 0, f"No enabled changefeeds expected on orders after cleanup, got {enabled_orders}"
         assert enabled_products == 0, f"No enabled changefeeds expected on products after cleanup, got {enabled_products}"
+
+
+class TestBackupCollectionServiceObjectsRotation(BaseTestBackupInFiles):
+    def test_service_schema_objects_cleanup_on_rotate(self):
+        # Setup
+        t_orders = "orders"
+        t_products = "products"
+        full_orders = f"/Root/{t_orders}"
+        full_products = f"/Root/{t_products}"
+
+        # Create initial tables
+        with self.session_scope() as session:
+            create_table_with_data(session, t_orders)
+            create_table_with_data(session, t_products)
+
+        collection_name = f"collection_{uuid.uuid4().hex[:8]}"
+        data_helper = DataHelper(self, t_orders)
+
+        with backup_lifecycle(self, collection_name, [full_orders, full_products]) as backup:
+
+            # Create backup collection with incremental enabled
+            backup.create_collection(incremental_enabled=True)
+
+            # Initial state - no changefeeds
+            has_cfs, enabled = self.has_changefeeds(t_orders)
+            assert not has_cfs, "Should have no changefeeds initially"
+
+            # Create first full backup
+            backup.stage(BackupType.FULL, "First full backup")
+            success, total, enabled = self.wait_for_changefeed_state(t_orders, expected_enabled=1)
+            assert success, f"Expected 1 enabled changefeed after full backup, got {enabled}"
+
+            # Create first incremental
+            data_helper.modify(add_rows=[(100, 1000, "inc1")])
+            backup.stage(BackupType.INCREMENTAL, "First incremental")
+
+            # Wait for old changefeed to be cleaned up (should happen after ~0.9s)
+            success, total, enabled = self.wait_for_changefeed_state(t_orders, expected_enabled=1, timeout=3.0)
+            assert success, f"Expected 1 enabled changefeed after incremental, got {enabled}"
+
+            success = self.try_drop_table_from_backup(
+                collection_name=collection_name,
+                backup_type="full",
+                table_name="orders",
+                snapshot_index=-1  # Latest full backup
+            )
+            assert success, "Expected ability to delete backup"
+
+            # Create second incremental
+            data_helper.modify(add_rows=[(101, 1001, "inc2")])
+            backup.stage(BackupType.INCREMENTAL, "Second incremental")
+
+            success, total, enabled = self.wait_for_changefeed_state(t_orders, expected_enabled=1, timeout=3.0)
+            assert success, f"Expected 1 enabled changefeed after second incremental, got {enabled}"
+
+            # Create third incremental
+            data_helper.modify(add_rows=[(102, 1002, "inc3")])
+            backup.stage(BackupType.INCREMENTAL, "Third incremental")
+
+            success, total_after_inc3, enabled = self.wait_for_changefeed_state(t_orders, expected_enabled=1, timeout=3.0)
+            assert success, f"Expected 1 enabled changefeed after third incremental, got {enabled}"
+
+            success = self.try_drop_table_from_backup(
+                collection_name=collection_name,
+                backup_type="incremental",
+                table_name="orders",
+                snapshot_index=-1  # Latest incr backup
+            )
+            assert success, "Expected ability to delete backup"
+
+            # Create second full backup - this might trigger the double-enabled bug
+            data_helper.modify(add_rows=[(103, 1003, "full2")])
+            backup.stage(BackupType.FULL, "Second full backup")
+
+            # Check immediately for the bug
+            has_cfs, enabled_immediate = self.has_changefeeds(t_orders)
+            if enabled_immediate > 1:
+                logger.error(f"{enabled_immediate} enabled changefeeds right after full backup!")
+
+            # Wait for proper state
+            success, total_after_full2, enabled = self.wait_for_changefeed_state(t_orders, expected_enabled=1, timeout=5.0)
+
+            if not success or enabled > 1:
+                logger.error(f"Changefeed rotation issue: {enabled} enabled changefeeds (expected 1)")
+            else:
+                logger.info(f"After second full backup: {total_after_full2} total changefeeds, {enabled} enabled")
+
+        self.drop_backup_collection(collection_name)
+
+        # Verify all changefeeds are removed
+        success, total, enabled = self.wait_for_changefeed_state(t_orders, expected_enabled=0, timeout=5.0)
+        has_cfs, _ = self.has_changefeeds(t_orders)
+        assert not has_cfs, "All changefeeds should be cleaned up after dropping collection"
+
+        # Check products table too
+        has_cfs_products, _ = self.has_changefeeds(t_products)
+        assert not has_cfs_products, "Products changefeeds should also be cleaned up"

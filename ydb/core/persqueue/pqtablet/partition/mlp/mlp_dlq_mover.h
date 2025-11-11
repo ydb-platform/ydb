@@ -62,8 +62,6 @@ private:
 
     bool FirstRequest = true;
 
-    ui64 NextPartNo = 0;
-    ui64 TotalPartNo = 0;
     ui64 WriteCookie = 0;
 };
 

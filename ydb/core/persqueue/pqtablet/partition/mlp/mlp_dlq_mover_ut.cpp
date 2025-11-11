@@ -106,7 +106,7 @@ Y_UNIT_TEST(MoveToDLQ_ShortMessage) {
     MoveToDLQ(NUnitTest::RandomString(1_KB));
 }
 
-Y_UNIT_TEST(MoveToDLQ_BigMessageMessage) {
+Y_UNIT_TEST(MoveToDLQ_BigMessage) {
     MoveToDLQ(NUnitTest::RandomString(31_MB));
 }
 

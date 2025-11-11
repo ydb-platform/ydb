@@ -186,12 +186,8 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    if (NextPartNo >= TotalPartNo) {
-        Processed.push_back(Queue.front());
-        Queue.pop_front();
-
-        NextPartNo = 0;
-    }
+    Processed.push_back(Queue.front());
+    Queue.pop_front();
 
     ProcessQueue();
 }

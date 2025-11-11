@@ -108,8 +108,6 @@ private:
     ui64 LastWALIndex = 0;
     bool HasSnapshot = false;
 
-    ui64 LastFetchedOffset = 0;
-    ui64 LastFetchedPartNo = 0;
     bool FirstPipeCacheRequest = true;
 };
 

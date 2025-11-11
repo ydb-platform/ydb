@@ -749,7 +749,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
     DLQMoverActorId = {};
     for (auto offset : moved) {
-        AFL_VERIFY(Storage->MarkDLQMoved(offset))("o", offset);
+        AFL_ENSURE(Storage->MarkDLQMoved(offset))("o", offset);
     }
 
     DLQMovedMessageCount += moved.size();

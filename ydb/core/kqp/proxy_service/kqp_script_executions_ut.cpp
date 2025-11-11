@@ -94,6 +94,8 @@ struct TScriptExecutionsYdbSetup {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(secureScriptExecutions);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         MsgBusPort = PortManager.GetPort(2134);
         GrpcPort = PortManager.GetPort(2135);

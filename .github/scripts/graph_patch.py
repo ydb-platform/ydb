@@ -17,7 +17,7 @@ def get_failed_uids(muted_path: str, report_path: str) -> set[str]:
     with open(report_path) as report_file:
         report = json.load(report_file).get('results', [])
     for record in report:
-        if record.get('status', 'OK') == 'OK' or record.get('suite', False):
+        if record.get('status', 'OK') != 'FAILED' or record.get('suite', False):
             continue
         if mute_check is not None:
             test_name = f'{record.get("path", "")} {record.get("name", "")}.{record.get("subtest_name", "")}'

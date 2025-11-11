@@ -447,6 +447,7 @@ message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
     optional string StorageId = 4;
+    optional bool InheritPortionStorage = 5;
 
     optional string ClassName = 39;
     oneof Implementation {
@@ -492,6 +493,7 @@ message TOlapIndexDescription {
     optional TCompressionOptions Compression = 3;
 
     optional string StorageId = 4;
+    optional bool InheritPortionStorage = 5;
 
     optional string ClassName = 40;
     oneof Implementation {

@@ -109,6 +109,7 @@ custom_runs-cmake_packages="list"
 custom_runs-cmake_packages-ITEM="dict"
 custom_runs-cmake_packages-name="str"
 custom_runs-cmake_packages-components="list"
+custom_runs-jar="str"
 
 javac-flags="list"
 kotlinc-flags="list"

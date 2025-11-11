@@ -2,6 +2,20 @@
 {#- Include macroses.jinja then include use_macroses.jinja not work! -#}
 {#- That is why all common macroses here -#}
 
+{%- macro PatchRootCommon(path, use_output_root) -%}
+{#- Replace (export_root / curdir) => (BINDIR), (export_root) ==> (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
+{%-     if use_output_root -%}
+{%-         set out_root = "$output_root" -%}
+{%-     else -%}
+{%-         set out_root = "$arcadia_root" -%}
+{%-     endif -%}
+"{{ path|replace(export_root + "/" + curdir, "$projectBuildDir")|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, out_root)|replace(output_root, out_root) }}"
+{%- endmacro -%}
+
+{%- macro PatchRootCodegen(path, output) -%}
+"{{ path|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{%- endmacro -%}
+
 {%- macro PatchRoots(arg, depend = false, output = "") -%}
 {#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $arcadia_root in Gradle -#}
 {%-     if depend -%}
@@ -22,23 +36,22 @@
 {%-             set bindir = false -%}
 {%-         endif -%}
 {%-         if bindir and current_target -%}
-{#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
+{%-             set path = export_root + "/" + bindir -%}
 {#-             "_" - don't patch output dir by codegen number -#}
 {%-             if output != "_" -%}
-"{{ (export_root + "/" + bindir)|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{{ PatchRootCodegen(path, output) }}
 {%-             else -%}
-"{{ (export_root + "/" + bindir)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{{ PatchRootCommon(path, true) }}
 {%-             endif -%}
 {%-         else -%}
 {%-             if output != "_" -%}
-"{{ arg|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{{ PatchRootCodegen(arg, output) }}
 {%-             else -%}
-"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{{ PatchRootCommon(arg, true) }}
 {%-             endif -%}
 {%-         endif -%}
 {%-     else -%}
-{#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
-"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root")|replace(output_root, "$output_root") }}"
+{{ PatchRootCommon(arg, false) }}
 {%-     endif -%}
 {%- endmacro -%}
 
@@ -52,9 +65,9 @@
 {%-             endif -%}
 {%-         else -%}
 {%-             if output != "" and output != "_" -%}
-"{{ arg|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
+{{ PatchRootCodegen(arg, output) }}
 {%-             else -%}
-"{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
+{{ PatchRootCommon(arg, true) }}
 {%-             endif -%}
 {%-         endif -%}
 {%-     endmacro -%}

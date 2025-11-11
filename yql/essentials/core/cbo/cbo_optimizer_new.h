@@ -390,7 +390,7 @@ struct TCBOSettings {
     ui32 ShuffleEliminationJoinNumCutoff = 14;
 };
 
-class IOptimizerFactory : private TNonCopyable {
+class IOptimizerFactory: private TNonCopyable {
 public:
     using TPtr = std::shared_ptr<IOptimizerFactory>;
     using TLogger = std::function<void(const TString&)>;

@@ -12,6 +12,7 @@ namespace NKikimr::NSchemeShard {
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY_DEF(TString, TypeName);
         YDB_READONLY_DEF(std::optional<TString>, StorageId);
+        YDB_READONLY_DEF(std::optional<bool>, InheritPortionStorage);
     protected:
         NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
     public:

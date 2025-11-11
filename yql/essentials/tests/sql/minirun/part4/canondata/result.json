@@ -1218,9 +1218,9 @@
     ],
     "test.test[optimizers-yql-20363-default.txt-Debug]": [
         {
-            "checksum": "72cfec918bb3cd74aed3d801c8583b00",
-            "size": 654,
-            "uri": "https://{canondata_backend}/1773845/9de2490825819ceeedcd38ca1caed14aade6bbb8/resource.tar.gz#test.test_optimizers-yql-20363-default.txt-Debug_/opt.yql"
+            "checksum": "fe0700fc083be99ae5859194f4ec38de",
+            "size": 622,
+            "uri": "https://{canondata_backend}/1600758/9bad92c123fa1c46fa6c9da76936f4586f5f9d03/resource.tar.gz#test.test_optimizers-yql-20363-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[optimizers-yql-20363-default.txt-Results]": [

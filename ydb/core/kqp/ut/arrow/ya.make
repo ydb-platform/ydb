@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     ydb/public/sdk/cpp/src/client/arrow
+    yql/essentials/sql/pg
 )
 
 YQL_LAST_ABI_VERSION()

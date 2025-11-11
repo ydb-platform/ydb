@@ -1,0 +1,35 @@
+{% extends '//builtin/bag.ym' %}
+
+{% block current_version %}3.0.1{% endblock %}
+
+{% block current_url %}
+https://snowballstem.org/dist/libstemmer_c-{{self.version().strip()}}.tar.gz
+{% endblock %}
+
+{% block patch_source %}
+(
+echo 'SRCS('
+cat mkinc.mak | grep '\.c' | tr -d '\\' | tr -d ' '
+echo ')'
+) > ya.make.inc
+rm -rf examples Makefile *.mak
+{% endblock %}
+
+{% block ya_make %}
+NO_RUNTIME()
+
+SUBSCRIBER(
+    g:cpp-contrib
+)
+
+ADDINCL(
+    GLOBAL contrib/libs/snowball
+)
+
+INCLUDE(ya.make.inc)
+{% endblock %}
+
+{% block move_to_output %}
+{{super()}}
+cp -R ./ ${OUTPUT}/
+{% endblock %}

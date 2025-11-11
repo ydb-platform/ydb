@@ -7,15 +7,10 @@ import logging
 import pytest
 
 import yatest
-import random
 
 from ydb.tests.oss.canonical import set_canondata_root
 
 logger = logging.getLogger(__name__)
-
-
-
-
 
 
 def ydb_bin():
@@ -95,11 +90,3 @@ class TestTpcdsInit(TpcInitBase):
 
 class TestClickbenchInit(InitBase):
     workload = 'clickbench'
-
-
-def test_flacky():
-    assert random.randint(0, 2) == 1
-
-
-def test_skiped():
-    pytest.skip("becourse I want it")

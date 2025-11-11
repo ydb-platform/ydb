@@ -381,8 +381,8 @@ protected:
     virtual void DoExecuteImpl() = 0;
 
     virtual void DoTerminateImpl() {
-            MemoryQuota.Reset();
-            MemoryLimits.MemoryQuotaManager.reset();
+        MemoryQuota.Reset();
+        MemoryLimits.MemoryQuotaManager.reset();
     }
 
     virtual bool DoHandleChannelsAfterFinishImpl() = 0;

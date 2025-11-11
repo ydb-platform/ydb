@@ -11,24 +11,17 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
         , NRm::EKqpMemoryPool memoryPool
-        , std::shared_ptr<IKqpNodeState> state
         , TIntrusivePtr<NRm::TTxState> tx
         , TIntrusivePtr<NRm::TTaskState> task
         , ui64 limit)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
     , ResourceManager(std::move(resourceManager))
     , MemoryPool(memoryPool)
-    , State(std::move(state))
     , Tx(std::move(tx))
     , Task(std::move(task))
-    {
-    }
+    {}
 
     ~TMemoryQuotaManager() override {
-        if (State) {
-            State->OnTaskTerminate(Tx->TxId, Task->TaskId, Success);
-        }
-
         ResourceManager->FreeResources(Tx, Task);
     }
 
@@ -71,7 +64,6 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
     NRm::EKqpMemoryPool MemoryPool;
-    std::shared_ptr<IKqpNodeState> State;
     TIntrusivePtr<NRm::TTxState> Tx;
     TIntrusivePtr<NRm::TTaskState> Task;
     bool Success = true;
@@ -169,7 +161,6 @@ public:
         memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
             ResourceManager_,
             args.MemoryPool,
-            std::move(args.State),
             std::move(args.TxInfo),
             std::move(task),
             limit);
@@ -219,6 +210,8 @@ public:
         } else if (args.Task->GetMeta().UnpackTo(&meta)) {
             tableKind = tableKindExtract(meta);
         }
+
+        // TODO: pass args.State to compute actor
 
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);

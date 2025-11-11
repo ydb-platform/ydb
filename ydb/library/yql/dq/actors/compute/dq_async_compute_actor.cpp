@@ -837,6 +837,9 @@ private:
         if (ev->Get()->Finish && source.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
             WatermarksTracker.UnregisterAsyncInput(ev->Get()->Index);
         }
+        if (source.IsPausedByWatermark()) {
+            ScheduleIdlenessCheck();
+        }
         if (--ProcessSourcesState.Inflight == 0) {
             CA_LOG_T("Send TEvContinueRun on OnAsyncInputPushFinished");
             AskContinueRun(Nothing(), false);

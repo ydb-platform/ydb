@@ -376,9 +376,9 @@ public:
         MakeResponseAndPassAway();
     }
 
-    void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
-        auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, "Buffer actor isn't available.");
-        ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
+    void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
+        AFL_ENSURE(ev->Sender == BufferActorId);
+        LOG_W("Got Undelivered from BufferActor: " << ev->Sender);
     }
 
     void MakeResponseAndPassAway() {

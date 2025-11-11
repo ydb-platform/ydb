@@ -254,18 +254,13 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          YA_MAKE_COMMAND="./ya make ${params[@]}"
-          if [ true = ${{ inputs.run_tests }} ]; then
-              YA_MAKE_COMMAND="$YA_MAKE_COMMAND -A"
-          fi
-          GRAPH_PATH=$(realpath graph.json)
-          CONTEXT_PATH=$(realpath context.json)
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
@@ -278,7 +273,7 @@ runs:
           fi
 
           git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET="ydb"
+          YA_MAKE_TARGET=.
         else
           YA_MAKE_TARGET=""
           for TARGET in ${{ inputs.build_target }}; do
@@ -318,10 +313,23 @@ runs:
         # Check YDB configuration (after checkout from main)
         python3 .github/scripts/check_ydb_qa_config.py || true
 
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
           params+=(--retest)
         fi
+
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
@@ -348,27 +356,12 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
-          CACHE_OPTS=()
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
-            if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-              CACHE_OPTS+=(--bazel-remote-store)
-              CACHE_OPTS+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-            fi
-
-            if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-              CACHE_OPTS+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-              CACHE_OPTS+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-              CACHE_OPTS+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-            fi
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
-            if [ -z "$GRAPH_PATH" ]; then
-              RERUN_FAILED_OPT="-X"
-            else
-              RERUN_FAILED_OPT=""
-            fi
+            RERUN_FAILED_OPT="-X"
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
@@ -388,14 +381,9 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
-          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
-            GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
-          else
-            GRAPH_OPTS=""
-          fi
 
           set +e
-          (./ya make ${params[@]} ${CACHE_OPTS[@]} $YA_MAKE_TARGET $GRAPH_OPTS \
+          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
@@ -536,16 +524,6 @@ runs:
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
-          fi
-          if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
-              NEW_GRAPH_PATH=$(realpath "graph-$RETRY.json")
-              NEW_CONTEXT_PATH=$(realpath "context-$RETRY.json")
-              .github/scripts/graph_patch.py \
-                --in-graph "$GRAPH_PATH" --in-context "$CONTEXT_PATH" \
-                --out-graph "$NEW_GRAPH_PATH" --out-context "$NEW_GRAPH_PATH" \
-                --report="$CURRENT_REPORT"
-              GRAPH_PATH=$NEW_GRAPH_PATH
-              CONTEXT_PATH=$NEW_CONTEXT_PATH
           fi
         done;
 

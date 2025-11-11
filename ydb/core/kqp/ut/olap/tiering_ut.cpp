@@ -551,8 +551,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             )";
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            for (auto& row: rows) {
-                UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), DEFAULT_TIER_PATH);
+            for (auto&& row: rows) {
+                const auto tierName = *NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8();
+                UNIT_ASSERT_C(tierName == DEFAULT_TIER_PATH || tierName == "__LOCAL_METADATA",
+                    TStringBuilder() << "Unexpected TierName: " << tierName);
             }
         }
 

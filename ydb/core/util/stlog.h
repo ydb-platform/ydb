@@ -9,11 +9,21 @@
 // special hack for gcc
 static struct STLOG_PARAM_T {} STLOG_PARAM;
 
-namespace NKikimr::NStLog {
+    namespace NKikimr::NStLog {
 
     extern bool OutputLogJson;
 
     void ProtobufToJson(const NProtoBuf::Message& m, NJson::TJsonWriter& json);
+    
+    // Non-template helper functions to reduce binary bloat
+    void OutputProtobufMessage(IOutputStream& s, const google::protobuf::Message& value);
+    void OutputProtobufEnum(IOutputStream& s, int enumValue, const google::protobuf::EnumDescriptor* descriptor);
+    void OutputProtobufEnumToJson(NJson::TJsonWriter& json, int enumValue, const google::protobuf::EnumDescriptor* descriptor);
+    void OutputBool(IOutputStream& s, bool value);
+    void OutputNull(IOutputStream& s);
+    const char* GetFileName(const char* file);
+    void WriteMessageHeader(IOutputStream& s, const char* marker, const char* file, int line);
+    void WriteJsonMessageHeader(NJson::TJsonWriter& json, const char* marker, const char* file, int line);
 
 #define STLOG_EXPAND(X) X
 
@@ -158,30 +168,22 @@ namespace NKikimr::NStLog {
             using Tx = std::decay_t<TValue>;
 
             if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
+                // Use helper function to reduce code duplication
                 const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
-                if (const auto *val = e->FindValueByNumber(value)) {
-                    s << val->name();
-                } else {
-                    s << static_cast<int>(value);
-                }
+                ::NKikimr::NStLog::OutputProtobufEnum(s, static_cast<int>(value), e);
             } else if constexpr (std::is_same_v<Tx, bool>) {
-                s << (value ? "true" : "false");
+                // Use helper function to reduce code duplication
+                ::NKikimr::NStLog::OutputBool(s, value);
             } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
-                google::protobuf::TextFormat::Printer p;
-                p.SetSingleLineMode(true);
-                TString str;
-                if (p.PrintToString(value, &str)) {
-                    s << "{" << str << "}";
-                } else {
-                    s << "<error>";
-                }
+                // Use helper function to reduce code duplication
+                ::NKikimr::NStLog::OutputProtobufMessage(s, value);
             } else if constexpr (THasToStringMethod<Tx>::value) {
                 s << value.ToString();
             } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
                 if (value) {
                     OutputParam(s, *value);
                 } else {
-                    s << "<null>";
+                    ::NKikimr::NStLog::OutputNull(s);
                 }
             } else if constexpr (TIsIterable<Tx>::value) {
                 auto begin = std::begin(value);
@@ -233,13 +235,11 @@ namespace NKikimr::NStLog {
             using Tx = std::decay_t<TValue>;
 
             if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
+                // Use helper function to reduce code duplication
                 const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
-                if (const auto *val = e->FindValueByNumber(value)) {
-                    json.Write(val->name());
-                } else {
-                    json.Write(static_cast<int>(value));
-                }
+                ::NKikimr::NStLog::OutputProtobufEnumToJson(json, static_cast<int>(value), e);
             } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
+                // Use existing helper function
                 ProtobufToJson(value, json);
             } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
                 if (value) {
@@ -277,6 +277,7 @@ namespace NKikimr::NStLog {
                 std::apply([&](const auto&... args) { OutputParam(json, args...); }, value);
                 json.CloseArray();
             } else {
+                // Fallback: convert via stream
                 TStringStream stream;
                 OutputParam(stream, value);
                 json.Write(stream.Str());
@@ -382,14 +383,7 @@ namespace NKikimr::NStLog {
 
             ~TJsonWriter() {
                 Json.OpenMap();
-                if (Self->Header()) {
-                    Json.WriteKey("marker");
-                    Json.Write(Self->Marker);
-                    Json.WriteKey("file");
-                    Json.Write(Self->GetFileName());
-                    Json.WriteKey("line");
-                    Json.Write(Self->Line);
-                }
+                ::NKikimr::NStLog::WriteJsonMessageHeader(Json, Self->Marker, Self->File, Self->Line);
                 Json.WriteKey("brief_message");
                 Json.Write(Stream.Str());
                 Self->WriteParamsToStream(Stream);
@@ -411,12 +405,11 @@ namespace NKikimr::NStLog {
         }
 
         const char *GetFileName() const {
-            const char *p = strrchr(File, '/');
-            return p ? p + 1 : File;
+            return ::NKikimr::NStLog::GetFileName(File);
         }
 
         void WriteHeaderToStream(IOutputStream& s) const {
-            s << "{" << Marker << "@" << GetFileName() << ":" << Line << "} ";
+            ::NKikimr::NStLog::WriteMessageHeader(s, Marker, File, Line);
         }
 
         void WriteParamsToStream(IOutputStream& s) const {

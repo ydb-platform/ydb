@@ -130,7 +130,9 @@ private:
             }
         }
         if (shardIds) {
-            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
+            STLOG_D(KQPSCAN, "Start resolving tablets nodes...",
+                (shard_ids_count, shardIds.size()),
+                (trace_id, TraceId()));
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
             auto kqpShardsResolver = CreateKqpShardsResolver(
                 this->SelfId(), TxId, false, std::move(shardIds));
@@ -147,7 +149,9 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            LOG_E("Can not find default state storage group for database " << Database);
+            STLOG_E(KQPSCAN, "Can not find default state storage group for database",
+                (database, Database),
+                (trace_id, TraceId()));
         }
 
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
@@ -199,14 +203,18 @@ private:
 
         if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            LOG_N("Too many compute actors: totalTasks=" << TasksGraph.GetTasks().size());
+            STLOG_N(KQPSCAN, "Too many compute actors",
+                (total_tasks, TasksGraph.GetTasks().size()),
+                (trace_id, TraceId()));
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
             return;
         }
 
-        LOG_D("TotalShardScans: " << nShardScans);
+        STLOG_D(KQPSCAN, "TotalShardScans",
+            (count, nShardScans),
+            (trace_id, TraceId()));
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
@@ -246,7 +254,9 @@ private:
     {
         if (Planner) {
             if (!Planner->GetPendingComputeTasks().empty()) {
-                LOG_D("terminate pending resources request: " << Ydb::StatusIds::StatusCode_Name(status));
+                STLOG_D(KQPSCAN, "terminate pending resources request",
+                    (status, Ydb::StatusIds::StatusCode_Name(status)),
+                    (trace_id, TraceId()));
 
                 auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
                 ev->Record.SetTxId(TxId);

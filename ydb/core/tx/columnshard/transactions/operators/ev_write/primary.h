@@ -163,7 +163,6 @@ private:
 
     void InitializeRequests(TColumnShard& owner) {
         if (WaitShardsBrokenFlags.empty()) {
-            WaitShardsResultAck.erase(owner.TabletID());
             if (WaitShardsResultAck.size()) {
                 SendResult(owner);
             } else {
@@ -226,21 +225,20 @@ private:
             auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             if (op->WaitShardsBrokenFlags.contains(Self->TabletID())) {
-                op->TxBroken = lock.IsBroken();
-                AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
-                if (op->WaitShardsBrokenFlags.empty()) {
-                    AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
-                }
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
-                    "receive", Self->TabletID());
+                // TxStartPreparation may be executed AFTER all the ReadSets from secondary.
+                // So, TxBroken may already be set, we must not ignore that.
+                op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             }
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            if (auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true)) {
-                op->CheckFinished(*Self);
-            }
+            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
+
+            AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
+            AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))("receive", Self->TabletID());
+            op->InitializeRequests(*Self);
         }
 
     public:

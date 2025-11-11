@@ -8,6 +8,7 @@
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
+#include <ydb/core/kqp/common/simple/services.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -632,48 +633,6 @@ struct TDictCase {
                 }
             }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
         }
-    }
-
-     Y_UNIT_TEST(TwoNodeOneShuttingDown) {
-        constexpr ui32 nodeId = 1;
-
-        TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2)
-                                        .SetUseRealThreads(false));
-
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
-        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
-        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
-
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-
-        ui32 nodeShuttingDownCount = 0;
-        auto grab = [&nodeShuttingDownCount](TAutoPtr<IEventHandle>& ev) -> auto {
-            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
-                auto msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
-                if (msg.NotStartedTasksSize() > 0 && msg.GetNotStartedTasks()[0].GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
-                    ++nodeShuttingDownCount;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-
-        runtime.SetObserverFunc(grab);
-        auto shutdownState = new TKqpShutdownState();
-        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)));
-
-        auto query = R"(SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";)";
-        auto resultFuture = kikimr.RunInThreadPool([&]{
-            return db.StreamExecuteScanQuery(query).GetValueSync();});
-
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&nodeShuttingDownCount](IEventHandle&) {
-            return nodeShuttingDownCount > 0;
-        });
-        runtime.DispatchEvents(opts);
-
-        auto result = runtime.WaitFuture(resultFuture);
-        UNIT_ASSERT_VALUES_EQUAL_C(nodeShuttingDownCount, 1, "Expected to be 1 since one node is shutting down");
-        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 }
 

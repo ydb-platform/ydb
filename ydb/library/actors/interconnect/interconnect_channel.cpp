@@ -112,7 +112,7 @@ namespace NActors {
                         bool sendViaRdma = Params.UseRdma && RdmaMemPool && SerializationInfo->Sections.size() > 2;
                         // Check each section can be send via rdma
                         for (const auto& section : SerializationInfo->Sections) {
-                            sendViaRdma &= section.IsRdma;
+                            sendViaRdma &= section.IsRdmaCapable;
                             totalSize += section.Size;
                         }
                         if (sendViaRdma) {
@@ -326,7 +326,7 @@ namespace NActors {
     }
 
     bool TEventOutputChannel::SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds,
-        ui32* checkSum, ssize_t rdmaDeviceIndex)
+        ui32* checksum, ssize_t rdmaDeviceIndex)
     {
         if (!event.Buffer && event.Event) {
             std::optional<TRope> rope = event.Event->SerializeToRope(
@@ -342,7 +342,7 @@ namespace NActors {
         }
 
         XXH3_state_t state;
-        if (checkSum) {
+        if (checksum) {
             XXH3_64bits_reset(&state);
         }
 
@@ -355,7 +355,7 @@ namespace NActors {
                     Iter = event.Buffer->GetBeginIter();
                     return false;
                 }
-                if (checkSum) {
+                if (checksum) {
                     XXH3_64bits_update(&state, buf.GetData(), buf.GetSize());
                 }
                 auto cred = rdmaCreds.AddCreds();
@@ -365,8 +365,8 @@ namespace NActors {
             }
         }
 
-        if (checkSum) {
-            *checkSum = XXH3_64bits_digest(&state);
+        if (checksum) {
+            *checksum = XXH3_64bits_digest(&state);
         }
         return true;
     }
@@ -376,8 +376,9 @@ namespace NActors {
         const NActorsInterconnect::TRdmaCreds& rdmaCreds = SendViaRdma->RdmaCreds;
         ui32 checkSum = SendViaRdma->CheckSum;
 
+        ui16 credsSerializedSize = rdmaCreds.ByteSizeLong();
         // Part = | TChannelPart | EXdcCommand::RDMA_READ | rdmaCreds.Size | rdmaCreds | checkSum |
-        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + rdmaCreds.ByteSizeLong() + sizeof(ui32);
+        size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + credsSerializedSize + sizeof(ui32);
         Y_ABORT_UNLESS(partSize < 4096);
 
         if (partSize > Max<ui16>() || partSize > task.GetInternalFreeAmount()) {
@@ -393,7 +394,6 @@ namespace NActors {
         };
         char *ptr = reinterpret_cast<char*>(part + 1);
         *ptr++ = static_cast<ui8>(EXdcCommand::RDMA_READ);
-        ui16 credsSerializedSize = rdmaCreds.ByteSizeLong();
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 

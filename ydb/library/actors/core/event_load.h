@@ -25,7 +25,7 @@ namespace NActors {
         size_t Tailroom = 0; // tailroom for the chunk
         size_t Alignment = 0; // required alignment
         bool IsInline = false; // if true, goes through ordinary channel
-        bool IsRdma = false; // if true, could go through RDMA
+        bool IsRdmaCapable = false; // if true, could go through RDMA
     };
 
     struct TEventSerializationInfo {

@@ -267,7 +267,8 @@ namespace NActors {
         return res;
     }
 
-    bool SerializeHeaderCommon(const TVector<TRope> &payload, std::function<bool(const char *p, size_t len)> append) {
+    template<typename TCb>
+    bool SerializeHeaderCommon(const TVector<TRope>& payload, TCb& append) {
         if (payload) {
             auto appendNumber = [&](size_t number) {
                 char buf[MaxNumberBytes];
@@ -339,7 +340,7 @@ namespace NActors {
 
     std::optional<TRope> SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload) {
         TRope result;
-        auto sz = CalculateSerilizedHeaderSizeImpl(payload);
+        auto sz = CalculateSerializedHeaderSizeImpl(payload);
         if (!sz) {
             return result;
         }
@@ -348,7 +349,7 @@ namespace NActors {
             return {};
         }
         char* data = headerBuf.GetDataMut();
-        auto append = [&](const char *p, size_t len) {
+        auto append = [&data](const char *p, size_t len) {
             std::memcpy(data, p, len);
             data += len;
             return true;
@@ -413,7 +414,7 @@ namespace NActors {
         }
     }
 
-    ui32 CalculateSerilizedHeaderSizeImpl(const TVector<TRope> &payload) {
+    ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload) {
         ui32 result = 0;
         if (payload) {
             ++result; // marker
@@ -430,12 +431,10 @@ namespace NActors {
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize) {
         ssize_t result = recordSize;
         if (result >= 0 && payload) {
-            result += CalculateSerilizedHeaderSizeImpl(payload);
-            size_t totalPayloadSize = 0;
+            result += CalculateSerializedHeaderSizeImpl(payload);
             for (const TRope& rope : payload) {
-                totalPayloadSize += rope.GetSize();
+                result += rope.GetSize();
             }
-            result += totalPayloadSize;
         }
         return result;
     }

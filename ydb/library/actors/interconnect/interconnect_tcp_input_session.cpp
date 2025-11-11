@@ -268,7 +268,7 @@ namespace NActors {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
         Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
         if (RdmaQp) {
-            LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
+            LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
         } else {
             LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
         }
@@ -914,15 +914,21 @@ namespace NActors {
             }
 #endif
 
-            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
-            if (expectedChecksum) {
-                ui32 checksum = 0;
+            ui32 checksum = 0;
+            if (descr.Checksum) {
+                for (const auto&& [data, size] : payload) {
+                    checksum = Crc32cExtendMSanCompatible(checksum, data, size);
+                }
+            } else if (pendingEvent.RdmaCheckSum) {
                 XXH3_state_t state;
                 XXH3_64bits_reset(&state);
                 for (const auto&& [data, size] : payload) {
                     XXH3_64bits_update(&state, data, size);
                 }
                 checksum = XXH3_64bits_digest(&state);
+            }
+            ui32 expectedChecksum = descr.Checksum ?: pendingEvent.RdmaCheckSum;
+            if (expectedChecksum) {
                 if (checksum != expectedChecksum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};

@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
     static void DropTable(Tests::TServer::TPtr server, TActorId sender, const char* name)
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
-        WaitTxNotification(server, sender, txId);
+        WaitTxNotification(server, txId);
     }
 
     static void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)

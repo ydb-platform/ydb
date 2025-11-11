@@ -36,7 +36,7 @@ An ordered sequence of backups starting with a full backup followed by zero or m
 ## Backup workflow {#backup-workflow}
 
 ```mermaid
-block
+block-beta
     columns 11
     space:11
     CREATE["CREATE<br/>COLLECTION"]
@@ -112,7 +112,7 @@ When a backup collection is no longer needed, drop it to remove all associated m
 ## Restore workflow {#restore-workflow}
 
 ```mermaid
-block
+block-beta
     columns 5
     FS["Filesystem<br/>Import"]
     space:4

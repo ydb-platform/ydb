@@ -68,7 +68,7 @@ void MoveToDLQ(const TString& msg) {
 
     for (size_t i = 0; i < 10; ++i) {
         Sleep(TDuration::Seconds(1));
-        // The message should appear in DQL
+        // The message should appear in DLQ
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1-dlq",
@@ -180,7 +180,7 @@ Y_UNIT_TEST(MoveToDLQ_ManyMessages) {
 
     for (size_t i = 0; i < 10; ++i) {
         Sleep(TDuration::Seconds(1));
-        // The message should appear in DQL
+        // The message should appear in DLQ
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1-dlq",

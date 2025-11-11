@@ -1851,7 +1851,7 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
     utils.AssertLoad();
 }
 
-Y_UNIT_TEST(ChangeDeadLettePolicy_Delete) {
+Y_UNIT_TEST(ChangeDeadLetterPolicy_Delete) {
     TUtils utils;
     utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
     utils.Storage.SetMaxMessageProcessingCount(1);
@@ -1871,7 +1871,7 @@ Y_UNIT_TEST(ChangeDeadLettePolicy_Delete) {
     utils.AssertLoad();
 }
 
-Y_UNIT_TEST(ChangeDeadLettePolicy_Unspecified) {
+Y_UNIT_TEST(ChangeDeadLetterPolicy_Unspecified) {
     TUtils utils;
     utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
     utils.Storage.SetMaxMessageProcessingCount(1);

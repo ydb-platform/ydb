@@ -478,7 +478,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 ++Metrics.CommittedMessageCount;
             }
 
-            AFL_ENSURE(-Metrics.LockedMessageCount > 0)("o", offset);
+            AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
                 if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {

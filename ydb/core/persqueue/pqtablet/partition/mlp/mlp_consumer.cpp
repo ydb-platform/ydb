@@ -377,6 +377,10 @@ void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     Send(ev->Sender, std::move(response), 0, ev->Cookie);
 }
 
+void TConsumerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    FirstPipeCacheRequest = true;
+}
+
 STFUNC(TConsumerActor::StateInit) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPQ::TEvMLPReadRequest, Queue);
@@ -408,6 +412,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -429,6 +434,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -600,7 +606,7 @@ void TConsumerActor::Persist() {
     }
 }
 
-size_t TConsumerActor::RequireInflyMessageCount() const {
+size_t TConsumerActor::RequiredToFetchMessageCount() const {
     auto& metrics = Storage->GetMetrics();
 
     auto maxMessages = Storage->MinMessages;
@@ -630,7 +636,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     FetchInProgress = true;
 
-    auto maxMessages = RequireInflyMessageCount();
+    auto maxMessages = RequiredToFetchMessageCount();
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
@@ -689,9 +695,11 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
             ProcessEventQueue();
         }
 
-        if (!HasDataInProgress && RequireInflyMessageCount()) {
+        if (!HasDataInProgress && RequiredToFetchMessageCount()) {
             HasDataInProgress = true;
-            Send(TabletActorId, MakeEvHasData(SelfId(), PartitionId,Storage->GetLastOffset(), Config));
+            auto request = MakeEvHasData(SelfId(), PartitionId, Storage->GetLastOffset(), Config);
+            LOG_D("Subscribing to data: " << request->Record.ShortDebugString());
+            SendToPQTablet(std::move(request));
         }
     }
 }
@@ -751,6 +759,12 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
     MoveToDLQIfPossible();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
+}
+
+void TConsumerActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
+    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstPipeCacheRequest, 1);
+    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+    FirstPipeCacheRequest = false;
 }
 
 NActors::IActor* CreateConsumerActor(

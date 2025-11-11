@@ -8,7 +8,7 @@ namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPConsumerTests) {
 
-Y_UNIT_TEST(Reload) {
+Y_UNIT_TEST(ReloadPQTablet) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 

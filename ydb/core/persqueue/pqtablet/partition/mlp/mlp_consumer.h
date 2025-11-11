@@ -3,6 +3,7 @@
 #include "mlp.h"
 #include "mlp_common.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/actor.h>
@@ -52,6 +53,8 @@ private:
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
 
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+
     void HandleOnWork(TEvents::TEvWakeup::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
 
@@ -72,7 +75,8 @@ private:
     void CommitIfNeeded();
     void UpdateStorageConfig();
     
-    size_t RequireInflyMessageCount() const;
+    size_t RequiredToFetchMessageCount() const;
+    void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
 private:
     const TString Database;
@@ -106,6 +110,7 @@ private:
 
     ui64 LastFetchedOffset = 0;
     ui64 LastFetchedPartNo = 0;
+    bool FirstPipeCacheRequest = true;
 };
 
 }

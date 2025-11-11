@@ -1,14 +1,13 @@
 {#- empty string #}
 val baseBuildDir = "{{ export_root }}/gradle.build"
-val projectBuildDir = "$baseBuildDir/{{ curdir }}/build"
-val projectCodegenDir = "$projectBuildDir/{{ CODEGENS_DIRNAME }}"
-layout.buildDirectory = file(projectBuildDir)
+allprojects {
+    layout.buildDirectory = file(baseBuildDir + "{%- if common_dir %}/{{ common_dir }}{% endif -%}/" + project.path.replace(":", "/"))
+}
 
 {%- if proto_template %}
-{%      if prepareProtosTask %}
-val mainProtosDir = layout.buildDirectory.dir("gradle.protos/main")
-{%-     endif %}
+
+val mainProtosDir = layout.buildDirectory.dir("main_protos")
 {%-     if extractLibrariesProtosTask %}
-val mainIncludeProtosDir = layout.buildDirectory.dir("gradle.protos/include")
+val mainExtractedIncludeProtosDir = layout.buildDirectory.dir("extracted-include-protos/main")
 {%-     endif %}
 {%- endif %}

@@ -23,16 +23,6 @@ class TExtractJoinExpressionsRule : public IRule {
 };
 
 /**
- * Rewrites scalar subplans into cross join plans
- */
-class TInlineScalarSubplanRule : public IRule {
-  public:
-    TInlineScalarSubplanRule() : IRule("Inline scalar subplan") {}
-
-    virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
-};
-
-/**
  * Push down a non-projecting map operator
  * Currently only pushes below joins that are immediately below
  */

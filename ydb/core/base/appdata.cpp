@@ -65,7 +65,6 @@ struct TAppData::TImpl {
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
-    NKikimrConfig::TAwsClientConfig AwsClientConfig;
     NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
     NKikimrConfig::TBackgroundCleaningConfig BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig GraphConfig;
@@ -132,7 +131,6 @@ TAppData::TAppData(
     , DomainsConfig(Impl->DomainsConfig)
     , BootstrapConfig(Impl->BootstrapConfig)
     , AwsCompatibilityConfig(Impl->AwsCompatibilityConfig)
-    , AwsClientConfig(Impl->AwsClientConfig)
     , S3ProxyResolverConfig(Impl->S3ProxyResolverConfig)
     , BackgroundCleaningConfig(Impl->BackgroundCleaningConfig)
     , GraphConfig(Impl->GraphConfig)

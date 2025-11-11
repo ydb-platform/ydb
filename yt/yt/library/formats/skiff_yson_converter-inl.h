@@ -1,5 +1,5 @@
 #ifndef SKIFF_YSON_CONVERTER_INL_H_
-#error "Direct inclusion of this file is not allowed, include skiff_yson_converter.h"
+#error "Direct inclusion of this file is not allowed; include skiff_yson_converter.h"
 #endif
 
 #include <yt/yt/library/tz_types/tz_types.h>

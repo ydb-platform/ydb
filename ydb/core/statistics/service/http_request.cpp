@@ -84,7 +84,6 @@ void THttpRequest::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
 
     auto navigateDomainKey = [this] (TPathId domainKey) {
         auto navigate = std::make_unique<TNavigate>();
-        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;

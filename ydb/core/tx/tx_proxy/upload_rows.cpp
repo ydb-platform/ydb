@@ -10,7 +10,6 @@ class TUploadRowsInternal : public TUploadRowsBase<NKikimrServices::TActivity::U
 public:
     TUploadRowsInternal(
         TActorId sender,
-        const TString& database,
         const TString& table,
         std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
@@ -21,7 +20,6 @@ public:
         TBackoff backoff)
         : TUploadRowsBase(std::move(rows))
         , Sender(sender)
-        , Database(database)
         , Table(table)
         , ColumnTypes(types)
         , Cookie(cookie)
@@ -45,11 +43,11 @@ public:
     }
 
 private:
-    const TString& GetDatabase() const override {
-        return Database;
+    TString GetDatabase()override {
+        return TString();
     }
 
-    const TString& GetTable() const override {
+    const TString& GetTable() override {
         return Table;
     }
 
@@ -89,7 +87,6 @@ private:
 
 private:
     const TActorId Sender;
-    const TString Database;
     const TString Table;
     const std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const ui64 Cookie;
@@ -98,7 +95,6 @@ private:
 };
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
-    const TString& database,
     const TString& table,
     std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
     std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
@@ -109,7 +105,6 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     TBackoff backoff)
 {
     return new TUploadRowsInternal(sender,
-        database,
         table,
         types,
         std::move(rows),

@@ -53,7 +53,7 @@ public:
             }
 
             for (ui32 i = 0U; i < Keys.size(); ++i) {
-                if (KeyArgs[i]->GetDependentsCount() > 0U) {
+                if (KeyArgs[i]->GetDependencesCount() > 0U) {
                     KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
                 }
             }
@@ -70,7 +70,7 @@ public:
             } while (!Chop->GetValue(ctx).Get<bool>());
 
             for (ui32 i = 0U; i < Keys.size(); ++i) {
-                if (KeyArgs[i]->GetDependentsCount() > 0U) {
+                if (KeyArgs[i]->GetDependencesCount() > 0U) {
                     KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
                 }
             }
@@ -98,7 +98,7 @@ public:
                         } while (!Chop->GetValue(ctx).Get<bool>());
                     case EState::Chop:
                         for (ui32 i = 0U; i < Keys.size(); ++i) {
-                            if (KeyArgs[i]->GetDependentsCount() > 0U) {
+                            if (KeyArgs[i]->GetDependencesCount() > 0U) {
                                 KeyArgs[i]->SetValue(ctx, Keys[i]->GetValue(ctx));
                             }
                         }
@@ -250,7 +250,7 @@ public:
             }
 
             for (ui32 i = 0U; i < Keys.size(); ++i) {
-                if (KeyArgs[i]->GetDependentsCount() > 0U) {
+                if (KeyArgs[i]->GetDependencesCount() > 0U) {
                     const auto map = KeysOnItems[i];
                     const auto key = map ? items[*map] : GetNodeValue(Keys[i], ctx, block);
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
@@ -311,7 +311,7 @@ public:
         new StoreInst(GetConstant(ui64(EState::Next), context), statePtr, block);
 
         for (ui32 i = 0U; i < Keys.size(); ++i) {
-            if (KeyArgs[i]->GetDependentsCount() > 0U) {
+            if (KeyArgs[i]->GetDependencesCount() > 0U) {
                 const auto key = GetNodeValue(Keys[i], ctx, block);
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(KeyArgs[i])->CreateSetValue(ctx, block, key);
             }

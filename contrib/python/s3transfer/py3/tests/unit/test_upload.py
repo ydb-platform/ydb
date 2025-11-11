@@ -50,7 +50,7 @@ class InterruptionError(Exception):
 class OSUtilsExceptionOnFileSize(OSUtils):
     def get_file_size(self, filename):
         raise AssertionError(
-            f"The file {filename} should not have been stated"
+            "The file %s should not have been stated" % filename
         )
 
 

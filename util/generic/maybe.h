@@ -303,30 +303,8 @@ public:
         return *this;
     }
 
-    template <typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
-    T& GetOrEmplace(Args&&... args) Y_LIFETIME_BOUND {
-        if (!Defined()) {
-            Init(std::forward<Args>(args)...);
-        }
-        return *Data();
-    }
-
-    template <typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
-    T& Emplace(Args&&... args) Y_LIFETIME_BOUND {
-        Clear();
-        Init(std::forward<Args>(args)...);
-        return *Data();
-    }
-
-    template <typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
-    T& emplace(Args&&... args) Y_LIFETIME_BOUND {
-        Clear();
-        Init(std::forward<Args>(args)...);
-        return *Data();
-    }
-
-    template <typename... Args, class = std::enable_if_t<std::is_constructible_v<T, Args...>>>
-    T& ConstructInPlace(Args&&... args) Y_LIFETIME_BOUND {
+    template <typename... Args>
+    T& ConstructInPlace(Args&&... args) {
         Clear();
         Init(std::forward<Args>(args)...);
         return *Data();

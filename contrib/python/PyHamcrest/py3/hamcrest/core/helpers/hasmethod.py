@@ -3,7 +3,7 @@ __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
 
-def hasmethod(obj: object, methodname: str) -> bool:
+def hasmethod(obj, methodname):
     """Does ``obj`` have a method named ``methodname``?"""
 
     if not hasattr(obj, methodname):

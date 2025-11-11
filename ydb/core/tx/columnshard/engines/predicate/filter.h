@@ -4,58 +4,19 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
-#include <ydb/library/formats/arrow/size_calcer.h>
-
 #include <deque>
 
 namespace NKikimr::NOlap {
 
 class TPKRangesFilter {
-    friend class TRangesBuilder;
-
-    class TMemoryTrackingGuard: TNonCopyable {
-    private:
-        YDB_READONLY_DEF(ui64, Bytes);
-
-    public:
-        TMemoryTrackingGuard(const ui64 mem)
-            : Bytes(mem)
-        {
-            TotalFiltersMemorySize += mem;
-        }
-        ~TMemoryTrackingGuard() {
-            TotalFiltersMemorySize.Sub(Bytes);
-        }
-    };
-
 private:
     bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
-    std::shared_ptr<arrow::RecordBatch> Data;
-    TMemoryTrackingGuard MemoryGuard;
-
-    [[nodiscard]] TConclusionStatus Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t);
-    TPKRangesFilter()
-        : MemoryGuard(0)
-    {
-    }
-    TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data);
-
-    static inline TPositiveControlInteger TotalFiltersMemorySize;
 
 public:
-    TPKRangesFilter(TPKRangesFilter&& other)
-        : FakeRanges(other.FakeRanges)
-        , SortedRanges(std::move(other.SortedRanges))
-        , Data(other.Data)
-        , MemoryGuard(other.MemoryGuard.GetBytes())
-    {
-    }
+    TPKRangesFilter();
 
     std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
-        if (SortedRanges.empty()) {
-            return std::nullopt;
-        }
         ui32 result = 0;
         for (auto&& i : SortedRanges) {
             if (i.IsPointRange(pkSchema)) {
@@ -67,11 +28,18 @@ public:
         return result;
     }
 
+    [[nodiscard]] TConclusionStatus Add(
+        std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema);
     std::shared_ptr<arrow::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const;
     TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
     bool IsEmpty() const {
         return SortedRanges.empty() || FakeRanges;
+    }
+
+    const TPKRangeFilter& Front() const {
+        Y_ABORT_UNLESS(Size());
+        return SortedRanges.front();
     }
 
     size_t Size() const {
@@ -87,15 +55,14 @@ public:
     }
 
     bool IsUsed(const TPortionInfo& info) const {
-        return IsUsed(info.IndexKeyStart().BuildSortablePosition(), info.IndexKeyEnd().BuildSortablePosition());
+        return IsUsed(info.IndexKeyStart(), info.IndexKeyEnd());
     }
 
-    bool IsUsed(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const {
+    bool IsUsed(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
         return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
     }
-    TPKRangeFilter::EUsageClass GetUsageClass(
-        const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const;
-    bool CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const;
+    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
+    bool CheckPoint(const NArrow::TSimpleRow& point) const;
 
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
@@ -118,19 +85,9 @@ public:
     static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
     static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
-    static TPKRangesFilter BuildEmpty() {
-        return TPKRangesFilter();
-    }
 
     static TConclusion<TPKRangesFilter> BuildFromProto(
         const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
-
-    size_t GetMemorySize() const {
-        return NArrow::GetBatchMemorySize(Data);
-    }
-    static size_t GetFiltersTotalMemorySize() {
-        return TotalFiltersMemorySize.Val();
-    }
 };
 
 class ICursorEntity {
@@ -257,8 +214,7 @@ public:
     TSimpleScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui64 portionId, const ui32 recordIndex)
         : PrimaryKey(pk)
         , SourceId(portionId)
-        , RecordIndex(recordIndex)
-    {
+        , RecordIndex(recordIndex) {
     }
 };
 
@@ -324,8 +280,7 @@ public:
 
     TNotSortedSimpleScanCursor(const ui64 portionId, const ui32 recordIndex)
         : SourceId(portionId)
-        , RecordIndex(recordIndex)
-    {
+        , RecordIndex(recordIndex) {
     }
 };
 
@@ -363,68 +318,9 @@ public:
     TPlainScanCursor() = default;
 
     TPlainScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk)
-        : PrimaryKey(pk)
-    {
+        : PrimaryKey(pk) {
         AFL_VERIFY(PrimaryKey);
     }
-};
-
-class TRangesBuilder {
-    class TPredicateInfo {
-    private:
-        YDB_READONLY_DEF(NKernels::EOperation, Operation);
-        YDB_READONLY_DEF(ui32, NumColumns);
-        YDB_READONLY_DEF(ui32, RowIndex);
-
-    public:
-        TPredicateInfo(const NKernels::EOperation operation, const ui32 numColumns, const ui32 rowIndex)
-            : Operation(operation)
-            , NumColumns(numColumns)
-            , RowIndex(rowIndex)
-        {
-        }
-
-        std::optional<TPredicate> BuildPredicate(
-            const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& batch) const {
-            if (!NumColumns) {
-                return std::nullopt;
-            }
-            auto columns = schema->field_names();
-            AFL_VERIFY(columns.size() >= NumColumns)("schema", columns.size())("predicate", NumColumns);
-            columns.resize(NumColumns);
-            return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false));
-        }
-    };
-
-private:
-    const std::vector<NScheme::TTypeInfo> YdbPK;
-    const std::shared_ptr<arrow::Schema> ArrPK;
-    NArrow::TArrowBatchBuilder BatchBuilder;
-    std::vector<std::pair<TPredicateInfo, TPredicateInfo>> RangesInfo;
-
-private:
-    static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
-        std::vector<NScheme::TTypeInfo> types;
-        types.reserve(columns.size());
-        for (auto& [name, type] : columns) {
-            types.push_back(type);
-        }
-        return types;
-    }
-
-    static TConclusion<TCell> MakeDefaultCell(const NScheme::TTypeInfo typeInfo);
-
-public:
-    TRangesBuilder(const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk)
-        : YdbPK(ExtractTypes(ydbPk))
-        , ArrPK(arrPk)
-    {
-        AFL_VERIFY((i64)ydbPk.size() == arrPk->num_fields());
-        NArrow::TStatusValidator::Validate(BatchBuilder.Start(ydbPk, arrPk));
-    }
-
-    void AddRange(TSerializedTableRange&&);
-    TConclusion<TPKRangesFilter> Finish();
 };
 
 }   // namespace NKikimr::NOlap

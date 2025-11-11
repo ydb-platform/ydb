@@ -45,16 +45,14 @@ namespace NWilson {
                 TMonotonic ExpirationTimestamp;
             };
 
-            TBatch(ui64 maxSpansInBatch, ui64 maxBytesInBatch, const TMap<TString, TString>& attributes)
+            TBatch(ui64 maxSpansInBatch, ui64 maxBytesInBatch, TString serviceName)
                 : MaxSpansInBatch(maxSpansInBatch)
                 , MaxBytesInBatch(maxBytesInBatch)
             {
                 auto *rspan = Request.add_resource_spans();
-                for (const auto& [key, value] : attributes) {
-                    auto *attr = rspan->mutable_resource()->add_attributes();
-                    attr->set_key(key);
-                    attr->mutable_value()->set_string_value(value);
-                }
+                auto *serviceNameAttr = rspan->mutable_resource()->add_attributes();
+                serviceNameAttr->set_key("service.name");
+                serviceNameAttr->mutable_value()->set_string_value(std::move(serviceName));
                 ScopeSpans = rspan->add_scope_spans();
             }
 
@@ -109,7 +107,7 @@ namespace NWilson {
             bool WakeupScheduled = false;
 
             TString CollectorUrl;
-            const TMap<TString, TString> SpanAttributes;
+            TString ServiceName;
             TMap<TString, TString> Headers;
 
             TRegisterMonPageCallback RegisterMonPage;
@@ -149,11 +147,11 @@ namespace NWilson {
                 , MaxSpanTimeInQueue(TDuration::Seconds(params.SpanExportTimeoutSeconds))
                 , MaxExportInflight(params.MaxExportRequestsInflight)
                 , CollectorUrl(std::move(params.CollectorUrl))
-                , SpanAttributes(GetSpanAttributes(params.ServiceName))
+                , ServiceName(std::move(params.ServiceName))
                 , Headers(params.Headers)
                 , RegisterMonPage(params.RegisterMonPage)
                 , GrpcSigner(std::move(params.GrpcSigner))
-                , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, SpanAttributes)
+                , CurrentBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName)
                 , DroppedSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderDroppedSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
                 , SentSpansCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentSpans", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
                 , SentBytesCounter(params.Counters ? params.Counters->GetCounter("WilsonUploaderSentBytes", true) : MakeIntrusive<NMonitoring::TCounterForPtr>(true))
@@ -166,15 +164,6 @@ namespace NWilson {
             }
 
             static constexpr char ActorName[] = "WILSON_UPLOADER_ACTOR";
-
-            static TMap<TString, TString> GetSpanAttributes(const TString& serviceName) {
-                TMap<TString, TString> attributes;
-                attributes["service.name"] = serviceName;
-                if (TString podUid = getenv("POD_UID")) {
-                    attributes["k8s.pod.uid"] = podUid;
-                }
-                return attributes;
-            }
 
             void Bootstrap() {
                 Become(&TThis::StateWork);
@@ -276,7 +265,7 @@ namespace NWilson {
                     return;
                 }
                 BatchQueue.push(std::move(CurrentBatch).Complete());
-                CurrentBatch = TBatch(MaxSpansInBatch, MaxBytesInBatch, SpanAttributes);
+                CurrentBatch = TBatch(MaxSpansInBatch, MaxBytesInBatch, ServiceName);
             }
 
             void TryToSend() {
@@ -473,10 +462,7 @@ namespace NWilson {
                         str << "MaxSpanTimeInQueue# " << MaxSpanTimeInQueue << '\n';
                         str << "MaxExportInflight# " << MaxExportInflight << '\n';
                         str << "CollectorUrl# " << CollectorUrl << '\n';
-                        str << "SpanAttributes# " << '\n';
-                        for (const auto& [key, value] : SpanAttributes) {
-                            str << '\t' << key << ": " << value << '\n';
-                        }
+                        str << "ServiceName# " << ServiceName << '\n';
                         str << "Headers# " << '\n';
                         for (const auto& [key, value] : Headers) {
                             str << '\t' << key << ": " << value << '\n';

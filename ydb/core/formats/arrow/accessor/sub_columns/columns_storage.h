@@ -49,7 +49,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        const arrow::BinaryArray* CurrentArrayData;
+        const arrow::StringArray* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -71,12 +71,10 @@ public:
             return KeyIndex;
         }
 
-        std::string_view GetRawValue() const {
+        std::string_view GetValue() const {
             auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
             return std::string_view(view.data(), view.size());
         }
-
-        NJson::TJsonValue GetValue() const;
 
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
@@ -131,7 +129,7 @@ public:
         , Records(data) {
         AFL_VERIFY(Records->num_columns() == Stats.GetColumnsCount())("records", Records->num_columns())("stats", Stats.GetColumnsCount());
         for (auto&& i : Records->GetColumns()) {
-            AFL_VERIFY(i->GetDataType()->id() == arrow::binary()->id());
+            AFL_VERIFY(i->GetDataType()->id() == arrow::utf8()->id());
         }
     }
 };

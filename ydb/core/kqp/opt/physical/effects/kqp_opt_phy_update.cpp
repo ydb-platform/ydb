@@ -240,7 +240,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 }
 
-TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {
+TDqStageBase ReadTableToStage(const TExprBase& expr, TExprContext& ctx) {
     if (expr.Maybe<TDqStageBase>()) {
         return expr.Cast<TDqStageBase>();
     }

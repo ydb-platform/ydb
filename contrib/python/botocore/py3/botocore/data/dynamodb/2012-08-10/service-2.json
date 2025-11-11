@@ -158,25 +158,6 @@
       "endpointdiscovery":{
       }
     },
-    "DeleteResourcePolicy":{
-      "name":"DeleteResourcePolicy",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DeleteResourcePolicyInput"},
-      "output":{"shape":"DeleteResourcePolicyOutput"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerError"},
-        {"shape":"PolicyNotFoundException"},
-        {"shape":"ResourceInUseException"},
-        {"shape":"LimitExceededException"}
-      ],
-      "documentation":"<p>Deletes the resource-based policy attached to the resource, which can be a table or stream.</p> <p> <code>DeleteResourcePolicy</code> is an idempotent operation; running it multiple times on the same resource <i>doesn't</i> result in an error response, unless you specify an <code>ExpectedRevisionId</code>, which will then return a <code>PolicyNotFoundException</code>.</p> <important> <p>To make sure that you don't inadvertently lock yourself out of your own resources, the root principal in your Amazon Web Services account can perform <code>DeleteResourcePolicy</code> requests, even if your resource-based policy explicitly denies the root principal's access. </p> </important> <note> <p> <code>DeleteResourcePolicy</code> is an asynchronous operation. If you issue a <code>GetResourcePolicy</code> request immediately after running the <code>DeleteResourcePolicy</code> request, DynamoDB might still return the deleted policy. This is because the policy for your resource might not have been deleted yet. Wait for a few seconds, and then try the <code>GetResourcePolicy</code> request again.</p> </note>",
-      "endpointdiscovery":{
-      }
-    },
     "DeleteTable":{
       "name":"DeleteTable",
       "http":{
@@ -500,23 +481,6 @@
       "endpointdiscovery":{
       }
     },
-    "GetResourcePolicy":{
-      "name":"GetResourcePolicy",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"GetResourcePolicyInput"},
-      "output":{"shape":"GetResourcePolicyOutput"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerError"},
-        {"shape":"PolicyNotFoundException"}
-      ],
-      "documentation":"<p>Returns the resource-based policy document attached to the resource, which can be a table or stream, in JSON format.</p> <p> <code>GetResourcePolicy</code> follows an <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html\"> <i>eventually consistent</i> </a> model. The following list describes the outcomes when you issue the <code>GetResourcePolicy</code> request immediately after issuing another request:</p> <ul> <li> <p>If you issue a <code>GetResourcePolicy</code> request immediately after a <code>PutResourcePolicy</code> request, DynamoDB might return a <code>PolicyNotFoundException</code>.</p> </li> <li> <p>If you issue a <code>GetResourcePolicy</code>request immediately after a <code>DeleteResourcePolicy</code> request, DynamoDB might return the policy that was present before the deletion request.</p> </li> <li> <p>If you issue a <code>GetResourcePolicy</code> request immediately after a <code>CreateTable</code> request, which includes a resource-based policy, DynamoDB might return a <code>ResourceNotFoundException</code> or a <code>PolicyNotFoundException</code>.</p> </li> </ul> <p>Because <code>GetResourcePolicy</code> uses an <i>eventually consistent</i> query, the metadata for your policy or table might not be available at that moment. Wait for a few seconds, and then retry the <code>GetResourcePolicy</code> request.</p> <p>After a <code>GetResourcePolicy</code> request returns a policy created using the <code>PutResourcePolicy</code> request, you can assume the policy will start getting applied in the authorization of requests to the resource. Because this process is eventually consistent, it will take some time to apply the policy to all requests to a resource. Policies that you attach while creating a table using the <code>CreateTable</code> request will always be applied to all requests for that table.</p>",
-      "endpointdiscovery":{
-      }
-    },
     "ImportTable":{
       "name":"ImportTable",
       "http":{
@@ -655,25 +619,6 @@
       "endpointdiscovery":{
       }
     },
-    "PutResourcePolicy":{
-      "name":"PutResourcePolicy",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"PutResourcePolicyInput"},
-      "output":{"shape":"PutResourcePolicyOutput"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerError"},
-        {"shape":"LimitExceededException"},
-        {"shape":"PolicyNotFoundException"},
-        {"shape":"ResourceInUseException"}
-      ],
-      "documentation":"<p>Attaches a resource-based policy document to the resource, which can be a table or stream. When you attach a resource-based policy using this API, the policy application is <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html\"> <i>eventually consistent</i> </a>.</p> <p> <code>PutResourcePolicy</code> is an idempotent operation; running it multiple times on the same resource using the same policy document will return the same revision ID. If you specify an <code>ExpectedRevisionId</code> which doesn't match the current policy's <code>RevisionId</code>, the <code>PolicyNotFoundException</code> will be returned.</p> <note> <p> <code>PutResourcePolicy</code> is an asynchronous operation. If you issue a <code>GetResourcePolicy</code> request immediately after a <code>PutResourcePolicy</code> request, DynamoDB might return your previous policy, if there was one, or return the <code>PolicyNotFoundException</code>. This is because <code>GetResourcePolicy</code> uses an eventually consistent query, and the metadata for your policy or table might not be available at that moment. Wait for a few seconds, and then try the <code>GetResourcePolicy</code> request again.</p> </note>",
-      "endpointdiscovery":{
-      }
-    },
     "Query":{
       "name":"Query",
       "http":{
@@ -729,7 +674,7 @@
         {"shape":"PointInTimeRecoveryUnavailableException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Restores the specified table to the specified point in time within <code>EarliestRestorableDateTime</code> and <code>LatestRestorableDateTime</code>. You can restore your table to any point in time during the last 35 days. Any number of users can execute up to 50 concurrent restores (any type of restore) in a given account. </p> <p>When you restore using point in time recovery, DynamoDB restores your table data to the state based on the selected date and time (day:hour:minute:second) to a new table. </p> <p>Along with data, the following are also included on the new restored table using point in time recovery: </p> <ul> <li> <p>Global secondary indexes (GSIs)</p> </li> <li> <p>Local secondary indexes (LSIs)</p> </li> <li> <p>Provisioned read and write capacity</p> </li> <li> <p>Encryption settings</p> <important> <p> All these settings come from the current settings of the source table at the time of restore. </p> </important> </li> </ul> <p>You must manually set up the following on the restored table:</p> <ul> <li> <p>Auto scaling policies</p> </li> <li> <p>IAM policies</p> </li> <li> <p>Amazon CloudWatch metrics and alarms</p> </li> <li> <p>Tags</p> </li> <li> <p>Stream settings</p> </li> <li> <p>Time to Live (TTL) settings</p> </li> <li> <p>Point in time recovery settings</p> </li> </ul>",
+      "documentation":"<p>Restores the specified table to the specified point in time within <code>EarliestRestorableDateTime</code> and <code>LatestRestorableDateTime</code>. You can restore your table to any point in time during the last 35 days. Any number of users can execute up to 4 concurrent restores (any type of restore) in a given account. </p> <p> When you restore using point in time recovery, DynamoDB restores your table data to the state based on the selected date and time (day:hour:minute:second) to a new table. </p> <p> Along with data, the following are also included on the new restored table using point in time recovery: </p> <ul> <li> <p>Global secondary indexes (GSIs)</p> </li> <li> <p>Local secondary indexes (LSIs)</p> </li> <li> <p>Provisioned read and write capacity</p> </li> <li> <p>Encryption settings</p> <important> <p> All these settings come from the current settings of the source table at the time of restore. </p> </important> </li> </ul> <p>You must manually set up the following on the restored table:</p> <ul> <li> <p>Auto scaling policies</p> </li> <li> <p>IAM policies</p> </li> <li> <p>Amazon CloudWatch metrics and alarms</p> </li> <li> <p>Tags</p> </li> <li> <p>Stream settings</p> </li> <li> <p>Time to Live (TTL) settings</p> </li> <li> <p>Point in time recovery settings</p> </li> </ul>",
       "endpointdiscovery":{
       }
     },
@@ -871,7 +816,7 @@
         {"shape":"ReplicaNotFoundException"},
         {"shape":"TableNotFoundException"}
       ],
-      "documentation":"<p>Adds or removes replicas in the specified global table. The global table must already exist to be able to use this operation. Any replica to be added must be empty, have the same name as the global table, have the same key schema, have DynamoDB Streams enabled, and have the same provisioned and maximum write capacity units.</p> <important> <p>This operation only applies to <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V1.html\">Version 2017.11.29 (Legacy)</a> of global tables. We recommend using <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html\">Version 2019.11.21 (Current)</a> when creating new global tables, as it provides greater flexibility, higher efficiency and consumes less write capacity than 2017.11.29 (Legacy). To determine which version you are using, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.DetermineVersion.html\">Determining the version</a>. To update existing global tables from version 2017.11.29 (Legacy) to version 2019.11.21 (Current), see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/V2globaltables_upgrade.html\"> Updating global tables</a>. </p> </important> <note> <p> This operation only applies to <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V1.html\">Version 2017.11.29</a> of global tables. If you are using global tables <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html\">Version 2019.11.21</a> you can use <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_UpdateTable.html\">UpdateTable</a> instead. </p> <p> Although you can use <code>UpdateGlobalTable</code> to add replicas and remove replicas in a single request, for simplicity we recommend that you issue separate requests for adding or removing replicas. </p> </note> <p> If global secondary indexes are specified, then the following conditions must also be met: </p> <ul> <li> <p> The global secondary indexes must have the same name. </p> </li> <li> <p> The global secondary indexes must have the same hash key and sort key (if present). </p> </li> <li> <p> The global secondary indexes must have the same provisioned and maximum write capacity units. </p> </li> </ul>",
+      "documentation":"<p>Adds or removes replicas in the specified global table. The global table must already exist to be able to use this operation. Any replica to be added must be empty, have the same name as the global table, have the same key schema, have DynamoDB Streams enabled, and have the same provisioned and maximum write capacity units.</p> <important> <p>This operation only applies to <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V1.html\">Version 2017.11.29 (Legacy)</a> of global tables. We recommend using <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html\">Version 2019.11.21 (Current)</a> when creating new global tables, as it provides greater flexibility, higher efficiency and consumes less write capacity than 2017.11.29 (Legacy). To determine which version you are using, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.DetermineVersion.html\">Determining the version</a>. To update existing global tables from version 2017.11.29 (Legacy) to version 2019.11.21 (Current), see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/V2globaltables_upgrade.html\"> Updating global tables</a>. </p> </important> <note> <p> This operation only applies to <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V1.html\">Version 2017.11.29</a> of global tables. If you are using global tables <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html\">Version 2019.11.21</a> you can use <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_DescribeTable.html\">DescribeTable</a> instead. </p> <p> Although you can use <code>UpdateGlobalTable</code> to add replicas and remove replicas in a single request, for simplicity we recommend that you issue separate requests for adding or removing replicas. </p> </note> <p> If global secondary indexes are specified, then the following conditions must also be met: </p> <ul> <li> <p> The global secondary indexes must have the same name. </p> </li> <li> <p> The global secondary indexes must have the same hash key and sort key (if present). </p> </li> <li> <p> The global secondary indexes must have the same provisioned and maximum write capacity units. </p> </li> </ul>",
       "endpointdiscovery":{
       }
     },
@@ -916,24 +861,6 @@
       "endpointdiscovery":{
       }
     },
-    "UpdateKinesisStreamingDestination":{
-      "name":"UpdateKinesisStreamingDestination",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"UpdateKinesisStreamingDestinationInput"},
-      "output":{"shape":"UpdateKinesisStreamingDestinationOutput"},
-      "errors":[
-        {"shape":"InternalServerError"},
-        {"shape":"LimitExceededException"},
-        {"shape":"ResourceInUseException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>The command to update the Kinesis stream destination.</p>",
-      "endpointdiscovery":{
-      }
-    },
     "UpdateTable":{
       "name":"UpdateTable",
       "http":{
@@ -948,7 +875,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"InternalServerError"}
       ],
-      "documentation":"<p>Modifies the provisioned throughput settings, global secondary indexes, or DynamoDB Streams settings for a given table.</p> <important> <p>This operation only applies to <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html\">Version 2019.11.21 (Current)</a> of global tables. </p> </important> <p>You can only perform one of the following operations at once:</p> <ul> <li> <p>Modify the provisioned throughput settings of the table.</p> </li> <li> <p>Remove a global secondary index from the table.</p> </li> <li> <p>Create a new global secondary index on the table. After the index begins backfilling, you can use <code>UpdateTable</code> to perform other operations.</p> </li> </ul> <p> <code>UpdateTable</code> is an asynchronous operation; while it's executing, the table status changes from <code>ACTIVE</code> to <code>UPDATING</code>. While it's <code>UPDATING</code>, you can't issue another <code>UpdateTable</code> request. When the table returns to the <code>ACTIVE</code> state, the <code>UpdateTable</code> operation is complete.</p>",
+      "documentation":"<p>Modifies the provisioned throughput settings, global secondary indexes, or DynamoDB Streams settings for a given table.</p> <important> <p>This operation only applies to <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/globaltables.V2.html\">Version 2019.11.21 (Current)</a> of global tables. </p> </important> <p>You can only perform one of the following operations at once:</p> <ul> <li> <p>Modify the provisioned throughput settings of the table.</p> </li> <li> <p>Remove a global secondary index from the table.</p> </li> <li> <p>Create a new global secondary index on the table. After the index begins backfilling, you can use <code>UpdateTable</code> to perform other operations.</p> </li> </ul> <p> <code>UpdateTable</code> is an asynchronous operation; while it is executing, the table status changes from <code>ACTIVE</code> to <code>UPDATING</code>. While it is <code>UPDATING</code>, you cannot issue another <code>UpdateTable</code> request. When the table returns to the <code>ACTIVE</code> state, the <code>UpdateTable</code> operation is complete.</p>",
       "endpointdiscovery":{
       }
     },
@@ -988,13 +915,6 @@
     }
   },
   "shapes":{
-    "ApproximateCreationDateTimePrecision":{
-      "type":"string",
-      "enum":[
-        "MILLISECOND",
-        "MICROSECOND"
-      ]
-    },
     "ArchivalReason":{"type":"string"},
     "ArchivalSummary":{
       "type":"structure",
@@ -1038,7 +958,7 @@
           "documentation":"<p>The data type for the attribute, where:</p> <ul> <li> <p> <code>S</code> - the attribute is of type String</p> </li> <li> <p> <code>N</code> - the attribute is of type Number</p> </li> <li> <p> <code>B</code> - the attribute is of type Binary</p> </li> </ul>"
         }
       },
-      "documentation":"<p>Represents an attribute for describing the schema for the table and indexes.</p>"
+      "documentation":"<p>Represents an attribute for describing the key schema for the table and indexes.</p>"
     },
     "AttributeDefinitions":{
       "type":"list",
@@ -1472,7 +1392,7 @@
       "members":{
         "RequestItems":{
           "shape":"BatchGetRequestMap",
-          "documentation":"<p>A map of one or more table names or table ARNs and, for each table, a map that describes one or more items to retrieve from that table. Each table name or ARN can be used only once per <code>BatchGetItem</code> request.</p> <p>Each element in the map of items to retrieve consists of the following:</p> <ul> <li> <p> <code>ConsistentRead</code> - If <code>true</code>, a strongly consistent read is used; if <code>false</code> (the default), an eventually consistent read is used.</p> </li> <li> <p> <code>ExpressionAttributeNames</code> - One or more substitution tokens for attribute names in the <code>ProjectionExpression</code> parameter. The following are some use cases for using <code>ExpressionAttributeNames</code>:</p> <ul> <li> <p>To access an attribute whose name conflicts with a DynamoDB reserved word.</p> </li> <li> <p>To create a placeholder for repeating occurrences of an attribute name in an expression.</p> </li> <li> <p>To prevent special characters in an attribute name from being misinterpreted in an expression.</p> </li> </ul> <p>Use the <b>#</b> character in an expression to dereference an attribute name. For example, consider the following attribute name:</p> <ul> <li> <p> <code>Percentile</code> </p> </li> </ul> <p>The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html\">Reserved Words</a> in the <i>Amazon DynamoDB Developer Guide</i>). To work around this, you could specify the following for <code>ExpressionAttributeNames</code>:</p> <ul> <li> <p> <code>{\"#P\":\"Percentile\"}</code> </p> </li> </ul> <p>You could then use this substitution in an expression, as in this example:</p> <ul> <li> <p> <code>#P = :val</code> </p> </li> </ul> <note> <p>Tokens that begin with the <b>:</b> character are <i>expression attribute values</i>, which are placeholders for the actual value at runtime.</p> </note> <p>For more information about expression attribute names, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html\">Accessing Item Attributes</a> in the <i>Amazon DynamoDB Developer Guide</i>.</p> </li> <li> <p> <code>Keys</code> - An array of primary key attribute values that define specific items in the table. For each primary key, you must provide <i>all</i> of the key attributes. For example, with a simple primary key, you only need to provide the partition key value. For a composite key, you must provide <i>both</i> the partition key value and the sort key value.</p> </li> <li> <p> <code>ProjectionExpression</code> - A string that identifies one or more attributes to retrieve from the table. These attributes can include scalars, sets, or elements of a JSON document. The attributes in the expression must be separated by commas.</p> <p>If no attribute names are specified, then all attributes are returned. If any of the requested attributes are not found, they do not appear in the result.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html\">Accessing Item Attributes</a> in the <i>Amazon DynamoDB Developer Guide</i>.</p> </li> <li> <p> <code>AttributesToGet</code> - This is a legacy parameter. Use <code>ProjectionExpression</code> instead. For more information, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributesToGet.html\">AttributesToGet</a> in the <i>Amazon DynamoDB Developer Guide</i>. </p> </li> </ul>"
+          "documentation":"<p>A map of one or more table names and, for each table, a map that describes one or more items to retrieve from that table. Each table name can be used only once per <code>BatchGetItem</code> request.</p> <p>Each element in the map of items to retrieve consists of the following:</p> <ul> <li> <p> <code>ConsistentRead</code> - If <code>true</code>, a strongly consistent read is used; if <code>false</code> (the default), an eventually consistent read is used.</p> </li> <li> <p> <code>ExpressionAttributeNames</code> - One or more substitution tokens for attribute names in the <code>ProjectionExpression</code> parameter. The following are some use cases for using <code>ExpressionAttributeNames</code>:</p> <ul> <li> <p>To access an attribute whose name conflicts with a DynamoDB reserved word.</p> </li> <li> <p>To create a placeholder for repeating occurrences of an attribute name in an expression.</p> </li> <li> <p>To prevent special characters in an attribute name from being misinterpreted in an expression.</p> </li> </ul> <p>Use the <b>#</b> character in an expression to dereference an attribute name. For example, consider the following attribute name:</p> <ul> <li> <p> <code>Percentile</code> </p> </li> </ul> <p>The name of this attribute conflicts with a reserved word, so it cannot be used directly in an expression. (For the complete list of reserved words, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html\">Reserved Words</a> in the <i>Amazon DynamoDB Developer Guide</i>). To work around this, you could specify the following for <code>ExpressionAttributeNames</code>:</p> <ul> <li> <p> <code>{\"#P\":\"Percentile\"}</code> </p> </li> </ul> <p>You could then use this substitution in an expression, as in this example:</p> <ul> <li> <p> <code>#P = :val</code> </p> </li> </ul> <note> <p>Tokens that begin with the <b>:</b> character are <i>expression attribute values</i>, which are placeholders for the actual value at runtime.</p> </note> <p>For more information about expression attribute names, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html\">Accessing Item Attributes</a> in the <i>Amazon DynamoDB Developer Guide</i>.</p> </li> <li> <p> <code>Keys</code> - An array of primary key attribute values that define specific items in the table. For each primary key, you must provide <i>all</i> of the key attributes. For example, with a simple primary key, you only need to provide the partition key value. For a composite key, you must provide <i>both</i> the partition key value and the sort key value.</p> </li> <li> <p> <code>ProjectionExpression</code> - A string that identifies one or more attributes to retrieve from the table. These attributes can include scalars, sets, or elements of a JSON document. The attributes in the expression must be separated by commas.</p> <p>If no attribute names are specified, then all attributes are returned. If any of the requested attributes are not found, they do not appear in the result.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.AccessingItemAttributes.html\">Accessing Item Attributes</a> in the <i>Amazon DynamoDB Developer Guide</i>.</p> </li> <li> <p> <code>AttributesToGet</code> - This is a legacy parameter. Use <code>ProjectionExpression</code> instead. For more information, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LegacyConditionalParameters.AttributesToGet.html\">AttributesToGet</a> in the <i>Amazon DynamoDB Developer Guide</i>. </p> </li> </ul>"
         },
         "ReturnConsumedCapacity":{"shape":"ReturnConsumedCapacity"}
       },
@@ -1483,7 +1403,7 @@
       "members":{
         "Responses":{
           "shape":"BatchGetResponseMap",
-          "documentation":"<p>A map of table name or table ARN to a list of items. Each object in <code>Responses</code> consists of a table name or ARN, along with a map of attribute data consisting of the data type and attribute value.</p>"
+          "documentation":"<p>A map of table name to a list of items. Each object in <code>Responses</code> consists of a table name, along with a map of attribute data consisting of the data type and attribute value.</p>"
         },
         "UnprocessedKeys":{
           "shape":"BatchGetRequestMap",
@@ -1498,14 +1418,14 @@
     },
     "BatchGetRequestMap":{
       "type":"map",
-      "key":{"shape":"TableArn"},
+      "key":{"shape":"TableName"},
       "value":{"shape":"KeysAndAttributes"},
       "max":100,
       "min":1
     },
     "BatchGetResponseMap":{
       "type":"map",
-      "key":{"shape":"TableArn"},
+      "key":{"shape":"TableName"},
       "value":{"shape":"ItemList"}
     },
     "BatchStatementError":{
@@ -1589,7 +1509,7 @@
       "members":{
         "RequestItems":{
           "shape":"BatchWriteItemRequestMap",
-          "documentation":"<p>A map of one or more table names or table ARNs and, for each table, a list of operations to be performed (<code>DeleteRequest</code> or <code>PutRequest</code>). Each element in the map consists of the following:</p> <ul> <li> <p> <code>DeleteRequest</code> - Perform a <code>DeleteItem</code> operation on the specified item. The item to be deleted is identified by a <code>Key</code> subelement:</p> <ul> <li> <p> <code>Key</code> - A map of primary key attribute values that uniquely identify the item. Each entry in this map consists of an attribute name and an attribute value. For each primary key, you must provide <i>all</i> of the key attributes. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide values for <i>both</i> the partition key and the sort key.</p> </li> </ul> </li> <li> <p> <code>PutRequest</code> - Perform a <code>PutItem</code> operation on the specified item. The item to be put is identified by an <code>Item</code> subelement:</p> <ul> <li> <p> <code>Item</code> - A map of attributes and their values. Each entry in this map consists of an attribute name and an attribute value. Attribute values must not be null; string and binary type attributes must have lengths greater than zero; and set type attributes must not be empty. Requests that contain empty values are rejected with a <code>ValidationException</code> exception.</p> <p>If you specify any attributes that are part of an index key, then the data types for those attributes must match those of the schema in the table's attribute definition.</p> </li> </ul> </li> </ul>"
+          "documentation":"<p>A map of one or more table names and, for each table, a list of operations to be performed (<code>DeleteRequest</code> or <code>PutRequest</code>). Each element in the map consists of the following:</p> <ul> <li> <p> <code>DeleteRequest</code> - Perform a <code>DeleteItem</code> operation on the specified item. The item to be deleted is identified by a <code>Key</code> subelement:</p> <ul> <li> <p> <code>Key</code> - A map of primary key attribute values that uniquely identify the item. Each entry in this map consists of an attribute name and an attribute value. For each primary key, you must provide <i>all</i> of the key attributes. For example, with a simple primary key, you only need to provide a value for the partition key. For a composite primary key, you must provide values for <i>both</i> the partition key and the sort key.</p> </li> </ul> </li> <li> <p> <code>PutRequest</code> - Perform a <code>PutItem</code> operation on the specified item. The item to be put is identified by an <code>Item</code> subelement:</p> <ul> <li> <p> <code>Item</code> - A map of attributes and their values. Each entry in this map consists of an attribute name and an attribute value. Attribute values must not be null; string and binary type attributes must have lengths greater than zero; and set type attributes must not be empty. Requests that contain empty values are rejected with a <code>ValidationException</code> exception.</p> <p>If you specify any attributes that are part of an index key, then the data types for those attributes must match those of the schema in the table's attribute definition.</p> </li> </ul> </li> </ul>"
         },
         "ReturnConsumedCapacity":{"shape":"ReturnConsumedCapacity"},
         "ReturnItemCollectionMetrics":{
@@ -1604,7 +1524,7 @@
       "members":{
         "UnprocessedItems":{
           "shape":"BatchWriteItemRequestMap",
-          "documentation":"<p>A map of tables and requests against those tables that were not processed. The <code>UnprocessedItems</code> value is in the same form as <code>RequestItems</code>, so you can provide this value directly to a subsequent <code>BatchWriteItem</code> operation. For more information, see <code>RequestItems</code> in the Request Parameters section.</p> <p>Each <code>UnprocessedItems</code> entry consists of a table name or table ARN and, for that table, a list of operations to perform (<code>DeleteRequest</code> or <code>PutRequest</code>).</p> <ul> <li> <p> <code>DeleteRequest</code> - Perform a <code>DeleteItem</code> operation on the specified item. The item to be deleted is identified by a <code>Key</code> subelement:</p> <ul> <li> <p> <code>Key</code> - A map of primary key attribute values that uniquely identify the item. Each entry in this map consists of an attribute name and an attribute value.</p> </li> </ul> </li> <li> <p> <code>PutRequest</code> - Perform a <code>PutItem</code> operation on the specified item. The item to be put is identified by an <code>Item</code> subelement:</p> <ul> <li> <p> <code>Item</code> - A map of attributes and their values. Each entry in this map consists of an attribute name and an attribute value. Attribute values must not be null; string and binary type attributes must have lengths greater than zero; and set type attributes must not be empty. Requests that contain empty values will be rejected with a <code>ValidationException</code> exception.</p> <p>If you specify any attributes that are part of an index key, then the data types for those attributes must match those of the schema in the table's attribute definition.</p> </li> </ul> </li> </ul> <p>If there are no unprocessed items remaining, the response contains an empty <code>UnprocessedItems</code> map.</p>"
+          "documentation":"<p>A map of tables and requests against those tables that were not processed. The <code>UnprocessedItems</code> value is in the same form as <code>RequestItems</code>, so you can provide this value directly to a subsequent <code>BatchWriteItem</code> operation. For more information, see <code>RequestItems</code> in the Request Parameters section.</p> <p>Each <code>UnprocessedItems</code> entry consists of a table name and, for that table, a list of operations to perform (<code>DeleteRequest</code> or <code>PutRequest</code>).</p> <ul> <li> <p> <code>DeleteRequest</code> - Perform a <code>DeleteItem</code> operation on the specified item. The item to be deleted is identified by a <code>Key</code> subelement:</p> <ul> <li> <p> <code>Key</code> - A map of primary key attribute values that uniquely identify the item. Each entry in this map consists of an attribute name and an attribute value.</p> </li> </ul> </li> <li> <p> <code>PutRequest</code> - Perform a <code>PutItem</code> operation on the specified item. The item to be put is identified by an <code>Item</code> subelement:</p> <ul> <li> <p> <code>Item</code> - A map of attributes and their values. Each entry in this map consists of an attribute name and an attribute value. Attribute values must not be null; string and binary type attributes must have lengths greater than zero; and set type attributes must not be empty. Requests that contain empty values will be rejected with a <code>ValidationException</code> exception.</p> <p>If you specify any attributes that are part of an index key, then the data types for those attributes must match those of the schema in the table's attribute definition.</p> </li> </ul> </li> </ul> <p>If there are no unprocessed items remaining, the response contains an empty <code>UnprocessedItems</code> map.</p>"
         },
         "ItemCollectionMetrics":{
           "shape":"ItemCollectionMetricsPerTable",
@@ -1619,7 +1539,7 @@
     },
     "BatchWriteItemRequestMap":{
       "type":"map",
-      "key":{"shape":"TableArn"},
+      "key":{"shape":"TableName"},
       "value":{"shape":"WriteRequests"},
       "max":25,
       "min":1
@@ -1759,8 +1679,8 @@
           "documentation":"<p>The primary key of the item to be checked. Each element consists of an attribute name and a value for that attribute.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>Name of the table for the check item request. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>Name of the table for the check item request.</p>"
         },
         "ConditionExpression":{
           "shape":"ConditionExpression",
@@ -1804,14 +1724,13 @@
         "OR"
       ]
     },
-    "ConfirmRemoveSelfResourceAccess":{"type":"boolean"},
     "ConsistentRead":{"type":"boolean"},
     "ConsumedCapacity":{
       "type":"structure",
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table that was affected by the operation. If you had specified the Amazon Resource Name (ARN) of a table in the input, you'll see the table ARN in the response.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table that was affected by the operation.</p>"
         },
         "CapacityUnits":{
           "shape":"ConsumedCapacityUnits",
@@ -1930,8 +1849,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table.</p>"
         },
         "BackupName":{
           "shape":"BackupName",
@@ -2052,8 +1971,8 @@
           "documentation":"<p>An array of attributes that describe the key schema for the table and indexes.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to create. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to create.</p>"
         },
         "KeySchema":{
           "shape":"KeySchema",
@@ -2094,10 +2013,6 @@
         "DeletionProtectionEnabled":{
           "shape":"DeletionProtectionEnabled",
           "documentation":"<p>Indicates whether deletion protection is to be enabled (true) or disabled (false) on the table.</p>"
-        },
-        "ResourcePolicy":{
-          "shape":"ResourcePolicy",
-          "documentation":"<p>An Amazon Web Services resource-based policy document in JSON format that will be attached to the table.</p> <p>When you attach a resource-based policy while creating a table, the policy creation is <i>strongly consistent</i>.</p> <p>The maximum size supported for a resource-based policy document is 20 KB. DynamoDB counts whitespaces when calculating the size of a policy against this limit. You can’t request an increase for this limit. For a full list of all considerations that you should keep in mind while attaching a resource-based policy, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/rbac-considerations.html\">Resource-based policy considerations</a>.</p>"
         }
       },
       "documentation":"<p>Represents the input of a <code>CreateTable</code> operation.</p>"
@@ -2157,8 +2072,8 @@
           "documentation":"<p>The primary key of the item to be deleted. Each element consists of an attribute name and a value for that attribute.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>Name of the table in which the item to be deleted resides. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>Name of the table in which the item to be deleted resides.</p>"
         },
         "ConditionExpression":{
           "shape":"ConditionExpression",
@@ -2217,8 +2132,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table from which to delete the item. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table from which to delete the item.</p>"
         },
         "Key":{
           "shape":"Key",
@@ -2311,36 +2226,13 @@
       },
       "documentation":"<p>Represents a request to perform a <code>DeleteItem</code> operation on an item.</p>"
     },
-    "DeleteResourcePolicyInput":{
-      "type":"structure",
-      "required":["ResourceArn"],
-      "members":{
-        "ResourceArn":{
-          "shape":"ResourceArnString",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the DynamoDB resource from which the policy will be removed. The resources you can specify include tables and streams. If you remove the policy of a table, it will also remove the permissions for the table's indexes defined in that policy document. This is because index permissions are defined in the table's policy.</p>"
-        },
-        "ExpectedRevisionId":{
-          "shape":"PolicyRevisionId",
-          "documentation":"<p>A string value that you can use to conditionally delete your policy. When you provide an expected revision ID, if the revision ID of the existing policy on the resource doesn't match or if there's no policy attached to the resource, the request will fail and return a <code>PolicyNotFoundException</code>.</p>"
-        }
-      }
-    },
-    "DeleteResourcePolicyOutput":{
-      "type":"structure",
-      "members":{
-        "RevisionId":{
-          "shape":"PolicyRevisionId",
-          "documentation":"<p>A unique string that represents the revision ID of the policy. If you are comparing revision IDs, make sure to always use string comparison logic.</p> <p>This value will be empty if you make a request against a resource without a policy.</p>"
-        }
-      }
-    },
     "DeleteTableInput":{
       "type":"structure",
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to delete. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to delete.</p>"
         }
       },
       "documentation":"<p>Represents the input of a <code>DeleteTable</code> operation.</p>"
@@ -2380,8 +2272,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>Name of the table for which the customer wants to check the continuous backups and point in time recovery settings.</p> <p>You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>Name of the table for which the customer wants to check the continuous backups and point in time recovery settings.</p>"
         }
       }
     },
@@ -2399,8 +2291,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to describe. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to describe.</p>"
         },
         "IndexName":{
           "shape":"IndexName",
@@ -2538,8 +2430,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table being described. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table being described.</p>"
         }
       }
     },
@@ -2589,8 +2481,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to describe. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to describe.</p>"
         }
       },
       "documentation":"<p>Represents the input of a <code>DescribeTable</code> operation.</p>"
@@ -2610,8 +2502,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table.</p>"
         }
       }
     },
@@ -2629,8 +2521,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to be described. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to be described.</p>"
         }
       }
     },
@@ -2650,8 +2542,7 @@
         "ACTIVE",
         "DISABLING",
         "DISABLED",
-        "ENABLE_FAILED",
-        "UPDATING"
+        "ENABLE_FAILED"
       ]
     },
     "DoubleObject":{"type":"double"},
@@ -2662,16 +2553,6 @@
       },
       "documentation":"<p> There was an attempt to insert an item with the same primary key as an item that already exists in the DynamoDB table.</p>",
       "exception":true
-    },
-    "EnableKinesisStreamingConfiguration":{
-      "type":"structure",
-      "members":{
-        "ApproximateCreationDateTimePrecision":{
-          "shape":"ApproximateCreationDateTimePrecision",
-          "documentation":"<p>Toggle for the precision of Kinesis data stream timestamp. The values are either <code>MILLISECOND</code> or <code>MICROSECOND</code>.</p>"
-        }
-      },
-      "documentation":"<p>Enables setting the configuration for Kinesis Streaming.</p>"
     },
     "Endpoint":{
       "type":"structure",
@@ -2989,7 +2870,7 @@
         },
         "S3BucketOwner":{
           "shape":"S3BucketOwner",
-          "documentation":"<p>The ID of the Amazon Web Services account that owns the bucket the export will be stored in.</p> <note> <p>S3BucketOwner is a required parameter when exporting to a S3 bucket in another account.</p> </note>"
+          "documentation":"<p>The ID of the Amazon Web Services account that owns the bucket the export will be stored in.</p>"
         },
         "S3Prefix":{
           "shape":"S3Prefix",
@@ -3087,8 +2968,8 @@
           "documentation":"<p>A map of attribute names to <code>AttributeValue</code> objects that specifies the primary key of the item to retrieve.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table from which to retrieve the specified item. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table from which to retrieve the specified item.</p>"
         },
         "ProjectionExpression":{
           "shape":"ProjectionExpression",
@@ -3109,8 +2990,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table containing the requested item. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table containing the requested item.</p>"
         },
         "Key":{
           "shape":"Key",
@@ -3149,29 +3030,6 @@
         }
       },
       "documentation":"<p>Represents the output of a <code>GetItem</code> operation.</p>"
-    },
-    "GetResourcePolicyInput":{
-      "type":"structure",
-      "required":["ResourceArn"],
-      "members":{
-        "ResourceArn":{
-          "shape":"ResourceArnString",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the DynamoDB resource to which the policy is attached. The resources you can specify include tables and streams.</p>"
-        }
-      }
-    },
-    "GetResourcePolicyOutput":{
-      "type":"structure",
-      "members":{
-        "Policy":{
-          "shape":"ResourcePolicy",
-          "documentation":"<p>The resource-based policy document attached to the resource, which can be a table or stream, in JSON format.</p>"
-        },
-        "RevisionId":{
-          "shape":"PolicyRevisionId",
-          "documentation":"<p>A unique string that represents the revision ID of the policy. If you are comparing revision IDs, make sure to always use string comparison logic.</p>"
-        }
-      }
     },
     "GlobalSecondaryIndex":{
       "type":"structure",
@@ -3751,7 +3609,7 @@
     },
     "ItemCollectionMetricsPerTable":{
       "type":"map",
-      "key":{"shape":"TableArn"},
+      "key":{"shape":"TableName"},
       "value":{"shape":"ItemCollectionMetricsMultiple"}
     },
     "ItemCollectionSizeEstimateBound":{"type":"double"},
@@ -3890,10 +3748,6 @@
         "DestinationStatusDescription":{
           "shape":"String",
           "documentation":"<p>The human-readable string that corresponds to the replica status.</p>"
-        },
-        "ApproximateCreationDateTimePrecision":{
-          "shape":"ApproximateCreationDateTimePrecision",
-          "documentation":"<p>The precision of the Kinesis data stream timestamp. The values are either <code>MILLISECOND</code> or <code>MICROSECOND</code>.</p>"
         }
       },
       "documentation":"<p>Describes a Kinesis data stream destination.</p>"
@@ -3910,16 +3764,12 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the DynamoDB table. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the DynamoDB table.</p>"
         },
         "StreamArn":{
           "shape":"StreamArn",
           "documentation":"<p>The ARN for a Kinesis data stream.</p>"
-        },
-        "EnableKinesisStreamingConfiguration":{
-          "shape":"EnableKinesisStreamingConfiguration",
-          "documentation":"<p>The source for the Kinesis streaming information that is being enabled.</p>"
         }
       }
     },
@@ -3937,10 +3787,6 @@
         "DestinationStatus":{
           "shape":"DestinationStatus",
           "documentation":"<p>The current status of the replication.</p>"
-        },
-        "EnableKinesisStreamingConfiguration":{
-          "shape":"EnableKinesisStreamingConfiguration",
-          "documentation":"<p>The destination for the Kinesis streaming information that is being enabled.</p>"
         }
       }
     },
@@ -3964,8 +3810,8 @@
       "type":"structure",
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>Lists the backups from the table specified in <code>TableName</code>. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The backups from the table specified by <code>TableName</code> are listed. </p>"
         },
         "Limit":{
           "shape":"BackupsInputLimit",
@@ -4006,8 +3852,8 @@
       "type":"structure",
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table.</p>"
         },
         "NextToken":{
           "shape":"NextTokenString",
@@ -4314,7 +4160,7 @@
       "members":{
         "Statement":{
           "shape":"PartiQLStatement",
-          "documentation":"<p> A PartiQL statement that uses parameters. </p>"
+          "documentation":"<p> A PartiQL statment that uses parameters. </p>"
         },
         "Parameters":{
           "shape":"PreparedStatementParameters",
@@ -4325,7 +4171,7 @@
           "documentation":"<p>An optional parameter that returns the item attributes for a PartiQL <code>ParameterizedStatement</code> operation that failed a condition check.</p> <p>There is no additional cost associated with requesting a return value aside from the small network and processing overhead of receiving a larger response. No read capacity units are consumed.</p>"
         }
       },
-      "documentation":"<p> Represents a PartiQL statement that uses parameters. </p>"
+      "documentation":"<p> Represents a PartiQL statment that uses parameters. </p>"
     },
     "ParameterizedStatements":{
       "type":"list",
@@ -4397,19 +4243,6 @@
       "documentation":"<p>Point in time recovery has not yet been enabled for this source table.</p>",
       "exception":true
     },
-    "PolicyNotFoundException":{
-      "type":"structure",
-      "members":{
-        "message":{"shape":"ErrorMessage"}
-      },
-      "documentation":"<p>The operation tried to access a nonexistent resource-based policy.</p> <p>If you specified an <code>ExpectedRevisionId</code>, it's possible that a policy is present for the resource but its revision ID didn't match the expected value.</p>",
-      "exception":true
-    },
-    "PolicyRevisionId":{
-      "type":"string",
-      "max":255,
-      "min":1
-    },
     "PositiveIntegerObject":{
       "type":"integer",
       "min":1
@@ -4432,7 +4265,7 @@
       "members":{
         "ProjectionType":{
           "shape":"ProjectionType",
-          "documentation":"<p>The set of attributes that are projected into the index:</p> <ul> <li> <p> <code>KEYS_ONLY</code> - Only the index and primary keys are projected into the index.</p> </li> <li> <p> <code>INCLUDE</code> - In addition to the attributes described in <code>KEYS_ONLY</code>, the secondary index will include other non-key attributes that you specify.</p> </li> <li> <p> <code>ALL</code> - All of the table attributes are projected into the index.</p> </li> </ul> <p>When using the DynamoDB console, <code>ALL</code> is selected by default.</p>"
+          "documentation":"<p>The set of attributes that are projected into the index:</p> <ul> <li> <p> <code>KEYS_ONLY</code> - Only the index and primary keys are projected into the index.</p> </li> <li> <p> <code>INCLUDE</code> - In addition to the attributes described in <code>KEYS_ONLY</code>, the secondary index will include other non-key attributes that you specify.</p> </li> <li> <p> <code>ALL</code> - All of the table attributes are projected into the index.</p> </li> </ul>"
         },
         "NonKeyAttributes":{
           "shape":"NonKeyAttributeNameList",
@@ -4527,8 +4360,8 @@
           "documentation":"<p>A map of attribute name to attribute values, representing the primary key of the item to be written by <code>PutItem</code>. All of the table's primary key attributes must be specified, and their data types must match those of the table's key schema. If any attributes are present in the item that are part of an index key schema for the table, their types must match the index key schema. </p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>Name of the table in which to write the item. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>Name of the table in which to write the item.</p>"
         },
         "ConditionExpression":{
           "shape":"ConditionExpression",
@@ -4557,8 +4390,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to contain the item. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to contain the item.</p>"
         },
         "Item":{
           "shape":"PutItemInputAttributeMap",
@@ -4634,47 +4467,13 @@
       },
       "documentation":"<p>Represents a request to perform a <code>PutItem</code> operation on an item.</p>"
     },
-    "PutResourcePolicyInput":{
-      "type":"structure",
-      "required":[
-        "ResourceArn",
-        "Policy"
-      ],
-      "members":{
-        "ResourceArn":{
-          "shape":"ResourceArnString",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the DynamoDB resource to which the policy will be attached. The resources you can specify include tables and streams.</p> <p>You can control index permissions using the base table's policy. To specify the same permission level for your table and its indexes, you can provide both the table and index Amazon Resource Name (ARN)s in the <code>Resource</code> field of a given <code>Statement</code> in your policy document. Alternatively, to specify different permissions for your table, indexes, or both, you can define multiple <code>Statement</code> fields in your policy document.</p>"
-        },
-        "Policy":{
-          "shape":"ResourcePolicy",
-          "documentation":"<p>An Amazon Web Services resource-based policy document in JSON format.</p> <p>The maximum size supported for a resource-based policy document is 20 KB. DynamoDB counts whitespaces when calculating the size of a policy against this limit. For a full list of all considerations that you should keep in mind while attaching a resource-based policy, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/rbac-considerations.html\">Resource-based policy considerations</a>.</p>"
-        },
-        "ExpectedRevisionId":{
-          "shape":"PolicyRevisionId",
-          "documentation":"<p>A string value that you can use to conditionally update your policy. You can provide the revision ID of your existing policy to make mutating requests against that policy. When you provide an expected revision ID, if the revision ID of the existing policy on the resource doesn't match or if there's no policy attached to the resource, your request will be rejected with a <code>PolicyNotFoundException</code>.</p> <p>To conditionally put a policy when no policy exists for the resource, specify <code>NO_POLICY</code> for the revision ID.</p>"
-        },
-        "ConfirmRemoveSelfResourceAccess":{
-          "shape":"ConfirmRemoveSelfResourceAccess",
-          "documentation":"<p>Set this parameter to <code>true</code> to confirm that you want to remove your permissions to change the policy of this resource in the future.</p>"
-        }
-      }
-    },
-    "PutResourcePolicyOutput":{
-      "type":"structure",
-      "members":{
-        "RevisionId":{
-          "shape":"PolicyRevisionId",
-          "documentation":"<p>A unique string that represents the revision ID of the policy. If you are comparing revision IDs, make sure to always use string comparison logic.</p>"
-        }
-      }
-    },
     "QueryInput":{
       "type":"structure",
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table containing the requested items. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table containing the requested items.</p>"
         },
         "IndexName":{
           "shape":"IndexName",
@@ -4723,7 +4522,7 @@
         },
         "FilterExpression":{
           "shape":"ConditionExpression",
-          "documentation":"<p>A string that contains conditions that DynamoDB applies after the <code>Query</code> operation, but before the data is returned to you. Items that do not satisfy the <code>FilterExpression</code> criteria are not returned.</p> <p>A <code>FilterExpression</code> does not allow key attributes. You cannot define a filter expression based on a partition key or a sort key.</p> <note> <p>A <code>FilterExpression</code> is applied after the items have already been read; the process of filtering does not consume any additional read capacity units.</p> </note> <p>For more information, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.FilterExpression.html\">Filter Expressions</a> in the <i>Amazon DynamoDB Developer Guide</i>.</p>"
+          "documentation":"<p>A string that contains conditions that DynamoDB applies after the <code>Query</code> operation, but before the data is returned to you. Items that do not satisfy the <code>FilterExpression</code> criteria are not returned.</p> <p>A <code>FilterExpression</code> does not allow key attributes. You cannot define a filter expression based on a partition key or a sort key.</p> <note> <p>A <code>FilterExpression</code> is applied after the items have already been read; the process of filtering does not consume any additional read capacity units.</p> </note> <p>For more information, see <a href=\"https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/QueryAndScan.html#Query.FilterExpression\">Filter Expressions</a> in the <i>Amazon DynamoDB Developer Guide</i>.</p>"
         },
         "KeyConditionExpression":{
           "shape":"KeyExpression",
@@ -5185,7 +4984,6 @@
       "documentation":"<p>The operation tried to access a nonexistent table or index. The resource might not be specified correctly, or its status might not be <code>ACTIVE</code>.</p>",
       "exception":true
     },
-    "ResourcePolicy":{"type":"string"},
     "RestoreInProgress":{"type":"boolean"},
     "RestoreSummary":{
       "type":"structure",
@@ -5462,8 +5260,8 @@
       "required":["TableName"],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table containing the requested items or if you provide <code>IndexName</code>, the name of the table to which that index belongs.</p> <p>You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table containing the requested items; or, if you provide <code>IndexName</code>, the name of the table to which that index belongs.</p>"
         },
         "IndexName":{
           "shape":"IndexName",
@@ -5694,11 +5492,7 @@
       "documentation":"<p>A target table with the specified name already exists. </p>",
       "exception":true
     },
-    "TableArn":{
-      "type":"string",
-      "max":1024,
-      "min":1
-    },
+    "TableArn":{"type":"string"},
     "TableAutoScalingDescription":{
       "type":"structure",
       "members":{
@@ -6181,8 +5975,8 @@
           "documentation":"<p>An expression that defines one or more attributes to be updated, the action to be performed on them, and new value(s) for them.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>Name of the table for the <code>UpdateItem</code> request. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>Name of the table for the <code>UpdateItem</code> request.</p>"
         },
         "ConditionExpression":{
           "shape":"ConditionExpression",
@@ -6211,8 +6005,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table.</p>"
         },
         "PointInTimeRecoverySpecification":{
           "shape":"PointInTimeRecoverySpecification",
@@ -6237,8 +6031,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table.</p>"
         },
         "IndexName":{
           "shape":"IndexName",
@@ -6363,8 +6157,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table containing the item to update. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table containing the item to update.</p>"
         },
         "Key":{
           "shape":"Key",
@@ -6432,58 +6226,6 @@
       },
       "documentation":"<p>Represents the output of an <code>UpdateItem</code> operation.</p>"
     },
-    "UpdateKinesisStreamingConfiguration":{
-      "type":"structure",
-      "members":{
-        "ApproximateCreationDateTimePrecision":{
-          "shape":"ApproximateCreationDateTimePrecision",
-          "documentation":"<p>Enables updating the precision of Kinesis data stream timestamp. </p>"
-        }
-      },
-      "documentation":"<p>Enables updating the configuration for Kinesis Streaming.</p>"
-    },
-    "UpdateKinesisStreamingDestinationInput":{
-      "type":"structure",
-      "required":[
-        "TableName",
-        "StreamArn"
-      ],
-      "members":{
-        "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The table name for the Kinesis streaming destination input. You can also provide the ARN of the table in this parameter.</p>"
-        },
-        "StreamArn":{
-          "shape":"StreamArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) for the Kinesis stream input.</p>"
-        },
-        "UpdateKinesisStreamingConfiguration":{
-          "shape":"UpdateKinesisStreamingConfiguration",
-          "documentation":"<p>The command to update the Kinesis stream configuration.</p>"
-        }
-      }
-    },
-    "UpdateKinesisStreamingDestinationOutput":{
-      "type":"structure",
-      "members":{
-        "TableName":{
-          "shape":"TableName",
-          "documentation":"<p>The table name for the Kinesis streaming destination output.</p>"
-        },
-        "StreamArn":{
-          "shape":"StreamArn",
-          "documentation":"<p>The ARN for the Kinesis stream input.</p>"
-        },
-        "DestinationStatus":{
-          "shape":"DestinationStatus",
-          "documentation":"<p>The status of the attempt to update the Kinesis streaming destination output.</p>"
-        },
-        "UpdateKinesisStreamingConfiguration":{
-          "shape":"UpdateKinesisStreamingConfiguration",
-          "documentation":"<p>The command to update the Kinesis streaming destination configuration.</p>"
-        }
-      }
-    },
     "UpdateReplicationGroupMemberAction":{
       "type":"structure",
       "required":["RegionName"],
@@ -6520,8 +6262,8 @@
           "documentation":"<p>An array of attributes that describe the key schema for the table and indexes. If you are adding a new global secondary index to the table, <code>AttributeDefinitions</code> must include the key element(s) of the new index.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to be updated. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to be updated.</p>"
         },
         "BillingMode":{
           "shape":"BillingMode",
@@ -6537,7 +6279,7 @@
         },
         "StreamSpecification":{
           "shape":"StreamSpecification",
-          "documentation":"<p>Represents the DynamoDB Streams configuration for the table.</p> <note> <p>You receive a <code>ValidationException</code> if you try to enable a stream on a table that already has a stream, or if you try to disable a stream on a table that doesn't have a stream.</p> </note>"
+          "documentation":"<p>Represents the DynamoDB Streams configuration for the table.</p> <note> <p>You receive a <code>ResourceInUseException</code> if you try to enable a stream on a table that already has a stream, or if you try to disable a stream on a table that doesn't have a stream.</p> </note>"
         },
         "SSESpecification":{
           "shape":"SSESpecification",
@@ -6577,8 +6319,8 @@
           "documentation":"<p>Represents the auto scaling settings of the global secondary indexes of the replica to be updated.</p>"
         },
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the global table to be updated. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the global table to be updated.</p>"
         },
         "ProvisionedWriteCapacityAutoScalingUpdate":{"shape":"AutoScalingSettingsUpdate"},
         "ReplicaUpdates":{
@@ -6604,8 +6346,8 @@
       ],
       "members":{
         "TableName":{
-          "shape":"TableArn",
-          "documentation":"<p>The name of the table to be configured. You can also provide the Amazon Resource Name (ARN) of the table in this parameter.</p>"
+          "shape":"TableName",
+          "documentation":"<p>The name of the table to be configured.</p>"
         },
         "TimeToLiveSpecification":{
           "shape":"TimeToLiveSpecification",

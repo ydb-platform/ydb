@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <immintrin.h>
 
 #include <library/cpp/digest/crc32c/crc32c.h>
 

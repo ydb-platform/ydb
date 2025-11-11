@@ -239,7 +239,7 @@ namespace boost { namespace property_tree {
 
     public:
         parser(Callbacks& callbacks, Encoding& encoding)
-            : callbacks(callbacks), encoding(encoding), src(encoding) /* NOLINT(clang-analyzer-optin.cplusplus.UninitializedObject) */
+            : callbacks(callbacks), encoding(encoding), src(encoding)
         {}
 
         template <typename Range>

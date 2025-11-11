@@ -1,5 +1,6 @@
-import ipaddress
 import os
+import socket
+import struct
 from typing import Optional
 from urllib.parse import unquote, urlparse
 from ._exceptions import WebSocketProxyException
@@ -8,7 +9,7 @@ from ._exceptions import WebSocketProxyException
 _url.py
 websocket - WebSocket client library for Python
 
-Copyright 2025 engn33r
+Copyright 2024 engn33r
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -72,12 +73,13 @@ def parse_url(url: str) -> tuple:
     return hostname, port, resource, is_secure
 
 
+DEFAULT_NO_PROXY_HOST = ["localhost", "127.0.0.1"]
+
+
 def _is_ip_address(addr: str) -> bool:
-    if not isinstance(addr, str):
-        raise TypeError("_is_ip_address() argument 1 must be str")
     try:
-        ipaddress.ip_address(addr)
-    except ValueError:
+        socket.inet_aton(addr)
+    except socket.error:
         return False
     else:
         return True
@@ -85,29 +87,29 @@ def _is_ip_address(addr: str) -> bool:
 
 def _is_subnet_address(hostname: str) -> bool:
     try:
-        ipaddress.ip_network(hostname)
+        addr, netmask = hostname.split("/")
+        return _is_ip_address(addr) and 0 <= int(netmask) < 32
     except ValueError:
         return False
-    else:
-        return True
 
 
 def _is_address_in_network(ip: str, net: str) -> bool:
-    try:
-        return ipaddress.ip_network(ip).subnet_of(ipaddress.ip_network(net))
-    except TypeError:
-        return False
+    ipaddr: int = struct.unpack("!I", socket.inet_aton(ip))[0]
+    netaddr, netmask = net.split("/")
+    netaddr: int = struct.unpack("!I", socket.inet_aton(netaddr))[0]
+
+    netmask = (0xFFFFFFFF << (32 - int(netmask))) & 0xFFFFFFFF
+    return ipaddr & netmask == netaddr
 
 
-def _is_no_proxy_host(hostname: str, no_proxy: Optional[list[str]]) -> bool:
+def _is_no_proxy_host(hostname: str, no_proxy: Optional[list]) -> bool:
     if not no_proxy:
         if v := os.environ.get("no_proxy", os.environ.get("NO_PROXY", "")).replace(
             " ", ""
         ):
             no_proxy = v.split(",")
-
     if not no_proxy:
-        no_proxy = []
+        no_proxy = DEFAULT_NO_PROXY_HOST
 
     if "*" in no_proxy:
         return True
@@ -122,8 +124,7 @@ def _is_no_proxy_host(hostname: str, no_proxy: Optional[list[str]]) -> bool:
             ]
         )
     for domain in [domain for domain in no_proxy if domain.startswith(".")]:
-        endDomain = domain.lstrip(".")
-        if hostname.endswith(endDomain):
+        if hostname.endswith(domain):
             return True
     return False
 
@@ -134,7 +135,7 @@ def get_proxy_info(
     proxy_host: Optional[str] = None,
     proxy_port: int = 0,
     proxy_auth: Optional[tuple] = None,
-    no_proxy: Optional[list[str]] = None,
+    no_proxy: Optional[list] = None,
     proxy_type: str = "http",
 ) -> tuple:
     """
@@ -180,7 +181,7 @@ def get_proxy_info(
     if value:
         proxy = urlparse(value)
         auth = (
-            (unquote(proxy.username or ""), unquote(proxy.password or ""))
+            (unquote(proxy.username), unquote(proxy.password))
             if proxy.username
             else None
         )

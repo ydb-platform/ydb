@@ -153,9 +153,7 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        TInstant now = TlsActivationContext->Now();
-
-        const auto [dataSize, event] = oChannel.Push(*ev, *Pool, now);
+        const auto [dataSize, event] = oChannel.Push(*ev, *Pool);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -258,9 +256,9 @@ namespace NActors {
             return;
         }
 
-        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
+        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64,
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket), (ev->Get()->RdmaQp ? (int)ev->Get()->RdmaQp->GetQpNum() : -1));
+            i64(*ev->Get()->Socket));
 
         NewConnectionSet = TActivationContext::Now();
         BytesWrittenToSocket = 0;
@@ -268,9 +266,6 @@ namespace NActors {
         SendBufferSize = ev->Get()->Socket->GetSendBufferSize();
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
-
-        auto cq = std::move(ev->Get()->RdmaCq);
-        RdmaQp = std::move(ev->Get()->RdmaQp);
 
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
@@ -297,7 +292,7 @@ namespace NActors {
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params, RdmaQp, std::move(cq));
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor
@@ -1307,10 +1302,6 @@ namespace NActors {
                             TABLER() {
                                 TABLED() { str << "Frame version/Checksum"; }
                                 TABLED() { str << (Params.Encryption ? "v2/none" : Params.UseXxhash ? "v2/xxhash" : "v2/crc32c"); }
-                            }
-                            TABLER() {
-                                TABLED() { str << "RdmaMode" ; }
-                                TABLED() { str << (Params.UseRdma ? Params.ChecksumRdmaEvent ? "On | SoftwareChecksum" : "On" : "Off"); }
                             }
 #define MON_VAR(NAME)     \
     TABLER() {            \

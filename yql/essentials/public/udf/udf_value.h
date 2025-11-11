@@ -1072,47 +1072,6 @@ private:
     TResourceData ResourceData_;
 };
 
-template <typename T>
-inline static T* CastDynamicResource(const TUnboxedValuePod& v, TStringRef expectedTag) {
-    auto result = static_cast<T*>(v.AsBoxed().Get());
-    Y_DEBUG_ABORT_UNLESS(result->GetResourceTag() == expectedTag);
-    return result;
-}
-
-template <typename TResourceData>
-class TBoxedDynamicResource: public TBoxedValue {
-public:
-    template <typename... Args>
-    inline TBoxedDynamicResource(TString&& tag, Args&&... args)
-        : ResourceData_(std::forward<Args>(args)...)
-        , Tag_(std::move(tag))
-    {
-    }
-
-    template <typename... Args>
-    inline TBoxedDynamicResource(const TString& tag, Args&&... args)
-        : ResourceData_(std::forward<Args>(args)...)
-        , Tag_(tag)
-    {
-    }
-
-    inline TStringRef GetResourceTag() const override {
-        return Tag_;
-    }
-
-    inline void* GetResource() override {
-        return Get();
-    }
-
-    inline TResourceData* Get() {
-        return &ResourceData_;
-    }
-
-private:
-    TResourceData ResourceData_;
-    TString Tag_;
-};
-
 #define INCLUDE_UDF_VALUE_INL_H
 #include "udf_value_inl.h"
 #undef INCLUDE_UDF_VALUE_INL_H

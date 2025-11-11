@@ -15,6 +15,7 @@ from socket import AF_INET
 
 from . import _common
 from . import _psposix
+from . import _psutil_posix as cext_posix
 from . import _psutil_sunos as cext
 from ._common import AF_INET6
 from ._common import ENCODING
@@ -29,6 +30,7 @@ from ._common import sockfam_to_enum
 from ._common import socktype_to_enum
 from ._common import usage_percent
 
+
 __extra__all__ = ["CONN_IDLE", "CONN_BOUND", "PROCFS_PATH"]
 
 
@@ -37,8 +39,8 @@ __extra__all__ = ["CONN_IDLE", "CONN_BOUND", "PROCFS_PATH"]
 # =====================================================================
 
 
-PAGE_SIZE = cext.getpagesize()
-AF_LINK = cext.AF_LINK
+PAGE_SIZE = cext_posix.getpagesize()
+AF_LINK = cext_posix.AF_LINK
 IS_64_BIT = sys.maxsize > 2**32
 
 CONN_IDLE = "IDLE"
@@ -251,7 +253,7 @@ def disk_partitions(all=False):
 
 
 net_io_counters = cext.net_io_counters
-net_if_addrs = cext.net_if_addrs
+net_if_addrs = cext_posix.net_if_addrs
 
 
 def net_connections(kind, _pid=-1):
@@ -437,7 +439,7 @@ class Process:
 
     @wrap_exceptions
     def cmdline(self):
-        return self._proc_name_and_args()[1]
+        return self._proc_name_and_args()[1].split(' ')
 
     @wrap_exceptions
     def environ(self):
@@ -466,7 +468,7 @@ class Process:
             # The process actually exists though, as it has a name,
             # creation time, etc.
             raise AccessDenied(self.pid, self._name)
-        return cext.proc_priority_set(self.pid, value)
+        return cext_posix.setpriority(self.pid, value)
 
     @wrap_exceptions
     def ppid(self):

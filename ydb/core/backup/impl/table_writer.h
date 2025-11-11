@@ -13,6 +13,6 @@ enum class EWriterType {
     Restore,
 };
 
-IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriterType type = EWriterType::Backup);
+IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriterType type = EWriterType::Backup);
 
 }

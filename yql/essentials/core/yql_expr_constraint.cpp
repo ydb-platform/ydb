@@ -3126,11 +3126,6 @@ private:
         std::transform(keys.begin(), keys.end(), columns.begin(), [](const TPartOfConstraintBase::TPathType& path) -> std::string_view {
             return path.front();
         });
-        if (const auto hoppingColumn = input->Child(TCoMultiHoppingCore::idx_HoppingColumn)->Content();
-            "_yql_time" != hoppingColumn) {
-            columns.push_back(hoppingColumn);
-        }
-
         if (!columns.empty()) {
             input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(columns));
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));

@@ -49,7 +49,7 @@ struct version
             traits_class_version< T >,
             mpl::int_<0>
         >::type type;
-    BOOST_STATIC_CONSTANT(int, value = version::type::value); /* NOLINT */
+    BOOST_STATIC_CONSTANT(int, value = version::type::value);
 };
 
 #ifndef BOOST_NO_INCLASS_MEMBER_INITIALIZATION
@@ -83,7 +83,7 @@ struct version<T >                                                     \
 {                                                                      \
     typedef mpl::int_<N> type;                                         \
     typedef mpl::integral_c_tag tag;                                   \
-    BOOST_STATIC_CONSTANT(int, value = version::type::value); /* NOLINT */          \
+    BOOST_STATIC_CONSTANT(int, value = version::type::value);          \
     BOOST_MPL_ASSERT((                                                 \
         boost::mpl::less<                                              \
             boost::mpl::int_<N>,                                       \

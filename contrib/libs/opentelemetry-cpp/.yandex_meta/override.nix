@@ -30,8 +30,5 @@ pkgs: attrs: with pkgs; rec {
 
     "-DWITH_OTLP_HTTP=ON"
     "-DWITH_OTLP_GRPC=ON"
-
-    "-DWITH_ABI_VERSION_1=OFF"
-    "-DWITH_ABI_VERSION_2=ON"
   ];
 }

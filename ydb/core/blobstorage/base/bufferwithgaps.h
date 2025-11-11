@@ -45,14 +45,10 @@ namespace NKikimr {
             , IsCommited(false)
         {}
 
-        TBufferWithGaps(ui32 offset, TRcBuf&& data)
-            : Data(std::move(data))
+        TBufferWithGaps(ui32 offset, ui32 size, ui32 tailroom)
+            : Data(TRcBuf::UninitializedPageAligned(size, tailroom))
             , Offset(offset)
             , IsCommited(false)
-        {}
-
-        TBufferWithGaps(ui32 offset, ui32 size, ui32 tailroom)
-            : TBufferWithGaps(offset, TRcBuf::UninitializedPageAligned(size, tailroom))
         {}
 
         TBufferWithGaps(TBufferWithGaps &&) = default;

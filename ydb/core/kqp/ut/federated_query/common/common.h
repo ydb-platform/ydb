@@ -27,7 +27,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
         TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
         TTestLogSettings LogSettings;
-        bool UseLocalCheckpointsInStreamingQueries = false;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(

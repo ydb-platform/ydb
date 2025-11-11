@@ -54,7 +54,7 @@ class TestSubscribers(unittest.TestCase):
         except Exception as e:
             self.fail(
                 'Should be able to call base class subscriber method. '
-                f'instead got: {e}'
+                'instead got: %s' % e
             )
 
     def test_subclass_can_have_and_call_additional_methods(self):

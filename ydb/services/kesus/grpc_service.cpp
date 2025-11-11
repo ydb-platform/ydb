@@ -14,7 +14,6 @@
 
 #include <ydb/library/grpc/server/event_callback.h>
 #include <ydb/library/grpc/server/grpc_async_ctx_base.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -635,70 +634,59 @@ TKesusGRpcService::TKesusGRpcService(
 void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using NGRpcService::TRateLimiterMode;
     using NGRpcService::TAuditMode;
-    using namespace Ydb::Coordination;
-    using namespace NGRpcService;
-    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
     auto getLimiter = CreateLimiterCb(LimiterRegistry_);
-    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
 
-#ifdef SETUP_KESUS_METHOD
-#error SETUP_KESUS_METHOD macro already defined
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro is already defined
 #endif
 
-#ifdef GET_LIMITER_BY_PATH
-#error GET_LIMITER_BY_PATH macro already defined
-#endif
-
-#ifdef SETUP_KESUS_STREAM_METHOD
-#error SETUP_KESUS_STREAM_METHOD macro already defined
-#endif
-
-#define SETUP_KESUS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    for (auto* cq : CQS) {                                                             \
-        SETUP_RUNTIME_EVENT_METHOD(methodName,                                         \
-            YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                  \
-            YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                 \
-            methodCallback,                                                            \
-            rlMode,                                                                    \
-            requestType,                                                               \
-            YDB_API_DEFAULT_COUNTER_BLOCK(coordination, methodName),                   \
-            auditMode,                                                                 \
-            COMMON,                                                                    \
-            ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                        \
-            GRpcRequestProxyId_,                                                       \
-            cq,                                                                        \
-            nullptr,                                                                   \
-            nullptr);                                                                  \
+#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
+    for (auto* cq : CQS) { \
+        MakeIntrusive<NGRpcService::TGRpcRequest<Ydb::Coordination::IN, Ydb::Coordination::OUT, TKesusGRpcService>>( \
+            this, \
+            &Service_, \
+            cq, \
+            [this](NYdbGrpc::IRequestContextBase* reqCtx) { \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
+                ActorSystem_->Send(GRpcRequestProxyId_, \
+                    new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
+                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
+            }, \
+            &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
+            #NAME,  \
+            logger, \
+            getCounterBlock("coordination", #NAME))->Run(); \
     }
 
-#define GET_LIMITER_BY_PATH(ICB_PATH) \
+    ADD_REQUEST(CreateNode, CreateNodeRequest, CreateNodeResponse, NGRpcService::DoCreateCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(AlterNode, AlterNodeRequest, AlterNodeResponse, NGRpcService::DoAlterCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(DropNode, DropNodeRequest, DropNodeResponse, NGRpcService::DoDropCoordinationNode, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(DescribeNode, DescribeNodeRequest, DescribeNodeResponse, NGRpcService::DoDescribeCoordinationNode, TAuditMode::NonModifying());
+
+#undef ADD_REQUEST
+
+#define GET_LIMITER_BY_PATH(ICB_PATH)\
     getLimiter(#ICB_PATH, icb.ICB_PATH, DEFAULT_MAX_SESSIONS_INFLIGHT)
 
-#define SETUP_KESUS_STREAM_METHOD(methodName, rlMode, requestType, auditMode, operationCallClass)          \
-    for (auto* cq : CQS) {                                                                                 \
-        SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName,                                                      \
-            YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                      \
-            YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                     \
-            rlMode,                                                                                        \
-            requestType,                                                                                   \
-            YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(coordination, methodName),                                \
-            auditMode,                                                                                     \
-            operationCallClass,                                                                            \
-            GRpcRequestProxyId_,                                                                           \
-            cq,                                                                                            \
-            GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.CoordinationService_##methodName.MaxInFlight), \
-            nullptr);                                                                                      \
+    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
+    for (auto* cq : CQS) {
+        TGRpcSessionActor::TGRpcRequest::Start(
+            this,
+            this->GetService(),
+            cq,
+            &Ydb::Coordination::V1::CoordinationService::AsyncService::RequestSession,
+            [this](TIntrusivePtr<TGRpcSessionActor::IContext> context) {
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, context->GetPeerName());
+                ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context));
+            },
+            *ActorSystem_,
+            "Session",
+            getCounterBlock("coordination", "Session", true),
+            GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.CoordinationService_Session.MaxInFlight));
     }
-
-    SETUP_KESUS_METHOD(CreateNode, DoCreateCoordinationNode, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_KESUS_METHOD(AlterNode, DoAlterCoordinationNode, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_KESUS_METHOD(DropNode, DoDropCoordinationNode, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_KESUS_METHOD(DescribeNode, DoDescribeCoordinationNode, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_KESUS_STREAM_METHOD(Session, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), NGRpcService::TEvCoordinationSessionRequest);
-
 #undef GET_LIMITER_BY_PATH
-#undef SETUP_KESUS_METHOD
-#undef SETUP_KESUS_STREAM_METHOD
+
 }
 
 } // namespace NKesus

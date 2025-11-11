@@ -17,16 +17,16 @@ namespace NKikimr::NStorage {
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             LocalPileQuorum = BridgeInfo && HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap,
-                BridgeInfo->SelfNodePile->BridgePileId, *Cfg, nullptr, true);
+                BridgeInfo->SelfNodePile->BridgePileId, nullptr);
             GlobalQuorum = (!BridgeInfo || BridgeInfo->SelfNodePile->IsPrimary) && HasNodeQuorum(*StorageConfig,
-                connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+                connected, BridgePileNameMap, TBridgePileId(), nullptr);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
                 ConnectedUnsyncedPiles.clear();
                 for (const auto& pile : BridgeInfo->Piles) {
                     if (pile.State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 && HasNodeQuorum(*StorageConfig,
-                            connected, BridgePileNameMap, pile.BridgePileId, *Cfg, nullptr, true)) {
+                            connected, BridgePileNameMap, pile.BridgePileId, nullptr)) {
                         ConnectedUnsyncedPiles.insert(pile.BridgePileId);
                     }
                 }
@@ -159,7 +159,7 @@ namespace NKikimr::NStorage {
             connected.push_back(nodeId);
         }
         return HasNodeQuorum(config, connected, BridgePileNameMap, local && BridgeInfo ?
-            BridgeInfo->SelfNodePile->BridgePileId : TBridgePileId(), *Cfg, nullptr, true);
+            BridgeInfo->SelfNodePile->BridgePileId : TBridgePileId(), nullptr);
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
@@ -175,8 +175,7 @@ namespace NKikimr::NStorage {
                 successfulNodes.emplace_back(node);
             }
         }
-        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, BridgePileNameMap, TBridgePileId(), *Cfg,
-            &err, true);
+        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, BridgePileNameMap, TBridgePileId(), &err);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Calculate configuration quorum
@@ -216,7 +215,7 @@ namespace NKikimr::NStorage {
                     nodesWithoutDistconf.emplace_back(node);
                 }
             }
-            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
+            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, BridgePileNameMap, TBridgePileId(), nullptr)) {
                 // yes, distconf is disabled on the majority of the nodes, so we can't do anything about it
                 return {.IsDistconfDisabledQuorum = true};
             }
@@ -257,7 +256,7 @@ namespace NKikimr::NStorage {
         }
         for (auto it = baseConfigs.begin(); it != baseConfigs.end(); ) { // filter out configs not having node quorum
             TBaseConfigInfo& r = it->second;
-            if (HasNodeQuorum(r.Config, r.HavingNodeIds, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
+            if (HasNodeQuorum(r.Config, r.HavingNodeIds, BridgePileNameMap, TBridgePileId(), nullptr)) {
                 ++it;
             } else {
                 baseConfigs.erase(it++);

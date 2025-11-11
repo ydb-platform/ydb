@@ -377,22 +377,25 @@ pg_fsync(int fd)
 	 * portable, even if it runs ok on the current system.
 	 *
 	 * We assert here that a descriptor for a file was opened with write
-	 * permissions (i.e., not O_RDONLY) and for a directory without write
-	 * permissions (O_RDONLY).  Notice that the assertion check is made even
-	 * if fsync() is disabled.
+	 * permissions (either O_RDWR or O_WRONLY) and for a directory without
+	 * write permissions (O_RDONLY).
 	 *
-	 * If fstat() fails, ignore it and let the follow-up fsync() complain.
+	 * Ignore any fstat errors and let the follow-up fsync() do its work.
+	 * Doing this sanity check here counts for the case where fsync() is
+	 * disabled.
 	 */
 	if (fstat(fd, &st) == 0)
 	{
 		int			desc_flags = fcntl(fd, F_GETFL);
 
-		desc_flags &= O_ACCMODE;
-
+		/*
+		 * O_RDONLY is historically 0, so just make sure that for directories
+		 * no write flags are used.
+		 */
 		if (S_ISDIR(st.st_mode))
-			Assert(desc_flags == O_RDONLY);
+			Assert((desc_flags & (O_RDWR | O_WRONLY)) == 0);
 		else
-			Assert(desc_flags != O_RDONLY);
+			Assert((desc_flags & (O_RDWR | O_WRONLY)) != 0);
 	}
 	errno = 0;
 #endif

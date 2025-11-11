@@ -5,12 +5,18 @@
 const std::string LogFileName = "benchmark.log";
 
 
-TThreadJob::TThreadJob(const TCommonOptions& opts, const std::string& operationType)
+TThreadJob::TThreadJob(const TCommonOptions& opts)
     : RpsProvider(opts.Rps)
     , Prefix(opts.DatabaseOptions.Prefix)
-    , Stats(opts.DontPushMetrics ? std::nullopt : std::make_optional(opts.MetricsPushUrl), operationType)
+    , Stats(
+        opts.ReactionTime,
+        opts.ResultFileName,
+        !opts.DontPushMetrics,
+        opts.RetryMode
+    )
     , StopOnError(opts.StopOnError)
     , MaxDelay(opts.ReactionTime)
+    , UseFollowers(opts.UseFollowers)
 {
 }
 
@@ -22,7 +28,7 @@ void TThreadJob::Start(TInstant deadline) {
 
 void TThreadJob::StartThread() {
     auto threadFunc = [this]() {
-        Stats.Start();
+        Stats.Reset();
         RpsProvider.Reset();
         DoJob();
         Stats.Finish();

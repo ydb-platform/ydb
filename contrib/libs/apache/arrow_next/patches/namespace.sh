@@ -10,8 +10,6 @@ find . -type f | grep -v patches | grep cpp/ | while read l; do
         -e 's|namespace parquet|namespace parquet20|' \
         -e 's|parquet::|parquet20::|g' \
         -e 's|arrow_strptime|arrow20_strptime|g' \
-        -e 's|::arrow20_vendored::double_conversion|::double_conversion|' \
-        -e 's|::arrow20_vendored::fast_float::|fast_float::|' \
         -i ${l}
 done
 

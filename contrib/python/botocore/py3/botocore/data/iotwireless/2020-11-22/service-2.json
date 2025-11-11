@@ -308,7 +308,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Provisions a wireless gateway.</p> <note> <p>When provisioning a wireless gateway, you might run into duplication errors for the following reasons.</p> <ul> <li> <p>If you specify a <code>GatewayEui</code> value that already exists.</p> </li> <li> <p>If you used a <code>ClientRequestToken</code> with the same parameters within the last 10 minutes.</p> </li> </ul> <p>To avoid this error, make sure that you use unique identifiers and parameters for each request within the specified time period.</p> </note>"
+      "documentation":"<p>Provisions a wireless gateway.</p>"
     },
     "CreateWirelessGatewayTask":{
       "name":"CreateWirelessGatewayTask",
@@ -532,7 +532,7 @@
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"}
       ],
-      "documentation":"<p>Deletes a wireless gateway.</p> <note> <p>When deleting a wireless gateway, you might run into duplication errors for the following reasons.</p> <ul> <li> <p>If you specify a <code>GatewayEui</code> value that already exists.</p> </li> <li> <p>If you used a <code>ClientRequestToken</code> with the same parameters within the last 10 minutes.</p> </li> </ul> <p>To avoid this error, make sure that you use unique identifiers and parameters for each request within the specified time period.</p> </note>"
+      "documentation":"<p>Deletes a wireless gateway.</p>"
     },
     "DeleteWirelessGatewayTask":{
       "name":"DeleteWirelessGatewayTask",
@@ -797,43 +797,6 @@
         {"shape":"ValidationException"}
       ],
       "documentation":"<p>Returns current default log levels or log levels by resource types. Based on resource types, log levels can be for wireless device log options or wireless gateway log options.</p>"
-    },
-    "GetMetricConfiguration":{
-      "name":"GetMetricConfiguration",
-      "http":{
-        "method":"GET",
-        "requestUri":"/metric-configuration",
-        "responseCode":200
-      },
-      "input":{"shape":"GetMetricConfigurationRequest"},
-      "output":{"shape":"GetMetricConfigurationResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ThrottlingException"}
-      ],
-      "documentation":"<p>Get the metric configuration status for this AWS account.</p>"
-    },
-    "GetMetrics":{
-      "name":"GetMetrics",
-      "http":{
-        "method":"POST",
-        "requestUri":"/metrics"
-      },
-      "input":{"shape":"GetMetricsRequest"},
-      "output":{"shape":"GetMetricsResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ThrottlingException"}
-      ],
-      "documentation":"<p>Get the summary metrics for this AWS account.</p>"
     },
     "GetMulticastGroup":{
       "name":"GetMulticastGroup",
@@ -1831,26 +1794,6 @@
       ],
       "documentation":"<p>Set default log level, or log levels by resource types. This can be for wireless device log options or wireless gateways log options and is used to control the log messages that'll be displayed in CloudWatch.</p>"
     },
-    "UpdateMetricConfiguration":{
-      "name":"UpdateMetricConfiguration",
-      "http":{
-        "method":"PUT",
-        "requestUri":"/metric-configuration",
-        "responseCode":204
-      },
-      "input":{"shape":"UpdateMetricConfigurationRequest"},
-      "output":{"shape":"UpdateMetricConfigurationResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ConflictException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ThrottlingException"}
-      ],
-      "documentation":"<p>Update the summary metric configuration.</p>",
-      "idempotent":true
-    },
     "UpdateMulticastGroup":{
       "name":"UpdateMulticastGroup",
       "http":{
@@ -2085,14 +2028,6 @@
       "min":0
     },
     "AddGwMetadata":{"type":"boolean"},
-    "AggregationPeriod":{
-      "type":"string",
-      "enum":[
-        "OneHour",
-        "OneDay",
-        "OneWeek"
-      ]
-    },
     "AmazonId":{
       "type":"string",
       "documentation":"<p>The Sidewalk Amazon ID.</p>",
@@ -2172,7 +2107,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         },
         "Tags":{
@@ -2331,7 +2266,6 @@
       }
     },
     "AutoCreateTasks":{"type":"boolean"},
-    "Avg":{"type":"double"},
     "BCCH":{
       "type":"integer",
       "max":1023,
@@ -2598,7 +2532,7 @@
     },
     "ClientRequestToken":{
       "type":"string",
-      "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+      "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request.</p>",
       "max":64,
       "min":1,
       "pattern":"^[a-zA-Z0-9-_]+$"
@@ -2692,7 +2626,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         }
       }
@@ -2727,7 +2661,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         },
         "Sidewalk":{
@@ -2789,7 +2723,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         },
         "LoRaWAN":{"shape":"LoRaWANMulticast"},
@@ -2856,7 +2790,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         }
       }
@@ -2899,7 +2833,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         },
         "LoRaWAN":{
@@ -2955,7 +2889,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         }
       }
@@ -2991,7 +2925,7 @@
         },
         "ClientRequestToken":{
           "shape":"ClientRequestToken",
-          "documentation":"<p>Each resource must have a unique client request token. The client token is used to implement idempotency. It ensures that the request completes no more than one time. If you retry a request with the same token and the same parameters, the request will complete successfully. However, if you try to create a new resource using the same token but different parameters, an HTTP 409 conflict occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. For more information about idempotency, see <a href=\"https://docs.aws.amazon.com/ec2/latest/devguide/ec2-api-idempotency.html\">Ensuring idempotency in Amazon EC2 API requests</a>.</p>",
+          "documentation":"<p>Each resource must have a unique client request token. If you try to create a new resource with the same token as a resource that already exists, an exception occurs. If you omit this value, AWS SDKs will automatically generate a unique client request. </p>",
           "idempotencyToken":true
         },
         "Tags":{
@@ -3476,36 +3410,6 @@
       "type":"string",
       "max":2048
     },
-    "Dimension":{
-      "type":"structure",
-      "members":{
-        "name":{
-          "shape":"DimensionName",
-          "documentation":"<p>The name of the dimension.</p>"
-        },
-        "value":{
-          "shape":"DimensionValue",
-          "documentation":"<p>The dimension's value.</p>"
-        }
-      },
-      "documentation":"<p>The required list of dimensions for the metric.</p>"
-    },
-    "DimensionName":{
-      "type":"string",
-      "enum":[
-        "DeviceId",
-        "GatewayId"
-      ],
-      "max":256
-    },
-    "DimensionValue":{
-      "type":"string",
-      "max":256
-    },
-    "Dimensions":{
-      "type":"list",
-      "member":{"shape":"Dimension"}
-    },
     "DisassociateAwsAccountFromPartnerAccountRequest":{
       "type":"structure",
       "required":[
@@ -3655,7 +3559,6 @@
       "members":{
       }
     },
-    "DlAllowed":{"type":"boolean"},
     "DlBucketSize":{
       "type":"integer",
       "max":2147483647,
@@ -4168,38 +4071,6 @@
         "DefaultLogLevel":{"shape":"LogLevel"},
         "WirelessGatewayLogOptions":{"shape":"WirelessGatewayLogOptionList"},
         "WirelessDeviceLogOptions":{"shape":"WirelessDeviceLogOptionList"}
-      }
-    },
-    "GetMetricConfigurationRequest":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "GetMetricConfigurationResponse":{
-      "type":"structure",
-      "members":{
-        "SummaryMetric":{
-          "shape":"SummaryMetricConfiguration",
-          "documentation":"<p>The configuration status of the AWS account for summary metric aggregation.</p>"
-        }
-      }
-    },
-    "GetMetricsRequest":{
-      "type":"structure",
-      "members":{
-        "SummaryMetricQueries":{
-          "shape":"SummaryMetricQueries",
-          "documentation":"<p>The list of queries to retrieve the summary metrics.</p>"
-        }
-      }
-    },
-    "GetMetricsResponse":{
-      "type":"structure",
-      "members":{
-        "SummaryMetricQueryResults":{
-          "shape":"SummaryMetricQueryResults",
-          "documentation":"<p>The list of summary metrics that were retrieved.</p>"
-        }
       }
     },
     "GetMulticastGroupRequest":{
@@ -5139,10 +5010,6 @@
       "type":"string",
       "pattern":"^([\\+-]?\\d{4}(?!\\d{2}\\b))((-?)((0[1-9]|1[0-2])(\\3([12]\\d|0[1-9]|3[01]))?|W([0-4]\\d|5[0-2])(-?[1-7])?|(00[1-9]|0[1-9]\\d|[12]\\d{2}|3([0-5]\\d|6[1-6])))([T\\s]((([01]\\d|2[0-3])((:?)[0-5]\\d)?|24\\:?00)([\\.,]\\d+(?!:))?)?(\\17[0-5]\\d([\\.,]\\d+)?)?([zZ]|([\\+-])([01]\\d|2[0-3]):?([0-5]\\d)?)?)?)?$"
     },
-    "Id":{
-      "type":"string",
-      "max":256
-    },
     "Identifier":{
       "type":"string",
       "max":256
@@ -5954,10 +5821,6 @@
         "Gateways":{
           "shape":"LoRaWANGatewayMetadataList",
           "documentation":"<p>Information about the gateways accessed by the device.</p>"
-        },
-        "PublicGateways":{
-          "shape":"LoRaWANPublicGatewayMetadataList",
-          "documentation":"<p>Information about the LoRaWAN public network accessed by the device.</p>"
         }
       },
       "documentation":"<p>LoRaWAN device metatdata.</p>"
@@ -6285,37 +6148,6 @@
       },
       "documentation":"<p>The LoRaWAN information used with the multicast session.</p>"
     },
-    "LoRaWANPublicGatewayMetadata":{
-      "type":"structure",
-      "members":{
-        "ProviderNetId":{
-          "shape":"ProviderNetId",
-          "documentation":"<p>The ID of the LoRaWAN public network provider.</p>"
-        },
-        "Id":{
-          "shape":"Id",
-          "documentation":"<p>The ID of the gateways that are operated by the network provider.</p>"
-        },
-        "Rssi":{
-          "shape":"Double",
-          "documentation":"<p>The RSSI (received signal strength indicator) value.</p>"
-        },
-        "Snr":{
-          "shape":"Double",
-          "documentation":"<p>The SNR (signal to noise ratio) value.</p>"
-        },
-        "RfRegion":{"shape":"RfRegion"},
-        "DlAllowed":{
-          "shape":"DlAllowed",
-          "documentation":"<p>Boolean that indicates whether downlink is allowed using the network.</p>"
-        }
-      },
-      "documentation":"<p>LoRaWAN public gateway metadata.</p>"
-    },
-    "LoRaWANPublicGatewayMetadataList":{
-      "type":"list",
-      "member":{"shape":"LoRaWANPublicGatewayMetadata"}
-    },
     "LoRaWANSendDataToDevice":{
       "type":"structure",
       "members":{
@@ -6568,7 +6400,6 @@
       "type":"string",
       "max":64
     },
-    "Max":{"type":"double"},
     "MaxAllowedSignature":{"type":"integer"},
     "MaxDutyCycle":{
       "type":"integer",
@@ -6625,103 +6456,6 @@
         "CUSTOM_COMMAND_ID_RESP"
       ]
     },
-    "MetricName":{
-      "type":"string",
-      "enum":[
-        "DeviceRSSI",
-        "DeviceSNR",
-        "DeviceUplinkCount",
-        "DeviceDownlinkCount",
-        "DeviceUplinkLostCount",
-        "DeviceUplinkLostRate",
-        "DeviceJoinRequestCount",
-        "DeviceJoinAcceptCount",
-        "DeviceRoamingUplinkCount",
-        "DeviceRoamingDownlinkCount",
-        "GatewayUpTime",
-        "GatewayDownTime",
-        "GatewayRSSI",
-        "GatewaySNR",
-        "GatewayUplinkCount",
-        "GatewayDownlinkCount",
-        "GatewayJoinRequestCount",
-        "GatewayJoinAcceptCount",
-        "AwsAccountUplinkCount",
-        "AwsAccountDownlinkCount",
-        "AwsAccountUplinkLostCount",
-        "AwsAccountUplinkLostRate",
-        "AwsAccountJoinRequestCount",
-        "AwsAccountJoinAcceptCount",
-        "AwsAccountRoamingUplinkCount",
-        "AwsAccountRoamingDownlinkCount",
-        "AwsAccountDeviceCount",
-        "AwsAccountGatewayCount",
-        "AwsAccountActiveDeviceCount",
-        "AwsAccountActiveGatewayCount"
-      ],
-      "max":256
-    },
-    "MetricQueryEndTimestamp":{"type":"timestamp"},
-    "MetricQueryError":{
-      "type":"string",
-      "max":256
-    },
-    "MetricQueryId":{
-      "type":"string",
-      "max":256
-    },
-    "MetricQueryStartTimestamp":{"type":"timestamp"},
-    "MetricQueryStatus":{
-      "type":"string",
-      "enum":[
-        "Succeeded",
-        "Failed"
-      ]
-    },
-    "MetricQueryTimestamp":{"type":"timestamp"},
-    "MetricQueryTimestamps":{
-      "type":"list",
-      "member":{"shape":"MetricQueryTimestamp"}
-    },
-    "MetricQueryValue":{
-      "type":"structure",
-      "members":{
-        "Min":{
-          "shape":"Min",
-          "documentation":"<p>The minimum of the values of all data points collected during the aggregation period.</p>"
-        },
-        "Max":{
-          "shape":"Max",
-          "documentation":"<p>The maximum of the values of all the data points collected during the aggregation period.</p>"
-        },
-        "Sum":{
-          "shape":"Sum",
-          "documentation":"<p>The sum of the values of all data points collected during the aggregation period.</p>"
-        },
-        "Avg":{
-          "shape":"Avg",
-          "documentation":"<p>The average of the values of all data points collected during the aggregation period.</p>"
-        },
-        "Std":{
-          "shape":"Std",
-          "documentation":"<p>The standard deviation of the values of all data points collected during the aggregation period.</p>"
-        },
-        "P90":{
-          "shape":"P90",
-          "documentation":"<p>The 90th percentile of the values of all data points collected during the aggregation period.</p>"
-        }
-      },
-      "documentation":"<p>The aggregated values of the metric.</p>"
-    },
-    "MetricQueryValues":{
-      "type":"list",
-      "member":{"shape":"MetricQueryValue"}
-    },
-    "MetricUnit":{
-      "type":"string",
-      "max":256
-    },
-    "Min":{"type":"double"},
     "MinGwDiversity":{
       "type":"integer",
       "max":100,
@@ -6896,11 +6630,11 @@
         },
         "AppEui":{
           "shape":"AppEui",
-          "documentation":"<p>The AppEUI value. You specify this value when using LoRaWAN versions v1.0.2 or v1.0.3.</p>"
+          "documentation":"<p>The AppEUI value.</p>"
         },
         "JoinEui":{
           "shape":"JoinEui",
-          "documentation":"<p>The JoinEUI value. You specify this value instead of the AppEUI when using LoRaWAN version v1.0.4.</p>"
+          "documentation":"<p>The JoinEUI value.</p>"
         },
         "GenAppKey":{
           "shape":"GenAppKey",
@@ -6927,7 +6661,6 @@
       },
       "documentation":"<p>OTAA device object for v1.1</p>"
     },
-    "P90":{"type":"double"},
     "PCI":{
       "type":"integer",
       "max":503,
@@ -7125,10 +6858,6 @@
     "PrivateKeysList":{
       "type":"list",
       "member":{"shape":"CertificateList"}
-    },
-    "ProviderNetId":{
-      "type":"string",
-      "max":256
     },
     "ProximityEventConfiguration":{
       "type":"structure",
@@ -7974,7 +7703,6 @@
       "min":1
     },
     "StatusReason":{"type":"string"},
-    "Std":{"type":"double"},
     "SubBand":{
       "type":"integer",
       "documentation":"<p>A subset of supported frequency channels in a certain RFRegion.</p>",
@@ -7987,112 +7715,6 @@
       "documentation":"<p>A list of integer indicating which sub bands are supported by LoRa gateway.</p>",
       "max":8,
       "min":0
-    },
-    "Sum":{"type":"double"},
-    "SummaryMetricConfiguration":{
-      "type":"structure",
-      "members":{
-        "Status":{
-          "shape":"SummaryMetricConfigurationStatus",
-          "documentation":"<p>The status of the configuration of summary metrics.</p>"
-        }
-      },
-      "documentation":"<p>The configuration of summary metrics.</p>"
-    },
-    "SummaryMetricConfigurationStatus":{
-      "type":"string",
-      "enum":[
-        "Enabled",
-        "Disabled"
-      ]
-    },
-    "SummaryMetricQueries":{
-      "type":"list",
-      "member":{"shape":"SummaryMetricQuery"}
-    },
-    "SummaryMetricQuery":{
-      "type":"structure",
-      "members":{
-        "QueryId":{
-          "shape":"MetricQueryId",
-          "documentation":"<p>The id of the summary metric query.</p>"
-        },
-        "MetricName":{
-          "shape":"MetricName",
-          "documentation":"<p>The name of the metric.</p>"
-        },
-        "Dimensions":{
-          "shape":"Dimensions",
-          "documentation":"<p>The dimensions of the summary metric.</p>"
-        },
-        "AggregationPeriod":{
-          "shape":"AggregationPeriod",
-          "documentation":"<p>The aggregation period of the summary metric.</p>"
-        },
-        "StartTimestamp":{
-          "shape":"MetricQueryStartTimestamp",
-          "documentation":"<p>The start timestamp for the summary metric query.</p>"
-        },
-        "EndTimestamp":{
-          "shape":"MetricQueryEndTimestamp",
-          "documentation":"<p>The end timestamp for the summary metric query.</p>"
-        }
-      },
-      "documentation":"<p>The summary metric query object.</p>"
-    },
-    "SummaryMetricQueryResult":{
-      "type":"structure",
-      "members":{
-        "QueryId":{
-          "shape":"MetricQueryId",
-          "documentation":"<p>The ID of the summary metric results query operation.</p>"
-        },
-        "QueryStatus":{
-          "shape":"MetricQueryStatus",
-          "documentation":"<p>The status of the summary metric query result.</p>"
-        },
-        "Error":{
-          "shape":"MetricQueryError",
-          "documentation":"<p>The error message for the summary metric query result.</p>"
-        },
-        "MetricName":{
-          "shape":"MetricName",
-          "documentation":"<p>The name of the summary metric query result.</p>"
-        },
-        "Dimensions":{
-          "shape":"Dimensions",
-          "documentation":"<p>The dimensions of the metric.</p>"
-        },
-        "AggregationPeriod":{
-          "shape":"AggregationPeriod",
-          "documentation":"<p>The aggregation period of the metric.</p>"
-        },
-        "StartTimestamp":{
-          "shape":"MetricQueryStartTimestamp",
-          "documentation":"<p>The start timestamp for the summary metric query.</p>"
-        },
-        "EndTimestamp":{
-          "shape":"MetricQueryEndTimestamp",
-          "documentation":"<p>The end timestamp for the summary metric query.</p>"
-        },
-        "Timestamps":{
-          "shape":"MetricQueryTimestamps",
-          "documentation":"<p>The timestamp of each aggregation result.</p>"
-        },
-        "Values":{
-          "shape":"MetricQueryValues",
-          "documentation":"<p>The list of aggregated summary metric query results.</p>"
-        },
-        "Unit":{
-          "shape":"MetricUnit",
-          "documentation":"<p>The units of measurement to be used for interpreting the aggregation result.</p>"
-        }
-      },
-      "documentation":"<p>The result of the summary metrics aggregation operation.</p>"
-    },
-    "SummaryMetricQueryResults":{
-      "type":"list",
-      "member":{"shape":"SummaryMetricQueryResult"}
     },
     "SupportedRfRegion":{
       "type":"string",
@@ -8558,20 +8180,6 @@
       }
     },
     "UpdateLogLevelsByResourceTypesResponse":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "UpdateMetricConfigurationRequest":{
-      "type":"structure",
-      "members":{
-        "SummaryMetric":{
-          "shape":"SummaryMetricConfiguration",
-          "documentation":"<p>The value to be used to set summary metric configuration.</p>"
-        }
-      }
-    },
-    "UpdateMetricConfigurationResponse":{
       "type":"structure",
       "members":{
       }
@@ -9419,5 +9027,5 @@
       "documentation":"<p>WirelessMetadata object.</p>"
     }
   },
-  "documentation":"<p>AWS IoT Wireless provides bi-directional communication between internet-connected wireless devices and the AWS Cloud. To onboard both LoRaWAN and Sidewalk devices to AWS IoT, use the IoT Wireless API. These wireless devices use the Low Power Wide Area Networking (LPWAN) communication protocol to communicate with AWS IoT.</p> <p>Using the API, you can perform create, read, update, and delete operations for your wireless devices, gateways, destinations, and profiles. After onboarding your devices, you can use the API operations to set log levels and monitor your devices with CloudWatch.</p> <p>You can also use the API operations to create multicast groups and schedule a multicast session for sending a downlink message to devices in the group. By using Firmware Updates Over-The-Air (FUOTA) API operations, you can create a FUOTA task and schedule a session to update the firmware of individual devices or an entire group of devices in a multicast group.</p> <p>To connect to the AWS IoT Wireless Service, use the Service endpoints as described in <a href=\"https://docs.aws.amazon.com/general/latest/gr/iot-lorawan.html#iot-wireless_region\">IoT Wireless Service endpoints</a> in the <i>AWS General Reference</i>.</p>"
+  "documentation":"<p>AWS IoT Wireless provides bi-directional communication between internet-connected wireless devices and the AWS Cloud. To onboard both LoRaWAN and Sidewalk devices to AWS IoT, use the IoT Wireless API. These wireless devices use the Low Power Wide Area Networking (LPWAN) communication protocol to communicate with AWS IoT.</p> <p>Using the API, you can perform create, read, update, and delete operations for your wireless devices, gateways, destinations, and profiles. After onboarding your devices, you can use the API operations to set log levels and monitor your devices with CloudWatch.</p> <p>You can also use the API operations to create multicast groups and schedule a multicast session for sending a downlink message to devices in the group. By using Firmware Updates Over-The-Air (FUOTA) API operations, you can create a FUOTA task and schedule a session to update the firmware of individual devices or an entire group of devices in a multicast group.</p>"
 }

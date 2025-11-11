@@ -134,7 +134,7 @@ namespace {
                 UNIT_ASSERT_LE(querySnapshot->FairShare, kQueryDemand);
             }
         }
-
+        
         auto* poolSnapshot = queries.front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);
         UNIT_ASSERT_VALUES_EQUAL(poolSnapshot->FairShare, kCpuLimit);
@@ -170,7 +170,7 @@ namespace {
         for (const auto& poolId : poolIds) {
             scheduler.AddOrUpdatePool(databaseId, poolId, {});
         }
-
+    
         std::vector<std::vector<NHdrf::NDynamic::TQueryPtr>> queries;
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
         NHdrf::TQueryId queryId = 0;
@@ -191,7 +191,7 @@ namespace {
         auto* poolSnapshot2 = queries[1].front()->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot2);
         UNIT_ASSERT_VALUES_EQUAL(poolSnapshot2->Demand, kCpuLimit);
-
+    
         auto* databaseSnapshot = poolSnapshot1->GetParent();
         UNIT_ASSERT(databaseSnapshot);
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->Demand, kCpuLimit);
@@ -202,7 +202,7 @@ namespace {
             Scenario:
             - 1 database with 1 pool and 3 queries with demand 4
             - CPU limit is less than sum of demands so the last query can't get full satisfaction
-            - Checking that each query get 1 demand and than two queries get full demand while the last only gets what lasts
+            - Checking that each query get 1 demand and than two queries get full demand while the last only gets what lasts 
         */
         constexpr ui64 kCpuLimit = 10;
         constexpr size_t kNQueries = 3;
@@ -215,7 +215,7 @@ namespace {
         };
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(kCpuLimit);
-
+        
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
 
@@ -337,7 +337,7 @@ namespace {
         std::vector<std::vector<TSchedulableTaskPtr>> tasks;
 
         std::vector<ui64> queryDemands = {6, 3, 3};
-
+        
         for (NHdrf::TQueryId queryId = 0; queryId < kNQueries; ++queryId) {
             auto query = queries.emplace_back(
                 scheduler.AddOrUpdateQuery(databaseId, pools[queryId], queryId, {})
@@ -684,7 +684,7 @@ namespace {
             Scenario:
             - 1 database with 1 pool and 3 queries with demand 5
             - CPU limit is less than demand so FairShare is distributed in FIFO order with at least 1 FairShare for each query
-            - After adding one more query FairShare is still distributed in FIFO order but second query gets less
+            - After adding one more query FairShare is still distributed in FIFO order but second query gets less 
             - Decreasing Demand for the first query should affect distribution by giving more for the next
         */
         constexpr ui64 kCpuLimit = 10;
@@ -696,13 +696,13 @@ namespace {
             .DelayParams = kDefaultDelayParams,
             .UpdateFairSharePeriod = kDefaultUpdateFairSharePeriod
         };
-
+    
         TComputeScheduler scheduler(options.Counters, options.DelayParams);
         scheduler.SetTotalCpuLimit(kCpuLimit);
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
-
+        
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
@@ -778,7 +778,7 @@ namespace {
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
-
+        
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
@@ -807,7 +807,7 @@ namespace {
         UNIT_ASSERT(databaseSnapshot);
         UNIT_ASSERT_VALUES_EQUAL(databaseSnapshot->FairShare, kCpuLimit);
 
-        scheduler.RemoveQuery(std::get<NHdrf::TQueryId>(queries[0]->GetId()));
+        scheduler.RemoveQuery(queries[0]);
         queries.erase(queries.begin());
 
         scheduler.UpdateFairShare();
@@ -851,7 +851,7 @@ namespace {
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
-
+        
         std::vector<TString> pools = {"pool1", "pool2", "pool3"};
         for (size_t i = 0; i < pools.size(); ++i) {
             scheduler.AddOrUpdatePool(databaseId, pools[i], {});
@@ -946,16 +946,16 @@ namespace {
 
         const TString databaseId = "db1";
         scheduler.AddOrUpdateDatabase(databaseId, {});
-
+        
         const TString poolId = "pool1";
         scheduler.AddOrUpdatePool(databaseId, poolId, {});
 
         NHdrf::TQueryId queryId = 1;
         NHdrf::NDynamic::TQueryPtr query = scheduler.AddOrUpdateQuery(databaseId, poolId, queryId, {});
 
-        UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(std::get<NHdrf::TQueryId>(query->GetId())));
-        UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(0));
-        UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(std::get<NHdrf::TQueryId>(query->GetId())));
+        UNIT_ASSERT_NO_EXCEPTION(scheduler.RemoveQuery(query));
+        UNIT_ASSERT_EXCEPTION(scheduler.RemoveQuery(nullptr), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.RemoveQuery(query), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool("non-existent", poolId, {}), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery("non-existent", poolId, queryId, {}), yexception);
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateQuery(databaseId, "non-existent", queryId, {}), yexception);

@@ -129,11 +129,8 @@ Y_UNIT_TEST_SUITE(YdbImport) {
 
     Y_UNIT_TEST(ImportFromS3ToExistingTable) {
         TKikimrWithGrpcAndRootSchema server;
-        auto driver = TDriver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())
-                .SetDatabase("/Root")
-            );
+        auto driver = TDriver(TDriverConfig().SetEndpoint(TStringBuilder()
+            << "localhost:" << server.GetPort()));
 
         {
             NYdb::NTable::TTableClient client(driver);

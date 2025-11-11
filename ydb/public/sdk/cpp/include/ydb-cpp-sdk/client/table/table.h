@@ -31,7 +31,6 @@ class ExplicitPartitions;
 class GlobalIndexSettings;
 class VectorIndexSettings;
 class KMeansTreeSettings;
-class FulltextIndexSettings;
 class PartitioningSettings;
 class ReadReplicasSettings;
 class DateTypeColumnModeSettings;
@@ -296,49 +295,6 @@ public:
     void Out(IOutputStream &o) const;
 };
 
-struct TFulltextIndexSettings {
-public:
-    enum class ELayout {
-        Unspecified = 0,
-        Flat,
-    };
-
-    enum class ETokenizer {
-        Unspecified = 0,
-        Whitespace,
-        Standard,
-        Keyword,
-    };
-
-    struct TAnalyzers {
-        std::optional<ETokenizer> Tokenizer;
-        std::optional<std::string> Language;
-        std::optional<bool> UseFilterLowercase;
-        std::optional<bool> UseFilterStopwords;
-        std::optional<bool> UseFilterNgram;
-        std::optional<bool> UseFilterEdgeNgram;
-        std::optional<int32_t> FilterNgramMinLength;
-        std::optional<int32_t> FilterNgramMaxLength;
-        std::optional<bool> UseFilterLength;
-        std::optional<int32_t> FilterLengthMin;
-        std::optional<int32_t> FilterLengthMax;
-    };
-
-    struct TColumnAnalyzers {
-        std::optional<std::string> Column;
-        std::optional<TAnalyzers> Analyzers;
-    };
-
-    std::optional<ELayout> Layout;
-    std::vector<TColumnAnalyzers> Columns;
-
-    static TFulltextIndexSettings FromProto(const Ydb::Table::FulltextIndexSettings& proto);
-
-    void SerializeTo(Ydb::Table::FulltextIndexSettings& settings) const;
-
-    void Out(IOutputStream& o) const;
-};
-
 //! Represents index description
 class TIndexDescription {
     friend class NYdb::TProtoAccessor;
@@ -350,7 +306,7 @@ public:
         const std::vector<std::string>& indexColumns,
         const std::vector<std::string>& dataColumns = {},
         const std::vector<TGlobalIndexSettings>& globalIndexSettings = {},
-        const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings = {}
+        const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings = {}
     );
 
     TIndexDescription(
@@ -364,7 +320,7 @@ public:
     EIndexType GetIndexType() const;
     const std::vector<std::string>& GetIndexColumns() const;
     const std::vector<std::string>& GetDataColumns() const;
-    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
+    const std::variant<std::monostate, TKMeansTreeSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
 
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
@@ -384,7 +340,7 @@ private:
     std::vector<std::string> IndexColumns_;
     std::vector<std::string> DataColumns_;
     std::vector<TGlobalIndexSettings> GlobalIndexSettings_;
-    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> SpecializedIndexSettings_;
+    std::variant<std::monostate, TKMeansTreeSettings> SpecializedIndexSettings_;
     uint64_t SizeBytes_ = 0;
 };
 
@@ -799,9 +755,6 @@ private:
     // vector KMeansTree
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
-    // fulltext
-    void AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
-    void AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
 
     // default
     void AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns);
@@ -1042,10 +995,6 @@ public:
     // vector KMeansTree
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
-
-    // fulltext
-    TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
-    TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
 
     // default
     TTableBuilder& AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns);

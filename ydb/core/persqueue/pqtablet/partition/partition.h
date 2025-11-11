@@ -35,9 +35,7 @@ static const ui32 MAX_USER_ACTS = 1000;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
-using TPartitionLabeledCounters =
-    TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
-using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
+using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
@@ -57,14 +55,13 @@ class IAutopartitioningManager;
 class TPartitionCompaction;
 
 struct TTransaction {
-    TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
-                 TInstant calcPredicateTimestamp,
-                 TMaybe<bool> predicate = Nothing())
+
+    explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> tx,
+                          TMaybe<bool> predicate = Nothing())
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
         , CalcPredicateSpan(std::move(tx->Span))
-        , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
         AFL_ENSURE(Tx);
     }
@@ -124,7 +121,6 @@ struct TTransaction {
     NWilson::TSpan CommitSpan;
 
     TInstant WriteInfoResponseTimestamp;
-    TInstant CalcPredicateTimestamp;
 };
 class TPartitionCompaction;
 
@@ -607,7 +603,6 @@ private:
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
-            hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -681,7 +676,6 @@ private:
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
-            hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -934,7 +928,6 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
-    THolder<TPartitionExtendedLabeledCounters> PartitionCountersExtended;
 
     THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
 
@@ -1152,6 +1145,7 @@ private:
     size_t GetBodyKeysCountLimit() const;
     ui64 GetCumulativeSizeLimit() const;
 
+    void UpdateCompactionCounters();
     bool ThereIsUncompactedData() const;
     TInstant GetFirstUncompactedBlobTimestamp() const;
 
@@ -1199,12 +1193,10 @@ private:
     void HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-    void HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>
@@ -1221,8 +1213,7 @@ private:
         TEvPQ::TEvMLPReadRequest::TPtr,
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
-        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
-        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
 };

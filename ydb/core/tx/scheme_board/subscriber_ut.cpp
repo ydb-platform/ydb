@@ -319,7 +319,7 @@ void TSubscriberCombinationsTest::CombinationsRootDomain() {
                 UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId::FromDomainKey(domainKey));
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
             }
 
             context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
@@ -343,7 +343,7 @@ void TSubscriberCombinationsTest::CombinationsRootDomain() {
                 UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId::FromDomainKey(domainKey));
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
 
                 continue;
             }
@@ -396,7 +396,7 @@ void TSubscriberCombinationsTest::MigratedPathRecreation() {
         UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
         const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
         const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-        UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId::FromDomainKey(domainKey));
+        UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
     }
 
     context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
@@ -420,7 +420,7 @@ void TSubscriberCombinationsTest::MigratedPathRecreation() {
         UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
         const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
         const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-        UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId::FromDomainKey(domainKey));
+        UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
 
         return;
     }
@@ -467,7 +467,7 @@ void TSubscriberCombinationsTest::CombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(argsLeft.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId::FromDomainKey(domainKey));
+                UNIT_ASSERT_VALUES_EQUAL(argsLeft.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
             }
 
             context->Send(replicas[1], populatorRight, argsRight.GenerateUpdate());
@@ -491,7 +491,7 @@ void TSubscriberCombinationsTest::CombinationsMigratedPath() {
                 UNIT_ASSERT_VALUES_EQUAL(argsRight.PathId, ev->Get()->PathId);
                 const NKikimrScheme::TEvDescribeSchemeResult& descr = ev->Get()->DescribeSchemeResult;
                 const auto& domainKey = descr.GetPathDescription().GetDomainDescription().GetDomainKey();
-                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId::FromDomainKey(domainKey));
+                UNIT_ASSERT_VALUES_EQUAL(argsRight.DomainId, TDomainId(domainKey.GetSchemeShard(), domainKey.GetPathId()));
 
                 continue;
             }

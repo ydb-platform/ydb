@@ -1,4 +1,4 @@
-# table_service_config
+# Секция конфигурации `table_service_config`
 
 Секция `table_service_config` содержит параметры конфигурации для сервиса таблиц, включая настройки спиллинга.
 

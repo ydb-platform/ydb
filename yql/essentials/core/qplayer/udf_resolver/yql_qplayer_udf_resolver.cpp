@@ -10,7 +10,6 @@ namespace NYql::NCommon {
 
 namespace {
 
-const TString UdfResolver_GetSystemModulePath = "UdfResolver_GetSystemModulePath";
 const TString UdfResolver_LoadMetadata = "UdfResolver_LoadMetadata";
 const TString UdfResolver_ContainsModule = "UdfResolver_ContainsModule";
 
@@ -33,16 +32,10 @@ public:
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            auto res = QContext_.GetReader()->Get({UdfResolver_GetSystemModulePath, TString(moduleName)}).GetValueSync();
-            return MakeMaybe<TFilePathWithMd5>(res ? res->Value : "", "");
+            return MakeMaybe<TFilePathWithMd5>("", "");
         }
 
-        auto res = Inner_->GetSystemModulePath(moduleName);
-        if (res && QContext_.CanWrite()) {
-            QContext_.GetWriter()->Put({UdfResolver_GetSystemModulePath, TString(moduleName)}, res->Path).GetValueSync();
-        }
-
-        return res;
+        return Inner_->GetSystemModulePath(moduleName);
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,

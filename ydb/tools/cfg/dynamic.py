@@ -32,7 +32,7 @@ class DynamicConfigGenerator(object):
         self._grpc_endpoint = grpc_endpoint
         self.__configure_request = None
         self.__static_config = static.StaticConfigGenerator(
-            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path, **kwargs
+            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path
         )
 
     @property

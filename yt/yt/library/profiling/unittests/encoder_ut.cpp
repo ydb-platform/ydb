@@ -64,7 +64,8 @@ TEST(TSensorEncoder, Encode)
     // Includes dummy tag for consistency between tagId and tag index.
     EXPECT_THAT(tagById, testing::UnorderedElementsAre(
         dummyTag, TTag{"common", "label"}, TTag{"gauge", "1"},
-        TTag{"rate", "2"}, TTag{"hist", "3"}, TTag{"histRate", "4"}, TTag{"a", "b"}));
+        TTag{"rate", "2"}, TTag{"hist", "3"}, TTag{"histRate", "4"}, TTag{"a", "b"}
+    ));
 
     auto getProjectionTags = [&tagById] (const NProto::TProjection& projection) {
         std::vector<TTag> tags;
@@ -166,7 +167,8 @@ TEST(TSensorEncoder, EncodeSameSensorWithDifferentTypes)
             TSensorEncoder encoder("sensor");
             registry.Accept(TInstant::Zero(), &encoder);
         },
-        testing::Throws<std::exception>());
+        testing::Throws<std::exception>()
+    );
 }
 
 ////////////////////////////////////////////////////////////////////////////////

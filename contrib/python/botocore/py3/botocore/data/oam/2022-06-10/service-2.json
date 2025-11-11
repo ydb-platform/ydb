@@ -831,8 +831,7 @@
         "AWS::CloudWatch::Metric",
         "AWS::Logs::LogGroup",
         "AWS::XRay::Trace",
-        "AWS::ApplicationInsights::Application",
-        "AWS::InternetMonitor::Monitor"
+        "AWS::ApplicationInsights::Application"
       ]
     },
     "ResourceTypesInput":{

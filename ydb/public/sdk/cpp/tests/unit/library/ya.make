@@ -3,5 +3,4 @@ RECURSE(
     grpc_client
     issue
     operation_id
-    time
 )

@@ -267,21 +267,12 @@
 namespace NKikimr::NKikimrServicesInitializers {
 
 struct TAwsApiGuard {
-    const TAwsClientConfig Config;
-
-    TAwsApiGuard(const NKikimrConfig::TAwsClientConfig& config)
-        : Config{
-            .LogConfig{
-                .LogLevel = config.GetLogConfig().GetLogLevel(),
-                .FilenamePrefix = config.GetLogConfig().GetFilenamePrefix(),
-            },
-        }
-    {
-        InitAwsAPI(Config);
+    TAwsApiGuard() {
+        InitAwsAPI();
     }
 
     ~TAwsApiGuard() {
-        ShutdownAwsAPI(Config);
+        ShutdownAwsAPI();
     }
 };
 
@@ -291,7 +282,6 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
     : Config(runConfig.AppConfig)
     , NodeId(runConfig.NodeId)
     , ScopeId(runConfig.ScopeId)
-    , TinyMode(runConfig.TinyMode)
 {}
 
 // TBasicServicesInitializer
@@ -526,7 +516,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
     if (useAutoConfig) {
         bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
-        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode, TinyMode);
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
     }
 
     Y_ABORT_UNLESS(Config.HasActorSystemConfig());
@@ -565,15 +555,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
         resolverOptions.ForceTcp = nsConfig.GetForceTcp();
         resolverOptions.KeepSocket = nsConfig.GetKeepSocket();
-        switch (nsConfig.GetDnsResolverType()) {
-            case NKikimrConfig::TStaticNameserviceConfig::ARES:
-                resolverOptions.Type = NDnsResolver::EDnsResolverType::Ares;
-                break;
-            case NKikimrConfig::TStaticNameserviceConfig::LIBC:
-                resolverOptions.Type = NDnsResolver::EDnsResolverType::Libc;
-                break;
-        }
-        resolverOptions.AddTrailingDot = nsConfig.GetAddTrailingDot();
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(
@@ -3134,7 +3115,8 @@ TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
 
 void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     Y_UNUSED(setup);
-    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>(appData->AwsClientConfig));
+    Y_UNUSED(appData);
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
 
 TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)

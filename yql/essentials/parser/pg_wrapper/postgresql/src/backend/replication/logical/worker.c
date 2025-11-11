@@ -436,8 +436,6 @@ static inline void reset_apply_error_context_info(void);
 static TransApplyAction get_transaction_apply_action(TransactionId xid,
 													 ParallelApplyWorkerInfo **winfo);
 
-static void replorigin_reset(int code, Datum arg);
-
 /*
  * Form the origin name for the subscription.
  *
@@ -4407,17 +4405,6 @@ start_table_sync(XLogRecPtr *origin_startpos, char **myslotname)
 }
 
 /*
- * Reset the origin state.
- */
-static void
-replorigin_reset(int code, Datum arg)
-{
-	replorigin_session_origin = InvalidRepOriginId;
-	replorigin_session_origin_lsn = InvalidXLogRecPtr;
-	replorigin_session_origin_timestamp = 0;
-}
-
-/*
  * Run the apply loop with error handling. Disable the subscription,
  * if necessary.
  *
@@ -4433,14 +4420,6 @@ start_apply(XLogRecPtr origin_startpos)
 	}
 	PG_CATCH();
 	{
-		/*
-		 * Reset the origin state to prevent the advancement of origin
-		 * progress if we fail to apply. Otherwise, this will result in
-		 * transaction loss as that transaction won't be sent again by the
-		 * server.
-		 */
-		replorigin_reset(0, (Datum) 0);
-
 		if (MySubscription->disableonerr)
 			DisableSubscriptionAndExit();
 		else
@@ -4573,19 +4552,6 @@ ApplyWorkerMain(Datum main_arg)
 	load_file("libpqwalreceiver", false);
 
 	InitializeApplyWorker();
-
-	/*
-	 * Register a callback to reset the origin state before aborting any
-	 * pending transaction during shutdown (see ShutdownPostgres()). This will
-	 * avoid origin advancement for an in-complete transaction which could
-	 * otherwise lead to its loss as such a transaction won't be sent by the
-	 * server again.
-	 *
-	 * Note that even a LOG or DEBUG statement placed after setting the origin
-	 * state may process a shutdown signal before committing the current apply
-	 * operation. So, it is important to register such a callback here.
-	 */
-	before_shmem_exit(replorigin_reset, (Datum) 0);
 
 	InitializingApplyWorker = false;
 
@@ -4725,16 +4691,8 @@ ApplyWorkerMain(Datum main_arg)
 			walrcv_startstreaming(LogRepWorkerWalRcvConn, &options);
 
 			StartTransactionCommand();
-
-			/*
-			 * Updating pg_subscription might involve TOAST table access, so
-			 * ensure we have a valid snapshot.
-			 */
-			PushActiveSnapshot(GetTransactionSnapshot());
-
 			UpdateTwoPhaseState(MySubscription->oid, LOGICALREP_TWOPHASE_STATE_ENABLED);
 			MySubscription->twophasestate = LOGICALREP_TWOPHASE_STATE_ENABLED;
-			PopActiveSnapshot();
 			CommitTransactionCommand();
 		}
 		else
@@ -4787,15 +4745,7 @@ DisableSubscriptionAndExit(void)
 
 	/* Disable the subscription */
 	StartTransactionCommand();
-
-	/*
-	 * Updating pg_subscription might involve TOAST table access, so ensure we
-	 * have a valid snapshot.
-	 */
-	PushActiveSnapshot(GetTransactionSnapshot());
-
 	DisableSubscription(MySubscription->oid);
-	PopActiveSnapshot();
 	CommitTransactionCommand();
 
 	/* Ensure we remove no-longer-useful entry for worker's start time */
@@ -4900,12 +4850,6 @@ clear_subscription_skip_lsn(XLogRecPtr finish_lsn)
 	}
 
 	/*
-	 * Updating pg_subscription might involve TOAST table access, so ensure we
-	 * have a valid snapshot.
-	 */
-	PushActiveSnapshot(GetTransactionSnapshot());
-
-	/*
 	 * Protect subskiplsn of pg_subscription from being concurrently updated
 	 * while clearing it.
 	 */
@@ -4962,8 +4906,6 @@ clear_subscription_skip_lsn(XLogRecPtr finish_lsn)
 
 	heap_freetuple(tup);
 	table_close(rel, NoLock);
-
-	PopActiveSnapshot();
 
 	if (started_tx)
 		CommitTransactionCommand();

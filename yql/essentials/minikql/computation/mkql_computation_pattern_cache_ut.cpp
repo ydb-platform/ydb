@@ -389,15 +389,6 @@ TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable* list 
 Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 template <class T>
 void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'000) {
-#if defined(_ubsan_enabled_)
-    if (useLLVM) {
-        // There is an issue with UBSan and codegen that occurs in various tests, including this one.
-        // The problem is likely caused by calling LLVM-generated functions.
-        // Moreover, the test fails in CI but does not fail locally, so it was decided to disable it
-        // and treat the failure as a false positive.
-        return;
-    }
-#endif
     TTimer t("total: ");
     const ui32 cacheSizeInBytes = 104857600; // 100 MiB
     const ui32 inFlight = 7;

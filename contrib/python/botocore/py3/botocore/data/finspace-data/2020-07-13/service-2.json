@@ -29,9 +29,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Adds a user to a permission group to grant permissions for actions a user can perform in FinSpace.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Adds a user to a permission group to grant permissions for actions a user can perform in FinSpace.</p>"
     },
     "CreateChangeset":{
       "name":"CreateChangeset",
@@ -50,9 +48,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Creates a new Changeset in a FinSpace Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Creates a new Changeset in a FinSpace Dataset.</p>"
     },
     "CreateDataView":{
       "name":"CreateDataView",
@@ -70,9 +66,7 @@
         {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Creates a Dataview for a Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Creates a Dataview for a Dataset.</p>"
     },
     "CreateDataset":{
       "name":"CreateDataset",
@@ -91,9 +85,7 @@
         {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Creates a new FinSpace Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Creates a new FinSpace Dataset.</p>"
     },
     "CreatePermissionGroup":{
       "name":"CreatePermissionGroup",
@@ -111,9 +103,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Creates a group of permissions for various actions that a user can perform in FinSpace.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Creates a group of permissions for various actions that a user can perform in FinSpace.</p>"
     },
     "CreateUser":{
       "name":"CreateUser",
@@ -131,9 +121,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Creates a new user in FinSpace.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Creates a new user in FinSpace.</p>"
     },
     "DeleteDataset":{
       "name":"DeleteDataset",
@@ -152,9 +140,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Deletes a FinSpace Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Deletes a FinSpace Dataset.</p>"
     },
     "DeletePermissionGroup":{
       "name":"DeletePermissionGroup",
@@ -173,9 +159,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Deletes a permission group. This action is irreversible.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Deletes a permission group. This action is irreversible.</p>"
     },
     "DisableUser":{
       "name":"DisableUser",
@@ -193,9 +177,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Denies access to the FinSpace web application and API for the specified user.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Denies access to the FinSpace web application and API for the specified user.</p>"
     },
     "DisassociateUserFromPermissionGroup":{
       "name":"DisassociateUserFromPermissionGroup",
@@ -213,9 +195,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Removes a user from a permission group.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Removes a user from a permission group.</p>"
     },
     "EnableUser":{
       "name":"EnableUser",
@@ -234,9 +214,7 @@
         {"shape":"LimitExceededException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p> Allows the specified user to access the FinSpace web application and API.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p> Allows the specified user to access the FinSpace web application and API.</p>"
     },
     "GetChangeset":{
       "name":"GetChangeset",
@@ -254,9 +232,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Get information about a Changeset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Get information about a Changeset.</p>"
     },
     "GetDataView":{
       "name":"GetDataView",
@@ -273,9 +249,7 @@
         {"shape":"ValidationException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Gets information about a Dataview.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Gets information about a Dataview.</p>"
     },
     "GetDataset":{
       "name":"GetDataset",
@@ -293,9 +267,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Returns information about a Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Returns information about a Dataset.</p>"
     },
     "GetExternalDataViewAccessDetails":{
       "name":"GetExternalDataViewAccessDetails",
@@ -312,9 +284,7 @@
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Returns the credentials to access the external Dataview from an S3 location. To call this API:</p> <ul> <li> <p>You must retrieve the programmatic credentials.</p> </li> <li> <p>You must be a member of a FinSpace user group, where the dataset that you want to access has <code>Read Dataset Data</code> permissions.</p> </li> </ul>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Returns the credentials to access the external Dataview from an S3 location. To call this API:</p> <ul> <li> <p>You must retrieve the programmatic credentials.</p> </li> <li> <p>You must be a member of a FinSpace user group, where the dataset that you want to access has <code>Read Dataset Data</code> permissions.</p> </li> </ul>"
     },
     "GetPermissionGroup":{
       "name":"GetPermissionGroup",
@@ -331,9 +301,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Retrieves the details of a specific permission group.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Retrieves the details of a specific permission group.</p>"
     },
     "GetProgrammaticAccessCredentials":{
       "name":"GetProgrammaticAccessCredentials",
@@ -349,9 +317,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Request programmatic credentials to use with FinSpace SDK. For more information, see <a href=\"https://docs.aws.amazon.com/finspace/latest/data-api/fs-using-the-finspace-api.html#accessing-credentials\">Step 2. Access credentials programmatically using IAM access key id and secret access key</a>.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Request programmatic credentials to use with FinSpace SDK. For more information, see <a href=\"https://docs.aws.amazon.com/finspace/latest/data-api/fs-using-the-finspace-api.html#accessing-credentials\">Step 2. Access credentials programmatically using IAM access key id and secret access key</a>.</p>"
     },
     "GetUser":{
       "name":"GetUser",
@@ -368,9 +334,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Retrieves details for a specific user.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Retrieves details for a specific user.</p>"
     },
     "GetWorkingLocation":{
       "name":"GetWorkingLocation",
@@ -386,9 +350,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>A temporary Amazon S3 location, where you can copy your files from a source location to stage or use as a scratch space in FinSpace notebook.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>A temporary Amazon S3 location, where you can copy your files from a source location to stage or use as a scratch space in FinSpace notebook.</p>"
     },
     "ListChangesets":{
       "name":"ListChangesets",
@@ -406,9 +368,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Lists the FinSpace Changesets for a Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists the FinSpace Changesets for a Dataset.</p>"
     },
     "ListDataViews":{
       "name":"ListDataViews",
@@ -425,9 +385,7 @@
         {"shape":"ValidationException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Lists all available Dataviews for a Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists all available Dataviews for a Dataset.</p>"
     },
     "ListDatasets":{
       "name":"ListDatasets",
@@ -444,9 +402,7 @@
         {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all of the active Datasets that a user has access to.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists all of the active Datasets that a user has access to.</p>"
     },
     "ListPermissionGroups":{
       "name":"ListPermissionGroups",
@@ -462,9 +418,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Lists all available permission groups in FinSpace.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists all available permission groups in FinSpace.</p>"
     },
     "ListPermissionGroupsByUser":{
       "name":"ListPermissionGroupsByUser",
@@ -481,9 +435,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all the permission groups that are associated with a specific user.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists all the permission groups that are associated with a specific user.</p>"
     },
     "ListUsers":{
       "name":"ListUsers",
@@ -499,9 +451,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"AccessDeniedException"}
       ],
-      "documentation":"<p>Lists all available users in FinSpace.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists all available users in FinSpace.</p>"
     },
     "ListUsersByPermissionGroup":{
       "name":"ListUsersByPermissionGroup",
@@ -518,9 +468,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists details of all the users in a specific permission group.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Lists details of all the users in a specific permission group.</p>"
     },
     "ResetUserPassword":{
       "name":"ResetUserPassword",
@@ -538,9 +486,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Resets the password for a specified user ID and generates a temporary one. Only a superuser can reset password for other users. Resetting the password immediately invalidates the previous password associated with the user.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Resets the password for a specified user ID and generates a temporary one. Only a superuser can reset password for other users. Resetting the password immediately invalidates the previous password associated with the user.</p>"
     },
     "UpdateChangeset":{
       "name":"UpdateChangeset",
@@ -558,9 +504,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Updates a FinSpace Changeset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Updates a FinSpace Changeset.</p>"
     },
     "UpdateDataset":{
       "name":"UpdateDataset",
@@ -578,9 +522,7 @@
         {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Updates a FinSpace Dataset.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Updates a FinSpace Dataset.</p>"
     },
     "UpdatePermissionGroup":{
       "name":"UpdatePermissionGroup",
@@ -598,9 +540,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Modifies the details of a permission group. You cannot modify a <code>permissionGroupID</code>.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Modifies the details of a permission group. You cannot modify a <code>permissionGroupID</code>.</p>"
     },
     "UpdateUser":{
       "name":"UpdateUser",
@@ -618,9 +558,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Modifies the details of the specified user. You cannot update the <code>userId</code> for a user.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This method will be discontinued."
+      "documentation":"<p>Modifies the details of the specified user. You cannot update the <code>userId</code> for a user.</p>"
     }
   },
   "shapes":{

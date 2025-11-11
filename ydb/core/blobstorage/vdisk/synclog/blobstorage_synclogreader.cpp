@@ -127,7 +127,7 @@ namespace NKikimr {
 
             bool Check(const TRecordHdr *rec) const {
                 return (rec->RecType != TRecordHdr::RecLogoBlob)
-                    || TLogoBlobFilter::Check(rec->GetLogoBlob()->LogoBlobID());
+                    || TLogoBlobFilter::Check(TLogoBlobID(rec->GetLogoBlob()->Raw));
             }
         };
 

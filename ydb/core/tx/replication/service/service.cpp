@@ -296,7 +296,7 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, TString> {
     bool EnableSsl() const {
         return std::get<2>(*this);
     }
-
+ 
     const TString& CaCert() const {
         return std::get<3>(*this);
     }
@@ -425,15 +425,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     static std::function<IActor*(void)> WriterFn(
-            const TString& database,
             const NKikimrReplication::TLocalTableWriterSettings& writerSettings,
             const NKikimrReplication::TConsistencySettings& consistencySettings)
     {
         const auto mode = consistencySettings.HasGlobal()
             ? EWriteMode::Consistent
             : EWriteMode::Simple;
-        return [database, tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
-            return CreateLocalTableWriter(database, tablePathId, mode);
+        return [tablePathId = TPathId::FromProto(writerSettings.GetPathId()), mode]() {
+            return CreateLocalTableWriter(tablePathId, mode);
         };
     }
 
@@ -504,7 +503,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         if (cmd.HasLocalTableWriter()) {
             const auto& writerSettings = cmd.GetLocalTableWriter();
             const auto& consistencySettings = cmd.GetConsistencySettings();
-            writerFn = WriterFn(cmd.GetDatabase(), writerSettings, consistencySettings);
+            writerFn = WriterFn(writerSettings, consistencySettings);
         } else if (cmd.HasTransferWriter()) {
             const auto& writerSettings = cmd.GetTransferWriter();
             const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();

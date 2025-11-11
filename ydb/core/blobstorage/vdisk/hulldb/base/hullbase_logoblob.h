@@ -33,7 +33,7 @@ namespace NKikimr {
         }
 
         TLogoBlobID LogoBlobID() const {
-            return ReadUnaligned<TLogoBlobID>(Raw);
+            return TLogoBlobID(Raw);
         }
 
         TString ToString() const {
@@ -60,9 +60,6 @@ namespace NKikimr {
                 && x.Cookie()     == y.Cookie();
         }
     };
-
-    static_assert(sizeof(TKeyLogoBlob) == 24, "expect sizeof(TKeyLogoBlob) == 24");
-
 #pragma pack(pop)
 
     inline bool operator <(const TKeyLogoBlob &x, const TKeyLogoBlob &y) {
@@ -233,9 +230,6 @@ namespace NKikimr {
             return str.Str();
         }
     };
-
-    static_assert(sizeof(TMemRecLogoBlob) == 20, "expect sizeof(TKeyLogoBlob) == 20");
-
 #pragma pack(pop)
 
     template <>

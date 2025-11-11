@@ -135,37 +135,6 @@ namespace {
         return length;
     }
 
-    void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams) {
-        const unsigned char* ngram_begin_ptr = (const unsigned char*)token.data();
-        const unsigned char* end = ngram_begin_ptr + token.size();
-        wchar32 symbol;
-        size_t symbolBytes;
-
-        while (ngram_begin_ptr < end) {
-            const unsigned char* ngram_end_ptr = ngram_begin_ptr;
-            size_t ngram_length = 0;
-            while (ngram_end_ptr < end) {
-                if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
-                    Y_ASSERT(false); // should already be validated during tokenization
-                    return;
-                }
-                ngram_length++;
-                ngram_end_ptr += symbolBytes;
-                if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
-                    ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
-                }
-            }
-            if (edge) {
-                break; // only prefixes
-            }
-            if (SafeReadUTF8Char(symbol, symbolBytes, ngram_begin_ptr, end) != RECODE_OK) {
-                Y_ASSERT(false); // should already be validated during tokenization
-                return;
-            }
-            ngram_begin_ptr += symbolBytes;
-        }
-    }
-
     bool ValidateSettings(const Ydb::Table::FulltextIndexSettings::Analyzers& settings, TString& error) {
         if (!settings.has_tokenizer() || settings.tokenizer() == Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED) {
             error = "tokenizer should be set";
@@ -182,38 +151,21 @@ namespace {
             return false;
         }
 
-        if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
-            if (settings.use_filter_ngram() && settings.use_filter_edge_ngram()) {
-                error = "only one of use_filter_ngram or use_filter_edge_ngram should be set, not both";
-                return false;
-            }
-            if (!settings.has_filter_ngram_min_length()) {
-                error = "filter_ngram_min_length should be set with use_filter_ngram/use_filter_edge_ngram";
-                return false;
-            }
-            if (!settings.has_filter_ngram_max_length()) {
-                error = "filter_ngram_max_length should be set with use_filter_ngram/use_filter_edge_ngram";
-                return false;
-            }
-            if (!ValidateSettingInRange("filter_ngram_min_length", settings.filter_ngram_min_length(), 1, 20, error)) {
-                return false;
-            }
-            if (!ValidateSettingInRange("filter_ngram_max_length", settings.filter_ngram_max_length(), 1, 20, error)) {
-                return false;
-            }
-            if (settings.filter_ngram_min_length() > settings.filter_ngram_max_length()) {
-                error = "Invalid filter_ngram_min_length: should be less than or equal to filter_ngram_max_length";
-                return false;
-            }
-        } else {
-            if (settings.has_filter_ngram_min_length()) {
-                error = "use_filter_ngram or use_filter_edge_ngram should be set with filter_ngram_min_length";
-                return false;
-            }
-            if (settings.has_filter_ngram_max_length()) {
-                error = "use_filter_ngram or use_filter_edge_ngram should be set with filter_ngram_max_length";
-                return false;
-            }
+        if (settings.use_filter_ngram()) {
+            error = "Unsupported use_filter_ngram setting";
+            return false;
+        }
+        if (settings.use_filter_edge_ngram()) {
+            error = "Unsupported use_filter_edge_ngram setting";
+            return false;
+        }
+        if (settings.has_filter_ngram_min_length()) {
+            error = "Unsupported filter_ngram_min_length setting";
+            return false;
+        }
+        if (settings.has_filter_ngram_max_length()) {
+            error = "Unsupported filter_ngram_max_length setting";
+            return false;
         }
 
         if (settings.use_filter_length()) {
@@ -228,7 +180,7 @@ namespace {
                 return false;
             }
             if (settings.has_filter_length_min() && settings.has_filter_length_max() && settings.filter_length_min() > settings.filter_length_max()) {
-                error = "Invalid filter_length_min: should be less than or equal to filter_length_max";
+                error = "Invalid filter_length_min: should be less or equal than filter_length_max";
                 return false;
             }
         } else {
@@ -266,14 +218,6 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
             }
             return false;
         }), tokens.end());
-    }
-
-    if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
-        TVector<TString> ngrams;
-        for (const auto& token : tokens) {
-            BuildNgrams(token, settings.filter_ngram_min_length(), settings.filter_ngram_max_length(), settings.use_filter_edge_ngram(), ngrams);
-        }
-        tokens.swap(ngrams);
     }
 
     return tokens;

@@ -3937,9 +3937,9 @@
                     "Body": 1,
                     "DataCenter": 49,
                     "DataCenterId": "1",
-                    "Location": "DC=1/R=1/U=1/",
+                    "Location": "DC=1/M=1/R=1/U=1/",
                     "Rack": 1,
-                    "Room": 0
+                    "Room": 1
                 },
                 "Port": "not-zero-number",
                 "ResolveHost": "text"
@@ -4005,9 +4005,9 @@
                     "Body": 1,
                     "DataCenter": 49,
                     "DataCenterId": "1",
-                    "Location": "DC=1/R=1/U=1/",
+                    "Location": "DC=1/M=1/R=1/U=1/",
                     "Rack": 1,
-                    "Room": 0
+                    "Room": 1
                 },
                 "Port": "not-zero-number",
                 "ResolveHost": "text"
@@ -4074,6 +4074,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -4383,6 +4384,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -4712,6 +4714,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -5689,6 +5692,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -6393,6 +6397,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -7451,6 +7456,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -7531,6 +7537,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -7611,6 +7618,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -7694,6 +7702,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -7773,6 +7782,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -7966,6 +7976,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -8335,6 +8346,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -8704,6 +8716,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -9073,6 +9086,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -9442,6 +9456,7 @@
                         "LoadAverage": "not-empty-array",
                         "Location": {
                             "DataCenter": "1",
+                            "Module": "1",
                             "Rack": "1",
                             "Unit": "1"
                         },
@@ -9753,6 +9768,7 @@
                     "LoadAverage": "not-empty-array",
                     "Location": {
                         "DataCenter": "1",
+                        "Module": "1",
                         "Rack": "1",
                         "Unit": "1"
                     },
@@ -9832,6 +9848,7 @@
                     "LoadAverage": "not-empty-array",
                     "Location": {
                         "DataCenter": "1",
+                        "Module": "1",
                         "Rack": "1",
                         "Unit": "1"
                     },
@@ -10037,6 +10054,7 @@
                 "LoadAverage": "not-empty-array",
                 "Location": {
                     "DataCenter": "1",
+                    "Module": "1",
                     "Rack": "1",
                     "Unit": "1"
                 },

@@ -1,5 +1,5 @@
 <tmp_path>/program.sql:<main>: Warning: Parse Sql
 
-    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function DateTime::Parse instead to avoid performance overhead
+    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function DateTime::Format instead to avoid performance overhead
     	select SimplePg::to_date('2023-03-01','%Y-%m-%d');
 	                 ^

@@ -812,7 +812,6 @@ private:
             SA_LOG_D("[TStatService::TEvNavigateKeySetResult] RequestId[ " << requestId
                 << " ] resolve DatabasePath[ " << pathId << " ]");
             auto navigateRequest = std::make_unique<TNavigate>();
-            navigateRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             AddNavigateEntry(navigateRequest->ResultSet, pathId);
 
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()), 0, ev->Cookie);
@@ -884,7 +883,6 @@ private:
 
         auto navigateDomainKey = [this, cookie = ev->Cookie] (const TPathId& domainKey) {
             auto navigateRequest = std::make_unique<TNavigate>();
-            navigateRequest->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             AddNavigateEntry(navigateRequest->ResultSet, domainKey);
             navigateRequest->Cookie = ResolveSACookie;
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));

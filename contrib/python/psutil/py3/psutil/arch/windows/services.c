@@ -8,74 +8,34 @@
 #include <windows.h>
 #include <Winsvc.h>
 
-#include "../../arch/all/init.h"
+#include "../../_psutil_common.h"
+#include "services.h"
 
 
 // ==================================================================
 // utils
 // ==================================================================
 
-
 SC_HANDLE
-psutil_get_service_handler(
-    const wchar_t *service_name,
-    DWORD scm_access,
-    DWORD access)
+psutil_get_service_handler(char *service_name, DWORD scm_access, DWORD access)
 {
     SC_HANDLE sc = NULL;
     SC_HANDLE hService = NULL;
 
-    sc = OpenSCManagerW(NULL, NULL, scm_access);
+    sc = OpenSCManager(NULL, NULL, scm_access);
     if (sc == NULL) {
-        psutil_PyErr_SetFromOSErrnoWithSyscall("OpenSCManagerW");
+        psutil_PyErr_SetFromOSErrnoWithSyscall("OpenSCManager");
         return NULL;
     }
-
-    hService = OpenServiceW(sc, service_name, access);
+    hService = OpenService(sc, service_name, access);
     if (hService == NULL) {
-        psutil_PyErr_SetFromOSErrnoWithSyscall("OpenServiceW");
+        psutil_PyErr_SetFromOSErrnoWithSyscall("OpenService");
         CloseServiceHandle(sc);
         return NULL;
     }
-
     CloseServiceHandle(sc);
     return hService;
 }
-
-
-// helper: parse args, convert to wchar, and open service
-// returns NULL on error. On success, fills *service_name_out.
-static SC_HANDLE
-psutil_get_service_from_args(
-    PyObject *args,
-    DWORD scm_access,
-    DWORD access,
-    wchar_t **service_name_out)
-{
-    PyObject *py_service_name = NULL;
-    wchar_t *service_name = NULL;
-    Py_ssize_t wlen;
-    SC_HANDLE hService = NULL;
-
-    if (!PyArg_ParseTuple(args, "U", &py_service_name)) {
-        return NULL;
-    }
-
-    service_name = PyUnicode_AsWideCharString(py_service_name, &wlen);
-    if (service_name == NULL) {
-        return NULL;
-    }
-
-    hService = psutil_get_service_handler(service_name, scm_access, access);
-    if (hService == NULL) {
-        PyMem_Free(service_name);
-        return NULL;
-    }
-
-    *service_name_out = service_name;
-    return hService;
-}
-
 
 
 // XXX - expose these as constants?
@@ -229,7 +189,7 @@ error:
  */
 PyObject *
 psutil_winservice_query_config(PyObject *self, PyObject *args) {
-    wchar_t *service_name = NULL;
+    char *service_name;
     SC_HANDLE hService = NULL;
     BOOL ok;
     DWORD bytesNeeded = 0;
@@ -239,14 +199,12 @@ psutil_winservice_query_config(PyObject *self, PyObject *args) {
     PyObject *py_unicode_binpath = NULL;
     PyObject *py_unicode_username = NULL;
 
-    hService = psutil_get_service_from_args(
-        args,
-        SC_MANAGER_ENUMERATE_SERVICE,
-        SERVICE_QUERY_CONFIG,
-        &service_name
-    );
-    if (hService == NULL)
+    if (!PyArg_ParseTuple(args, "s", &service_name))
         return NULL;
+    hService = psutil_get_service_handler(
+        service_name, SC_MANAGER_ENUMERATE_SERVICE, SERVICE_QUERY_CONFIG);
+    if (hService == NULL)
+        goto error;
 
     // First call to QueryServiceConfigW() is necessary to get the
     // right size.
@@ -256,15 +214,9 @@ psutil_winservice_query_config(PyObject *self, PyObject *args) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("QueryServiceConfigW");
         goto error;
     }
-
     qsc = (QUERY_SERVICE_CONFIGW *)malloc(bytesNeeded);
-    if (qsc == NULL) {
-        PyErr_NoMemory();
-        goto error;
-    }
-
     ok = QueryServiceConfigW(hService, qsc, bytesNeeded, &bytesNeeded);
-    if (!ok) {
+    if (ok == 0) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("QueryServiceConfigW");
         goto error;
     }
@@ -304,7 +256,6 @@ psutil_winservice_query_config(PyObject *self, PyObject *args) {
     Py_DECREF(py_unicode_username);
     free(qsc);
     CloseServiceHandle(hService);
-    PyMem_Free(service_name);
     return py_tuple;
 
 error:
@@ -312,12 +263,10 @@ error:
     Py_XDECREF(py_unicode_binpath);
     Py_XDECREF(py_unicode_username);
     Py_XDECREF(py_tuple);
-    if (hService)
+    if (hService != NULL)
         CloseServiceHandle(hService);
-    if (qsc)
+    if (qsc != NULL)
         free(qsc);
-    if (service_name)
-        PyMem_Free(service_name);
     return NULL;
 }
 
@@ -329,21 +278,19 @@ error:
  */
 PyObject *
 psutil_winservice_query_status(PyObject *self, PyObject *args) {
-    wchar_t *service_name = NULL;
+    char *service_name;
     SC_HANDLE hService = NULL;
     BOOL ok;
     DWORD bytesNeeded = 0;
-    SERVICE_STATUS_PROCESS *ssp = NULL;
+    SERVICE_STATUS_PROCESS  *ssp = NULL;
     PyObject *py_tuple = NULL;
 
-    hService = psutil_get_service_from_args(
-        args,
-        SC_MANAGER_ENUMERATE_SERVICE,
-        SERVICE_QUERY_STATUS,
-        &service_name
-    );
-    if (hService == NULL)
+    if (!PyArg_ParseTuple(args, "s", &service_name))
         return NULL;
+    hService = psutil_get_service_handler(
+        service_name, SC_MANAGER_ENUMERATE_SERVICE, SERVICE_QUERY_STATUS);
+    if (hService == NULL)
+        goto error;
 
     // First call to QueryServiceStatusEx() is necessary to get the
     // right size.
@@ -353,15 +300,14 @@ psutil_winservice_query_status(PyObject *self, PyObject *args) {
         // Also services.msc fails in the same manner, so we return an
         // empty string.
         CloseServiceHandle(hService);
-        PyMem_Free(service_name);
         return Py_BuildValue("s", "");
     }
     if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("QueryServiceStatusEx");
         goto error;
     }
-
-    ssp = (SERVICE_STATUS_PROCESS *)HeapAlloc(GetProcessHeap(), 0, bytesNeeded);
+    ssp = (SERVICE_STATUS_PROCESS *)HeapAlloc(
+        GetProcessHeap(), 0, bytesNeeded);
     if (ssp == NULL) {
         PyErr_NoMemory();
         goto error;
@@ -370,7 +316,7 @@ psutil_winservice_query_status(PyObject *self, PyObject *args) {
     // Actual call.
     ok = QueryServiceStatusEx(hService, SC_STATUS_PROCESS_INFO, (LPBYTE)ssp,
                               bytesNeeded, &bytesNeeded);
-    if (!ok) {
+    if (ok == 0) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("QueryServiceStatusEx");
         goto error;
     }
@@ -385,65 +331,58 @@ psutil_winservice_query_status(PyObject *self, PyObject *args) {
 
     CloseServiceHandle(hService);
     HeapFree(GetProcessHeap(), 0, ssp);
-    PyMem_Free(service_name);
     return py_tuple;
 
 error:
     Py_XDECREF(py_tuple);
-    if (hService)
+    if (hService != NULL)
         CloseServiceHandle(hService);
-    if (ssp)
+    if (ssp != NULL)
         HeapFree(GetProcessHeap(), 0, ssp);
-    if (service_name)
-        PyMem_Free(service_name);
     return NULL;
 }
 
+
+/*
+ * Get service description.
+ */
 PyObject *
 psutil_winservice_query_descr(PyObject *self, PyObject *args) {
+    ENUM_SERVICE_STATUS_PROCESSW *lpService = NULL;
     BOOL ok;
     DWORD bytesNeeded = 0;
     SC_HANDLE hService = NULL;
     SERVICE_DESCRIPTIONW *scd = NULL;
-    wchar_t *service_name = NULL;
+    char *service_name;
     PyObject *py_retstr = NULL;
 
-    hService = psutil_get_service_from_args(
-        args,
-        SC_MANAGER_ENUMERATE_SERVICE,
-        SERVICE_QUERY_CONFIG,
-        &service_name
-    );
-    if (hService == NULL)
+    if (!PyArg_ParseTuple(args, "s", &service_name))
         return NULL;
+    hService = psutil_get_service_handler(
+        service_name, SC_MANAGER_ENUMERATE_SERVICE, SERVICE_QUERY_CONFIG);
+    if (hService == NULL)
+        goto error;
 
-    QueryServiceConfig2W(hService, SERVICE_CONFIG_DESCRIPTION, NULL, 0, &bytesNeeded);
-
-    if ((GetLastError() == ERROR_NOT_FOUND) ||
-        (GetLastError() == ERROR_MUI_FILE_NOT_FOUND))
-    {
-        // E.g. services.msc fails in this manner, so we return an
+    // This first call to QueryServiceConfig2W() is necessary in order
+    // to get the right size.
+    bytesNeeded = 0;
+    QueryServiceConfig2W(hService, SERVICE_CONFIG_DESCRIPTION, NULL, 0,
+                         &bytesNeeded);
+    if (GetLastError() == ERROR_MUI_FILE_NOT_FOUND) {
+        // Also services.msc fails in the same manner, so we return an
         // empty string.
-        psutil_debug("set empty string for NOT_FOUND service description");
         CloseServiceHandle(hService);
-        PyMem_Free(service_name);
         return Py_BuildValue("s", "");
     }
-
     if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("QueryServiceConfig2W");
         goto error;
     }
 
     scd = (SERVICE_DESCRIPTIONW *)malloc(bytesNeeded);
-    if (scd == NULL) {
-        PyErr_NoMemory();
-        goto error;
-    }
-
     ok = QueryServiceConfig2W(hService, SERVICE_CONFIG_DESCRIPTION,
                               (LPBYTE)scd, bytesNeeded, &bytesNeeded);
-    if (!ok) {
+    if (ok == 0) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("QueryServiceConfig2W");
         goto error;
     }
@@ -453,24 +392,20 @@ psutil_winservice_query_descr(PyObject *self, PyObject *args) {
     }
     else {
         py_retstr = PyUnicode_FromWideChar(
-            scd->lpDescription, wcslen(scd->lpDescription));
+            scd->lpDescription,  wcslen(scd->lpDescription));
     }
-
     if (!py_retstr)
         goto error;
 
     free(scd);
     CloseServiceHandle(hService);
-    PyMem_Free(service_name);
     return py_retstr;
 
 error:
-    if (hService)
+    if (hService != NULL)
         CloseServiceHandle(hService);
-    if (scd)
-        free(scd);
-    if (service_name)
-        PyMem_Free(service_name);
+    if (lpService != NULL)
+        free(lpService);
     return NULL;
 }
 
@@ -481,34 +416,29 @@ error:
  */
 PyObject *
 psutil_winservice_start(PyObject *self, PyObject *args) {
+    char *service_name;
     BOOL ok;
     SC_HANDLE hService = NULL;
-    wchar_t *service_name = NULL;
 
-    hService = psutil_get_service_from_args(
-        args,
-        SC_MANAGER_ALL_ACCESS,
-        SERVICE_START,
-        &service_name
-    );
-    if (hService == NULL)
+    if (!PyArg_ParseTuple(args, "s", &service_name))
         return NULL;
-
+    hService = psutil_get_service_handler(
+        service_name, SC_MANAGER_ALL_ACCESS, SERVICE_START);
+    if (hService == NULL) {
+        goto error;
+    }
     ok = StartService(hService, 0, NULL);
-    if (!ok) {
+    if (ok == 0) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("StartService");
         goto error;
     }
 
     CloseServiceHandle(hService);
-    PyMem_Free(service_name);
     Py_RETURN_NONE;
 
 error:
-    if (hService)
+    if (hService != NULL)
         CloseServiceHandle(hService);
-    if (service_name)
-        PyMem_Free(service_name);
     return NULL;
 }
 
@@ -519,37 +449,32 @@ error:
  */
 PyObject *
 psutil_winservice_stop(PyObject *self, PyObject *args) {
-    wchar_t *service_name = NULL;
+    char *service_name;
     BOOL ok;
     SC_HANDLE hService = NULL;
     SERVICE_STATUS ssp;
 
-    hService = psutil_get_service_from_args(
-        args,
-        SC_MANAGER_ALL_ACCESS,
-        SERVICE_STOP,
-        &service_name
-    );
-    if (hService == NULL)
+    if (!PyArg_ParseTuple(args, "s", &service_name))
         return NULL;
+    hService = psutil_get_service_handler(
+        service_name, SC_MANAGER_ALL_ACCESS, SERVICE_STOP);
+    if (hService == NULL)
+        goto error;
 
     // Note: this can hang for 30 secs.
     Py_BEGIN_ALLOW_THREADS
     ok = ControlService(hService, SERVICE_CONTROL_STOP, &ssp);
     Py_END_ALLOW_THREADS
-    if (!ok) {
+    if (ok == 0) {
         psutil_PyErr_SetFromOSErrnoWithSyscall("ControlService");
         goto error;
     }
 
     CloseServiceHandle(hService);
-    PyMem_Free(service_name);
     Py_RETURN_NONE;
 
 error:
-    if (hService)
+    if (hService != NULL)
         CloseServiceHandle(hService);
-    if (service_name)
-        PyMem_Free(service_name);
     return NULL;
 }

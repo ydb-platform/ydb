@@ -2,7 +2,6 @@
 
 #include "ydb_common.h"
 
-#include <ydb/public/lib/ydb_cli/common/exclude_item.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
@@ -83,11 +82,6 @@ void TCommandImportFromS3::Config(TConfig& config) {
 
     config.Opts->AddLongOption("include", "Schema objects to be included in the import. Directories are traversed recursively. The option can be used multiple times")
         .RequiredArgument("PATH").AppendTo(&IncludePaths);
-
-    config.Opts->AddLongOption("exclude", "Pattern (PCRE) for paths excluded from import operation")
-        .RequiredArgument("STRING").Handler([this](const TString& arg) {
-            ExclusionPatterns.emplace_back(TRegExMatch(arg));
-        });
 
     config.Opts->AddLongOption("item", TItem::FormatHelp("Item specification", config.HelpCommandVerbosiltyLevel, 2))
         .RequiredArgument("PROPERTY=VALUE,...");
@@ -176,8 +170,6 @@ void TCommandImportFromS3::FillItems(NYdb::NImport::TImportFromS3Settings& setti
     } else {
         FillItemsFromIncludeParam(settings);
     }
-
-    ExcludeItems(settings, ExclusionPatterns);
 }
 
 void TCommandImportFromS3::FillItemsFromItemParam(NYdb::NImport::TImportFromS3Settings& settings) const {

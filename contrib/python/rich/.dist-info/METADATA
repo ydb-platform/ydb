@@ -1,7 +1,8 @@
-Metadata-Version: 2.3
+Metadata-Version: 2.1
 Name: rich
-Version: 14.2.0
+Version: 14.1.0
 Summary: Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal
+Home-page: https://github.com/Textualize/rich
 License: MIT
 Author: Will McGugan
 Author-email: willmcgugan@gmail.com
@@ -21,14 +22,12 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
-Classifier: Programming Language :: Python :: 3.14
 Classifier: Typing :: Typed
 Provides-Extra: jupyter
 Requires-Dist: ipywidgets (>=7.5.1,<9) ; extra == "jupyter"
 Requires-Dist: markdown-it-py (>=2.2.0)
 Requires-Dist: pygments (>=2.13.0,<3.0.0)
 Project-URL: Documentation, https://rich.readthedocs.io/en/latest/
-Project-URL: Homepage, https://github.com/Textualize/rich
 Description-Content-Type: text/markdown
 
 [![Supported Python Versions](https://img.shields.io/pypi/pyversions/rich)](https://pypi.org/project/rich/) [![PyPI version](https://badge.fury.io/py/rich.svg)](https://badge.fury.io/py/rich)

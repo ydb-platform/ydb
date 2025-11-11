@@ -1,5 +1,3 @@
-#pragma once
-
 #include <yt/yt/client/table_client/logical_type.h>
 
 /**

@@ -155,20 +155,6 @@
       ],
       "documentation":"<p>Retrieves the cost anomaly subscription objects for your account. You can filter using a list of cost anomaly monitor Amazon Resource Names (ARNs). </p>"
     },
-    "GetApproximateUsageRecords":{
-      "name":"GetApproximateUsageRecords",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"GetApproximateUsageRecordsRequest"},
-      "output":{"shape":"GetApproximateUsageRecordsResponse"},
-      "errors":[
-        {"shape":"LimitExceededException"},
-        {"shape":"DataUnavailableException"}
-      ],
-      "documentation":"<p>Retrieves estimated usage records for hourly granularity or resource-level data at daily granularity.</p>"
-    },
     "GetCostAndUsage":{
       "name":"GetCostAndUsage",
       "http":{
@@ -414,20 +400,6 @@
       ],
       "documentation":"<p>Retrieves a forecast for how much Amazon Web Services predicts that you will use over the forecast time period that you select, based on your past usage. </p>"
     },
-    "ListCostAllocationTagBackfillHistory":{
-      "name":"ListCostAllocationTagBackfillHistory",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListCostAllocationTagBackfillHistoryRequest"},
-      "output":{"shape":"ListCostAllocationTagBackfillHistoryResponse"},
-      "errors":[
-        {"shape":"LimitExceededException"},
-        {"shape":"InvalidNextTokenException"}
-      ],
-      "documentation":"<p> Retrieves a list of your historical cost allocation tag backfill requests. </p>"
-    },
     "ListCostAllocationTags":{
       "name":"ListCostAllocationTags",
       "http":{
@@ -496,20 +468,6 @@
         {"shape":"LimitExceededException"}
       ],
       "documentation":"<p>Modifies the feedback property of a given cost anomaly. </p>"
-    },
-    "StartCostAllocationTagBackfill":{
-      "name":"StartCostAllocationTagBackfill",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"StartCostAllocationTagBackfillRequest"},
-      "output":{"shape":"StartCostAllocationTagBackfillResponse"},
-      "errors":[
-        {"shape":"LimitExceededException"},
-        {"shape":"BackfillLimitExceededException"}
-      ],
-      "documentation":"<p> Request a cost allocation tag backfill. This will backfill the activation status (either <code>active</code> or <code>inactive</code>) for all tag keys from <code>para:BackfillFrom</code> up to the when this request is made.</p> <p>You can request a backfill once every 24 hours. </p>"
     },
     "StartSavingsPlansPurchaseRecommendationGeneration":{
       "name":"StartSavingsPlansPurchaseRecommendationGeneration",
@@ -822,18 +780,6 @@
       "type":"list",
       "member":{"shape":"AnomalySubscription"}
     },
-    "ApproximateUsageRecordsPerService":{
-      "type":"map",
-      "key":{"shape":"GenericString"},
-      "value":{"shape":"NonNegativeLong"}
-    },
-    "ApproximationDimension":{
-      "type":"string",
-      "enum":[
-        "SERVICE",
-        "RESOURCE"
-      ]
-    },
     "Arn":{
       "type":"string",
       "max":2048,
@@ -846,14 +792,6 @@
       "type":"map",
       "key":{"shape":"AttributeType"},
       "value":{"shape":"AttributeValue"}
-    },
-    "BackfillLimitExceededException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"ErrorMessage"}
-      },
-      "documentation":"<p> A request to backfill is already in progress. Once the previous request is complete, you can create another request. </p>",
-      "exception":true
     },
     "BillExpirationException":{
       "type":"structure",
@@ -901,46 +839,6 @@
         }
       },
       "documentation":"<p>The cost allocation tag structure. This includes detailed metadata for the <code>CostAllocationTag</code> object. </p>"
-    },
-    "CostAllocationTagBackfillRequest":{
-      "type":"structure",
-      "members":{
-        "BackfillFrom":{
-          "shape":"ZonedDateTime",
-          "documentation":"<p> The date the backfill starts from. </p>"
-        },
-        "RequestedAt":{
-          "shape":"ZonedDateTime",
-          "documentation":"<p> The time when the backfill was requested. </p>"
-        },
-        "CompletedAt":{
-          "shape":"ZonedDateTime",
-          "documentation":"<p> The backfill completion time. </p>"
-        },
-        "BackfillStatus":{
-          "shape":"CostAllocationTagBackfillStatus",
-          "documentation":"<p> The status of the cost allocation tag backfill request. </p>"
-        },
-        "LastUpdatedAt":{
-          "shape":"ZonedDateTime",
-          "documentation":"<p> The time when the backfill status was last updated. </p>"
-        }
-      },
-      "documentation":"<p> The cost allocation tag backfill request structure that contains metadata and details of a certain backfill.</p>"
-    },
-    "CostAllocationTagBackfillRequestList":{
-      "type":"list",
-      "member":{"shape":"CostAllocationTagBackfillRequest"},
-      "max":1000,
-      "min":0
-    },
-    "CostAllocationTagBackfillStatus":{
-      "type":"string",
-      "enum":[
-        "SUCCEEDED",
-        "PROCESSING",
-        "FAILED"
-      ]
     },
     "CostAllocationTagKeyList":{
       "type":"list",
@@ -2165,44 +2063,6 @@
         }
       }
     },
-    "GetApproximateUsageRecordsRequest":{
-      "type":"structure",
-      "required":[
-        "Granularity",
-        "ApproximationDimension"
-      ],
-      "members":{
-        "Granularity":{
-          "shape":"Granularity",
-          "documentation":"<p>How granular you want the data to be. You can enable data at hourly or daily granularity.</p>"
-        },
-        "Services":{
-          "shape":"UsageServices",
-          "documentation":"<p>The service metadata for the service or services you want to query. If not specified, all elements are returned.</p>"
-        },
-        "ApproximationDimension":{
-          "shape":"ApproximationDimension",
-          "documentation":"<p>The service to evaluate for the usage records. You can choose resource-level data at daily granularity, or hourly granularity with or without resource-level data.</p>"
-        }
-      }
-    },
-    "GetApproximateUsageRecordsResponse":{
-      "type":"structure",
-      "members":{
-        "Services":{
-          "shape":"ApproximateUsageRecordsPerService",
-          "documentation":"<p>The service metadata for the service or services in the response.</p>"
-        },
-        "TotalRecords":{
-          "shape":"NonNegativeLong",
-          "documentation":"<p>The total number of usage records for all services in the services list.</p>"
-        },
-        "LookbackPeriod":{
-          "shape":"DateInterval",
-          "documentation":"<p>The lookback period that's used for the estimation.</p>"
-        }
-      }
-    },
     "GetCostAndUsageRequest":{
       "type":"structure",
       "required":[
@@ -3154,33 +3014,6 @@
       "documentation":"<p>You made too many calls in a short period of time. Try again later.</p>",
       "exception":true
     },
-    "ListCostAllocationTagBackfillHistoryRequest":{
-      "type":"structure",
-      "members":{
-        "NextToken":{
-          "shape":"NextPageToken",
-          "documentation":"<p> The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size. </p>"
-        },
-        "MaxResults":{
-          "shape":"CostAllocationTagsMaxResults",
-          "documentation":"<p> The maximum number of objects that are returned for this request. </p>",
-          "box":true
-        }
-      }
-    },
-    "ListCostAllocationTagBackfillHistoryResponse":{
-      "type":"structure",
-      "members":{
-        "BackfillRequests":{
-          "shape":"CostAllocationTagBackfillRequestList",
-          "documentation":"<p> The list of historical cost allocation tag backfill requests. </p>"
-        },
-        "NextToken":{
-          "shape":"NextPageToken",
-          "documentation":"<p> The token to retrieve the next set of results. Amazon Web Services provides the token when the response from a previous call has more results than the maximum page size. </p>"
-        }
-      }
-    },
     "ListCostAllocationTagsRequest":{
       "type":"structure",
       "members":{
@@ -3462,10 +3295,6 @@
     },
     "NonNegativeInteger":{
       "type":"integer",
-      "min":0
-    },
-    "NonNegativeLong":{
-      "type":"long",
       "min":0
     },
     "NullableNonNegativeDouble":{
@@ -4741,25 +4570,6 @@
         "DESCENDING"
       ]
     },
-    "StartCostAllocationTagBackfillRequest":{
-      "type":"structure",
-      "required":["BackfillFrom"],
-      "members":{
-        "BackfillFrom":{
-          "shape":"ZonedDateTime",
-          "documentation":"<p> The date you want the backfill to start from. The date can only be a first day of the month (a billing start date). Dates can't precede the previous twelve months, or in the future.</p>"
-        }
-      }
-    },
-    "StartCostAllocationTagBackfillResponse":{
-      "type":"structure",
-      "members":{
-        "BackfillRequest":{
-          "shape":"CostAllocationTagBackfillRequest",
-          "documentation":"<p> An object containing detailed metadata of your new backfill request. </p>"
-        }
-      }
-    },
     "StartSavingsPlansPurchaseRecommendationGenerationRequest":{
       "type":"structure",
       "members":{
@@ -5184,10 +4994,6 @@
           "documentation":"<p>The Cost Category's effective start date. It can only be a billing start date (first day of the month).</p>"
         }
       }
-    },
-    "UsageServices":{
-      "type":"list",
-      "member":{"shape":"GenericString"}
     },
     "UtilizationByTime":{
       "type":"structure",

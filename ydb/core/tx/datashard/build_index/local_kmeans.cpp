@@ -123,7 +123,7 @@ public:
         , Lead{std::move(lead)}
         , TabletId(tabletId)
         , BuildId{request.GetId()}
-        , Uploader(request.GetDatabaseName(), request.GetScanSettings())
+        , Uploader(request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , K(request.GetK())
         , ScanSettings(request.GetScanSettings())

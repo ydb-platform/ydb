@@ -235,7 +235,7 @@ namespace NKikimr {
                 // copy placeholder data, because otherwise we get unaligned access
                 TIdxDiskPlaceHolder placeHolder(0);
                 size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder);
-                memcpy(&placeHolder, data.DataPtr<const ui8>(partSize), sizeof(TIdxDiskPlaceHolder));
+                memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder));
 
                 Y_VERIFY_S(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature, VCtx->VDiskLogPrefix);
                 RestToReadIndex = placeHolder.Info.IdxTotalSize;
@@ -261,7 +261,7 @@ namespace NKikimr {
             } else {
                 TIdxDiskLinker linker;
                 size_t partSize = data.Size() - sizeof(TIdxDiskLinker);
-                memcpy(&linker, data.DataPtr<const char>(partSize, sizeof(TIdxDiskLinker)), sizeof(TIdxDiskLinker));
+                memcpy(&linker, data.DataPtr<const TIdxDiskLinker>(partSize), sizeof(TIdxDiskLinker));
 
                 // TODO(alexvru, fomichev): this logic seems to work incorrectly -- data must be prepended
                 AppendData(data.DataPtr<const char>(0, partSize), partSize);

@@ -272,14 +272,10 @@ class TSupportsAttributes
 protected:
     TSupportsAttributes();
 
-    const IAttributeDictionary& CombinedAttributes() const;
-    IAttributeDictionary* MutableCombinedAttributes();
+    IAttributeDictionary* GetCombinedAttributes();
 
-    //! Always returns a valid dictionary.
-    //! If custom attributes are not supported then the latter is empty.
-    virtual const IAttributeDictionary& CustomAttributes() const;
-    //! May return null if custom attributes are not supported.
-    virtual IAttributeDictionary* MutableCustomAttributesOrNull();
+    //! Can be |nullptr|.
+    virtual IAttributeDictionary* GetCustomAttributes();
 
     //! Can be |nullptr|.
     virtual ISystemAttributeProvider* GetBuiltinAttributeProvider();
@@ -343,7 +339,7 @@ private:
 
     using TCombinedAttributeDictionaryPtr = TIntrusivePtr<TCombinedAttributeDictionary>;
 
-    const TCombinedAttributeDictionaryPtr CombinedAttributes_;
+    TCombinedAttributeDictionaryPtr CombinedAttributes_;
 
     TFuture<NYson::TYsonString> DoFindAttribute(TStringBuf key);
 

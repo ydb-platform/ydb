@@ -1,6 +1,5 @@
 #pragma once
 
-#include "statistics.h"
 #include "utils.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -57,7 +56,7 @@ public:
         bool Valid = true;
     };
 
-    struct TOperationContext {
+    struct TOperationContext : public TThrRefBase {
         bool Finished = false;
         TAdaptiveLock Lock;
         TCheckedIterator RetryIter;
@@ -132,6 +131,7 @@ public:
     std::uint32_t Wait(TDuration waitTimeout);
     bool IsStopped();
     void Finish();
+    std::uint32_t GetTotal() const;
     void Report(TStringBuilder& out) const;
 
 protected:
@@ -167,6 +167,8 @@ protected:
     TInstant Deadline;
     // Last second we reported Infly
     std::uint64_t LastReportSec = 0;
+    // Max infly for current second
+    std::uint64_t MaxSecInfly = 0;
     // Max Active sessions for current second
     std::uint64_t MaxSecSessions = 0;
 
@@ -175,4 +177,22 @@ protected:
     std::size_t InProgressSum = 0;
     std::uint64_t MaxSecReadPromises = 0;
     std::uint64_t MaxSecExecutorPromises = 0;
+};
+
+class TExecutorWithRetry : public TExecutor {
+public:
+    struct TRetryContext {
+        TRetryContext(TStat& stat)
+            : LifeTimeStat(stat.CreateStatUnit())
+            , PerRequestStat(stat.CreateStatUnit())
+        {}
+
+        TStatUnit LifeTimeStat;
+        TStatUnit PerRequestStat;
+        std::unique_ptr<std::function<void(const TAsyncFinalStatus& resultFuture)>> HandleStatusFunc;
+        std::atomic<std::uint64_t> Retries = 0;
+    };
+
+    TExecutorWithRetry(const TCommonOptions& opts, TStat& stats);
+    bool Execute(const NYdb::NTable::TTableClient::TOperationFunc& func) override;
 };

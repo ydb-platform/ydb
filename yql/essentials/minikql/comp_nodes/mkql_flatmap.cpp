@@ -104,7 +104,7 @@ private:
             Own(flow, Input);
             DependsOn(flow, Output);
         }
-        Input->AddDependent(Output->GetSource());
+        Input->AddDependence(Output->GetSource());
     }
 
     IComputationNode* const Flow;
@@ -204,7 +204,7 @@ private:
             Own(flow, Input);
             DependsOn(flow, Output);
         }
-        Input->AddDependent(Output->GetSource());
+        Input->AddDependence(Output->GetSource());
     }
 
     IComputationNode* const Flow;
@@ -311,7 +311,7 @@ private:
             Own(flow, Input);
             DependsOn(flow, Output);
         }
-        Input->AddDependent(Output->GetSource());
+        Input->AddDependence(Output->GetSource());
     }
 
     IComputationNode* const List;
@@ -419,7 +419,7 @@ private:
             Own(flow, Input);
             DependsOn(flow, Output);
         }
-        Input->AddDependent(Output->GetSource());
+        Input->AddDependence(Output->GetSource());
     }
 
     IComputationNode* const List;
@@ -445,7 +445,7 @@ public:
 
         if (state.IsInvalid()) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U) {
+                if (Items[i]->GetDependencesCount() > 0U) {
                     fields[i] = &Items[i]->RefValue(ctx);
                 }
             }
@@ -463,7 +463,7 @@ public:
         while (true) {
             if (auto output = Output->GetValue(ctx); output.IsFinish()) {
                 for (auto i = 0U; i < Items.size(); ++i) {
-                    if (Items[i]->GetDependentsCount() > 0U) {
+                    if (Items[i]->GetDependencesCount() > 0U) {
                         fields[i] = &Items[i]->RefValue(ctx);
                     }
                 }
@@ -516,7 +516,7 @@ public:
         new StoreInst(GetEmpty(context), statePtr, block);
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (Items[i]->GetDependentsCount() > 0U) {
+            if (Items[i]->GetDependencesCount() > 0U) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
             }
         }
@@ -546,7 +546,7 @@ private:
             std::for_each(Items.cbegin(), Items.cend(), std::bind(&TNarrowFlatMapFlowWrapper::Own, flow, std::placeholders::_1));
             DependsOn(flow, Output);
         }
-        std::for_each(Items.cbegin(), Items.cend(), std::bind(&IComputationNode::AddDependent, std::placeholders::_1, Output->GetSource()));
+        std::for_each(Items.cbegin(), Items.cend(), std::bind(&IComputationNode::AddDependence, std::placeholders::_1, Output->GetSource()));
     }
 
     IComputationWideFlowNode* const Flow;
@@ -761,7 +761,7 @@ public:
 
         while (true) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (NewItem == Items[i] || Items[i]->GetDependentsCount() > 0U) {
+                if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U) {
                     fields[i] = &Items[i]->RefValue(ctx);
                 }
             }
@@ -839,7 +839,7 @@ public:
             value = getres.second[*passtrough](ctx, block);
         } else {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U) {
+                if (Items[i]->GetDependencesCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
                 }
             }

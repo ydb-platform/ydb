@@ -120,7 +120,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     void ResolvePath() {
         auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = GetDatabaseName();
+        request->DatabaseName = NKikimr::CanonizePath(GetDatabaseName());
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;

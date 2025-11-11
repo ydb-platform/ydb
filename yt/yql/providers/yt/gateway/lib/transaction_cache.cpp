@@ -68,14 +68,13 @@ void TTransactionCache::TEntry::DoRemove(const TString& table) {
     }
 }
 
-void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commitDumpTx) {
+void TTransactionCache::TEntry::Finalize(const TString& clusterName) {
     NYT::ITransactionPtr binarySnapshotTx;
     decltype(SnapshotTxs) snapshotTxs;
     THashMap<TString, bool> toDelete;
     decltype(CheckpointTxs) checkpointTxs;
     decltype(WriteTxs) writeTxs;
     NYT::ITransactionPtr layersTx;
-    NYT::ITransactionPtr dumpTx;
     with_lock(Lock_) {
         binarySnapshotTx.Swap(BinarySnapshotTx);
         snapshotTxs.swap(SnapshotTxs);
@@ -85,7 +84,6 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
         checkpointTxs.swap(CheckpointTxs);
         writeTxs.swap(WriteTxs);
         layersTx.Swap(LayersSnapshotTx);
-        dumpTx.Swap(DumpTx);
     }
 
     if (layersTx) {
@@ -114,15 +112,6 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
 
     YQL_CLOG(INFO, ProviderYt) << "Committing tx " << GetGuidAsString(Tx->GetId())  << " on " << clusterName;
     Tx->Commit();
-
-    if (dumpTx) {
-        YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(dumpTx->GetId())  << " on " << clusterName;
-        if (commitDumpTx) {
-            dumpTx->Commit();
-        } else {
-            dumpTx->Abort();
-        }
-    }
 }
 
 TMaybe<ui64> TTransactionCache::TEntry::GetColumnarStat(NYT::TRichYPath ytPath) const {
@@ -490,8 +479,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::TryGetEntry(const TString& se
 }
 
 TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token,
-    const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics,
-    bool createDumpTx)
+    const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics)
 {
     TEntry::TPtr createdEntry = nullptr;
     NYT::TTransactionId externalTx = config->ExternalTx.Get(cluster).GetOrElse(TGUID());
@@ -523,9 +511,6 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->CacheTx = createdEntry->Client;
         createdEntry->CacheTtl = config->QueryCacheTtl.Get().GetOrElse(TDuration::Days(7));
-        if (createDumpTx) {
-            createdEntry->DumpTx = createdEntry->Client->StartTransaction(TStartTransactionOptions().Attributes(createdEntry->TransactionSpec));
-        }
         const TString tmpFolder = GetTablesTmpFolder(*config, cluster);
         if (!tmpFolder.empty()) {
             auto fullTmpFolder = AddPathPrefix(tmpFolder, NYT::TConfig::Get()->Prefix);
@@ -548,9 +533,6 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx) << " on cluster " << cluster;
     }
     YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server << " cluster " << cluster;
-    if (createdEntry->DumpTx) {
-        YQL_CLOG(INFO, ProviderYt) << "Created dump tx " << GetGuidAsString(createdEntry->DumpTx->GetId()) << " on " << server << " cluster " << cluster;
-    }
     return createdEntry;
 }
 
@@ -575,13 +557,13 @@ void TTransactionCache::Commit(const TString& server) {
     }
 }
 
-void TTransactionCache::Finalize(bool commitDumpTxs) {
+void TTransactionCache::Finalize() {
     THashMap<TString, TEntry::TPtr> txMap;
     with_lock(Lock_) {
         txMap.swap(TxMap_);
     }
     for (auto& item: txMap) {
-        item.second->Finalize(item.first, commitDumpTxs);
+        item.second->Finalize(item.first);
     }
 }
 
@@ -623,10 +605,6 @@ void TTransactionCache::AbortAll() {
         if (entry->BinarySnapshotTx) {
             YQL_CLOG(INFO, ProviderYt) << "AbortAll(): Aborting BinarySnapshot tx " << GetGuidAsString(entry->BinarySnapshotTx->GetId());
             abortTx(entry->BinarySnapshotTx);
-        }
-        if (entry->DumpTx) {
-            YQL_CLOG(INFO, ProviderYt) << "AbortAll(): Aborting dump tx " << GetGuidAsString(entry->DumpTx->GetId())  << " on " << item.first;
-            abortTx(entry->DumpTx);
         }
         if (entry->Tx) {
             YQL_CLOG(INFO, ProviderYt) << "Aborting tx " << GetGuidAsString(entry->Tx->GetId())  << " on " << item.first;

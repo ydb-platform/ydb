@@ -4,7 +4,6 @@
 #include "yql_yt_table_desc.h"
 
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
-#include <yt/yql/providers/yt/lib/full_capture/yql_yt_full_capture.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <yql/providers/stat/uploader/yql_stat_uploader.h>
 
@@ -109,8 +108,6 @@ public:
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
         OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
-        OPTION_FIELD_DEFAULT(TQContext, QContext, {})
-        OPTION_FIELD_DEFAULT(IYtFullCapture::TPtr, FullCapture, nullptr)
     };
 
     //////////////////////////////////////////////////////////////
@@ -148,7 +145,6 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD_DEFAULT(bool, Abort, false)
         OPTION_FIELD_DEFAULT(bool, DetachSnapshotTxs, false)
-        OPTION_FIELD_DEFAULT(bool, CommitDumpTxs, false)
     };
 
     struct TFinalizeResult : public NCommon::TOperationResult {
@@ -676,28 +672,6 @@ public:
         TVector<std::pair<TString, ui64>> Data;
     };
 
-    struct TDumpOptions : public TCommonOptions {
-        using TSelf = TDumpOptions;
-
-        struct TEntry {
-            TString SrcPath;
-            TString DstPath;
-        };
-
-        using TEntries = TVector<TEntry>;
-        using TEntriesPerCluster = THashMap<TString, TEntries>;
-
-        TDumpOptions(const TString& sessionId)
-            : TCommonOptions(sessionId)
-        {
-        }
-
-        OPTION_FIELD(TEntriesPerCluster, Entries);
-    };
-
-    struct TDumpResult : public NCommon::TOperationResult {
-    };
-
 public:
     virtual ~IYtGateway() = default;
 
@@ -725,7 +699,7 @@ public:
 
     virtual NThreading::TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) = 0;
 
-    virtual NThreading::TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) = 0;
+    virtual NThreading::TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const = 0;
     virtual NThreading::TFuture<TRunResult> GetTableStat(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) = 0 ;
 
     virtual NThreading::TFuture<TCalcResult> Calc(const TExprNode::TListType& nodes, TExprContext& ctx, TCalcOptions&& options) = 0;
@@ -765,7 +739,6 @@ public:
 
     virtual TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) = 0;
 
-    virtual NThreading::TFuture<TDumpResult> Dump(TDumpOptions&& options) = 0;
 };
 
 }

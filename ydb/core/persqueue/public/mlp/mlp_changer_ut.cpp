@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/public/mlp/ut/common/common.h>
+#include <ydb/core/persqueue/public/mlp/ut/common.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -184,14 +184,9 @@ Y_UNIT_TEST(CapacityTest) {
     return;
 
     auto setup = CreateSetup();
-
     CreateTopic(setup, "/Root/topic1", "mlp-consumer");
 
-    Cerr << (TStringBuilder() << ">>>>> TOPIC WAS CREATED" << Endl);
-
     WriteMany(setup, "/Root/topic1", 0, 10000, 50000);
-
-    Cerr << (TStringBuilder() << ">>>>> MESSAGES WAS WRITTEN" << Endl);
 
     struct State {
         size_t ReadSuccess = 0;
@@ -214,7 +209,7 @@ Y_UNIT_TEST(CapacityTest) {
         }
 
         void Next() {
-            while (Infly < 200) {
+            while (Infly < 100) {
                 Register(CreateReader(SelfId(), TReaderSettings{
                     .DatabasePath = "/Root",
                     .TopicName = "/Root/topic1",

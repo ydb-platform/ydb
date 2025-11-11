@@ -17,19 +17,15 @@ class HostsInformationProvider:
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def get_rack(self, hostname):
+    def get_rack(hostname):
         pass
 
     @abstractmethod
-    def get_datacenter(self, hostname):
+    def get_datacenter(hostname):
         pass
 
     @abstractmethod
-    def get_body(self, hostname):
-        pass
-
-    @abstractmethod
-    def get_module(self, hostname):
+    def get_body(hostname):
         pass
 
 
@@ -47,9 +43,6 @@ class NopHostsInformationProvider(HostsInformationProvider):
 
     def get_body(self, hostname):
         return zlib.crc32(hostname.encode())
-
-    def get_module(self, hostname):
-        return "FAKE"
 
 
 class WalleHostsInformationProvider(HostsInformationProvider):
@@ -109,10 +102,6 @@ class WalleHostsInformationProvider(HostsInformationProvider):
     def get_datacenter(self, hostname):
         short_dc_name = self._ask_location(hostname)["location"]["short_datacenter_name"]
         return short_dc_name if self._cloud_mode else short_dc_name.upper()
-
-    def get_module(self, hostname):
-        queue = self._ask_location(hostname)["location"].get("queue", "")
-        return queue if self._cloud_mode else queue.upper()
 
     def get_body(self, hostname):
         return self._ask_location(hostname)["inv"]

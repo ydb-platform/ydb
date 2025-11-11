@@ -1060,14 +1060,8 @@ void TPartition::Initialize(const TActorContext& ctx) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
                                                                          Config.GetYdbDatabasePath()));
-
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(EscapeBadChars(TopicName()),
-                                                                                  Partition.InternalPartitionId,
-                                                                                  Config.GetYdbDatabasePath()));
         } else {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
-            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(TopicName(),
-                                                                                  Partition.InternalPartitionId));
         }
     }
 
@@ -1095,8 +1089,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {
-        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition,
-            Config.GetYdbDatabasePath(), Config.GetOffloadConfig()));
+        OffloadActor = Register(CreateOffloadActor(TabletActorId, TabletId, Partition, Config.GetOffloadConfig()));
     }
 
     LOG_I("bootstrapping " << Partition << " " << ctx.SelfID);

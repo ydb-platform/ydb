@@ -224,7 +224,7 @@ public:
     using TField = std::conditional_t<IsWriter, TProtobufWriterFieldDescription, TProtobufParserFieldDescription>;
     using TFieldPtr = std::unique_ptr<TField>;
 
-    explicit TProtobufTypeBuilder(const THashMap<std::string, TEnumerationDescription>& enumerations);
+    TProtobufTypeBuilder(const THashMap<std::string, TEnumerationDescription>& enumerations);
 
     TFieldPtr CreateField(
         int structFieldIndex,

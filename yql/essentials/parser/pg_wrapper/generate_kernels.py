@@ -372,7 +372,6 @@ def main():
                 '#undef bind\n'
                 '#undef locale_t\n'
                 '#undef strtou64\n'
-                '#undef ftruncate\n'
                 '}\n'
                 '\n'
                 '#include "arrow.h"\n'

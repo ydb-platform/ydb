@@ -149,7 +149,7 @@ protected:
         NActors::TActorId actorId = SelfId();
         NActors::TActorSystem* actorSystem = NActors::TActivationContext::ActorSystem();
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = NYdb::TDeadline::SafeDurationCast(RPC_TIMEOUT);
+        meta.Timeout = RPC_TIMEOUT;
         auto connection = CreateGRpcServiceConnection<TGrpcService>(endpoint);
         NYdbGrpc::TResponseCallback<TResponse> cb =
             [actorId, actorSystem, name, subject](NYdbGrpc::TGrpcStatus&& status, TResponse&& response) -> void {

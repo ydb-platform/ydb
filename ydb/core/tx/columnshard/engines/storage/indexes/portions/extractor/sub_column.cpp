@@ -3,14 +3,14 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-void TSubColumnDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& /*chunkVisitor*/,
+void TSubColumnDataExtractor::DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& chunkVisitor,
     const TRecordVisitor& recordVisitor) const {
     AFL_VERIFY(dataArray->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray);
     const auto subColumns = std::static_pointer_cast<NArrow::NAccessor::TSubColumnsArray>(dataArray);
     if (auto idxColumn = subColumns->GetColumnsData().GetStats().GetKeyIndexOptional(SubColumnName)) {
-        auto iterator = subColumns->GetColumnsData().BuildIterator(*idxColumn);
-        for (; iterator.IsValid(); iterator.Next()) {
-            recordVisitor(iterator.GetValue(), 0);
+        auto chunkedArray = subColumns->GetColumnsData().GetRecords()->GetColumnVerified(*idxColumn)->GetChunkedArray();
+        for (auto&& i : chunkedArray->chunks()) {
+            chunkVisitor(i, 0);
         }
     } else if (auto idxColumn = subColumns->GetOthersData().GetStats().GetKeyIndexOptional(SubColumnName)) {
         auto iterator = subColumns->GetOthersData().BuildIterator();

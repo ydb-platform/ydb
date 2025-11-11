@@ -1423,9 +1423,9 @@ WaitEventSetWait(WaitEventSet *set, long timeout,
 		int			rc;
 
 		/*
-		 * Check if the latch is set already first.  If so, we either exit
-		 * immediately or ask the kernel for further events available right
-		 * now without waiting, depending on how many events the caller wants.
+		 * Check if the latch is set already. If so, leave the loop
+		 * immediately, avoid blocking again. We don't attempt to report any
+		 * other events that might also be satisfied.
 		 *
 		 * If someone sets the latch between this and the
 		 * WaitEventSetWaitBlock() below, the setter will write a byte to the
@@ -1470,16 +1470,7 @@ WaitEventSetWait(WaitEventSet *set, long timeout,
 			/* could have been set above */
 			set->latch->maybe_sleeping = false;
 
-			if (returned_events == nevents)
-				break;			/* output buffer full already */
-
-			/*
-			 * Even though we already have an event, we'll poll just once with
-			 * zero timeout to see what non-latch events we can fit into the
-			 * output buffer at the same time.
-			 */
-			cur_timeout = 0;
-			timeout = 0;
+			break;
 		}
 
 		/*
@@ -1488,16 +1479,18 @@ WaitEventSetWait(WaitEventSet *set, long timeout,
 		 * to retry, everything >= 1 is the number of returned events.
 		 */
 		rc = WaitEventSetWaitBlock(set, cur_timeout,
-								   occurred_events, nevents - returned_events);
+								   occurred_events, nevents);
 
-		if (set->latch &&
-			set->latch->maybe_sleeping)
+		if (set->latch)
+		{
+			Assert(set->latch->maybe_sleeping);
 			set->latch->maybe_sleeping = false;
+		}
 
 		if (rc == -1)
 			break;				/* timeout occurred */
 		else
-			returned_events += rc;
+			returned_events = rc;
 
 		/* If we're not done, update cur_timeout for next iteration */
 		if (returned_events == 0 && timeout >= 0)
@@ -1585,7 +1578,7 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 			/* Drain the signalfd. */
 			drain();
 
-			if (set->latch && set->latch->maybe_sleeping && set->latch->is_set)
+			if (set->latch && set->latch->is_set)
 			{
 				occurred_events->fd = PGINVALID_SOCKET;
 				occurred_events->events = WL_LATCH_SET;
@@ -1744,7 +1737,7 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 		if (cur_event->events == WL_LATCH_SET &&
 			cur_kqueue_event->filter == EVFILT_SIGNAL)
 		{
-			if (set->latch && set->latch->maybe_sleeping && set->latch->is_set)
+			if (set->latch && set->latch->is_set)
 			{
 				occurred_events->fd = PGINVALID_SOCKET;
 				occurred_events->events = WL_LATCH_SET;
@@ -1869,7 +1862,7 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 			/* There's data in the self-pipe, clear it. */
 			drain();
 
-			if (set->latch && set->latch->maybe_sleeping && set->latch->is_set)
+			if (set->latch && set->latch->is_set)
 			{
 				occurred_events->fd = PGINVALID_SOCKET;
 				occurred_events->events = WL_LATCH_SET;
@@ -1975,38 +1968,6 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 		}
 
 		/*
-		 * We associate the socket with a new event handle for each
-		 * WaitEventSet.  FD_CLOSE is only generated once if the other end
-		 * closes gracefully.  Therefore we might miss the FD_CLOSE
-		 * notification, if it was delivered to another event after we stopped
-		 * waiting for it.  Close that race by peeking for EOF after setting
-		 * up this handle to receive notifications, and before entering the
-		 * sleep.
-		 *
-		 * XXX If we had one event handle for the lifetime of a socket, we
-		 * wouldn't need this.
-		 */
-		if (cur_event->events & WL_SOCKET_READABLE)
-		{
-			char		c;
-			WSABUF		buf;
-			DWORD		received;
-			DWORD		flags;
-
-			buf.buf = &c;
-			buf.len = 1;
-			flags = MSG_PEEK;
-			if (WSARecv(cur_event->fd, &buf, 1, &received, &flags, NULL, NULL) == 0)
-			{
-				occurred_events->pos = cur_event->pos;
-				occurred_events->user_data = cur_event->user_data;
-				occurred_events->events = WL_SOCKET_READABLE;
-				occurred_events->fd = cur_event->fd;
-				return 1;
-			}
-		}
-
-		/*
 		 * Windows does not guarantee to log an FD_WRITE network event
 		 * indicating that more data can be sent unless the previous send()
 		 * failed with WSAEWOULDBLOCK.  While our caller might well have made
@@ -2083,7 +2044,7 @@ WaitEventSetWaitBlock(WaitEventSet *set, int cur_timeout,
 		if (!ResetEvent(set->handles[cur_event->pos + 1]))
 			elog(ERROR, "ResetEvent failed: error code %lu", GetLastError());
 
-		if (set->latch && set->latch->maybe_sleeping && set->latch->is_set)
+		if (set->latch && set->latch->is_set)
 		{
 			occurred_events->fd = PGINVALID_SOCKET;
 			occurred_events->events = WL_LATCH_SET;

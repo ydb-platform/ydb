@@ -456,7 +456,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
-                        .QLFilter<TCoVoid>().Build()
                     .Build()
                 .Build()
                 .Settings()

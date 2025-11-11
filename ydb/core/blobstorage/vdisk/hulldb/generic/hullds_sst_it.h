@@ -70,12 +70,12 @@ namespace NKikimr {
 
         TKey GetCurKey() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return Ptr->GetKey();
+            return Ptr->Key;
         }
 
-        const TMemRec GetMemRec() const {
+        const TMemRec& GetMemRec() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return Ptr->GetMemRec();
+            return Ptr->MemRec;
         }
 
         void SeekToFirst() {
@@ -94,7 +94,7 @@ namespace NKikimr {
 
         template <class TRecordMerger>
         void PutToMerger(TRecordMerger *merger) {
-            merger->AddFromSegment(Ptr->GetMemRec(), Segment->GetOutbound(), GetCurKey(), Segment->Info.LastLsn, Segment);
+            merger->AddFromSegment(Ptr->MemRec, Segment->GetOutbound(), GetCurKey(), Segment->Info.LastLsn, Segment);
         }
 
         template <class Heap>
@@ -112,7 +112,7 @@ namespace NKikimr {
         }
 
         TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr) const {
-            return Ptr->GetMemRec().GetDiskData(extr, Segment->GetOutbound());
+            return Ptr->MemRec.GetDiskData(extr, Segment->GetOutbound());
         }
 
         const TLevelSegment *GetSstPtr() const {
@@ -164,7 +164,7 @@ namespace NKikimr {
         void Next() {
             Y_DEBUG_ABORT_UNLESS(Valid());
             ++Low;
-            if (Y_UNLIKELY(Low == Segment->IndexLow.begin() + High->GetLowRangeEndIndex())) {
+            if (Y_UNLIKELY(Low == Segment->IndexLow.begin() + High->LowRangeEndIndex)) {
                 ++High;
                 LowRangeBegin = Low;
             }
@@ -177,21 +177,21 @@ namespace NKikimr {
             if (Y_UNLIKELY(Low == LowRangeBegin)) {
                 --High;
                 LowRangeBegin = Segment->IndexLow.begin() +
-                        (High <= Segment->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+                        (High <= Segment->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
             }
             --Low;
         }
 
         TKeyLogoBlob GetCurKey() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            const auto high = High->GetKey();
-            const auto low = Low->GetKey();
+            const auto& high = High->Key;
+            const auto& low = Low->Key;
             return TKeyLogoBlob(TLogoBlobID(high.Raw.X[0], high.Raw.X[1], low.Raw.X));
         }
 
-        TMemRecLogoBlob GetMemRec() const {
+        const TMemRecLogoBlob& GetMemRec() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return Low->GetMemRec();
+            return Low->MemRec;
         }
 
         void SeekToFirst() {
@@ -218,14 +218,14 @@ namespace NKikimr {
             }
 
             auto rangeBegin = Segment->IndexLow.begin() +
-                    (High == Segment->IndexHigh.begin() ? 0 : (High - 1)->GetLowRangeEndIndex());
+                    (High == Segment->IndexHigh.begin() ? 0 : (High - 1)->LowRangeEndIndex);
 
-            if (High->GetKey() != keyHigh) {
+            if (High->Key != keyHigh) {
                 Low = LowRangeBegin = rangeBegin;
                 return;
             }
 
-            auto rangeEnd = Segment->IndexLow.begin() + High->GetLowRangeEndIndex();
+            auto rangeEnd = Segment->IndexLow.begin() + High->LowRangeEndIndex;
 
             Low = std::lower_bound(rangeBegin, rangeEnd, keyLow, TLevelSegment::TRecLow::TLess());
 

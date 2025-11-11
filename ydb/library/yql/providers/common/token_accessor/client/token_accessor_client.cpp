@@ -70,7 +70,7 @@ private:
                     std::move(cb),
                     &TokenAccessorService::Stub::AsyncGetToken,
                     {
-                        {}, {}, RequestTimeout ? NYdb::TDeadline::SafeDurationCast(RequestTimeout) : NYdb::TDeadline::Duration::max()
+                        {}, {}, RequestTimeout
                     },
                     context.get()
                 );

@@ -25,49 +25,6 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
-namespace {
-
-struct TStageScheduleInfo {
-    double StageCost = 0.0;
-    ui32 TaskCount = 0;
-};
-
-std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
-    std::map<ui32, TStageScheduleInfo> result;
-    if (!resourceSnapshot.empty()) // can't schedule w/o node count
-    {
-        // collect costs and schedule stages with external sources only
-        double totalCost = 0.0;
-        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-            auto& stage = tx.Body->GetStages(stageIdx);
-            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
-                if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
-                    totalCost += stage.GetStageCost();
-                    result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
-                }
-            }
-        }
-        // assign task counts
-        if (!result.empty()) {
-            // allow use 2/3 of threads in single stage
-            ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
-            // total limit per mode is x2
-            ui32 maxTotalTaskCount = maxStageTaskCount * 2;
-            for (auto& [_, stageInfo] : result) {
-                // schedule tasks evenly between nodes
-                stageInfo.TaskCount =
-                    std::max<ui32>(
-                        std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
-                        , 1
-                    ) * resourceSnapshot.size();
-            }
-        }
-    }
-    return result;
-}
-
-} // anonymous namespace
-
 struct TShardRangesWithShardId {
     TMaybe<ui64> ShardId;
     const TShardKeyRanges* Ranges;
@@ -589,12 +546,6 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     streamLookupSource.SetProviderName(compiledSource.GetType());
     *streamLookupSource.MutableLookupSource() = compiledSource.GetSettings();
 
-    TString structuredToken;
-    const auto& sourceName = compiledSource.GetSourceName();
-    if (sourceName) {
-        structuredToken = NYql::CreateStructuredTokenParser(compiledSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
-    }
-
     TTransform dqSourceStreamLookupTransform = {
         .Type = "StreamLookupInputTransform",
         .InputType = dqSourceStreamLookup.GetInputStageRowType(),
@@ -603,12 +554,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     YQL_ENSURE(dqSourceStreamLookupTransform.Settings.PackFrom(*settings));
 
     for (const auto taskId : stageInfo.Tasks) {
-        auto& task = GetTask(taskId);
-        task.Inputs[inputIndex].Transform = dqSourceStreamLookupTransform;
-
-        if (structuredToken) {
-            task.Meta.SecureParams.emplace(sourceName, structuredToken);
-        }
+        GetTask(taskId).Inputs[inputIndex].Transform = dqSourceStreamLookupTransform;
     }
 
     BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
@@ -1559,10 +1505,9 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
     }
 }
 
-void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
-    GetMeta().IsRestored = true;
-    GetMeta().AllowWithSpilling = false;
-
+// Restored graph only requires to update authentication secrets
+// and to reassign existing tasks between actual nodes.
+void TKqpTasksGraph::RestoreTasksGraphInfo(const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
     const auto restoreDqTransform = [](const auto& protoInfo) -> TMaybe<TTransform> {
         if (!protoInfo.HasTransform()) {
             return Nothing();
@@ -1598,14 +1543,12 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         const auto& task = graphInfo.GetTasks(taskIdx);
         const auto txId = task.GetTxId();
         const auto& taskInfo = task.GetDqTask();
-        const NYql::NDq::TStageId stageId(txId, taskInfo.GetStageId());
 
-        auto& stageInfo = GetStageInfo(stageId);
+        auto& stageInfo = GetStageInfo({txId, taskInfo.GetStageId()});
         auto& newTask = AddTask(stageInfo, TTaskType::RESTORED);
         YQL_ENSURE(taskInfo.GetId() == newTask.Id);
         newTask.Meta.TaskParams.insert(taskInfo.GetTaskParams().begin(), taskInfo.GetTaskParams().end());
         newTask.Meta.ReadRanges.assign(taskInfo.GetReadRanges().begin(), taskInfo.GetReadRanges().end());
-        newTask.Meta.Type = TTaskMeta::TTaskType::Compute;
 
         for (size_t inputIdx = 0; inputIdx < taskInfo.InputsSize(); ++inputIdx) {
             const auto& inputInfo = taskInfo.GetInputs(inputIdx);
@@ -1720,23 +1663,6 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                 restoreDqChannel(txId, channelInfo).SrcOutputIndex = outputIdx;
             }
         }
-
-        const auto& stage = stageInfo.Meta.GetStage(stageId);
-        FillSecureParamsFromStage(newTask.Meta.SecureParams, stage);
-        BuildSinks(stage, stageInfo, newTask);
-
-        for (const auto& input : stage.GetInputs()) {
-            if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup) {
-                continue;
-            }
-
-            if (const auto& compiledSource = input.GetDqSourceStreamLookup().GetLookupSource(); const auto& sourceName = compiledSource.GetSourceName()) {
-                newTask.Meta.SecureParams.emplace(
-                    sourceName,
-                    NYql::CreateStructuredTokenParser(compiledSource.GetAuthInfo()).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson()
-                );
-            }
-        }
     }
 
     for (const auto& [id, channel] : channels) {
@@ -1745,20 +1671,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
         YQL_ENSURE(id == newChannel.Id);
     }
 
-    for (ui64 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
-        const auto& tx = Transactions.at(txIdx);
-        const auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
-
-        for (ui64 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-            const auto& stage = tx.Body->GetStages(stageIdx);
-            auto& stageInfo = GetStageInfo({txIdx, stageIdx});
-
-            if (const auto& sources = stage.GetSources(); !sources.empty() && sources[0].GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
-                const auto it = scheduledTaskCount.find(stageIdx);
-                BuildReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
-            }
-        }
-    }
+    GetMeta().IsRestored = true;
 }
 
 void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
@@ -1831,6 +1744,15 @@ std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMax
 
 bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
     auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+    // TODO: move outside
+    if (GetMeta().IsRestored) {
+        for (const auto taskId : stageInfo.Tasks) {
+            auto& task = GetTask(taskId);
+            task.Meta.Type = TTaskMeta::TTaskType::Compute;
+        }
+        return false;
+    }
 
     TTaskType::ECreateReason tasksReason = TTaskType::MINIMUM_COMPUTE;
     bool unknownAffectedShardCount = false;
@@ -2793,6 +2715,45 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
     }
 }
 
+struct TStageScheduleInfo {
+    double StageCost = 0.0;
+    ui32 TaskCount = 0;
+};
+
+static std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    std::map<ui32, TStageScheduleInfo> result;
+    if (!resourceSnapshot.empty()) // can't schedule w/o node count
+    {
+        // collect costs and schedule stages with external sources only
+        double totalCost = 0.0;
+        for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
+            auto& stage = tx.Body->GetStages(stageIdx);
+            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
+                if (stage.GetStageCost() > 0.0 && stage.GetTaskCount() == 0) {
+                    totalCost += stage.GetStageCost();
+                    result.emplace(stageIdx, TStageScheduleInfo{.StageCost = stage.GetStageCost()});
+                }
+            }
+        }
+        // assign task counts
+        if (!result.empty()) {
+            // allow use 2/3 of threads in single stage
+            ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
+            // total limit per mode is x2
+            ui32 maxTotalTaskCount = maxStageTaskCount * 2;
+            for (auto& [_, stageInfo] : result) {
+                // schedule tasks evenly between nodes
+                stageInfo.TaskCount =
+                    std::max<ui32>(
+                        std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
+                        , 1
+                    ) * resourceSnapshot.size();
+            }
+        }
+    }
+    return result;
+}
+
 void TKqpTasksGraph::FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const {
     for (const auto& [secretName, authInfo] : stage.GetSecureParams()) {
         const auto& structuredToken = NYql::CreateStructuredTokenParser(authInfo).ToBuilder().ReplaceReferences(GetMeta().SecureParams).ToJson();
@@ -2982,7 +2943,9 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
 
             // Not task-related
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
-            BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+            if (!GetMeta().IsRestored) {
+                BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());
+            }
         }
 
         // Not task-related

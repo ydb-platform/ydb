@@ -290,7 +290,6 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	bool		vm;
 	bool		need_fsm_vacuum = false;
 	ForkNumber	forks[MAX_FORKNUM];
-	BlockNumber old_blocks[MAX_FORKNUM];
 	BlockNumber blocks[MAX_FORKNUM];
 	int			nforks = 0;
 	SMgrRelation reln;
@@ -306,7 +305,6 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 
 	/* Prepare for truncation of MAIN fork of the relation */
 	forks[nforks] = MAIN_FORKNUM;
-	old_blocks[nforks] = smgrnblocks(reln, MAIN_FORKNUM);
 	blocks[nforks] = nblocks;
 	nforks++;
 
@@ -318,7 +316,6 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 		if (BlockNumberIsValid(blocks[nforks]))
 		{
 			forks[nforks] = FSM_FORKNUM;
-			old_blocks[nforks] = smgrnblocks(reln, FSM_FORKNUM);
 			nforks++;
 			need_fsm_vacuum = true;
 		}
@@ -332,7 +329,6 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 		if (BlockNumberIsValid(blocks[nforks]))
 		{
 			forks[nforks] = VISIBILITYMAP_FORKNUM;
-			old_blocks[nforks] = smgrnblocks(reln, VISIBILITYMAP_FORKNUM);
 			nforks++;
 		}
 	}
@@ -340,49 +336,30 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	RelationPreTruncate(rel);
 
 	/*
-	 * The code which follows can interact with concurrent checkpoints in two
-	 * separate ways.
+	 * Make sure that a concurrent checkpoint can't complete while truncation
+	 * is in progress.
 	 *
-	 * First, the truncation operation might drop buffers that the checkpoint
+	 * The truncation operation might drop buffers that the checkpoint
 	 * otherwise would have flushed. If it does, then it's essential that the
 	 * files actually get truncated on disk before the checkpoint record is
 	 * written. Otherwise, if reply begins from that checkpoint, the
 	 * to-be-truncated blocks might still exist on disk but have older
 	 * contents than expected, which can cause replay to fail. It's OK for the
 	 * blocks to not exist on disk at all, but not for them to have the wrong
-	 * contents. For this reason, we need to set DELAY_CHKPT_COMPLETE while
-	 * this code executes.
-	 *
-	 * Second, the call to smgrtruncate() below will in turn call
-	 * RegisterSyncRequest(). We need the sync request created by that call to
-	 * be processed before the checkpoint completes. CheckPointGuts() will
-	 * call ProcessSyncRequests(), but if we register our sync request after
-	 * that happens, then the WAL record for the truncation could end up
-	 * preceding the checkpoint record, while the actual sync doesn't happen
-	 * until the next checkpoint. To prevent that, we need to set
-	 * DELAY_CHKPT_START here. That way, if the XLOG_SMGR_TRUNCATE precedes
-	 * the redo pointer of a concurrent checkpoint, we're guaranteed that the
-	 * corresponding sync request will be processed before the checkpoint
-	 * completes.
+	 * contents.
 	 */
-	Assert((MyProc->delayChkptFlags & (DELAY_CHKPT_START | DELAY_CHKPT_COMPLETE)) == 0);
-	MyProc->delayChkptFlags |= DELAY_CHKPT_START | DELAY_CHKPT_COMPLETE;
+	Assert((MyProc->delayChkptFlags & DELAY_CHKPT_COMPLETE) == 0);
+	MyProc->delayChkptFlags |= DELAY_CHKPT_COMPLETE;
 
 	/*
-	 * We WAL-log the truncation first and then truncate in a critical
-	 * section. Truncation drops buffers, even if dirty, and then truncates
-	 * disk files. All of that work needs to complete before the lock is
-	 * released, or else old versions of pages on disk that are missing recent
-	 * changes would become accessible again.  We'll try the whole operation
-	 * again in crash recovery if we panic, but even then we can't give up
-	 * because we don't want standbys' relation sizes to diverge and break
-	 * replay or visibility invariants downstream.  The critical section also
-	 * suppresses interrupts.
-	 *
-	 * (See also pg_visibilitymap.c if changing this code.)
+	 * We WAL-log the truncation before actually truncating, which means
+	 * trouble if the truncation fails. If we then crash, the WAL replay
+	 * likely isn't going to succeed in the truncation either, and cause a
+	 * PANIC. It's tempting to put a critical section here, but that cure
+	 * would be worse than the disease. It would turn a usually harmless
+	 * failure to truncate, that might spell trouble at WAL replay, into a
+	 * certain PANIC.
 	 */
-	START_CRIT_SECTION();
-
 	if (RelationNeedsWAL(rel))
 	{
 		/*
@@ -406,10 +383,10 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 		 * hit the disk before the WAL record, and the truncation of the FSM
 		 * or visibility map. If we crashed during that window, we'd be left
 		 * with a truncated heap, but the FSM or visibility map would still
-		 * contain entries for the non-existent heap pages, and standbys would
-		 * also never replay the truncation.
+		 * contain entries for the non-existent heap pages.
 		 */
-		XLogFlush(lsn);
+		if (fsm || vm)
+			XLogFlush(lsn);
 	}
 
 	/*
@@ -417,12 +394,10 @@ RelationTruncate(Relation rel, BlockNumber nblocks)
 	 * longer exist after truncation is complete, and then truncate the
 	 * corresponding files on disk.
 	 */
-	smgrtruncate2(RelationGetSmgr(rel), forks, nforks, old_blocks, blocks);
-
-	END_CRIT_SECTION();
+	smgrtruncate(RelationGetSmgr(rel), forks, nforks, blocks);
 
 	/* We've done all the critical work, so checkpoints are OK now. */
-	MyProc->delayChkptFlags &= ~(DELAY_CHKPT_START | DELAY_CHKPT_COMPLETE);
+	MyProc->delayChkptFlags &= ~DELAY_CHKPT_COMPLETE;
 
 	/*
 	 * Update upper-level FSM pages to account for the truncation. This is
@@ -781,7 +756,7 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
 	{
 		ForkNumber	fork;
 		BlockNumber nblocks[MAX_FORKNUM + 1];
-		uint64		total_blocks = 0;
+		BlockNumber total_blocks = 0;
 		SMgrRelation srel;
 
 		srel = smgropen(pendingsync->rlocator, InvalidBackendId);
@@ -825,7 +800,7 @@ smgrDoPendingSyncs(bool isCommit, bool isParallelWorker)
 		 * main fork is longer than ever but FSM fork gets shorter.
 		 */
 		if (pendingsync->is_truncated ||
-			total_blocks >= wal_skip_threshold * (uint64) 1024 / BLCKSZ)
+			total_blocks * BLCKSZ / 1024 >= wal_skip_threshold)
 		{
 			/* allocate the initial array, or extend it, if needed */
 			if (maxrels == 0)
@@ -1003,7 +978,6 @@ smgr_redo(XLogReaderState *record)
 		Relation	rel;
 		ForkNumber	forks[MAX_FORKNUM];
 		BlockNumber blocks[MAX_FORKNUM];
-		BlockNumber old_blocks[MAX_FORKNUM];
 		int			nforks = 0;
 		bool		need_fsm_vacuum = false;
 
@@ -1038,7 +1012,6 @@ smgr_redo(XLogReaderState *record)
 		if ((xlrec->flags & SMGR_TRUNCATE_HEAP) != 0)
 		{
 			forks[nforks] = MAIN_FORKNUM;
-			old_blocks[nforks] = smgrnblocks(reln, MAIN_FORKNUM);
 			blocks[nforks] = xlrec->blkno;
 			nforks++;
 
@@ -1056,7 +1029,6 @@ smgr_redo(XLogReaderState *record)
 			if (BlockNumberIsValid(blocks[nforks]))
 			{
 				forks[nforks] = FSM_FORKNUM;
-				old_blocks[nforks] = smgrnblocks(reln, FSM_FORKNUM);
 				nforks++;
 				need_fsm_vacuum = true;
 			}
@@ -1068,18 +1040,13 @@ smgr_redo(XLogReaderState *record)
 			if (BlockNumberIsValid(blocks[nforks]))
 			{
 				forks[nforks] = VISIBILITYMAP_FORKNUM;
-				old_blocks[nforks] = smgrnblocks(reln, VISIBILITYMAP_FORKNUM);
 				nforks++;
 			}
 		}
 
 		/* Do the real work to truncate relation forks */
 		if (nforks > 0)
-		{
-			START_CRIT_SECTION();
-			smgrtruncate2(reln, forks, nforks, old_blocks, blocks);
-			END_CRIT_SECTION();
-		}
+			smgrtruncate(reln, forks, nforks, blocks);
 
 		/*
 		 * Update upper-level FSM pages to account for the truncation. This is

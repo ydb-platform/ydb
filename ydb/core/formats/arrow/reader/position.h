@@ -110,17 +110,6 @@ private:
         return std::partial_ordering::equivalent;
     }
 
-    TSortableScanData(const ui64 start, const ui64 finish, const ui64 lastInit, const ui64 recordsCount,
-        const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields)
-        : RecordsCount(recordsCount)
-        , Columns(columns)
-        , Fields(fields)
-        , StartPosition(start)
-        , FinishPosition(finish)
-        , LastInit(lastInit)
-    {
-    }
-
 public:
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
@@ -148,15 +137,8 @@ public:
         return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
-    std::shared_ptr<TSortableScanData> BuildCopy() const {
+    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 /*position*/) const {
         return std::make_shared<TSortableScanData>(*this);
-    }
-
-    std::shared_ptr<TSortableScanData> Trim(const ui64 numFields) const {
-        AFL_VERIFY(numFields < Fields.size())("req", numFields)("self", Fields.size());
-        return std::make_shared<TSortableScanData>(TSortableScanData(StartPosition, FinishPosition, LastInit, RecordsCount,
-            std::vector<std::shared_ptr<NAccessor::IChunkedArray>>(Columns.begin(), Columns.begin() + numFields),
-            std::vector<std::shared_ptr<arrow::Field>>(Fields.begin(), Fields.begin() + numFields)));
     }
 
     TCursor BuildCursor(const ui64 position) const {
@@ -478,10 +460,6 @@ public:
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 
-    TSortableBatchPosition TrimSortingKeys(const ui64 numSortingColumns) const {
-        return TSortableBatchPosition(Position, RecordsCount, ReverseSort, Sorting->Trim(numSortingColumns), Data);
-    }
-
     std::partial_ordering Compare(const TSortableScanData& data, const ui64 dataPosition) const {
         return Sorting->Compare(Position, data, dataPosition);
     }
@@ -496,11 +474,6 @@ public:
 
     bool operator!=(const TSortableBatchPosition& item) const {
         return Compare(item) != std::partial_ordering::equivalent;
-    }
-
-    std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {
-        AFL_VERIFY(colIdx < Sorting->GetColumns().size())("req", colIdx)("size", Sorting->GetColumns().size());
-        return Sorting->GetColumns()[colIdx]->GetScalar(Sorting->GetPositionInChunk(colIdx, Position));
     }
 };
 

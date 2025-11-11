@@ -21,7 +21,6 @@ using TRegex = TString;
 struct TRange {
     TRegex Begin;
     TRegex End;
-    TMaybe<TRegex> Escape;
 };
 
 struct TMatcher {
@@ -80,7 +79,7 @@ TString ToTextMateGroup(EUnitKind kind) {
         case EUnitKind::BindParameterIdentifier:
             return "variable.parameter";
         case EUnitKind::OptionIdentifier:
-            return "identifier";
+            return "support.constant";
         case EUnitKind::TypeIdentifier:
             return "entity.name.type";
         case EUnitKind::FunctionIdentifier:
@@ -104,14 +103,18 @@ TString ToTextMateName(EUnitKind kind) {
     return ToString(kind);
 }
 
-NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, const TRangePattern& range) {
+TMaybe<NTextMate::TMatcher> TextMateMultilinePattern(const TUnit& unit) {
+    auto range = unit.RangePattern;
+    if (!range) {
+        return Nothing();
+    }
+
     return NTextMate::TMatcher{
         .Name = ToTextMateName(unit.Kind),
         .Group = ToTextMateGroup(unit.Kind),
         .Pattern = NTextMate::TRange{
-            .Begin = RE2::QuoteMeta(range.BeginPlain),
-            .End = RE2::QuoteMeta(range.EndPlain),
-            .Escape = range.EscapeRegex,
+            .Begin = RE2::QuoteMeta(range->Begin),
+            .End = RE2::QuoteMeta(range->End),
         },
     };
 }
@@ -141,24 +144,12 @@ NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
         for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
             language.Matchers.emplace_back(ToTextMatePattern(unit, pattern));
         }
-        for (const TRangePattern& range : unit.RangePatterns) {
-            language.Matchers.emplace_back(TextMateMultilinePattern(unit, range));
+        if (auto textmate = TextMateMultilinePattern(unit)) {
+            language.Matchers.emplace_back(*textmate);
         }
     }
 
     return language;
-}
-
-TMaybe<TString> EmbeddedLanguage(const NTextMate::TRange& range) {
-    if (range.Begin.StartsWith(RE2::QuoteMeta(TRangePattern::EmbeddedPythonBegin))) {
-        return "source.python";
-    }
-
-    if (range.Begin.StartsWith(RE2::QuoteMeta(TRangePattern::EmbeddedJavaScriptBegin))) {
-        return "source.js";
-    }
-
-    return Nothing();
 }
 
 NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
@@ -171,15 +162,6 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
         } else if constexpr (std::is_same_v<T, NTextMate::TRange>) {
             json["begin"] = pattern.Begin;
             json["end"] = pattern.End;
-            if (auto embedded = EmbeddedLanguage(pattern)) {
-                json["patterns"].AppendValue(NJson::TJsonMap{{"include", *embedded}});
-            }
-            if (pattern.Escape) {
-                json["patterns"].AppendValue(NJson::TJsonMap{
-                    {"name", "constant.character.escape.untitled"},
-                    {"match", *pattern.Escape},
-                });
-            }
         } else {
             static_assert(false);
         }
@@ -194,6 +176,24 @@ NJson::TJsonValue ToJson(const NTextMate::TLanguage& language) {
     root["scopeName"] = language.ScopeName;
     root["scope"] = language.ScopeName;
     root["fileTypes"] = NJson::TJsonArray({language.FileType});
+
+    root["patterns"].AppendValue(NJson::TJsonMap({
+        {"begin", "@@#py"},
+        {"end", "@@"},
+        {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.python"}}})},
+    }));
+
+    root["patterns"].AppendValue(NJson::TJsonMap({
+        {"begin", "@@//js"},
+        {"end", "@@"},
+        {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.js"}}})},
+    }));
+
+    root["patterns"].AppendValue(NJson::TJsonMap({
+        {"begin", "@@{"},
+        {"end", "@@"},
+        {"patterns", NJson::TJsonArray({NJson::TJsonMap{{"include", "source.json"}}})},
+    }));
 
     THashSet<TString> visited;
     for (const NTextMate::TMatcher& matcher : language.Matchers) {

@@ -555,7 +555,6 @@
     },
     "AdBreak":{
       "type":"structure",
-      "required":["OffsetMillis"],
       "members":{
         "AdBreakMetadata":{
           "shape":"AdBreakMetadataList",
@@ -666,55 +665,6 @@
         "INFO"
       ]
     },
-    "AlternateMedia":{
-      "type":"structure",
-      "members":{
-        "AdBreaks":{
-          "shape":"__listOfAdBreak",
-          "documentation":"<p>Ad break configuration parameters defined in AlternateMedia.</p>"
-        },
-        "ClipRange":{"shape":"ClipRange"},
-        "DurationMillis":{
-          "shape":"__long",
-          "documentation":"<p>The duration of the alternateMedia in milliseconds.</p>"
-        },
-        "LiveSourceName":{
-          "shape":"__string",
-          "documentation":"<p>The name of the live source for alternateMedia.</p>"
-        },
-        "ScheduledStartTimeMillis":{
-          "shape":"__long",
-          "documentation":"<p>The date and time that the alternateMedia is scheduled to start, in epoch milliseconds.</p>"
-        },
-        "SourceLocationName":{
-          "shape":"__string",
-          "documentation":"<p>The name of the source location for alternateMedia.</p>"
-        },
-        "VodSourceName":{
-          "shape":"__string",
-          "documentation":"<p>The name of the VOD source for alternateMedia.</p>"
-        }
-      },
-      "documentation":"<p>A playlist of media (VOD and/or live) to be played instead of the default media on a particular program.</p>"
-    },
-    "AudienceMedia":{
-      "type":"structure",
-      "members":{
-        "AlternateMedia":{
-          "shape":"__listOfAlternateMedia",
-          "documentation":"<p>The list of AlternateMedia defined in AudienceMedia.</p>"
-        },
-        "Audience":{
-          "shape":"__string",
-          "documentation":"<p>The Audience defined in AudienceMedia.</p>"
-        }
-      },
-      "documentation":"<p>An AudienceMedia object contains an Audience and a list of AlternateMedia.</p>"
-    },
-    "Audiences":{
-      "type":"list",
-      "member":{"shape":"String"}
-    },
     "AvailMatchingCriteria":{
       "type":"structure",
       "required":[
@@ -807,10 +757,6 @@
           "shape":"__string",
           "documentation":"<p>The ARN of the channel.</p>"
         },
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in channel.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel.</p>"
@@ -864,15 +810,11 @@
     },
     "ClipRange":{
       "type":"structure",
+      "required":["EndOffsetMillis"],
       "members":{
         "EndOffsetMillis":{
           "shape":"__long",
-          "documentation":"<p>The end offset of the clip range, in milliseconds, starting from the beginning of the VOD source associated with the program.</p>",
-          "box":true
-        },
-        "StartOffsetMillis":{
-          "shape":"__long",
-          "documentation":"<p>The start offset of the clip range, in milliseconds. This offset truncates the start at the number of milliseconds into the duration of the VOD source.</p>"
+          "documentation":"<p>The end offset of the clip range, in milliseconds, starting from the beginning of the VOD source associated with the program.</p>"
         }
       },
       "documentation":"<p>Clip range configuration for the VOD source associated with the program.</p>"
@@ -971,10 +913,6 @@
         "PlaybackMode"
       ],
       "members":{
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in channel.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel.</p>",
@@ -1001,10 +939,6 @@
         "Tier":{
           "shape":"Tier",
           "documentation":"<p>The tier of the channel.</p>"
-        },
-        "TimeShiftConfiguration":{
-          "shape":"TimeShiftConfiguration",
-          "documentation":"<p> The time-shifted viewing configuration you want to associate to the channel. </p>"
         }
       }
     },
@@ -1014,10 +948,6 @@
         "Arn":{
           "shape":"__string",
           "documentation":"<p>The Amazon Resource Name (ARN) to assign to the channel.</p>"
-        },
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in channel.</p>"
         },
         "ChannelName":{
           "shape":"__string",
@@ -1055,10 +985,6 @@
         "Tier":{
           "shape":"__string",
           "documentation":"<p>The tier of the channel.</p>"
-        },
-        "TimeShiftConfiguration":{
-          "shape":"TimeShiftConfiguration",
-          "documentation":"<p> The time-shifted viewing configuration assigned to the channel. </p>"
         }
       }
     },
@@ -1204,10 +1130,6 @@
           "shape":"__listOfAdBreak",
           "documentation":"<p>The ad break configuration settings.</p>"
         },
-        "AudienceMedia":{
-          "shape":"__listOfAudienceMedia",
-          "documentation":"<p>The list of AudienceMedia defined in program.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel for this Program.</p>",
@@ -1248,10 +1170,6 @@
         "Arn":{
           "shape":"__string",
           "documentation":"<p>The ARN to assign to the program.</p>"
-        },
-        "AudienceMedia":{
-          "shape":"__listOfAudienceMedia",
-          "documentation":"<p>The list of AudienceMedia defined in program.</p>"
         },
         "ChannelName":{
           "shape":"__string",
@@ -1690,10 +1608,6 @@
           "shape":"__string",
           "documentation":"<p>The ARN of the channel.</p>"
         },
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in channel.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel.</p>"
@@ -1734,10 +1648,6 @@
         "Tier":{
           "shape":"__string",
           "documentation":"<p>The channel's tier.</p>"
-        },
-        "TimeShiftConfiguration":{
-          "shape":"TimeShiftConfiguration",
-          "documentation":"<p> The time-shifted viewing configuration for the channel. </p>"
         }
       }
     },
@@ -1827,10 +1737,6 @@
         "Arn":{
           "shape":"__string",
           "documentation":"<p>The ARN of the program.</p>"
-        },
-        "AudienceMedia":{
-          "shape":"__listOfAudienceMedia",
-          "documentation":"<p>The list of AudienceMedia defined in program.</p>"
         },
         "ChannelName":{
           "shape":"__string",
@@ -2015,12 +1921,6 @@
       "type":"structure",
       "required":["ChannelName"],
       "members":{
-        "Audience":{
-          "shape":"__string",
-          "documentation":"<p>The single audience for GetChannelScheduleRequest.</p>",
-          "location":"querystring",
-          "locationName":"audience"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel associated with this Channel Schedule.</p>",
@@ -2102,10 +2002,6 @@
         "HlsConfiguration":{
           "shape":"HlsConfiguration",
           "documentation":"<p>The configuration for HLS content.</p>"
-        },
-        "InsertionMode":{
-          "shape":"InsertionMode",
-          "documentation":"<p>The setting that controls whether players can use stitched or guided ad insertion. The default, <code>STITCHED_ONLY</code>, forces all player sessions to use stitched (server-side) ad insertion. Choosing <code>PLAYER_SELECT</code> allows players to select either stitched or guided ad insertion at session-initialization time. The default for players that do not specify an insertion mode is stitched.</p>"
         },
         "LivePreRollConfiguration":{
           "shape":"LivePreRollConfiguration",
@@ -2270,14 +2166,6 @@
       "type":"list",
       "member":{"shape":"HttpPackageConfiguration"},
       "documentation":"<p>The VOD source's HTTP package configuration settings.</p>"
-    },
-    "InsertionMode":{
-      "type":"string",
-      "documentation":"<p>Insertion Mode controls whether players can use stitched or guided ad insertion.</p>",
-      "enum":[
-        "STITCHED_ONLY",
-        "PLAYER_SELECT"
-      ]
     },
     "Integer":{
       "type":"integer",
@@ -2661,7 +2549,6 @@
     },
     "MaxResults":{
       "type":"integer",
-      "box":true,
       "max":100,
       "min":1
     },
@@ -2721,10 +2608,6 @@
         "HlsConfiguration":{
           "shape":"HlsConfiguration",
           "documentation":"<p>The configuration for HLS content.</p>"
-        },
-        "InsertionMode":{
-          "shape":"InsertionMode",
-          "documentation":"<p>The setting that controls whether players can use stitched or guided ad insertion. The default, <code>STITCHED_ONLY</code>, forces all player sessions to use stitched (server-side) ad insertion. Choosing <code>PLAYER_SELECT</code> allows players to select either stitched or guided ad insertion at session-initialization time. The default for players that do not specify an insertion mode is stitched.</p>"
         },
         "LivePreRollConfiguration":{
           "shape":"LivePreRollConfiguration",
@@ -2912,10 +2795,6 @@
           "shape":"DashConfigurationForPut",
           "documentation":"<p>The configuration for DASH content.</p>"
         },
-        "InsertionMode":{
-          "shape":"InsertionMode",
-          "documentation":"<p>The setting that controls whether players can use stitched or guided ad insertion. The default, <code>STITCHED_ONLY</code>, forces all player sessions to use stitched (server-side) ad insertion. Choosing <code>PLAYER_SELECT</code> allows players to select either stitched or guided ad insertion at session-initialization time. The default for players that do not specify an insertion mode is stitched.</p>"
-        },
         "LivePreRollConfiguration":{
           "shape":"LivePreRollConfiguration",
           "documentation":"<p>The configuration for pre-roll ad insertion.</p>"
@@ -2981,10 +2860,6 @@
         "HlsConfiguration":{
           "shape":"HlsConfiguration",
           "documentation":"<p>The configuration for HLS content.</p>"
-        },
-        "InsertionMode":{
-          "shape":"InsertionMode",
-          "documentation":"<p>The setting that controls whether players can use stitched or guided ad insertion. The default, <code>STITCHED_ONLY</code>, forces all player sessions to use stitched (server-side) ad insertion. Choosing <code>PLAYER_SELECT</code> allows players to select either stitched or guided ad insertion at session-initialization time. The default for players that do not specify an insertion mode is stitched.</p>"
         },
         "LivePreRollConfiguration":{
           "shape":"LivePreRollConfiguration",
@@ -3168,10 +3043,6 @@
           "shape":"__string",
           "documentation":"<p>The ARN of the program.</p>"
         },
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in ScheduleEntry.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel that uses this schedule.</p>"
@@ -3207,8 +3078,7 @@
       "type":"string",
       "enum":[
         "PROGRAM",
-        "FILLER_SLATE",
-        "ALTERNATE_MEDIA"
+        "FILLER_SLATE"
       ]
     },
     "SecretsManagerAccessTokenConfiguration":{
@@ -3431,17 +3301,6 @@
         "STANDARD"
       ]
     },
-    "TimeShiftConfiguration":{
-      "type":"structure",
-      "required":["MaxTimeDelaySeconds"],
-      "members":{
-        "MaxTimeDelaySeconds":{
-          "shape":"__integer",
-          "documentation":"<p> The maximum time delay for time-shifted viewing. The minimum allowed maximum time delay is 0 seconds, and the maximum allowed maximum time delay is 21600 seconds (6 hours). </p>"
-        }
-      },
-      "documentation":"<p> The configuration for time-shifted viewing. </p>"
-    },
     "TimeSignalMessage":{
       "type":"structure",
       "members":{
@@ -3517,10 +3376,6 @@
         "Outputs"
       ],
       "members":{
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in channel.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel.</p>",
@@ -3534,10 +3389,6 @@
         "Outputs":{
           "shape":"RequestOutputs",
           "documentation":"<p>The channel's output properties.</p>"
-        },
-        "TimeShiftConfiguration":{
-          "shape":"TimeShiftConfiguration",
-          "documentation":"<p> The time-shifted viewing configuration you want to associate to the channel. </p>"
         }
       }
     },
@@ -3547,10 +3398,6 @@
         "Arn":{
           "shape":"__string",
           "documentation":"<p>The Amazon Resource Name (ARN) associated with the channel.</p>"
-        },
-        "Audiences":{
-          "shape":"Audiences",
-          "documentation":"<p>The list of audiences defined in channel.</p>"
         },
         "ChannelName":{
           "shape":"__string",
@@ -3588,10 +3435,6 @@
         "Tier":{
           "shape":"__string",
           "documentation":"<p>The tier associated with this Channel.</p>"
-        },
-        "TimeShiftConfiguration":{
-          "shape":"TimeShiftConfiguration",
-          "documentation":"<p> The time-shifted viewing configuration for the channel. </p>"
         }
       }
     },
@@ -3667,10 +3510,6 @@
           "shape":"__listOfAdBreak",
           "documentation":"<p>The ad break configuration settings.</p>"
         },
-        "AudienceMedia":{
-          "shape":"__listOfAudienceMedia",
-          "documentation":"<p>The list of AudienceMedia defined in program.</p>"
-        },
         "ChannelName":{
           "shape":"__string",
           "documentation":"<p>The name of the channel for this Program.</p>",
@@ -3699,10 +3538,6 @@
         "Arn":{
           "shape":"__string",
           "documentation":"<p>The ARN to assign to the program.</p>"
-        },
-        "AudienceMedia":{
-          "shape":"__listOfAudienceMedia",
-          "documentation":"<p>The list of AudienceMedia defined in program.</p>"
         },
         "ChannelName":{
           "shape":"__string",
@@ -3944,22 +3779,14 @@
       },
       "documentation":"<p>VOD source configuration parameters.</p>"
     },
-    "__boolean":{
-      "type":"boolean",
-      "box":true
-    },
-    "__integer":{
-      "type":"integer",
-      "box":true
-    },
+    "__boolean":{"type":"boolean"},
+    "__integer":{"type":"integer"},
     "__integerMin1":{
       "type":"integer",
-      "box":true,
       "min":1
     },
     "__integerMin1Max100":{
       "type":"integer",
-      "box":true,
       "max":100,
       "min":1
     },
@@ -3970,14 +3797,6 @@
     "__listOfAlert":{
       "type":"list",
       "member":{"shape":"Alert"}
-    },
-    "__listOfAlternateMedia":{
-      "type":"list",
-      "member":{"shape":"AlternateMedia"}
-    },
-    "__listOfAudienceMedia":{
-      "type":"list",
-      "member":{"shape":"AudienceMedia"}
     },
     "__listOfAvailMatchingCriteria":{
       "type":"list",
@@ -4023,10 +3842,7 @@
       "type":"list",
       "member":{"shape":"__string"}
     },
-    "__long":{
-      "type":"long",
-      "box":true
-    },
+    "__long":{"type":"long"},
     "__mapOf__string":{
       "type":"map",
       "key":{"shape":"__string"},

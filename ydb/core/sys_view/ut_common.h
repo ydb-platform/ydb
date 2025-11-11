@@ -27,7 +27,6 @@ struct TTestEnvSettings {
     bool EnableSparsedColumns = false;
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
-    bool EnableFulltextIndex = false;
     TMaybe<bool> EnableRealSystemViewPaths;
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;

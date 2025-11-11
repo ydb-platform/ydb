@@ -18,7 +18,6 @@ using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
-static const TString kDatabaseName = "/Root";
 static const TString kMainTable = "/Root/table-main";
 static const TString kPrefixTable = "/Root/table-prefix";
 static const TString kLevelTable = "/Root/table-level";
@@ -71,7 +70,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
         rec.SetPrefixName(kPrefixTable);
 
-        rec.SetDatabaseName(kDatabaseName);
         rec.SetLevelName(kLevelTable);
         rec.SetOutputName(kPostingTable);
         rec.SetPrefixName(kPrefixTable);
@@ -126,7 +124,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.SetPrefixColumns(1);
                 rec.AddSourcePrimaryKeyColumns("key");
 
-                rec.SetDatabaseName(kDatabaseName);
                 rec.SetPrefixName(kPrefixTable);
                 rec.SetLevelName(kLevelTable);
                 rec.SetOutputName(kPostingTable);

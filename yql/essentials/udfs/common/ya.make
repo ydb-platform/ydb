@@ -13,7 +13,6 @@ RECURSE(
     protobuf
     python
     re2
-    reservoir_sampling
     set
     stat
     streaming

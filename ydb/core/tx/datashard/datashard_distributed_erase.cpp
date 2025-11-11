@@ -339,7 +339,6 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             << ": txId# " << TxId);
 
         auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = DatabaseName;
         request->ResultSet.emplace_back(MakeNavigateEntry(MainTableId));
         for (const auto& [tableId, _] : Indexes) {
             request->ResultSet.emplace_back(MakeNavigateEntry(tableId));
@@ -495,8 +494,6 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         Y_ENSURE(!TableInfos.empty());
 
         auto request = MakeHolder<TResolve>();
-        request->DatabaseName = DatabaseName;
-
         for (auto& [_, info] : TableInfos) {
             auto& entry = request->ResultSet.emplace_back(info.TakeKeyDesc());
             entry.Access = NACLib::EAccessRights::EraseRow;
@@ -1056,9 +1053,8 @@ public:
         return NKikimrServices::TActivity::DISTRIBUTED_ERASE_ROWS_ACTOR;
     }
 
-    TDistEraser(const TActorId& replyTo, const TString& databaseName, const TTableId& mainTableId, const TIndexes& indexes)
+    TDistEraser(const TActorId& replyTo, const TTableId& mainTableId, const TIndexes& indexes)
         : ReplyTo(replyTo)
-        , DatabaseName(databaseName)
         , MainTableId(mainTableId)
         , Indexes(indexes)
         , Cancelled(false)
@@ -1090,7 +1086,6 @@ public:
 
 private:
     const TActorId ReplyTo;
-    const TString DatabaseName;
     const TTableId MainTableId;
     const TIndexes Indexes;
 
@@ -1114,9 +1109,8 @@ private:
 
 }; // TDistEraser
 
-IActor* CreateDistributedEraser(const TActorId& replyTo, const TString& databaseName,
-    const TTableId& mainTableId, const TIndexes& indexes) {
-    return new TDistEraser(replyTo, databaseName, mainTableId, indexes);
+IActor* CreateDistributedEraser(const TActorId& replyTo, const TTableId& mainTableId, const TIndexes& indexes) {
+    return new TDistEraser(replyTo, mainTableId, indexes);
 }
 
 } // NDataShard

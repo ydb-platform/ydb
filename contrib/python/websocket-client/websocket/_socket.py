@@ -1,20 +1,20 @@
 import errno
 import selectors
 import socket
-from typing import Optional, Union, Any
+from typing import Union
 
 from ._exceptions import (
     WebSocketConnectionClosedException,
     WebSocketTimeoutException,
 )
-from ._ssl_compat import SSLError, SSLEOFError, SSLWantReadError, SSLWantWriteError
+from ._ssl_compat import SSLError, SSLWantReadError, SSLWantWriteError
 from ._utils import extract_error_code, extract_err_message
 
 """
 _socket.py
 websocket - WebSocket client library for Python
 
-Copyright 2025 engn33r
+Copyright 2024 engn33r
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -53,19 +53,17 @@ __all__ = [
 
 
 class sock_opt:
-    def __init__(
-        self, sockopt: Optional[list[tuple]], sslopt: Optional[dict[str, Any]]
-    ) -> None:
+    def __init__(self, sockopt: list, sslopt: dict) -> None:
         if sockopt is None:
             sockopt = []
         if sslopt is None:
             sslopt = {}
         self.sockopt = sockopt
         self.sslopt = sslopt
-        self.timeout: Optional[Union[int, float]] = None
+        self.timeout = None
 
 
-def setdefaulttimeout(timeout: Optional[Union[int, float]]) -> None:
+def setdefaulttimeout(timeout: Union[int, float, None]) -> None:
     """
     Set the global timeout setting to connect.
 
@@ -78,7 +76,7 @@ def setdefaulttimeout(timeout: Optional[Union[int, float]]) -> None:
     _default_timeout = timeout
 
 
-def getdefaulttimeout() -> Optional[Union[int, float]]:
+def getdefaulttimeout() -> Union[int, float, None]:
     """
     Get default timeout
 
@@ -98,15 +96,12 @@ def recv(sock: socket.socket, bufsize: int) -> bytes:
         try:
             return sock.recv(bufsize)
         except SSLWantReadError:
-            # Don't return None implicitly - fall through to retry logic
             pass
         except socket.error as exc:
             error_code = extract_error_code(exc)
             if error_code not in [errno.EAGAIN, errno.EWOULDBLOCK]:
                 raise
-            # Don't return None implicitly - fall through to retry logic
 
-        # Retry logic using selector for both SSLWantReadError and EAGAIN/EWOULDBLOCK
         sel = selectors.DefaultSelector()
         sel.register(sock, selectors.EVENT_READ)
 
@@ -115,10 +110,6 @@ def recv(sock: socket.socket, bufsize: int) -> bytes:
 
         if r:
             return sock.recv(bufsize)
-        else:
-            # Selector timeout should raise WebSocketTimeoutException
-            # not return None which gets misclassified as connection closed
-            raise WebSocketTimeoutException("Connection timed out waiting for data")
 
     try:
         if sock.gettimeout() == 0:
@@ -137,8 +128,6 @@ def recv(sock: socket.socket, bufsize: int) -> bytes:
         else:
             raise
 
-    if bytes_ is None:
-        raise WebSocketConnectionClosedException("Connection to remote host was lost.")
     if not bytes_:
         raise WebSocketConnectionClosedException("Connection to remote host was lost.")
 
@@ -162,11 +151,9 @@ def send(sock: socket.socket, data: Union[bytes, str]) -> int:
     if not sock:
         raise WebSocketConnectionClosedException("socket is already closed.")
 
-    def _send() -> int:
+    def _send():
         try:
             return sock.send(data)
-        except SSLEOFError:
-            raise WebSocketConnectionClosedException("socket is already closed.")
         except SSLWantWriteError:
             pass
         except socket.error as exc:
@@ -184,7 +171,6 @@ def send(sock: socket.socket, data: Union[bytes, str]) -> int:
 
         if w:
             return sock.send(data)
-        return 0
 
     try:
         if sock.gettimeout() == 0:
@@ -194,7 +180,7 @@ def send(sock: socket.socket, data: Union[bytes, str]) -> int:
     except socket.timeout as e:
         message = extract_err_message(e)
         raise WebSocketTimeoutException(message)
-    except (OSError, SSLError) as e:
+    except Exception as e:
         message = extract_err_message(e)
         if isinstance(message, str) and "timed out" in message:
             raise WebSocketTimeoutException(message)

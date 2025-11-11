@@ -23,8 +23,7 @@ TConstructor::TConstructor(
     for (auto&& i : schemasAll) {
         if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
             constructors.emplace_back(TabletId, std::move(current));
-            if (!pkFilter->IsUsed(
-                    constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
                 constructors.pop_back();
             }
             current.clear();
@@ -33,7 +32,7 @@ TConstructor::TConstructor(
     }
     if (current.size()) {
         constructors.emplace_back(TabletId, std::move(current));
-        if (!pkFilter->IsUsed(constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+        if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
             constructors.pop_back();
         }
         current.clear();

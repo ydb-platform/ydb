@@ -1780,12 +1780,13 @@ private:
     }
 
     void InitCheckpointStorage() {
-        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
+        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
             return;
         }
 
         auto service = NFq::NewCheckpointStorageService(
-            {},
+            streamingQueries.GetExternalStorage(),
             "cs",
             NKikimr::CreateYdbCredentialsProviderFactory,
             *FederatedQuerySetup->Driver,

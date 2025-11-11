@@ -44,7 +44,6 @@ namespace NSchemeCache {
 
 namespace NRpcService {
     struct TRlPath {
-        TString DatabaseName;
         TString CoordinationNode;
         TString ResourcePath;
     };
@@ -354,11 +353,8 @@ enum class TRateLimiterMode : ui8 {
     RuTopic = 5,
 };
 
-#define RLMODE(mode) \
-    ::NKikimr::NGRpcService::TRateLimiterMode::mode
-
 #define RLSWITCH(mode) \
-    IsRlAllowed() ? RLMODE(mode) : RLMODE(Off)
+    IsRlAllowed() ? mode : TRateLimiterMode::Off
 
 struct TAuditMode {
     using TLogClassConfig = NKikimrConfig::TAuditConfig::TLogClassConfig;

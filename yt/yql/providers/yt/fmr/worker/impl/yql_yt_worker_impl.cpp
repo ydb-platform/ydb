@@ -37,11 +37,11 @@ public:
     void Start() override {
         auto mainThreadFunc = [&] () {
             WorkerState_->State = EFmrWorkerRuntimeState::Running;
+            std::vector<TTaskState::TPtr> taskStates;
+            std::vector<TString> taskIdsToErase;
 
             while (!StopWorker_) {
                 try {
-                    std::vector<TTaskState::TPtr> taskStates;
-                    std::vector<TString> taskIdsToErase;
                     with_lock(WorkerState_->Mutex) {
                         for (auto& [taskId, taskState]: WorkerState_->TaskStatuses) {
                             auto taskStatus = taskState->TaskStatus;

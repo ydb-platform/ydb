@@ -26,8 +26,7 @@ const std::vector<NKikimrServices::EServiceKikimr> TLoggerInit::CSServices = {
     NKikimrServices::TX_COLUMNSHARD_BLOBS_BS,
     NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER,
     NKikimrServices::TX_COLUMNSHARD_SCAN,
-    NKikimrServices::TX_CONVEYOR,
-    NKikimrServices::ARROW_HELPER
+    NKikimrServices::TX_CONVEYOR
 };
 
 TLoggerInit::TLoggerInit(NKqp::TKikimrRunner& kikimr)

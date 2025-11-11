@@ -72,7 +72,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Creates a single GuardDuty detector. A detector is a resource that represents the GuardDuty service. To start using GuardDuty, you must create a detector in each Region where you enable the service. You can have only one detector per account per Region. All data sources are enabled in a new detector by default.</p> <ul> <li> <p>When you don't specify any <code>features</code>, with an exception to <code>RUNTIME_MONITORING</code>, all the optional features are enabled by default.</p> </li> <li> <p>When you specify some of the <code>features</code>, any feature that is not specified in the API call gets enabled by default, with an exception to <code>RUNTIME_MONITORING</code>. </p> </li> </ul> <p>Specifying both EKS Runtime Monitoring (<code>EKS_RUNTIME_MONITORING</code>) and Runtime Monitoring (<code>RUNTIME_MONITORING</code>) will cause an error. You can add only one of these two features because Runtime Monitoring already includes the threat detection for Amazon EKS resources. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html\">Runtime Monitoring</a>.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
+      "documentation":"<p>Creates a single Amazon GuardDuty detector. A detector is a resource that represents the GuardDuty service. To start using GuardDuty, you must create a detector in each Region where you enable the service. You can have only one detector per account per Region. All data sources are enabled in a new detector by default.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
     },
     "CreateFilter":{
       "name":"CreateFilter",
@@ -117,7 +117,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Creates member accounts of the current Amazon Web Services account by specifying a list of Amazon Web Services account IDs. This step is a prerequisite for managing the associated member accounts either by invitation or through an organization.</p> <p>As a delegated administrator, using <code>CreateMembers</code> will enable GuardDuty in the added member accounts, with the exception of the organization delegated administrator account. A delegated administrator must enable GuardDuty prior to being added as a member.</p> <p>When you use CreateMembers as an Organizations delegated administrator, GuardDuty applies your organization's auto-enable settings to the member accounts in this request, irrespective of the accounts being new or existing members. For more information about the existing auto-enable settings for your organization, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DescribeOrganizationConfiguration.html\">DescribeOrganizationConfiguration</a>.</p> <p>If you disassociate a member account that was added by invitation, the member account details obtained from this API, including the associated email addresses, will be retained. This is done so that the delegated administrator can invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a> API without the need to invoke the CreateMembers API again. To remove the details associated with a member account, the delegated administrator must invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a> API. </p> <p>When the member accounts added through Organizations are later disassociated, you (administrator) can't invite them by calling the InviteMembers API. You can create an association with these member accounts again only by calling the CreateMembers API.</p>"
+      "documentation":"<p>Creates member accounts of the current Amazon Web Services account by specifying a list of Amazon Web Services account IDs. This step is a prerequisite for managing the associated member accounts either by invitation or through an organization.</p> <p>As a delegated administrator, using <code>CreateMembers</code> will enable GuardDuty in the added member accounts, with the exception of the organization delegated administrator account. A delegated administrator must enable GuardDuty prior to being added as a member.</p> <p>If you are adding accounts by invitation, before using <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a>, use <code>CreateMembers</code> after GuardDuty has been enabled in potential member accounts.</p> <p>If you disassociate a member from a GuardDuty delegated administrator, the member account details obtained from this API, including the associated email addresses, will be retained. This is done so that the delegated administrator can invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a> API without the need to invoke the CreateMembers API again. To remove the details associated with a member account, the delegated administrator must invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a> API. </p>"
     },
     "CreatePublishingDestination":{
       "name":"CreatePublishingDestination",
@@ -389,7 +389,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Disassociates GuardDuty member accounts (from the current administrator account) specified by the account IDs.</p> <p>When you disassociate an invited member from a GuardDuty delegated administrator, the member account details obtained from the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_CreateMembers.html\">CreateMembers</a> API, including the associated email addresses, are retained. This is done so that the delegated administrator can invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a> API without the need to invoke the CreateMembers API again. To remove the details associated with a member account, the delegated administrator must invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a> API. </p> <p>With <code>autoEnableOrganizationMembers</code> configuration for your organization set to <code>ALL</code>, you'll receive an error if you attempt to disassociate a member account before removing them from your organization.</p> <p>If you disassociate a member account that was added by invitation, the member account details obtained from this API, including the associated email addresses, will be retained. This is done so that the delegated administrator can invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a> API without the need to invoke the CreateMembers API again. To remove the details associated with a member account, the delegated administrator must invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a> API. </p> <p>When the member accounts added through Organizations are later disassociated, you (administrator) can't invite them by calling the InviteMembers API. You can create an association with these member accounts again only by calling the CreateMembers API.</p>"
+      "documentation":"<p>Disassociates GuardDuty member accounts (from the current administrator account) specified by the account IDs.</p> <p>When you disassociate an invited member from a GuardDuty delegated administrator, the member account details obtained from the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_CreateMembers.html\">CreateMembers</a> API, including the associated email addresses, are retained. This is done so that the delegated administrator can invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a> API without the need to invoke the CreateMembers API again. To remove the details associated with a member account, the delegated administrator must invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a> API. </p> <p>With <code>autoEnableOrganizationMembers</code> configuration for your organization set to <code>ALL</code>, you'll receive an error if you attempt to disassociate a member account before removing them from your organization.</p>"
     },
     "EnableOrganizationAdminAccount":{
       "name":"EnableOrganizationAdminAccount",
@@ -434,7 +434,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Retrieves aggregated statistics for your account. If you are a GuardDuty administrator, you can retrieve the statistics for all the resources associated with the active member accounts in your organization who have enabled Runtime Monitoring and have the GuardDuty security agent running on their resources.</p>"
+      "documentation":"<p>Retrieves aggregated statistics for your account. If you are a GuardDuty administrator, you can retrieve the statistics for all the resources associated with the active member accounts in your organization who have enabled EKS Runtime Monitoring and have the GuardDuty agent running on their EKS nodes.</p>"
     },
     "GetDetector":{
       "name":"GetDetector",
@@ -494,7 +494,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Lists Amazon GuardDuty findings statistics for the specified detector ID.</p> <p>There might be regional differences because some flags might not be available in all the Regions where GuardDuty is currently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
+      "documentation":"<p>Lists Amazon GuardDuty findings statistics for the specified detector ID.</p>"
     },
     "GetIPSet":{
       "name":"GetIPSet",
@@ -588,20 +588,6 @@
       ],
       "documentation":"<p>Retrieves GuardDuty member accounts (of the current GuardDuty administrator account) specified by the account IDs.</p>"
     },
-    "GetOrganizationStatistics":{
-      "name":"GetOrganizationStatistics",
-      "http":{
-        "method":"GET",
-        "requestUri":"/organization/statistics",
-        "responseCode":200
-      },
-      "output":{"shape":"GetOrganizationStatisticsResponse"},
-      "errors":[
-        {"shape":"BadRequestException"},
-        {"shape":"InternalServerErrorException"}
-      ],
-      "documentation":"<p>Retrieves how many active member accounts have each feature enabled within GuardDuty. Only a delegated GuardDuty administrator of an organization can run this API.</p> <p>When you create a new organization, it might take up to 24 hours to generate the statistics for the entire organization.</p>"
-    },
     "GetRemainingFreeTrialDays":{
       "name":"GetRemainingFreeTrialDays",
       "http":{
@@ -660,7 +646,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Invites Amazon Web Services accounts to become members of an organization administered by the Amazon Web Services account that invokes this API. If you are using Amazon Web Services Organizations to manage your GuardDuty environment, this step is not needed. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_organizations.html\">Managing accounts with organizations</a>.</p> <p>To invite Amazon Web Services accounts, the first step is to ensure that GuardDuty has been enabled in the potential member accounts. You can now invoke this API to add accounts by invitation. The invited accounts can either accept or decline the invitation from their GuardDuty accounts. Each invited Amazon Web Services account can choose to accept the invitation from only one Amazon Web Services account. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_invitations.html\">Managing GuardDuty accounts by invitation</a>.</p> <p>After the invite has been accepted and you choose to disassociate a member account (by using <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DisassociateMembers.html\">DisassociateMembers</a>) from your account, the details of the member account obtained by invoking <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_CreateMembers.html\">CreateMembers</a>, including the associated email addresses, will be retained. This is done so that you can invoke InviteMembers without the need to invoke <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_CreateMembers.html\">CreateMembers</a> again. To remove the details associated with a member account, you must also invoke <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a>. </p> <p>If you disassociate a member account that was added by invitation, the member account details obtained from this API, including the associated email addresses, will be retained. This is done so that the delegated administrator can invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_InviteMembers.html\">InviteMembers</a> API without the need to invoke the CreateMembers API again. To remove the details associated with a member account, the delegated administrator must invoke the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a> API. </p> <p>When the member accounts added through Organizations are later disassociated, you (administrator) can't invite them by calling the InviteMembers API. You can create an association with these member accounts again only by calling the CreateMembers API.</p>"
+      "documentation":"<p>Invites Amazon Web Services accounts to become members of an organization administered by the Amazon Web Services account that invokes this API. If you are using Amazon Web Services Organizations to manage your GuardDuty environment, this step is not needed. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_organizations.html\">Managing accounts with organizations</a>.</p> <p>To invite Amazon Web Services accounts, the first step is to ensure that GuardDuty has been enabled in the potential member accounts. You can now invoke this API to add accounts by invitation. The invited accounts can either accept or decline the invitation from their GuardDuty accounts. Each invited Amazon Web Services account can choose to accept the invitation from only one Amazon Web Services account. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_invitations.html\">Managing GuardDuty accounts by invitation</a>.</p> <p>After the invite has been accepted and you choose to disassociate a member account (by using <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DisassociateMembers.html\">DisassociateMembers</a>) from your account, the details of the member account obtained by invoking <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_CreateMembers.html\">CreateMembers</a>, including the associated email addresses, will be retained. This is done so that you can invoke InviteMembers without the need to invoke <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_CreateMembers.html\">CreateMembers</a> again. To remove the details associated with a member account, you must also invoke <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DeleteMembers.html\">DeleteMembers</a>. </p>"
     },
     "ListCoverage":{
       "name":"ListCoverage",
@@ -675,7 +661,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Lists coverage details for your GuardDuty account. If you're a GuardDuty administrator, you can retrieve all resources associated with the active member accounts in your organization.</p> <p>Make sure the accounts have Runtime Monitoring enabled and GuardDuty agent running on their resources.</p>"
+      "documentation":"<p>Lists coverage details for your GuardDuty account. If you're a GuardDuty administrator, you can retrieve all resources associated with the active member accounts in your organization.</p> <p>Make sure the accounts have EKS Runtime Monitoring enabled and GuardDuty agent running on their EKS nodes.</p>"
     },
     "ListDetectors":{
       "name":"ListDetectors",
@@ -720,7 +706,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Lists GuardDuty findings for the specified detector ID.</p> <p>There might be regional differences because some flags might not be available in all the Regions where GuardDuty is currently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
+      "documentation":"<p>Lists Amazon GuardDuty findings for the specified detector ID.</p>"
     },
     "ListIPSets":{
       "name":"ListIPSets",
@@ -842,7 +828,7 @@
         {"shape":"ConflictException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Initiates the malware scan. Invoking this API will automatically create the <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/slr-permissions-malware-protection.html\">Service-linked role</a> in the corresponding account.</p> <p>When the malware scan starts, you can use the associated scan ID to track the status of the scan. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_DescribeMalwareScans.html\">DescribeMalwareScans</a>.</p>"
+      "documentation":"<p>Initiates the malware scan. Invoking this API will automatically create the <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/slr-permissions-malware-protection.html\">Service-linked role </a> in the corresponding account.</p>"
     },
     "StartMonitoringMembers":{
       "name":"StartMonitoringMembers",
@@ -934,7 +920,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Updates the GuardDuty detector specified by the detector ID.</p> <p>Specifying both EKS Runtime Monitoring (<code>EKS_RUNTIME_MONITORING</code>) and Runtime Monitoring (<code>RUNTIME_MONITORING</code>) will cause an error. You can add only one of these two features because Runtime Monitoring already includes the threat detection for Amazon EKS resources. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html\">Runtime Monitoring</a>.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
+      "documentation":"<p>Updates the Amazon GuardDuty detector specified by the detectorId.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
     },
     "UpdateFilter":{
       "name":"UpdateFilter",
@@ -1009,7 +995,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Contains information on member accounts to be updated.</p> <p>Specifying both EKS Runtime Monitoring (<code>EKS_RUNTIME_MONITORING</code>) and Runtime Monitoring (<code>RUNTIME_MONITORING</code>) will cause an error. You can add only one of these two features because Runtime Monitoring already includes the threat detection for Amazon EKS resources. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html\">Runtime Monitoring</a>.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
+      "documentation":"<p>Contains information on member accounts to be updated.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
     },
     "UpdateOrganizationConfiguration":{
       "name":"UpdateOrganizationConfiguration",
@@ -1024,7 +1010,7 @@
         {"shape":"BadRequestException"},
         {"shape":"InternalServerErrorException"}
       ],
-      "documentation":"<p>Configures the delegated administrator account with the provided values. You must provide a value for either <code>autoEnableOrganizationMembers</code> or <code>autoEnable</code>, but not both. </p> <p>Specifying both EKS Runtime Monitoring (<code>EKS_RUNTIME_MONITORING</code>) and Runtime Monitoring (<code>RUNTIME_MONITORING</code>) will cause an error. You can add only one of these two features because Runtime Monitoring already includes the threat detection for Amazon EKS resources. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html\">Runtime Monitoring</a>.</p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
+      "documentation":"<p>Configures the delegated administrator account with the provided values. You must provide a value for either <code>autoEnableOrganizationMembers</code> or <code>autoEnable</code>, but not both. </p> <p>There might be regional differences because some data sources might not be available in all the Amazon Web Services Regions where GuardDuty is presently supported. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_regions.html\">Regions and endpoints</a>.</p>"
     },
     "UpdatePublishingDestination":{
       "name":"UpdatePublishingDestination",
@@ -1296,21 +1282,6 @@
           "shape":"RdsLoginAttemptAction",
           "documentation":"<p>Information about <code>RDS_LOGIN_ATTEMPT</code> action described in this finding.</p>",
           "locationName":"rdsLoginAttemptAction"
-        },
-        "KubernetesPermissionCheckedDetails":{
-          "shape":"KubernetesPermissionCheckedDetails",
-          "documentation":"<p>Information whether the user has the permission to use a specific Kubernetes API.</p>",
-          "locationName":"kubernetesPermissionCheckedDetails"
-        },
-        "KubernetesRoleBindingDetails":{
-          "shape":"KubernetesRoleBindingDetails",
-          "documentation":"<p>Information about the role binding that grants the permission defined in a Kubernetes role.</p>",
-          "locationName":"kubernetesRoleBindingDetails"
-        },
-        "KubernetesRoleDetails":{
-          "shape":"KubernetesRoleDetails",
-          "documentation":"<p>Information about the Kubernetes role name and role type.</p>",
-          "locationName":"kubernetesRoleDetails"
         }
       },
       "documentation":"<p>Contains information about actions.</p>"
@@ -1392,84 +1363,6 @@
       "type":"map",
       "key":{"shape":"String"},
       "value":{"shape":"String"}
-    },
-    "AgentDetails":{
-      "type":"structure",
-      "members":{
-        "Version":{
-          "shape":"String",
-          "documentation":"<p>Version of the installed GuardDuty security agent.</p>",
-          "locationName":"version"
-        }
-      },
-      "documentation":"<p>Information about the installed GuardDuty security agent.</p>"
-    },
-    "Anomaly":{
-      "type":"structure",
-      "members":{
-        "Profiles":{
-          "shape":"AnomalyProfiles",
-          "documentation":"<p>Information about the types of profiles.</p>",
-          "locationName":"profiles"
-        },
-        "Unusual":{
-          "shape":"AnomalyUnusual",
-          "documentation":"<p>Information about the behavior of the anomalies.</p>",
-          "locationName":"unusual"
-        }
-      },
-      "documentation":"<p>Contains information about the anomalies.</p>"
-    },
-    "AnomalyObject":{
-      "type":"structure",
-      "members":{
-        "ProfileType":{
-          "shape":"ProfileType",
-          "documentation":"<p>The type of behavior of the profile.</p>",
-          "locationName":"profileType"
-        },
-        "ProfileSubtype":{
-          "shape":"ProfileSubtype",
-          "documentation":"<p>The frequency of the anomaly.</p>",
-          "locationName":"profileSubtype"
-        },
-        "Observations":{
-          "shape":"Observations",
-          "documentation":"<p>The recorded value.</p>",
-          "locationName":"observations"
-        }
-      },
-      "documentation":"<p>Contains information about the unusual anomalies.</p>"
-    },
-    "AnomalyProfileFeatureObjects":{
-      "type":"list",
-      "member":{"shape":"AnomalyObject"}
-    },
-    "AnomalyProfileFeatures":{
-      "type":"map",
-      "key":{"shape":"String"},
-      "value":{"shape":"AnomalyProfileFeatureObjects"}
-    },
-    "AnomalyProfiles":{
-      "type":"map",
-      "key":{"shape":"String"},
-      "value":{"shape":"AnomalyProfileFeatures"}
-    },
-    "AnomalyUnusual":{
-      "type":"structure",
-      "members":{
-        "Behavior":{
-          "shape":"Behavior",
-          "documentation":"<p>The behavior of the anomalous activity that caused GuardDuty to generate the finding.</p>",
-          "locationName":"behavior"
-        }
-      },
-      "documentation":"<p>Contains information about the behavior of the anomaly that is new to GuardDuty.</p>"
-    },
-    "AnomalyUnusualBehaviorFeature":{
-      "type":"map",
-      "key":{"shape":"String"},
-      "value":{"shape":"AnomalyObject"}
     },
     "ArchiveFindingsRequest":{
       "type":"structure",
@@ -1572,11 +1465,6 @@
       "documentation":"<p>A bad request exception object.</p>",
       "error":{"httpStatusCode":400},
       "exception":true
-    },
-    "Behavior":{
-      "type":"map",
-      "key":{"shape":"String"},
-      "value":{"shape":"AnomalyUnusualBehaviorFeature"}
     },
     "BlockPublicAccess":{
       "type":"structure",
@@ -1801,22 +1689,6 @@
       },
       "documentation":"<p>Details of a container.</p>"
     },
-    "ContainerInstanceDetails":{
-      "type":"structure",
-      "members":{
-        "CoveredContainerInstances":{
-          "shape":"Long",
-          "documentation":"<p>Represents the nodes in the Amazon ECS cluster that has a <code>HEALTHY</code> coverage status.</p>",
-          "locationName":"coveredContainerInstances"
-        },
-        "CompatibleContainerInstances":{
-          "shape":"Long",
-          "documentation":"<p>Represents total number of nodes in the Amazon ECS cluster.</p>",
-          "locationName":"compatibleContainerInstances"
-        }
-      },
-      "documentation":"<p>Contains information about the Amazon EC2 instance that is running the Amazon ECS container.</p>"
-    },
     "Containers":{
       "type":"list",
       "member":{"shape":"Container"}
@@ -1851,58 +1723,6 @@
         }
       },
       "documentation":"<p>Contains information about the country where the remote IP address is located.</p>"
-    },
-    "CoverageEc2InstanceDetails":{
-      "type":"structure",
-      "members":{
-        "InstanceId":{
-          "shape":"String",
-          "documentation":"<p>The Amazon EC2 instance ID.</p>",
-          "locationName":"instanceId"
-        },
-        "InstanceType":{
-          "shape":"String",
-          "documentation":"<p>The instance type of the Amazon EC2 instance.</p>",
-          "locationName":"instanceType"
-        },
-        "ClusterArn":{
-          "shape":"String",
-          "documentation":"<p>The cluster ARN of the Amazon ECS cluster running on the Amazon EC2 instance.</p>",
-          "locationName":"clusterArn"
-        },
-        "AgentDetails":{
-          "shape":"AgentDetails",
-          "documentation":"<p>Information about the installed security agent.</p>",
-          "locationName":"agentDetails"
-        },
-        "ManagementType":{
-          "shape":"ManagementType",
-          "documentation":"<p>Indicates how the GuardDuty security agent is managed for this resource.</p> <ul> <li> <p> <code>AUTO_MANAGED</code> indicates that GuardDuty deploys and manages updates for this resource.</p> </li> <li> <p> <code>MANUAL</code> indicates that you are responsible to deploy, update, and manage the GuardDuty security agent updates for this resource.</p> </li> </ul> <note> <p>The <code>DISABLED</code> status doesn't apply to Amazon EC2 instances and Amazon EKS clusters.</p> </note>",
-          "locationName":"managementType"
-        }
-      },
-      "documentation":"<p>Contains information about the Amazon EC2 instance runtime coverage details.</p>"
-    },
-    "CoverageEcsClusterDetails":{
-      "type":"structure",
-      "members":{
-        "ClusterName":{
-          "shape":"String",
-          "documentation":"<p>The name of the Amazon ECS cluster.</p>",
-          "locationName":"clusterName"
-        },
-        "FargateDetails":{
-          "shape":"FargateDetails",
-          "documentation":"<p>Information about the Fargate details associated with the Amazon ECS cluster.</p>",
-          "locationName":"fargateDetails"
-        },
-        "ContainerInstanceDetails":{
-          "shape":"ContainerInstanceDetails",
-          "documentation":"<p>Information about the Amazon ECS container running on Amazon EC2 instance.</p>",
-          "locationName":"containerInstanceDetails"
-        }
-      },
-      "documentation":"<p>Contains information about Amazon ECS cluster runtime coverage details.</p>"
     },
     "CoverageEksClusterDetails":{
       "type":"structure",
@@ -1987,11 +1807,7 @@
         "COVERAGE_STATUS",
         "ADDON_VERSION",
         "MANAGEMENT_TYPE",
-        "EKS_CLUSTER_NAME",
-        "ECS_CLUSTER_NAME",
-        "AGENT_VERSION",
-        "INSTANCE_ID",
-        "CLUSTER_ARN"
+        "EKS_CLUSTER_NAME"
       ]
     },
     "CoverageFilterCriterionList":{
@@ -2053,16 +1869,6 @@
           "shape":"ResourceType",
           "documentation":"<p>The type of Amazon Web Services resource.</p>",
           "locationName":"resourceType"
-        },
-        "EcsClusterDetails":{
-          "shape":"CoverageEcsClusterDetails",
-          "documentation":"<p>Information about the Amazon ECS cluster that is assessed for runtime coverage.</p>",
-          "locationName":"ecsClusterDetails"
-        },
-        "Ec2InstanceDetails":{
-          "shape":"CoverageEc2InstanceDetails",
-          "documentation":"<p>Information about the Amazon EC2 instance assessed for runtime coverage.</p>",
-          "locationName":"ec2InstanceDetails"
         }
       },
       "documentation":"<p>Information about the resource for each individual EKS cluster.</p>"
@@ -2096,9 +1902,7 @@
         "ISSUE",
         "ADDON_VERSION",
         "UPDATED_AT",
-        "EKS_CLUSTER_NAME",
-        "ECS_CLUSTER_NAME",
-        "INSTANCE_ID"
+        "EKS_CLUSTER_NAME"
       ]
     },
     "CoverageStatistics":{
@@ -2225,7 +2029,7 @@
         },
         "FindingCriteria":{
           "shape":"FindingCriteria",
-          "documentation":"<p>Represents the criteria to be used in the filter for querying findings.</p> <p>You can only use the following attributes to query findings:</p> <ul> <li> <p>accountId</p> </li> <li> <p>id</p> </li> <li> <p>region</p> </li> <li> <p>severity</p> <p>To filter on the basis of severity, the API and CLI use the following input list for the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_FindingCriteria.html\">FindingCriteria</a> condition:</p> <ul> <li> <p> <b>Low</b>: <code>[\"1\", \"2\", \"3\"]</code> </p> </li> <li> <p> <b>Medium</b>: <code>[\"4\", \"5\", \"6\"]</code> </p> </li> <li> <p> <b>High</b>: <code>[\"7\", \"8\", \"9\"]</code> </p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_findings.html#guardduty_findings-severity\">Severity levels for GuardDuty findings</a>.</p> </li> <li> <p>type</p> </li> <li> <p>updatedAt</p> <p>Type: ISO 8601 string format: YYYY-MM-DDTHH:MM:SS.SSSZ or YYYY-MM-DDTHH:MM:SSZ depending on whether the value contains milliseconds.</p> </li> <li> <p>resource.accessKeyDetails.accessKeyId</p> </li> <li> <p>resource.accessKeyDetails.principalId</p> </li> <li> <p>resource.accessKeyDetails.userName</p> </li> <li> <p>resource.accessKeyDetails.userType</p> </li> <li> <p>resource.instanceDetails.iamInstanceProfile.id</p> </li> <li> <p>resource.instanceDetails.imageId</p> </li> <li> <p>resource.instanceDetails.instanceId</p> </li> <li> <p>resource.instanceDetails.tags.key</p> </li> <li> <p>resource.instanceDetails.tags.value</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.ipv6Addresses</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.privateIpAddresses.privateIpAddress</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.publicDnsName</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.publicIp</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.securityGroups.groupId</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.securityGroups.groupName</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.subnetId</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.vpcId</p> </li> <li> <p>resource.instanceDetails.outpostArn</p> </li> <li> <p>resource.resourceType</p> </li> <li> <p>resource.s3BucketDetails.publicAccess.effectivePermissions</p> </li> <li> <p>resource.s3BucketDetails.name</p> </li> <li> <p>resource.s3BucketDetails.tags.key</p> </li> <li> <p>resource.s3BucketDetails.tags.value</p> </li> <li> <p>resource.s3BucketDetails.type</p> </li> <li> <p>service.action.actionType</p> </li> <li> <p>service.action.awsApiCallAction.api</p> </li> <li> <p>service.action.awsApiCallAction.callerType</p> </li> <li> <p>service.action.awsApiCallAction.errorCode</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.city.cityName</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.country.countryName</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.ipAddressV4</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.ipAddressV6</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.organization.asn</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.organization.asnOrg</p> </li> <li> <p>service.action.awsApiCallAction.serviceName</p> </li> <li> <p>service.action.dnsRequestAction.domain</p> </li> <li> <p>service.action.dnsRequestAction.domainWithSuffix</p> </li> <li> <p>service.action.networkConnectionAction.blocked</p> </li> <li> <p>service.action.networkConnectionAction.connectionDirection</p> </li> <li> <p>service.action.networkConnectionAction.localPortDetails.port</p> </li> <li> <p>service.action.networkConnectionAction.protocol</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.city.cityName</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.country.countryName</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.ipAddressV4</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.ipAddressV6</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.organization.asn</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.organization.asnOrg</p> </li> <li> <p>service.action.networkConnectionAction.remotePortDetails.port</p> </li> <li> <p>service.action.awsApiCallAction.remoteAccountDetails.affiliated</p> </li> <li> <p>service.action.kubernetesApiCallAction.remoteIpDetails.ipAddressV4</p> </li> <li> <p>service.action.kubernetesApiCallAction.remoteIpDetails.ipAddressV6</p> </li> <li> <p>service.action.kubernetesApiCallAction.namespace</p> </li> <li> <p>service.action.kubernetesApiCallAction.remoteIpDetails.organization.asn</p> </li> <li> <p>service.action.kubernetesApiCallAction.requestUri</p> </li> <li> <p>service.action.kubernetesApiCallAction.statusCode</p> </li> <li> <p>service.action.networkConnectionAction.localIpDetails.ipAddressV4</p> </li> <li> <p>service.action.networkConnectionAction.localIpDetails.ipAddressV6</p> </li> <li> <p>service.action.networkConnectionAction.protocol</p> </li> <li> <p>service.action.awsApiCallAction.serviceName</p> </li> <li> <p>service.action.awsApiCallAction.remoteAccountDetails.accountId</p> </li> <li> <p>service.additionalInfo.threatListName</p> </li> <li> <p>service.resourceRole</p> </li> <li> <p>resource.eksClusterDetails.name</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.name</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.namespace</p> </li> <li> <p>resource.kubernetesDetails.kubernetesUserDetails.username</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.containers.image</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.containers.imagePrefix</p> </li> <li> <p>service.ebsVolumeScanDetails.scanId</p> </li> <li> <p>service.ebsVolumeScanDetails.scanDetections.threatDetectedByName.threatNames.name</p> </li> <li> <p>service.ebsVolumeScanDetails.scanDetections.threatDetectedByName.threatNames.severity</p> </li> <li> <p>service.ebsVolumeScanDetails.scanDetections.threatDetectedByName.threatNames.filePaths.hash</p> </li> <li> <p>resource.ecsClusterDetails.name</p> </li> <li> <p>resource.ecsClusterDetails.taskDetails.containers.image</p> </li> <li> <p>resource.ecsClusterDetails.taskDetails.definitionArn</p> </li> <li> <p>resource.containerDetails.image</p> </li> <li> <p>resource.rdsDbInstanceDetails.dbInstanceIdentifier</p> </li> <li> <p>resource.rdsDbInstanceDetails.dbClusterIdentifier</p> </li> <li> <p>resource.rdsDbInstanceDetails.engine</p> </li> <li> <p>resource.rdsDbUserDetails.user</p> </li> <li> <p>resource.rdsDbInstanceDetails.tags.key</p> </li> <li> <p>resource.rdsDbInstanceDetails.tags.value</p> </li> <li> <p>service.runtimeDetails.process.executableSha256</p> </li> <li> <p>service.runtimeDetails.process.name</p> </li> <li> <p>service.runtimeDetails.process.name</p> </li> <li> <p>resource.lambdaDetails.functionName</p> </li> <li> <p>resource.lambdaDetails.functionArn</p> </li> <li> <p>resource.lambdaDetails.tags.key</p> </li> <li> <p>resource.lambdaDetails.tags.value</p> </li> </ul>",
+          "documentation":"<p>Represents the criteria to be used in the filter for querying findings.</p> <p>You can only use the following attributes to query findings:</p> <ul> <li> <p>accountId</p> </li> <li> <p>id</p> </li> <li> <p>region</p> </li> <li> <p>severity</p> <p>To filter on the basis of severity, the API and CLI use the following input list for the <a href=\"https://docs.aws.amazon.com/guardduty/latest/APIReference/API_FindingCriteria.html\">FindingCriteria</a> condition:</p> <ul> <li> <p> <b>Low</b>: <code>[\"1\", \"2\", \"3\"]</code> </p> </li> <li> <p> <b>Medium</b>: <code>[\"4\", \"5\", \"6\"]</code> </p> </li> <li> <p> <b>High</b>: <code>[\"7\", \"8\", \"9\"]</code> </p> </li> </ul> <p>For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/guardduty_findings.html#guardduty_findings-severity\">Severity levels for GuardDuty findings</a>.</p> </li> <li> <p>type</p> </li> <li> <p>updatedAt</p> <p>Type: ISO 8601 string format: YYYY-MM-DDTHH:MM:SS.SSSZ or YYYY-MM-DDTHH:MM:SSZ depending on whether the value contains milliseconds.</p> </li> <li> <p>resource.accessKeyDetails.accessKeyId</p> </li> <li> <p>resource.accessKeyDetails.principalId</p> </li> <li> <p>resource.accessKeyDetails.userName</p> </li> <li> <p>resource.accessKeyDetails.userType</p> </li> <li> <p>resource.instanceDetails.iamInstanceProfile.id</p> </li> <li> <p>resource.instanceDetails.imageId</p> </li> <li> <p>resource.instanceDetails.instanceId</p> </li> <li> <p>resource.instanceDetails.tags.key</p> </li> <li> <p>resource.instanceDetails.tags.value</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.ipv6Addresses</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.privateIpAddresses.privateIpAddress</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.publicDnsName</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.publicIp</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.securityGroups.groupId</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.securityGroups.groupName</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.subnetId</p> </li> <li> <p>resource.instanceDetails.networkInterfaces.vpcId</p> </li> <li> <p>resource.instanceDetails.outpostArn</p> </li> <li> <p>resource.resourceType</p> </li> <li> <p>resource.s3BucketDetails.publicAccess.effectivePermissions</p> </li> <li> <p>resource.s3BucketDetails.name</p> </li> <li> <p>resource.s3BucketDetails.tags.key</p> </li> <li> <p>resource.s3BucketDetails.tags.value</p> </li> <li> <p>resource.s3BucketDetails.type</p> </li> <li> <p>service.action.actionType</p> </li> <li> <p>service.action.awsApiCallAction.api</p> </li> <li> <p>service.action.awsApiCallAction.callerType</p> </li> <li> <p>service.action.awsApiCallAction.errorCode</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.city.cityName</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.country.countryName</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.ipAddressV4</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.organization.asn</p> </li> <li> <p>service.action.awsApiCallAction.remoteIpDetails.organization.asnOrg</p> </li> <li> <p>service.action.awsApiCallAction.serviceName</p> </li> <li> <p>service.action.dnsRequestAction.domain</p> </li> <li> <p>service.action.networkConnectionAction.blocked</p> </li> <li> <p>service.action.networkConnectionAction.connectionDirection</p> </li> <li> <p>service.action.networkConnectionAction.localPortDetails.port</p> </li> <li> <p>service.action.networkConnectionAction.protocol</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.city.cityName</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.country.countryName</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.ipAddressV4</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.organization.asn</p> </li> <li> <p>service.action.networkConnectionAction.remoteIpDetails.organization.asnOrg</p> </li> <li> <p>service.action.networkConnectionAction.remotePortDetails.port</p> </li> <li> <p>service.action.awsApiCallAction.remoteAccountDetails.affiliated</p> </li> <li> <p>service.action.kubernetesApiCallAction.remoteIpDetails.ipAddressV4</p> </li> <li> <p>service.action.kubernetesApiCallAction.requestUri</p> </li> <li> <p>service.action.networkConnectionAction.localIpDetails.ipAddressV4</p> </li> <li> <p>service.action.networkConnectionAction.protocol</p> </li> <li> <p>service.action.awsApiCallAction.serviceName</p> </li> <li> <p>service.action.awsApiCallAction.remoteAccountDetails.accountId</p> </li> <li> <p>service.additionalInfo.threatListName</p> </li> <li> <p>service.resourceRole</p> </li> <li> <p>resource.eksClusterDetails.name</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.name</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.namespace</p> </li> <li> <p>resource.kubernetesDetails.kubernetesUserDetails.username</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.containers.image</p> </li> <li> <p>resource.kubernetesDetails.kubernetesWorkloadDetails.containers.imagePrefix</p> </li> <li> <p>service.ebsVolumeScanDetails.scanId</p> </li> <li> <p>service.ebsVolumeScanDetails.scanDetections.threatDetectedByName.threatNames.name</p> </li> <li> <p>service.ebsVolumeScanDetails.scanDetections.threatDetectedByName.threatNames.severity</p> </li> <li> <p>service.ebsVolumeScanDetails.scanDetections.threatDetectedByName.threatNames.filePaths.hash</p> </li> <li> <p>resource.ecsClusterDetails.name</p> </li> <li> <p>resource.ecsClusterDetails.taskDetails.containers.image</p> </li> <li> <p>resource.ecsClusterDetails.taskDetails.definitionArn</p> </li> <li> <p>resource.containerDetails.image</p> </li> <li> <p>resource.rdsDbInstanceDetails.dbInstanceIdentifier</p> </li> <li> <p>resource.rdsDbInstanceDetails.dbClusterIdentifier</p> </li> <li> <p>resource.rdsDbInstanceDetails.engine</p> </li> <li> <p>resource.rdsDbUserDetails.user</p> </li> <li> <p>resource.rdsDbInstanceDetails.tags.key</p> </li> <li> <p>resource.rdsDbInstanceDetails.tags.value</p> </li> <li> <p>service.runtimeDetails.process.executableSha256</p> </li> <li> <p>service.runtimeDetails.process.name</p> </li> <li> <p>service.runtimeDetails.process.name</p> </li> <li> <p>resource.lambdaDetails.functionName</p> </li> <li> <p>resource.lambdaDetails.functionArn</p> </li> <li> <p>resource.lambdaDetails.tags.key</p> </li> <li> <p>resource.lambdaDetails.tags.value</p> </li> </ul>",
           "locationName":"findingCriteria"
         },
         "ClientToken":{
@@ -2950,7 +2754,7 @@
         },
         "AutoEnableOrganizationMembers":{
           "shape":"AutoEnableMembers",
-          "documentation":"<p>Indicates the auto-enablement configuration of GuardDuty or any of the corresponding protection plans for the member accounts in the organization.</p> <ul> <li> <p> <code>NEW</code>: Indicates that when a new account joins the organization, they will have GuardDuty or any of the corresponding protection plans enabled automatically. </p> </li> <li> <p> <code>ALL</code>: Indicates that all accounts in the organization have GuardDuty and any of the corresponding protection plans enabled automatically. This includes <code>NEW</code> accounts that join the organization and accounts that may have been suspended or removed from the organization in GuardDuty.</p> </li> <li> <p> <code>NONE</code>: Indicates that GuardDuty or any of the corresponding protection plans will not be automatically enabled for any account in the organization. The administrator must manage GuardDuty for each account in the organization individually.</p> <p>When you update the auto-enable setting from <code>ALL</code> or <code>NEW</code> to <code>NONE</code>, this action doesn't disable the corresponding option for your existing accounts. This configuration will apply to the new accounts that join the organization. After you update the auto-enable settings, no new account will have the corresponding option as enabled.</p> </li> </ul>",
+          "documentation":"<p>Indicates the auto-enablement configuration of GuardDuty for the member accounts in the organization.</p> <ul> <li> <p> <code>NEW</code>: Indicates that when a new account joins the organization, they will have GuardDuty enabled automatically. </p> </li> <li> <p> <code>ALL</code>: Indicates that all accounts in the organization have GuardDuty enabled automatically. This includes <code>NEW</code> accounts that join the organization and accounts that may have been suspended or removed from the organization in GuardDuty.</p> </li> <li> <p> <code>NONE</code>: Indicates that GuardDuty will not be automatically enabled for any account in the organization. The administrator must manage GuardDuty for each account in the organization individually.</p> </li> </ul>",
           "locationName":"autoEnableOrganizationMembers"
         }
       }
@@ -3065,17 +2869,6 @@
       "type":"list",
       "member":{"shape":"Destination"}
     },
-    "Detection":{
-      "type":"structure",
-      "members":{
-        "Anomaly":{
-          "shape":"Anomaly",
-          "documentation":"<p>The details about the anomalous activity that caused GuardDuty to generate the finding.</p>",
-          "locationName":"anomaly"
-        }
-      },
-      "documentation":"<p>Contains information about the detected behavior.</p>"
-    },
     "DetectorAdditionalConfiguration":{
       "type":"structure",
       "members":{
@@ -3129,8 +2922,7 @@
         "EBS_MALWARE_PROTECTION",
         "RDS_LOGIN_EVENTS",
         "EKS_RUNTIME_MONITORING",
-        "LAMBDA_NETWORK_LOGS",
-        "RUNTIME_MONITORING"
+        "LAMBDA_NETWORK_LOGS"
       ]
     },
     "DetectorFeatureConfiguration":{
@@ -3152,7 +2944,7 @@
           "locationName":"additionalConfiguration"
         }
       },
-      "documentation":"<p>Contains information about a GuardDuty feature.</p> <p>Specifying both EKS Runtime Monitoring (<code>EKS_RUNTIME_MONITORING</code>) and Runtime Monitoring (<code>RUNTIME_MONITORING</code>) will cause an error. You can add only one of these two features because Runtime Monitoring already includes the threat detection for Amazon EKS resources. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html\">Runtime Monitoring</a>.</p>"
+      "documentation":"<p>Contains information about a GuardDuty feature.</p>"
     },
     "DetectorFeatureConfigurationResult":{
       "type":"structure",
@@ -3178,7 +2970,7 @@
           "locationName":"additionalConfiguration"
         }
       },
-      "documentation":"<p>Contains information about a GuardDuty feature.</p> <p>Specifying both EKS Runtime Monitoring (<code>EKS_RUNTIME_MONITORING</code>) and Runtime Monitoring (<code>RUNTIME_MONITORING</code>) will cause an error. You can add only one of these two features because Runtime Monitoring already includes the threat detection for Amazon EKS resources. For more information, see <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/runtime-monitoring.html\">Runtime Monitoring</a>.</p>"
+      "documentation":"<p>Contains information about a GuardDuty feature.</p>"
     },
     "DetectorFeatureConfigurations":{
       "type":"list",
@@ -3199,8 +2991,7 @@
         "EBS_MALWARE_PROTECTION",
         "RDS_LOGIN_EVENTS",
         "EKS_RUNTIME_MONITORING",
-        "LAMBDA_NETWORK_LOGS",
-        "RUNTIME_MONITORING"
+        "LAMBDA_NETWORK_LOGS"
       ]
     },
     "DetectorId":{
@@ -3328,7 +3119,7 @@
         },
         "DomainWithSuffix":{
           "shape":"String",
-          "documentation":"<p>The second and top level domain involved in the activity that potentially prompted GuardDuty to generate this finding. For a list of top-level and second-level domains, see <a href=\"https://publicsuffix.org/\">public suffix list</a>.</p>",
+          "documentation":"<p>The second and top level domain involved in the activity that prompted GuardDuty to generate this finding.</p>",
           "locationName":"domainWithSuffix"
         }
       },
@@ -3567,8 +3358,7 @@
     "Email":{
       "type":"string",
       "max":64,
-      "min":1,
-      "sensitive":true
+      "min":1
     },
     "EnableOrganizationAdminAccountRequest":{
       "type":"structure",
@@ -3605,29 +3395,9 @@
       },
       "documentation":"<p>Contains information about the reason that the finding was generated.</p>"
     },
-    "FargateDetails":{
-      "type":"structure",
-      "members":{
-        "Issues":{
-          "shape":"Issues",
-          "documentation":"<p>Runtime coverage issues identified for the resource running on Amazon Web Services Fargate.</p>",
-          "locationName":"issues"
-        },
-        "ManagementType":{
-          "shape":"ManagementType",
-          "documentation":"<p>Indicates how the GuardDuty security agent is managed for this resource.</p> <ul> <li> <p> <code>AUTO_MANAGED</code> indicates that GuardDuty deploys and manages updates for this resource.</p> </li> <li> <p> <code>DISABLED</code> indicates that the deployment of the GuardDuty security agent is disabled for this resource.</p> </li> </ul> <note> <p>The <code>MANUAL</code> status doesn't apply to the Amazon Web Services Fargate (Amazon ECS only) woprkloads.</p> </note>",
-          "locationName":"managementType"
-        }
-      },
-      "documentation":"<p>Contains information about Amazon Web Services Fargate details associated with an Amazon ECS cluster.</p>"
-    },
     "FeatureAdditionalConfiguration":{
       "type":"string",
-      "enum":[
-        "EKS_ADDON_MANAGEMENT",
-        "ECS_FARGATE_AGENT_MANAGEMENT",
-        "EC2_AGENT_MANAGEMENT"
-      ]
+      "enum":["EKS_ADDON_MANAGEMENT"]
     },
     "FeatureStatus":{
       "type":"string",
@@ -3937,9 +3707,7 @@
         "EBS_MALWARE_PROTECTION",
         "RDS_LOGIN_EVENTS",
         "EKS_RUNTIME_MONITORING",
-        "LAMBDA_NETWORK_LOGS",
-        "FARGATE_RUNTIME_MONITORING",
-        "EC2_RUNTIME_MONITORING"
+        "LAMBDA_NETWORK_LOGS"
       ]
     },
     "GeoLocation":{
@@ -4416,16 +4184,6 @@
         }
       }
     },
-    "GetOrganizationStatisticsResponse":{
-      "type":"structure",
-      "members":{
-        "OrganizationDetails":{
-          "shape":"OrganizationDetails",
-          "documentation":"<p>Information about the statistics report for your organization.</p>",
-          "locationName":"organizationDetails"
-        }
-      }
-    },
     "GetRemainingFreeTrialDaysRequest":{
       "type":"structure",
       "required":["DetectorId"],
@@ -4626,22 +4384,6 @@
         }
       },
       "documentation":"<p>Contains information about the EC2 instance profile.</p>"
-    },
-    "ImpersonatedUser":{
-      "type":"structure",
-      "members":{
-        "Username":{
-          "shape":"String",
-          "documentation":"<p>Information about the <code>username</code> that was being impersonated.</p>",
-          "locationName":"username"
-        },
-        "Groups":{
-          "shape":"Groups",
-          "documentation":"<p>The <code>group</code> to which the user name belongs.</p>",
-          "locationName":"groups"
-        }
-      },
-      "documentation":"<p>Contains information about the impersonated user.</p>"
     },
     "InstanceArn":{
       "type":"string",
@@ -4852,12 +4594,6 @@
       "type":"list",
       "member":{"shape":"String"}
     },
-    "Issues":{
-      "type":"list",
-      "member":{"shape":"String"},
-      "max":50,
-      "min":0
-    },
     "KubernetesApiCallAction":{
       "type":"structure",
       "members":{
@@ -4894,26 +4630,6 @@
           "shape":"String",
           "documentation":"<p>Parameters related to the Kubernetes API call action.</p>",
           "locationName":"parameters"
-        },
-        "Resource":{
-          "shape":"String",
-          "documentation":"<p>The resource component in the Kubernetes API call action.</p>",
-          "locationName":"resource"
-        },
-        "Subresource":{
-          "shape":"String",
-          "documentation":"<p>The name of the sub-resource in the Kubernetes API call action.</p>",
-          "locationName":"subresource"
-        },
-        "Namespace":{
-          "shape":"String",
-          "documentation":"<p>The name of the namespace where the Kubernetes API call action takes place.</p>",
-          "locationName":"namespace"
-        },
-        "ResourceName":{
-          "shape":"String",
-          "documentation":"<p>The name of the resource in the Kubernetes API call action.</p>",
-          "locationName":"resourceName"
         }
       },
       "documentation":"<p>Information about the Kubernetes API call action described in this finding.</p>"
@@ -4993,84 +4709,6 @@
       },
       "documentation":"<p>Details about Kubernetes resources such as a Kubernetes user or workload resource involved in a Kubernetes finding.</p>"
     },
-    "KubernetesPermissionCheckedDetails":{
-      "type":"structure",
-      "members":{
-        "Verb":{
-          "shape":"String",
-          "documentation":"<p>The verb component of the Kubernetes API call. For example, when you check whether or not you have the permission to call the <code>CreatePod</code> API, the verb component will be <code>Create</code>.</p>",
-          "locationName":"verb"
-        },
-        "Resource":{
-          "shape":"String",
-          "documentation":"<p>The Kubernetes resource with which your Kubernetes API call will interact.</p>",
-          "locationName":"resource"
-        },
-        "Namespace":{
-          "shape":"String",
-          "documentation":"<p>The namespace where the Kubernetes API action will take place.</p>",
-          "locationName":"namespace"
-        },
-        "Allowed":{
-          "shape":"Boolean",
-          "documentation":"<p>Information whether the user has the permission to call the Kubernetes API.</p>",
-          "locationName":"allowed"
-        }
-      },
-      "documentation":"<p>Information about the Kubernetes API for which you check if you have permission to call.</p>"
-    },
-    "KubernetesRoleBindingDetails":{
-      "type":"structure",
-      "members":{
-        "Kind":{
-          "shape":"String",
-          "documentation":"<p>The kind of the role. For role binding, this value will be <code>RoleBinding</code>.</p>",
-          "locationName":"kind"
-        },
-        "Name":{
-          "shape":"String",
-          "documentation":"<p>The name of the <code>RoleBinding</code>.</p>",
-          "locationName":"name"
-        },
-        "Uid":{
-          "shape":"String",
-          "documentation":"<p>The unique identifier of the role binding.</p>",
-          "locationName":"uid"
-        },
-        "RoleRefName":{
-          "shape":"String",
-          "documentation":"<p>The name of the role being referenced. This must match the name of the <code>Role</code> or <code>ClusterRole</code> that you want to bind to.</p>",
-          "locationName":"roleRefName"
-        },
-        "RoleRefKind":{
-          "shape":"String",
-          "documentation":"<p>The type of the role being referenced. This could be either <code>Role</code> or <code>ClusterRole</code>.</p>",
-          "locationName":"roleRefKind"
-        }
-      },
-      "documentation":"<p>Contains information about the role binding that grants the permission defined in a Kubernetes role.</p>"
-    },
-    "KubernetesRoleDetails":{
-      "type":"structure",
-      "members":{
-        "Kind":{
-          "shape":"String",
-          "documentation":"<p>The kind of role. For this API, the value of <code>kind</code> will be <code>Role</code>.</p>",
-          "locationName":"kind"
-        },
-        "Name":{
-          "shape":"String",
-          "documentation":"<p>The name of the Kubernetes role.</p>",
-          "locationName":"name"
-        },
-        "Uid":{
-          "shape":"String",
-          "documentation":"<p>The unique identifier of the Kubernetes role name.</p>",
-          "locationName":"uid"
-        }
-      },
-      "documentation":"<p>Information about the Kubernetes role name and role type.</p>"
-    },
     "KubernetesUserDetails":{
       "type":"structure",
       "members":{
@@ -5093,11 +4731,6 @@
           "shape":"SessionNameList",
           "documentation":"<p>Entity that assumes the IAM role when Kubernetes RBAC permissions are assigned to that role.</p>",
           "locationName":"sessionName"
-        },
-        "ImpersonatedUser":{
-          "shape":"ImpersonatedUser",
-          "documentation":"<p>Information about the impersonated user.</p>",
-          "locationName":"impersonatedUser"
         }
       },
       "documentation":"<p>Details about the Kubernetes user involved in a Kubernetes finding.</p>"
@@ -5139,21 +4772,6 @@
           "shape":"Volumes",
           "documentation":"<p>Volumes used by the Kubernetes workload.</p>",
           "locationName":"volumes"
-        },
-        "ServiceAccountName":{
-          "shape":"String",
-          "documentation":"<p>The service account name that is associated with a Kubernetes workload.</p>",
-          "locationName":"serviceAccountName"
-        },
-        "HostIPC":{
-          "shape":"Boolean",
-          "documentation":"<p>Whether the host IPC flag is enabled for the pods in the workload.</p>",
-          "locationName":"hostIPC"
-        },
-        "HostPID":{
-          "shape":"Boolean",
-          "documentation":"<p>Whether the host PID flag is enabled for the pods in the workload. </p>",
-          "locationName":"hostPID"
         }
       },
       "documentation":"<p>Details about the Kubernetes workload involved in a Kubernetes finding.</p>"
@@ -5540,7 +5158,7 @@
       "members":{
         "Members":{
           "shape":"Members",
-          "documentation":"<p>A list of members.</p> <note> <p>The values for <code>email</code> and <code>invitedAt</code> are available only if the member accounts are added by invitation.</p> </note>",
+          "documentation":"<p>A list of members.</p>",
           "locationName":"members"
         },
         "NextToken":{
@@ -5688,14 +5306,9 @@
       "type":"structure",
       "members":{
         "IpAddressV4":{
-          "shape":"SensitiveString",
+          "shape":"String",
           "documentation":"<p>The IPv4 local address of the connection.</p>",
           "locationName":"ipAddressV4"
-        },
-        "IpAddressV6":{
-          "shape":"SensitiveString",
-          "documentation":"<p>The IPv6 local address of the connection.</p>",
-          "locationName":"ipAddressV6"
         }
       },
       "documentation":"<p>Contains information about the local IP address of the connection.</p>"
@@ -5795,8 +5408,7 @@
       "type":"string",
       "enum":[
         "AUTO_MANAGED",
-        "MANUAL",
-        "DISABLED"
+        "MANUAL"
       ]
     },
     "MapEquals":{
@@ -6096,7 +5708,7 @@
           "locationName":"privateDnsName"
         },
         "PrivateIpAddress":{
-          "shape":"SensitiveString",
+          "shape":"String",
           "documentation":"<p>The private IP address of the EC2 instance.</p>",
           "locationName":"privateIpAddress"
         },
@@ -6146,21 +5758,6 @@
       "type":"list",
       "member":{"shape":"String"}
     },
-    "ObservationTexts":{
-      "type":"list",
-      "member":{"shape":"String"}
-    },
-    "Observations":{
-      "type":"structure",
-      "members":{
-        "Text":{
-          "shape":"ObservationTexts",
-          "documentation":"<p>The text that was unusual.</p>",
-          "locationName":"text"
-        }
-      },
-      "documentation":"<p>Contains information about the observed behavior.</p>"
-    },
     "OrderBy":{
       "type":"string",
       "enum":[
@@ -6176,17 +5773,12 @@
         "EBS_MALWARE_PROTECTION",
         "RDS_LOGIN_EVENTS",
         "EKS_RUNTIME_MONITORING",
-        "LAMBDA_NETWORK_LOGS",
-        "RUNTIME_MONITORING"
+        "LAMBDA_NETWORK_LOGS"
       ]
     },
     "OrgFeatureAdditionalConfiguration":{
       "type":"string",
-      "enum":[
-        "EKS_ADDON_MANAGEMENT",
-        "ECS_FARGATE_AGENT_MANAGEMENT",
-        "EC2_AGENT_MANAGEMENT"
-      ]
+      "enum":["EKS_ADDON_MANAGEMENT"]
     },
     "OrgFeatureStatus":{
       "type":"string",
@@ -6305,22 +5897,6 @@
       },
       "documentation":"<p>An object that contains information on which data sources are automatically enabled for new members within the organization.</p>"
     },
-    "OrganizationDetails":{
-      "type":"structure",
-      "members":{
-        "UpdatedAt":{
-          "shape":"Timestamp",
-          "documentation":"<p>The timestamp at which the organization statistics was last updated. This is in UTC format.</p>",
-          "locationName":"updatedAt"
-        },
-        "OrganizationStatistics":{
-          "shape":"OrganizationStatistics",
-          "documentation":"<p>Information about the GuardDuty coverage statistics for members in your Amazon Web Services organization.</p>",
-          "locationName":"organizationStatistics"
-        }
-      },
-      "documentation":"<p>Information about GuardDuty coverage statistics for members in your Amazon Web Services organization.</p>"
-    },
     "OrganizationEbsVolumes":{
       "type":"structure",
       "members":{
@@ -6384,51 +5960,6 @@
         }
       },
       "documentation":"<p>A list of features which will be configured for the organization.</p>"
-    },
-    "OrganizationFeatureStatistics":{
-      "type":"structure",
-      "members":{
-        "Name":{
-          "shape":"OrgFeature",
-          "documentation":"<p>Name of the feature.</p>",
-          "locationName":"name"
-        },
-        "EnabledAccountsCount":{
-          "shape":"Integer",
-          "documentation":"<p>Total number of accounts that have enabled a specific feature.</p>",
-          "locationName":"enabledAccountsCount"
-        },
-        "AdditionalConfiguration":{
-          "shape":"OrganizationFeatureStatisticsAdditionalConfigurations",
-          "documentation":"<p>Name of the additional configuration.</p>",
-          "locationName":"additionalConfiguration"
-        }
-      },
-      "documentation":"<p>Information about the number of accounts that have enabled a specific feature.</p>"
-    },
-    "OrganizationFeatureStatisticsAdditionalConfiguration":{
-      "type":"structure",
-      "members":{
-        "Name":{
-          "shape":"OrgFeatureAdditionalConfiguration",
-          "documentation":"<p>Name of the additional configuration within a feature.</p>",
-          "locationName":"name"
-        },
-        "EnabledAccountsCount":{
-          "shape":"Integer",
-          "documentation":"<p>Total number of accounts that have enabled the additional configuration.</p>",
-          "locationName":"enabledAccountsCount"
-        }
-      },
-      "documentation":"<p>Information about the coverage statistic for the additional configuration of the feature.</p>"
-    },
-    "OrganizationFeatureStatisticsAdditionalConfigurations":{
-      "type":"list",
-      "member":{"shape":"OrganizationFeatureStatisticsAdditionalConfiguration"}
-    },
-    "OrganizationFeatureStatisticsResults":{
-      "type":"list",
-      "member":{"shape":"OrganizationFeatureStatistics"}
     },
     "OrganizationFeaturesConfigurations":{
       "type":"list",
@@ -6554,37 +6085,6 @@
       },
       "documentation":"<p>An object that contains information on the status of scanning EC2 instances with findings for an organization.</p>"
     },
-    "OrganizationStatistics":{
-      "type":"structure",
-      "members":{
-        "TotalAccountsCount":{
-          "shape":"Integer",
-          "documentation":"<p>Total number of accounts in your Amazon Web Services organization.</p>",
-          "locationName":"totalAccountsCount"
-        },
-        "MemberAccountsCount":{
-          "shape":"Integer",
-          "documentation":"<p>Total number of accounts in your Amazon Web Services organization that are associated with GuardDuty.</p>",
-          "locationName":"memberAccountsCount"
-        },
-        "ActiveAccountsCount":{
-          "shape":"Integer",
-          "documentation":"<p>Total number of active accounts in your Amazon Web Services organization that are associated with GuardDuty.</p>",
-          "locationName":"activeAccountsCount"
-        },
-        "EnabledAccountsCount":{
-          "shape":"Integer",
-          "documentation":"<p>Total number of accounts that have enabled GuardDuty.</p>",
-          "locationName":"enabledAccountsCount"
-        },
-        "CountByFeature":{
-          "shape":"OrganizationFeatureStatisticsResults",
-          "documentation":"<p>Retrieves the coverage statistics for each feature.</p>",
-          "locationName":"countByFeature"
-        }
-      },
-      "documentation":"<p>Information about the coverage statistics of the features for the entire Amazon Web Services organization.</p> <p>When you create a new Amazon Web Services organization, it might take up to 24 hours to generate the statistics summary for this organization.</p>"
-    },
     "Owner":{
       "type":"structure",
       "members":{
@@ -6666,7 +6166,7 @@
           "locationName":"privateDnsName"
         },
         "PrivateIpAddress":{
-          "shape":"SensitiveString",
+          "shape":"String",
           "documentation":"<p>The private IP address of the EC2 instance.</p>",
           "locationName":"privateIpAddress"
         }
@@ -6767,19 +6267,6 @@
     "ProductCodes":{
       "type":"list",
       "member":{"shape":"ProductCode"}
-    },
-    "ProfileSubtype":{
-      "type":"string",
-      "enum":[
-        "FREQUENT",
-        "INFREQUENT",
-        "UNSEEN",
-        "RARE"
-      ]
-    },
-    "ProfileType":{
-      "type":"string",
-      "enum":["FREQUENCY"]
     },
     "PublicAccess":{
       "type":"structure",
@@ -6924,14 +6411,9 @@
           "locationName":"geoLocation"
         },
         "IpAddressV4":{
-          "shape":"SensitiveString",
+          "shape":"String",
           "documentation":"<p>The IPv4 remote address of the connection.</p>",
           "locationName":"ipAddressV4"
-        },
-        "IpAddressV6":{
-          "shape":"SensitiveString",
-          "documentation":"<p>The IPv6 remote address of the connection.</p>",
-          "locationName":"ipAddressV6"
         },
         "Organization":{
           "shape":"Organization",
@@ -7043,11 +6525,7 @@
     },
     "ResourceType":{
       "type":"string",
-      "enum":[
-        "EKS",
-        "ECS",
-        "EC2"
-      ]
+      "enum":["EKS"]
     },
     "RuntimeContext":{
       "type":"structure",
@@ -7151,31 +6629,6 @@
           "shape":"MemoryRegionsList",
           "documentation":"<p>Specifies the Region of a process's address space such as stack and heap.</p>",
           "locationName":"memoryRegions"
-        },
-        "ToolName":{
-          "shape":"String",
-          "documentation":"<p>Name of the potentially suspicious tool.</p>",
-          "locationName":"toolName"
-        },
-        "ToolCategory":{
-          "shape":"String",
-          "documentation":"<p>Category that the tool belongs to. Some of the examples are Backdoor Tool, Pentest Tool, Network Scanner, and Network Sniffer.</p>",
-          "locationName":"toolCategory"
-        },
-        "ServiceName":{
-          "shape":"String",
-          "documentation":"<p>Name of the security service that has been potentially disabled.</p>",
-          "locationName":"serviceName"
-        },
-        "CommandLineExample":{
-          "shape":"String",
-          "documentation":"<p>Example of the command line involved in the suspicious activity.</p>",
-          "locationName":"commandLineExample"
-        },
-        "ThreatFilePath":{
-          "shape":"String",
-          "documentation":"<p>The suspicious file path for which the threat intelligence details were found.</p>",
-          "locationName":"threatFilePath"
         }
       },
       "documentation":"<p>Additional information about the suspicious activity.</p>"
@@ -7577,11 +7030,6 @@
           "shape":"Boolean",
           "documentation":"<p>Whether the container is privileged.</p>",
           "locationName":"privileged"
-        },
-        "AllowPrivilegeEscalation":{
-          "shape":"Boolean",
-          "documentation":"<p>Whether or not a container or a Kubernetes pod is allowed to gain more privileges than its parent process.</p>",
-          "locationName":"allowPrivilegeEscalation"
         }
       },
       "documentation":"<p>Container security context.</p>"
@@ -7605,10 +7053,6 @@
     "SecurityGroups":{
       "type":"list",
       "member":{"shape":"SecurityGroup"}
-    },
-    "SensitiveString":{
-      "type":"string",
-      "sensitive":true
     },
     "Service":{
       "type":"structure",
@@ -7682,11 +7126,6 @@
           "shape":"RuntimeDetails",
           "documentation":"<p>Information about the process and any required context values for a specific finding</p>",
           "locationName":"runtimeDetails"
-        },
-        "Detection":{
-          "shape":"Detection",
-          "documentation":"<p>Contains information about the detected unusual behavior.</p>",
-          "locationName":"detection"
         }
       },
       "documentation":"<p>Contains additional information about the generated finding.</p>"
@@ -7962,11 +7401,6 @@
           "shape":"ThreatNames",
           "documentation":"<p>A list of names of the threats in the threat intelligence list that triggered the finding.</p>",
           "locationName":"threatNames"
-        },
-        "ThreatFileSha256":{
-          "shape":"String",
-          "documentation":"<p>SHA256 of the file that generated the finding.</p>",
-          "locationName":"threatFileSha256"
         }
       },
       "documentation":"<p>An instance of a threat intelligence detail that constitutes evidence for the finding.</p>"
@@ -8379,7 +7813,7 @@
         },
         "AutoEnableOrganizationMembers":{
           "shape":"AutoEnableMembers",
-          "documentation":"<p>Indicates the auto-enablement configuration of GuardDuty for the member accounts in the organization. You must provide a value for either <code>autoEnableOrganizationMembers</code> or <code>autoEnable</code>. </p> <p>Use one of the following configuration values for <code>autoEnableOrganizationMembers</code>:</p> <ul> <li> <p> <code>NEW</code>: Indicates that when a new account joins the organization, they will have GuardDuty enabled automatically. </p> </li> <li> <p> <code>ALL</code>: Indicates that all accounts in the organization have GuardDuty enabled automatically. This includes <code>NEW</code> accounts that join the organization and accounts that may have been suspended or removed from the organization in GuardDuty.</p> <p>It may take up to 24 hours to update the configuration for all the member accounts.</p> </li> <li> <p> <code>NONE</code>: Indicates that GuardDuty will not be automatically enabled for any account in the organization. The administrator must manage GuardDuty for each account in the organization individually.</p> <p>When you update the auto-enable setting from <code>ALL</code> or <code>NEW</code> to <code>NONE</code>, this action doesn't disable the corresponding option for your existing accounts. This configuration will apply to the new accounts that join the organization. After you update the auto-enable settings, no new account will have the corresponding option as enabled.</p> </li> </ul>",
+          "documentation":"<p>Indicates the auto-enablement configuration of GuardDuty for the member accounts in the organization. You must provide a value for either <code>autoEnableOrganizationMembers</code> or <code>autoEnable</code>. </p> <p>Use one of the following configuration values for <code>autoEnableOrganizationMembers</code>:</p> <ul> <li> <p> <code>NEW</code>: Indicates that when a new account joins the organization, they will have GuardDuty enabled automatically. </p> </li> <li> <p> <code>ALL</code>: Indicates that all accounts in the organization have GuardDuty enabled automatically. This includes <code>NEW</code> accounts that join the organization and accounts that may have been suspended or removed from the organization in GuardDuty.</p> <p>It may take up to 24 hours to update the configuration for all the member accounts.</p> </li> <li> <p> <code>NONE</code>: Indicates that GuardDuty will not be automatically enabled for any account in the organization. The administrator must manage GuardDuty for each account in the organization individually.</p> </li> </ul>",
           "locationName":"autoEnableOrganizationMembers"
         }
       }
@@ -8540,11 +7974,7 @@
         "EBS_MALWARE_PROTECTION",
         "RDS_LOGIN_EVENTS",
         "LAMBDA_NETWORK_LOGS",
-        "EKS_RUNTIME_MONITORING",
-        "FARGATE_RUNTIME_MONITORING",
-        "EC2_RUNTIME_MONITORING",
-        "RDS_DBI_PROTECTION_PROVISIONED",
-        "RDS_DBI_PROTECTION_SERVERLESS"
+        "EKS_RUNTIME_MONITORING"
       ]
     },
     "UsageFeatureList":{
@@ -8597,8 +8027,7 @@
         "SUM_BY_DATA_SOURCE",
         "SUM_BY_RESOURCE",
         "TOP_RESOURCES",
-        "SUM_BY_FEATURES",
-        "TOP_ACCOUNTS_BY_FEATURE"
+        "SUM_BY_FEATURES"
       ]
     },
     "UsageStatistics":{
@@ -8608,11 +8037,6 @@
           "shape":"UsageAccountResultList",
           "documentation":"<p>The usage statistic sum organized by account ID.</p>",
           "locationName":"sumByAccount"
-        },
-        "TopAccountsByFeature":{
-          "shape":"UsageTopAccountsResultList",
-          "documentation":"<p>Lists the top 50 accounts by feature that have generated the most GuardDuty usage, in the order from most to least expensive.</p> <p>Currently, this doesn't support <code>RDS_LOGIN_EVENTS</code>.</p>",
-          "locationName":"topAccountsByFeature"
         },
         "SumByDataSource":{
           "shape":"UsageDataSourceResultList",
@@ -8636,45 +8060,6 @@
         }
       },
       "documentation":"<p>Contains the result of GuardDuty usage. If a UsageStatisticType is provided the result for other types will be null. </p>"
-    },
-    "UsageTopAccountResult":{
-      "type":"structure",
-      "members":{
-        "AccountId":{
-          "shape":"AccountId",
-          "documentation":"<p>The unique account ID.</p>",
-          "locationName":"accountId"
-        },
-        "Total":{
-          "shape":"Total",
-          "locationName":"total"
-        }
-      },
-      "documentation":"<p>Contains information on the total of usage based on the topmost 50 account IDs.</p>"
-    },
-    "UsageTopAccountsByFeatureList":{
-      "type":"list",
-      "member":{"shape":"UsageTopAccountResult"}
-    },
-    "UsageTopAccountsResult":{
-      "type":"structure",
-      "members":{
-        "Feature":{
-          "shape":"UsageFeature",
-          "documentation":"<p>Features by which you can generate the usage statistics.</p> <p> <code>RDS_LOGIN_EVENTS</code> is currently not supported with <code>topAccountsByFeature</code>.</p>",
-          "locationName":"feature"
-        },
-        "Accounts":{
-          "shape":"UsageTopAccountsByFeatureList",
-          "documentation":"<p>The accounts that contributed to the total usage cost.</p>",
-          "locationName":"accounts"
-        }
-      },
-      "documentation":"<p>Information about the usage statistics, calculated by top accounts by feature.</p>"
-    },
-    "UsageTopAccountsResultList":{
-      "type":"list",
-      "member":{"shape":"UsageTopAccountsResult"}
     },
     "Volume":{
       "type":"structure",
@@ -8783,5 +8168,5 @@
       "documentation":"<p>Amazon Virtual Private Cloud configuration details associated with your Lambda function.</p>"
     }
   },
-  "documentation":"<p>Amazon GuardDuty is a continuous security monitoring service that analyzes and processes the following foundational data sources - VPC flow logs, Amazon Web Services CloudTrail management event logs, CloudTrail S3 data event logs, EKS audit logs, DNS logs, Amazon EBS volume data, runtime activity belonging to container workloads, such as Amazon EKS, Amazon ECS (including Amazon Web Services Fargate), and Amazon EC2 instances. It uses threat intelligence feeds, such as lists of malicious IPs and domains, and machine learning to identify unexpected, potentially unauthorized, and malicious activity within your Amazon Web Services environment. This can include issues like escalations of privileges, uses of exposed credentials, or communication with malicious IPs, domains, or presence of malware on your Amazon EC2 instances and container workloads. For example, GuardDuty can detect compromised EC2 instances and container workloads serving malware, or mining bitcoin. </p> <p>GuardDuty also monitors Amazon Web Services account access behavior for signs of compromise, such as unauthorized infrastructure deployments like EC2 instances deployed in a Region that has never been used, or unusual API calls like a password policy change to reduce password strength. </p> <p>GuardDuty informs you about the status of your Amazon Web Services environment by producing security findings that you can view in the GuardDuty console or through Amazon EventBridge. For more information, see the <i> <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html\">Amazon GuardDuty User Guide</a> </i>. </p>"
+  "documentation":"<p>Amazon GuardDuty is a continuous security monitoring service that analyzes and processes the following data sources: VPC flow logs, Amazon Web Services CloudTrail management event logs, CloudTrail S3 data event logs, EKS audit logs, DNS logs, and Amazon EBS volume data. It uses threat intelligence feeds, such as lists of malicious IPs and domains, and machine learning to identify unexpected, potentially unauthorized, and malicious activity within your Amazon Web Services environment. This can include issues like escalations of privileges, uses of exposed credentials, or communication with malicious IPs, domains, or presence of malware on your Amazon EC2 instances and container workloads. For example, GuardDuty can detect compromised EC2 instances and container workloads serving malware, or mining bitcoin. </p> <p>GuardDuty also monitors Amazon Web Services account access behavior for signs of compromise, such as unauthorized infrastructure deployments like EC2 instances deployed in a Region that has never been used, or unusual API calls like a password policy change to reduce password strength. </p> <p>GuardDuty informs you about the status of your Amazon Web Services environment by producing security findings that you can view in the GuardDuty console or through Amazon EventBridge. For more information, see the <i> <a href=\"https://docs.aws.amazon.com/guardduty/latest/ug/what-is-guardduty.html\">Amazon GuardDuty User Guide</a> </i>. </p>"
 }

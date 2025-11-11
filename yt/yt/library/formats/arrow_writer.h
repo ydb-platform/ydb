@@ -34,4 +34,4 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NFormats
+} // namespace NYT::NFormat

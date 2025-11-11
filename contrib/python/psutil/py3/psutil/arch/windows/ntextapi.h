@@ -10,6 +10,10 @@
 #include <winternl.h>
 #include <iphlpapi.h>
 
+#ifndef PSUTIL_MAYBE_EXTERN
+#define PSUTIL_MAYBE_EXTERN extern
+#endif
+
 typedef LONG NTSTATUS;
 
 // https://github.com/ajkhoury/TestDll/blob/master/nt_ddk.h
@@ -504,7 +508,7 @@ typedef struct {
 // When we are a 32 bit (WoW64) process accessing a 64 bit process
 // we need to use the 64 bit structure layout and a special function
 // to read its memory.
-PSUTIL_MAYBE_EXTERN typedef NTSTATUS (NTAPI *_NtWow64ReadVirtualMemory64)(
+typedef NTSTATUS (NTAPI *_NtWow64ReadVirtualMemory64)(
     HANDLE ProcessHandle,
     PVOID64 BaseAddress,
     PVOID Buffer,
@@ -659,12 +663,6 @@ PSUTIL_MAYBE_EXTERN ULONGLONG (CALLBACK *_GetTickCount64) (
     void);
 
 #define GetTickCount64 _GetTickCount64
-
-PSUTIL_MAYBE_EXTERN VOID(CALLBACK *_QueryInterruptTime) (
-    PULONGLONG lpInterruptTime
-);
-
-#define QueryInterruptTime _QueryInterruptTime
 
 PSUTIL_MAYBE_EXTERN NTSTATUS (NTAPI *_NtQueryObject) (
     HANDLE Handle,

@@ -1,4 +1,3 @@
-#pragma clang system_header
 /*
  * PCG Random Number Generation for C++
  *

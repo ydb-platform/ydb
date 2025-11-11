@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(21.1.3)
+VERSION(21.1.2)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.2.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/openmp

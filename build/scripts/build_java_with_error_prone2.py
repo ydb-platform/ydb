@@ -1,8 +1,14 @@
 import sys
 import os
+import re
 import subprocess
 import platform
 
+
+ERROR_PRONE_FLAGS = [
+    '-Xep:FunctionalInterfaceMethodChanged:WARN',
+    '-Xep:ReturnValueIgnored:WARN',
+]
 
 JAVA10_EXPORTS = [
     '--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED',
@@ -40,11 +46,10 @@ def parse_args(argv):
 def fix_cmd_line(error_prone_tool, cmd):
     if not error_prone_tool:
         return cmd
-    error_prone_flags = []
     for f in cmd:
         if f.startswith('-Xep'):
-            error_prone_flags.append(f)
-    for f in error_prone_flags:
+            ERROR_PRONE_FLAGS.append(f)
+    for f in ERROR_PRONE_FLAGS:
         if f in cmd:
             cmd.remove(f)
     if '-processor' in cmd:
@@ -55,18 +60,17 @@ def fix_cmd_line(error_prone_tool, cmd):
         cmd
         + JAVA10_EXPORTS
         + ['-processorpath', error_prone_tool, '-XDcompilePolicy=byfile']
-        + [(' '.join(['-Xplugin:ErrorProne'] + error_prone_flags))]
+        + [(' '.join(['-Xplugin:ErrorProne'] + ERROR_PRONE_FLAGS))]
     )
 
 
 # NOTE: legacy, only for "devtools/ya/jbuild"
 def just_do_it(argv):
     java, javac, error_prone_tool, javac_cmd = parse_args(argv)
-    error_prone_flags = []
     for f in javac_cmd:
         if f.startswith('-Xep'):
-            error_prone_flags.append(f)
-    for f in error_prone_flags:
+            ERROR_PRONE_FLAGS.append(f)
+    for f in ERROR_PRONE_FLAGS:
         if f in javac_cmd:
             javac_cmd.remove(f)
     if '-processor' in javac_cmd:
@@ -77,7 +81,7 @@ def just_do_it(argv):
         [javac]
         + JAVA10_EXPORTS
         + ['-processorpath', error_prone_tool, '-XDcompilePolicy=byfile']
-        + [(' '.join(['-Xplugin:ErrorProne'] + error_prone_flags))]
+        + [(' '.join(['-Xplugin:ErrorProne'] + ERROR_PRONE_FLAGS))]
         + javac_cmd
     )
     if platform.system() == 'Windows':

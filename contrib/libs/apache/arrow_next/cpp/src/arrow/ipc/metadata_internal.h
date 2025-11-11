@@ -45,7 +45,7 @@
 
 namespace arrow20 {
 
-namespace flatbuf = org::apache::arrow20::flatbuf;
+namespace flatbuf = ::org::apache::arrow20::flatbuf;
 
 namespace ipc {
 

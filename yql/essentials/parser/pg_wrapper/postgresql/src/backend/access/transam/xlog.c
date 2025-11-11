@@ -94,7 +94,6 @@
 #include "storage/proc.h"
 #include "storage/procarray.h"
 #include "storage/reinit.h"
-#include "storage/sinvaladt.h"
 #include "storage/smgr.h"
 #include "storage/spin.h"
 #include "storage/sync.h"
@@ -650,8 +649,7 @@ static XLogRecPtr CreateOverwriteContrecordRecord(XLogRecPtr aborted_lsn,
 												  XLogRecPtr pagePtr,
 												  TimeLineID newTLI);
 static void CheckPointGuts(XLogRecPtr checkPointRedo, int flags);
-static void KeepLogSeg(XLogRecPtr recptr, XLogRecPtr slotsMinLSN,
-					   XLogSegNo *logSegNo);
+static void KeepLogSeg(XLogRecPtr recptr, XLogSegNo *logSegNo);
 static XLogRecPtr XLogGetReplicationSlotMinimumLSN(void);
 
 static void AdvanceXLInsertBuffer(XLogRecPtr upto, TimeLineID tli,
@@ -5422,9 +5420,6 @@ StartupXLOG(void)
 				RunningTransactionsData running;
 				TransactionId latestCompletedXid;
 
-				/* Update pg_subtrans entries for any prepared transactions */
-				StandbyRecoverPreparedTransactions();
-
 				/*
 				 * Construct a RunningTransactions snapshot representing a
 				 * shut down server, with only prepared transactions still
@@ -5433,7 +5428,7 @@ StartupXLOG(void)
 				 */
 				running.xcnt = nxids;
 				running.subxcnt = 0;
-				running.subxid_status = SUBXIDS_IN_SUBTRANS;
+				running.subxid_overflow = false;
 				running.nextXid = XidFromFullTransactionId(checkPoint.nextXid);
 				running.oldestRunningXid = oldestActiveXID;
 				latestCompletedXid = XidFromFullTransactionId(checkPoint.nextXid);
@@ -5443,6 +5438,8 @@ StartupXLOG(void)
 				running.xids = xids;
 
 				ProcArrayApplyRecoveryInfo(&running);
+
+				StandbyRecoverPreparedTransactions();
 			}
 		}
 
@@ -5660,30 +5657,6 @@ StartupXLOG(void)
 
 	XLogCtl->LogwrtRqst.Write = EndOfLog;
 	XLogCtl->LogwrtRqst.Flush = EndOfLog;
-
-	/*
-	 * Invalidate all sinval-managed caches before READ WRITE transactions
-	 * begin.  The xl_heap_inplace WAL record doesn't store sufficient data
-	 * for invalidations.  The commit record, if any, has the invalidations.
-	 * However, the inplace update is permanent, whether or not we reach a
-	 * commit record.  Fortunately, read-only transactions tolerate caches not
-	 * reflecting the latest inplace updates.  Read-only transactions
-	 * experience the notable inplace updates as follows:
-	 *
-	 * - relhasindex=true affects readers only after the CREATE INDEX
-	 * transaction commit makes an index fully available to them.
-	 *
-	 * - datconnlimit=DATCONNLIMIT_INVALID_DB affects readers only at
-	 * InitPostgres() time, and that read does not use a cache.
-	 *
-	 * - relfrozenxid, datfrozenxid, relminmxid, and datminmxid have no effect
-	 * on readers.
-	 *
-	 * Hence, hot standby queries (all READ ONLY) function correctly without
-	 * the missing invalidations.  This avoided changing the WAL format in
-	 * back branches.
-	 */
-	SIResetAll();
 
 	/*
 	 * Preallocate additional log files, if wanted.
@@ -6493,7 +6466,6 @@ CreateCheckPoint(int flags)
 	VirtualTransactionId *vxids;
 	int			nvxids;
 	int			oldXLogAllowed = 0;
-	XLogRecPtr	slotsMinReqLSN;
 
 	/*
 	 * An end-of-recovery checkpoint is really a shutdown checkpoint, just
@@ -6696,15 +6668,6 @@ CreateCheckPoint(int flags)
 	END_CRIT_SECTION();
 
 	/*
-	 * Get the current minimum LSN to be used later in the WAL segment
-	 * cleanup.  We may clean up only WAL segments, which are not needed
-	 * according to synchronized LSNs of replication slots.  The slot's LSN
-	 * might be advanced concurrently, so we call this before
-	 * CheckPointReplicationSlots() synchronizes replication slots.
-	 */
-	slotsMinReqLSN = XLogGetReplicationSlotMinimumLSN();
-
-	/*
 	 * In some cases there are groups of actions that must all occur on one
 	 * side or the other of a checkpoint record. Before flushing the
 	 * checkpoint record we must explicitly wait for any backend currently
@@ -6738,12 +6701,6 @@ CreateCheckPoint(int flags)
 	{
 		do
 		{
-			/*
-			 * Keep absorbing fsync requests while we wait. There could even
-			 * be a deadlock if we don't, if the process that prevents the
-			 * checkpoint is trying to add a request to the queue.
-			 */
-			AbsorbSyncRequests();
 			pg_usleep(10000L);	/* wait for 10 msec */
 		} while (HaveVirtualXIDsDelayingChkpt(vxids, nvxids,
 											  DELAY_CHKPT_START));
@@ -6757,7 +6714,6 @@ CreateCheckPoint(int flags)
 	{
 		do
 		{
-			AbsorbSyncRequests();
 			pg_usleep(10000L);	/* wait for 10 msec */
 		} while (HaveVirtualXIDsDelayingChkpt(vxids, nvxids,
 											  DELAY_CHKPT_COMPLETE));
@@ -6869,25 +6825,17 @@ CreateCheckPoint(int flags)
 	 * prevent the disk holding the xlog from growing full.
 	 */
 	XLByteToSeg(RedoRecPtr, _logSegNo, wal_segment_size);
-	KeepLogSeg(recptr, slotsMinReqLSN, &_logSegNo);
+	KeepLogSeg(recptr, &_logSegNo);
 	if (InvalidateObsoleteReplicationSlots(RS_INVAL_WAL_REMOVED,
 										   _logSegNo, InvalidOid,
 										   InvalidTransactionId))
 	{
 		/*
-		 * Recalculate the current minimum LSN to be used in the WAL segment
-		 * cleanup.  Then, we must synchronize the replication slots again in
-		 * order to make this LSN safe to use.
-		 */
-		slotsMinReqLSN = XLogGetReplicationSlotMinimumLSN();
-		CheckPointReplicationSlots();
-
-		/*
 		 * Some slots have been invalidated; recalculate the old-segment
 		 * horizon, starting again from RedoRecPtr.
 		 */
 		XLByteToSeg(RedoRecPtr, _logSegNo, wal_segment_size);
-		KeepLogSeg(recptr, slotsMinReqLSN, &_logSegNo);
+		KeepLogSeg(recptr, &_logSegNo);
 	}
 	_logSegNo--;
 	RemoveOldXlogFiles(_logSegNo, RedoRecPtr, recptr,
@@ -7159,7 +7107,6 @@ CreateRestartPoint(int flags)
 	XLogRecPtr	endptr;
 	XLogSegNo	_logSegNo;
 	TimestampTz xtime;
-	XLogRecPtr	slotsMinReqLSN;
 
 	/* Concurrent checkpoint/restartpoint cannot happen */
 	Assert(!IsUnderPostmaster || MyBackendType == B_CHECKPOINTER);
@@ -7241,15 +7188,6 @@ CreateRestartPoint(int flags)
 	 */
 	MemSet(&CheckpointStats, 0, sizeof(CheckpointStats));
 	CheckpointStats.ckpt_start_t = GetCurrentTimestamp();
-
-	/*
-	 * Get the current minimum LSN to be used later in the WAL segment
-	 * cleanup.  We may clean up only WAL segments, which are not needed
-	 * according to synchronized LSNs of replication slots.  The slot's LSN
-	 * might be advanced concurrently, so we call this before
-	 * CheckPointReplicationSlots() synchronizes replication slots.
-	 */
-	slotsMinReqLSN = XLogGetReplicationSlotMinimumLSN();
 
 	if (log_checkpoints)
 		LogCheckpointStart(flags, true);
@@ -7333,25 +7271,17 @@ CreateRestartPoint(int flags)
 	receivePtr = GetWalRcvFlushRecPtr(NULL, NULL);
 	replayPtr = GetXLogReplayRecPtr(&replayTLI);
 	endptr = (receivePtr < replayPtr) ? replayPtr : receivePtr;
-	KeepLogSeg(endptr, slotsMinReqLSN, &_logSegNo);
+	KeepLogSeg(endptr, &_logSegNo);
 	if (InvalidateObsoleteReplicationSlots(RS_INVAL_WAL_REMOVED,
 										   _logSegNo, InvalidOid,
 										   InvalidTransactionId))
 	{
 		/*
-		 * Recalculate the current minimum LSN to be used in the WAL segment
-		 * cleanup.  Then, we must synchronize the replication slots again in
-		 * order to make this LSN safe to use.
-		 */
-		slotsMinReqLSN = XLogGetReplicationSlotMinimumLSN();
-		CheckPointReplicationSlots();
-
-		/*
 		 * Some slots have been invalidated; recalculate the old-segment
 		 * horizon, starting again from RedoRecPtr.
 		 */
 		XLByteToSeg(RedoRecPtr, _logSegNo, wal_segment_size);
-		KeepLogSeg(endptr, slotsMinReqLSN, &_logSegNo);
+		KeepLogSeg(endptr, &_logSegNo);
 	}
 	_logSegNo--;
 
@@ -7446,7 +7376,6 @@ GetWALAvailability(XLogRecPtr targetLSN)
 	XLogSegNo	oldestSegMaxWalSize;	/* oldest segid kept by max_wal_size */
 	XLogSegNo	oldestSlotSeg;	/* oldest segid kept by slot */
 	uint64		keepSegs;
-	XLogRecPtr	slotsMinReqLSN;
 
 	/*
 	 * slot does not reserve WAL. Either deactivated, or has never been active
@@ -7460,9 +7389,8 @@ GetWALAvailability(XLogRecPtr targetLSN)
 	 * oldestSlotSeg to the current segment.
 	 */
 	currpos = GetXLogWriteRecPtr();
-	slotsMinReqLSN = XLogGetReplicationSlotMinimumLSN();
 	XLByteToSeg(currpos, oldestSlotSeg, wal_segment_size);
-	KeepLogSeg(currpos, slotsMinReqLSN, &oldestSlotSeg);
+	KeepLogSeg(currpos, &oldestSlotSeg);
 
 	/*
 	 * Find the oldest extant segment file. We get 1 until checkpoint removes
@@ -7523,7 +7451,7 @@ GetWALAvailability(XLogRecPtr targetLSN)
  * invalidation is optionally done here, instead.
  */
 static void
-KeepLogSeg(XLogRecPtr recptr, XLogRecPtr slotsMinReqLSN, XLogSegNo *logSegNo)
+KeepLogSeg(XLogRecPtr recptr, XLogSegNo *logSegNo)
 {
 	XLogSegNo	currSegNo;
 	XLogSegNo	segno;
@@ -7536,7 +7464,7 @@ KeepLogSeg(XLogRecPtr recptr, XLogRecPtr slotsMinReqLSN, XLogSegNo *logSegNo)
 	 * Calculate how many segments are kept by slots first, adjusting for
 	 * max_slot_wal_keep_size.
 	 */
-	keep = slotsMinReqLSN;
+	keep = XLogGetReplicationSlotMinimumLSN();
 	if (keep != InvalidXLogRecPtr && keep < recptr)
 	{
 		XLByteToSeg(keep, segno, wal_segment_size);
@@ -7873,9 +7801,6 @@ xlog_redo(XLogReaderState *record)
 
 			oldestActiveXID = PrescanPreparedTransactions(&xids, &nxids);
 
-			/* Update pg_subtrans entries for any prepared transactions */
-			StandbyRecoverPreparedTransactions();
-
 			/*
 			 * Construct a RunningTransactions snapshot representing a shut
 			 * down server, with only prepared transactions still alive. We're
@@ -7884,7 +7809,7 @@ xlog_redo(XLogReaderState *record)
 			 */
 			running.xcnt = nxids;
 			running.subxcnt = 0;
-			running.subxid_status = SUBXIDS_IN_SUBTRANS;
+			running.subxid_overflow = false;
 			running.nextXid = XidFromFullTransactionId(checkPoint.nextXid);
 			running.oldestRunningXid = oldestActiveXID;
 			latestCompletedXid = XidFromFullTransactionId(checkPoint.nextXid);
@@ -7894,6 +7819,8 @@ xlog_redo(XLogReaderState *record)
 			running.xids = xids;
 
 			ProcArrayApplyRecoveryInfo(&running);
+
+			StandbyRecoverPreparedTransactions();
 		}
 
 		/* ControlFile->checkPointCopy always tracks the latest ckpt XID */

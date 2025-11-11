@@ -23,7 +23,7 @@ void TExtensionWhoamiWorker::Bootstrap() {
 
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", AuthHeader);
-    meta.Timeout = NYdb::TDeadline::SafeDurationCast(Timeout);
+    meta.Timeout = Timeout;
 
     connection->DoRequest(request, std::move(responseCb), &nebius::iam::v1::ProfileService::Stub::AsyncGet, meta, RequestContext.get());
     Become(&TExtensionWhoamiWorker::StateWork);

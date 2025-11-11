@@ -67,7 +67,6 @@ const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
 const TString StaticCredentialsLabel = "Credentials";
 const TString DynamicCredentialsLabel = "DynamicCredentials";
-const TString FullCaptureLabel = "FullCapture";
 
 class TUrlLoader: public IUrlLoader {
 public:
@@ -203,10 +202,6 @@ void TProgramFactory::SetCredentials(TCredentials::TPtr credentials) {
     Credentials_ = std::move(credentials);
 }
 
-void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider) {
-    RemoteLayersProviders_.emplace(alias, std::move(provider));
-}
-
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
@@ -285,7 +280,7 @@ TProgramPtr TProgramFactory::Create(
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-                        qContext, gatewaysForMerge, RemoteLayersProviders_);
+                        qContext, gatewaysForMerge);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -318,8 +313,7 @@ TProgram::TProgram(
     const IArrowResolver::TPtr& arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge,
-    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
+    TMaybe<TString> gatewaysForMerge)
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
@@ -352,7 +346,6 @@ TProgram::TProgram(
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
     , GatewaysForMerge_(gatewaysForMerge)
-    , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -366,7 +359,7 @@ TProgram::TProgram(
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
         QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
-    } else if (QContext_.CaptureMode() == EQPlayerCaptureMode::MetaOnly) {
+    } else if (QContext_.CanRead()) {
         Credentials_ = MakeIntrusive<TCredentials>();
         Credentials_->SetUserCredentials({.OauthToken = "REPLAY_OAUTH",
                                           .BlackboxSessionIdCookie = "REPLAY_SESSIONID"});
@@ -540,30 +533,6 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 TString TProgram::GetSourceCode() const {
     return SourceCode_;
-}
-
-bool TProgram::IsFullCaptureReady() const {
-    if (!TypeCtx_ || !QContext_.CanWrite() || QContext_.CaptureMode() != EQPlayerCaptureMode::Full) {
-        return false;
-    }
-
-    for (auto& source : TypeCtx_->DataSources) {
-        if (!source->IsFullCaptureReady()) {
-            return false;
-        }
-    }
-    for (auto& sink : TypeCtx_->DataSinks) {
-        if (!sink->IsFullCaptureReady()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-void TProgram::CommitFullCapture() const {
-    if (IsFullCaptureReady()) {
-        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
-    }
 }
 
 void TProgram::SetParametersYson(const TString& parameters) {
@@ -765,11 +734,6 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
             AddSqlFlagsFromPatch(flags, *gatewaysPatch);
         }
     }
-}
-
-bool HasFullCapture(const IQReaderPtr& reader) {
-    auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
-    return fullCaptureItem.Defined();
 }
 
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
@@ -1872,17 +1836,10 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     if (TypeCtx_->EnableLineage) {
-        writer.OnKeyedItem("CorrectLineage");
+        writer.OnKeyedItem("CalculateLineage");
         writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
-        writer.OnEndMap();
-    }
-    if (TypeCtx_->CorrectStandaloneLineage) {
-        writer.OnKeyedItem("CorrectStandaloneLineage");
-        writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
+            writer.OnKeyedItem("Correct");
+            writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
         writer.OnEndMap();
     }
 
@@ -2079,9 +2036,6 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
-    for (auto& [alias, provider] : RemoteLayersProviders_) {
-        typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
-    }
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning

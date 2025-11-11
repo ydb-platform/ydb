@@ -36,7 +36,6 @@ protected:
     NKikimrConfig::TAppConfig& Config;
     const ui32                       NodeId;
     const TKikimrScopeId             ScopeId;
-    const bool                       TinyMode;
 
 public:
     IKikimrServicesInitializer(const TKikimrRunConfig& runConfig);

@@ -1519,8 +1519,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                 NLs::IsExternalSubDomain("USER_0"),
                 NLs::ExtractDomainHive(&tenantHiveId),
             });
-            const auto& domainKey = describe.GetPathDescription().GetDomainDescription().GetDomainKey();
-            subdomainPathId = TPathId::FromDomainKey(domainKey);
+            TSubDomainKey subdomainKey(describe.GetPathDescription().GetDomainDescription().GetDomainKey());
+            subdomainPathId = TPathId(subdomainKey.GetSchemeShard(), subdomainKey.GetPathId());
         }
 
         // check that there is a new path in the root schemeshard

@@ -191,9 +191,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                         if (!path.Ranges().Maybe<TCoVoid>()) {
                             builder.Ranges(path.Ranges());
                         }
-                        if (!path.QLFilter().Maybe<TCoVoid>()) {
-                            builder.QLFilter(path.QLFilter());
-                        }
 
                         auto updatedPath = builder.Done();
                         if (unordered) {

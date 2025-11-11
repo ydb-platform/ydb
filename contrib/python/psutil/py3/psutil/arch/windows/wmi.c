@@ -10,7 +10,7 @@
 #include <windows.h>
 #include <pdh.h>
 
-#include "../../arch/all/init.h"
+#include "../../_psutil_common.h"
 
 
 // We use an exponentially weighted moving average, just like Unix systems do
@@ -31,15 +31,6 @@ double load_avg_1m = 0;
 double load_avg_5m = 0;
 double load_avg_15m = 0;
 
-#ifdef Py_GIL_DISABLED
-    static PyMutex mutex;
-    #define MUTEX_LOCK(m) PyMutex_Lock(m)
-    #define MUTEX_UNLOCK(m) PyMutex_Unlock(m)
-#else
-    #define MUTEX_LOCK(m)
-    #define MUTEX_UNLOCK(m)
-#endif
-
 
 VOID CALLBACK LoadAvgCallback(PVOID hCounter, BOOLEAN timedOut) {
     PDH_FMT_COUNTERVALUE displayValue;
@@ -54,14 +45,12 @@ VOID CALLBACK LoadAvgCallback(PVOID hCounter, BOOLEAN timedOut) {
     }
     currentLoad = displayValue.doubleValue;
 
-    MUTEX_LOCK(&mutex);
     load_avg_1m = load_avg_1m * LOADAVG_FACTOR_1F + currentLoad * \
         (1.0 - LOADAVG_FACTOR_1F);
     load_avg_5m = load_avg_5m * LOADAVG_FACTOR_5F + currentLoad * \
         (1.0 - LOADAVG_FACTOR_5F);
     load_avg_15m = load_avg_15m * LOADAVG_FACTOR_15F + currentLoad * \
         (1.0 - LOADAVG_FACTOR_15F);
-    MUTEX_UNLOCK(&mutex);
 }
 
 
@@ -127,10 +116,5 @@ psutil_init_loadavg_counter(PyObject *self, PyObject *args) {
  */
 PyObject *
 psutil_get_loadavg(PyObject *self, PyObject *args) {
-    MUTEX_LOCK(&mutex);
-    double load_avg_1m_l = load_avg_1m;
-    double load_avg_5m_l = load_avg_5m;
-    double load_avg_15m_l = load_avg_15m;
-    MUTEX_UNLOCK(&mutex);
-    return Py_BuildValue("(ddd)", load_avg_1m_l, load_avg_5m_l, load_avg_15m_l);
+    return Py_BuildValue("(ddd)", load_avg_1m, load_avg_5m, load_avg_15m);
 }

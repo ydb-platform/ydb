@@ -29,7 +29,7 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (NewItem == Items[i] || Items[i]->GetDependentsCount() > 0U) {
+            if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U) {
                 fields[i] = &Items[i]->RefValue(ctx);
             }
         }
@@ -68,7 +68,7 @@ public:
             result->addIncoming(getres.second[*passtrough](ctx, block), block);
         } else {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U) {
+                if (Items[i]->GetDependencesCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
                 }
             }

@@ -1701,6 +1701,7 @@ private:
         apply("WatermarksMode", "disable");
         apply("WatermarksGranularityMs", "1000");
         apply("WatermarksLateArrivalDelayMs", "5000");
+        apply("WatermarksIdlePartitions", "true");
         apply("EnableChannelStats", "true");
         apply("ExportStats", "true");
 

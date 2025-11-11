@@ -266,7 +266,7 @@ public:
     }
 
     TString GetDatabase() {
-        return Request->GetDatabaseName().GetOrElse("");
+        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
     }
 
     const TString& GetTable() {

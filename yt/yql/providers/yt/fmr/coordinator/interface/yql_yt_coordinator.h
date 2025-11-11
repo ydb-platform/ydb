@@ -54,19 +54,9 @@ struct TDeleteOperationResponse {
     EOperationStatus Status;
 };
 
-struct TDropTablesRequest {
-    std::vector<TString> TableIds;
-    TString SessionId;
-};
-
-struct TDropTablesResponse {
-};
-
 struct TGetFmrTableInfoRequest {
     TString TableId;
-    TString SessionId;
 };
-
 
 struct TGetFmrTableInfoResponse {
     TTableStats TableStats;
@@ -75,28 +65,6 @@ struct TGetFmrTableInfoResponse {
 
 struct TClearSessionRequest {
     TString SessionId;
-};
-
-struct TOpenSessionRequest {
-    TString SessionId;
-};
-
-struct TOpenSessionResponse {
-};
-
-struct TListSessionsRequest {
-};
-
-struct TListSessionsResponse {
-    std::vector<TString> SessionIds;
-};
-
-struct TPingSessionRequest {
-    TString SessionId;
-};
-
-struct TPingSessionResponse {
-    bool Success;
 };
 
 class IFmrCoordinator: public TThrRefBase {
@@ -111,19 +79,11 @@ public:
 
     virtual NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) = 0;
 
-    virtual NThreading::TFuture<TDropTablesResponse> DropTables(const TDropTablesRequest& request) = 0;
-
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
 
     virtual NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) = 0;
 
     virtual NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) = 0;
-
-    virtual NThreading::TFuture<TOpenSessionResponse> OpenSession(const TOpenSessionRequest& request) = 0;
-
-    virtual NThreading::TFuture<TPingSessionResponse> PingSession(const TPingSessionRequest& request) = 0;
-
-    virtual NThreading::TFuture<TListSessionsResponse> ListSessions(const TListSessionsRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

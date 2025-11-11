@@ -1025,11 +1025,9 @@ IAsyncZeroCopyInputStreamPtr CreateConcurrentAdapter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-void DoPipeInputToOutput(
-    const auto& input,
-    const auto& output)
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncOutputStreamPtr& output)
 {
     while (true) {
         auto asyncBlock = input->Read();
@@ -1040,34 +1038,6 @@ void DoPipeInputToOutput(
         }
         WaitFor(output->Write(block))
             .ThrowOnError();
-    }
-}
-
-} // namespace
-
-void PipeInputToOutput(
-    const IAsyncZeroCopyInputStreamPtr& input,
-    const IAsyncOutputStreamPtr& output)
-{
-    DoPipeInputToOutput(input, output);
-}
-
-void PipeInputToOutput(
-    const IAsyncZeroCopyInputStreamPtr& input,
-    const IAsyncZeroCopyOutputStreamPtr& output)
-{
-    DoPipeInputToOutput(input, output);
-}
-
-void DrainInput(const IAsyncZeroCopyInputStreamPtr& input)
-{
-    while (true) {
-        auto asyncBlock = input->Read();
-        auto block = WaitFor(asyncBlock)
-            .ValueOrThrow();
-        if (!block || block.Empty()) {
-            break;
-        }
     }
 }
 

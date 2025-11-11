@@ -61,7 +61,6 @@ from botocore.signers import (
 from botocore.utils import (
     SAFE_CHARS,
     ArnParser,
-    conditionally_calculate_checksum,
     conditionally_calculate_md5,
     percent_encode,
     switch_host_with_param,
@@ -98,7 +97,7 @@ _OUTPOST_ARN = (
 VALID_S3_ARN = re.compile('|'.join([_ACCESSPOINT_ARN, _OUTPOST_ARN]))
 # signing names used for the services s3 and s3-control, for example in
 # botocore/data/s3/2006-03-01/endpoints-rule-set-1.json
-S3_SIGNING_NAMES = ('s3', 's3-outposts', 's3-object-lambda', 's3express')
+S3_SIGNING_NAMES = ('s3', 's3-outposts', 's3-object-lambda')
 VERSION_ID_SUFFIX = re.compile(r'\?versionId=[^\s]+$')
 
 
@@ -204,9 +203,6 @@ def set_operation_specific_signer(context, signing_name, **kwargs):
         return 'bearer'
 
     if auth_type.startswith('v4'):
-        if auth_type == 'v4-s3express':
-            return auth_type
-
         if auth_type == 'v4a':
             # If sigv4a is chosen, we must add additional signing config for
             # global signature.
@@ -346,14 +342,6 @@ def add_expect_header(model, params, **kwargs):
     if 'body' in params:
         body = params['body']
         if hasattr(body, 'read'):
-            check_body = utils.ensure_boolean(
-                os.environ.get(
-                    'BOTO_EXPERIMENTAL__NO_EMPTY_CONTINUE',
-                    False,
-                )
-            )
-            if check_body and utils.determine_content_length(body) == 0:
-                return
             # Any file like object will use an expect 100-continue
             # header regardless of size.
             logger.debug("Adding expect 100 continue header to request.")
@@ -1168,7 +1156,6 @@ def customize_endpoint_resolver_builtins(
         and not path_style_required
         and not path_style_requested
         and not bucket_is_arn
-        and not utils.is_s3express_bucket(bucket_name)
     ):
         builtins[EndpointResolverBuiltins.AWS_REGION] = 'aws-global'
         builtins[EndpointResolverBuiltins.AWS_S3_USE_GLOBAL_ENDPOINT] = True
@@ -1246,11 +1233,10 @@ BUILTIN_HANDLERS = [
     ('before-call.s3', add_expect_header),
     ('before-call.glacier', add_glacier_version),
     ('before-call.apigateway', add_accept_header),
-    ('before-call.s3.PutObject', conditionally_calculate_checksum),
+    ('before-call.s3.PutObject', conditionally_calculate_md5),
     ('before-call.s3.PatchObject', conditionally_calculate_md5),
     ('before-call.s3.UploadPart', conditionally_calculate_md5),
     ('before-call.s3.DeleteObjects', escape_xml_payload),
-    ('before-call.s3.DeleteObjects', conditionally_calculate_checksum),
     ('before-call.s3.PutBucketLifecycleConfiguration', escape_xml_payload),
     ('before-call.glacier.UploadArchive', add_glacier_checksums),
     ('before-call.glacier.UploadMultipartPart', add_glacier_checksums),

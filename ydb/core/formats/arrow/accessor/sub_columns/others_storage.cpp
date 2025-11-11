@@ -8,8 +8,6 @@
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
-#include <yql/essentials/types/binary_json/read.h>
-
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TOthersData::TBuilderWithStats::TBuilderWithStats() {
@@ -17,10 +15,10 @@ TOthersData::TBuilderWithStats::TBuilderWithStats() {
     AFL_VERIFY(Builders.size() == 3);
     AFL_VERIFY(Builders[0]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[2]->type()->id() == arrow::binary()->id());
+    AFL_VERIFY(Builders[2]->type()->id() == arrow::utf8()->id());
     RecordIndex = static_cast<arrow::UInt32Builder*>(Builders[0].get());
     KeyIndex = static_cast<arrow::UInt32Builder*>(Builders[1].get());
-    Values = static_cast<arrow::BinaryBuilder*>(Builders[2].get());
+    Values = static_cast<arrow::StringBuilder*>(Builders[2].get());
 }
 
 void TOthersData::TBuilderWithStats::AddImpl(const ui32 recordIndex, const ui32 keyIndex, const std::string_view* value) {
@@ -62,7 +60,7 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
             TStatusValidator::Validate(KeyIndex->Append(newIndex));
             if (idx) {
                 const ui32 predKeyIndex = (*finishContext.GetRemap())[RTKeyIndexes[idx - 1]];
-                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
+                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) || 
                 (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && predKeyIndex < newIndex))(
                                                                    "r1", arrRecordIndexValue->Value(idx - 1))(
                                                                    "r2", arrRecordIndexValue->Value(idx))("k1", predKeyIndex)("k2", newIndex);
@@ -72,7 +70,7 @@ TOthersData TOthersData::TBuilderWithStats::Finish(const TFinishContext& finishC
         for (ui32 idx = 0; idx < RTKeyIndexes.size(); ++idx) {
             TStatusValidator::Validate(KeyIndex->Append(RTKeyIndexes[idx]));
             if (idx) {
-                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) ||
+                AFL_VERIFY((arrRecordIndexValue->Value(idx - 1) < arrRecordIndexValue->Value(idx)) || 
                 (arrRecordIndexValue->Value(idx - 1) == arrRecordIndexValue->Value(idx) && RTKeyIndexes[idx - 1] < RTKeyIndexes[idx]))("r1",
                                                                    arrRecordIndexValue->Value(idx - 1))("r2", arrRecordIndexValue->Value(idx))(
                                                                    "k1", RTKeyIndexes[idx - 1])("k2", RTKeyIndexes[idx]);
@@ -132,14 +130,13 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
     } else if (filter.IsTotalDenyFilter()) {
         return TOthersData::BuildEmpty();
     }
-
     TOthersData::TIterator itOthersData = BuildIterator();
     bool currentAcceptance = filter.GetStartValue();
     ui32 filterIntervalStart = 0;
     ui32 shiftSkippedCount = 0;
     TColumnFilter newFilter = TColumnFilter::BuildAllowFilter();
     auto recordIndexBuilder = NArrow::MakeBuilder(arrow::uint32());
-    auto valuesBuilder = NArrow::MakeBuilder(arrow::binary());
+    auto valuesBuilder = NArrow::MakeBuilder(arrow::utf8());
     TUsedKeysCollection usedKeys(Stats);
     std::vector<ui32> originalKeys;
     std::optional<ui32> predRecordIndex;
@@ -160,9 +157,9 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
                     AFL_VERIFY(filteredRecordIndex < resultRecordsCount)("new_record_index", filteredRecordIndex)("count", resultRecordsCount)(
                         "shift", shiftSkippedCount)("record_index", itOthersData.GetRecordIndex());
                     NArrow::Append<arrow::UInt32Type>(*recordIndexBuilder, filteredRecordIndex);
-                    NArrow::Append<arrow::BinaryType>(*valuesBuilder, arrow::util::string_view(itOthersData.GetRawValue().data(), itOthersData.GetRawValue().size()));
+                    NArrow::Append<arrow::StringType>(*valuesBuilder, arrow::util::string_view(itOthersData.GetValue().data(), itOthersData.GetValue().size()));
                     originalKeys.emplace_back(itOthersData.GetKeyIndex());
-                    usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetRawValue());
+                    usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetValue());
                 }
             } else {
                 break;
@@ -208,7 +205,7 @@ TOthersData TOthersData::Slice(const ui32 offset, const ui32 count, const TSetti
     {
         itOthersData.MoveToPosition(*startPosition);
         for (; itOthersData.IsValid() && itOthersData.GetRecordIndex() < offset + count; itOthersData.Next()) {
-            usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetRawValue());
+            usedKeys.AddKeyInfo(itOthersData.GetKeyIndex(), itOthersData.GetValue());
         }
     }
     const std::vector<ui32> keyIndexDecoder = usedKeys.BuildDecoder();
@@ -249,7 +246,7 @@ TOthersData TOthersData::BuildEmpty() {
 std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
     auto idx = Stats.GetKeyIndexOptional(path);
     if (!idx) {
-        return std::make_shared<TSparsedArray>(nullptr, arrow::binary(), recordsCount);
+        return std::make_shared<TSparsedArray>(nullptr, arrow::utf8(), recordsCount);
     }
     TColumnFilter filter = TColumnFilter::BuildAllowFilter();
     for (TIterator it(Records); it.IsValid(); it.Next()) {
@@ -259,22 +256,10 @@ std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_vi
     filter.Apply(recordsFiltered);
     auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
 
-    TSparsedArray::TBuilder builder(nullptr, arrow::binary());
+    TSparsedArray::TBuilder builder(nullptr, arrow::utf8());
     auto batch = ToBatch(table);
     builder.AddChunk(recordsCount, batch->GetColumnByName("record_idx"), batch->GetColumnByName("value"));
     return builder.Finish();
-}
-
-NJson::TJsonValue TOthersData::TIterator::GetValue() const {
-    AFL_VERIFY(IsValid());
-    auto view = Values->GetView(CurrentIndex);
-    if (view.empty()) {
-        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
-    }
-    auto data = NBinaryJson::SerializeToJson(TStringBuf(view.data(), view.size()));
-    NJson::TJsonValue res;
-    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
-    return res;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

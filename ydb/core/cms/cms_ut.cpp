@@ -2773,68 +2773,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes.
         env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
-    }
-
-    Y_UNIT_TEST(DisableCMS){
-        TCmsTestEnv env(16);
-
-        auto r1 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
-                                             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
-
-        // Scheduled request
-        auto r2 = env.CheckPermissionRequest("user", false, false, /* scheduled */ true, true, TStatus::DISALLOW_TEMP,
-                                             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
-
-        // Disable CMS
-        NKikimrCms::TCmsConfig config;
-        config.SetEnable(false);
-        env.SetCmsConfig(config);
-
-        env.CheckDonePermission("user", r1.GetPermissions(0).GetId());
-
-        // Requests should fail
-        env.CheckPermissionRequest("user", false, false, true, true, TStatus::ERROR_TEMP,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
-        env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ERROR_TEMP);
-
-        // Enable CMS back
-        config.SetEnable(true);
-        env.SetCmsConfig(config);
-
-        // Requests should be ok
-        auto r3 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
-                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
-        UNIT_ASSERT_VALUES_EQUAL(r3.PermissionsSize(), 1);
-        env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ALLOW, 1);
-    }
-
-    Y_UNIT_TEST(WalleDisableCMS){
-        TCmsTestEnv env(16);
-
-        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0));
-
-        // Scheduled request
-        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(0));
-
-        // Disable CMS
-        NKikimrCms::TCmsConfig config;
-        config.SetEnable(false);
-        env.SetCmsConfig(config);
-
-        env.CheckWalleRemoveTask("task-1");
-
-        // Requests should fail
-        env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ERROR_TEMP, env.GetNodeId(9));
-        env.CheckWalleCheckTask("task-2", TStatus::ERROR_TEMP);
-
-        // Enable CMS back
-        config.SetEnable(true);
-        env.SetCmsConfig(config);
-
-        // Requests should be ok
-        env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ALLOW, env.GetNodeId(9));
-        env.CheckWalleCheckTask("task-2", TStatus::ALLOW);
+        
     }
 }
 

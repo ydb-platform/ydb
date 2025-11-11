@@ -1,5 +1,15 @@
 # VIEW (Векторный индекс)
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% note warning %}
+
+{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
+
+{% endnote %}
+
+{% endif %}
+
 Для выполнения запроса `SELECT` с использованием [векторного индекса](../../../../concepts/glossary.md#vector-index) в строчно-ориентированной таблице используйте следующий синтаксис:
 
 ```yql

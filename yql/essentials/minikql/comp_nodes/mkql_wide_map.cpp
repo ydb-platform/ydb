@@ -29,7 +29,7 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependentsCount()) {
+            if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependencesCount()) {
                 if (const auto out = output[*map]) {
                     fields[i] = out;
                 }
@@ -45,7 +45,7 @@ public:
         for (auto i = 0U; i < NewItems.size(); ++i) {
             if (const auto out = output[i]) {
                 if (const auto& map = ReversePasstroughtMap[i]) {
-                    if (const auto from = *map; !Items[from]->GetDependentsCount()) {
+                    if (const auto from = *map; !Items[from]->GetDependencesCount()) {
                         if (const auto first = *PasstroughtMap[from]; first != i) {
                             *out = *output[first];
                         }
@@ -74,7 +74,7 @@ public:
         block = work;
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (Items[i]->GetDependentsCount() > 0U || !PasstroughtMap[i]) {
+            if (Items[i]->GetDependencesCount() > 0U || !PasstroughtMap[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, result.second[i](ctx, block));
             }
         }
@@ -170,7 +170,7 @@ private:
             }
 
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependentsCount()) {
+                if (const auto& map = PasstroughtMap[i]; map && !Items[i]->GetDependencesCount()) {
                     output[*map] = State[i];
                 } else {
                     Items[i]->RefValue(CompCtx) = State[i];
@@ -179,7 +179,7 @@ private:
 
             for (auto i = 0U; i < NewItems.size(); ++i) {
                 if (const auto& map = ReversePasstroughtMap[i]) {
-                    if (const auto from = *map; !Items[from]->GetDependentsCount()) {
+                    if (const auto from = *map; !Items[from]->GetDependencesCount()) {
                         if (const auto first = *PasstroughtMap[from]; first != i) {
                             output[i] = output[first];
                         }
@@ -205,7 +205,7 @@ private:
     };
 
     void RegisterDependencies() const final {
-        Stream->AddDependent(this);
+        Stream->AddDependence(this);
         std::for_each(Items.cbegin(), Items.cend(), std::bind(&TWideMapStreamWrapper::Own, this, std::placeholders::_1));
         std::for_each(NewItems.cbegin(), NewItems.cend(), std::bind(&TWideMapStreamWrapper::DependsOn, this, std::placeholders::_1));
     }

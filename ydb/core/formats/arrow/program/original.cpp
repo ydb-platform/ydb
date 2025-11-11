@@ -9,7 +9,6 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
     if (!source) {
         return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
     }
-    THashSet<uint32_t> uniqueEntityIds;
     std::vector<std::shared_ptr<IFetchLogic>> logic;
     for (auto&& [_, i] : DataAddresses) {
         auto acc = context.GetResources().GetAccessorOptional(i.GetColumnId());
@@ -29,11 +28,6 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
-            auto entityId = conclusion.GetResult()->GetEntityId();
-            auto [_, emplaced] = uniqueEntityIds.emplace(entityId);
-            if (!emplaced) {
-                return TConclusionStatus::Fail(TStringBuilder{} << "Try to process the same entity id (data) " << entityId << " twice");
-            }
             logic.emplace_back(conclusion.DetachResult());
         } else {
             continue;
@@ -45,13 +39,6 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (conclusion.IsFail()) {
             return conclusion;
         } else {
-            for (const auto& index: conclusion.GetResult()) {
-                auto entityId = index->GetEntityId();
-                auto [_, emplaced] = uniqueEntityIds.emplace(entityId);
-                if (!emplaced) {
-                    return TConclusionStatus::Fail(TStringBuilder{} << "Try to process the same entity id (index) " << entityId << " twice");
-                }
-            }
             logic.insert(logic.end(), conclusion.GetResult().begin(), conclusion.GetResult().end());
         }
     }
@@ -63,11 +50,6 @@ TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::
         if (conclusion.IsFail()) {
             return conclusion;
         } else if (!!conclusion.GetResult()) {
-            auto entityId = conclusion.GetResult()->GetEntityId();
-            auto [_, emplaced] = uniqueEntityIds.emplace(entityId);
-            if (!emplaced) {
-                return TConclusionStatus::Fail(TStringBuilder{} << "Try to process the same entity id (header) " << entityId << " twice");
-            }
             logic.emplace_back(conclusion.DetachResult());
         } else {
             continue;

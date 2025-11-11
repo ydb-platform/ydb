@@ -388,8 +388,7 @@ hash_create(const char *tabname, long nelem, const HASHCTL *info, int flags)
 	}
 
 	/* Initialize the hash header, plus a copy of the table name */
-	hashp = (HTAB *) MemoryContextAlloc(CurrentDynaHashCxt,
-										sizeof(HTAB) + strlen(tabname) + 1);
+	hashp = (HTAB *) DynaHashAlloc(sizeof(HTAB) + strlen(tabname) + 1);
 	MemSet(hashp, 0, sizeof(HTAB));
 
 	hashp->tabname = (char *) (hashp + 1);

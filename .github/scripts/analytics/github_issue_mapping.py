@@ -7,22 +7,29 @@ This table will be used by SQL queries to join muted test data with GitHub issue
 
 import os
 import ydb
+import configparser
 import time
 import sys
-from ydb_wrapper import YDBWrapper
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import create_test_issue_mapping
 
+# Load YDB configuration
+dir = os.path.dirname(__file__)
+config = configparser.ConfigParser()
+config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
+config.read(config_file_path)
+
+DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 
-def get_github_issues_data(ydb_wrapper):
-    """Get GitHub issues data from the issues table"""
-    # Get table path from config
-    issues_table = ydb_wrapper.get_table_path("issues")
-    query = f"""
+
+def get_github_issues_data(driver):
+    """Get GitHub issues data from the github_data/issues table"""
+    query = """
     SELECT 
         issue_number,
         title,
@@ -31,24 +38,36 @@ def get_github_issues_data(ydb_wrapper):
         body,
         created_at,
         updated_at
-    FROM `{issues_table}`
+    FROM `github_data/issues`
     WHERE body IS NOT NULL
     AND body != ''
     """
     
     print("Fetching GitHub issues data...")
+    start_time = time.time()
     
+    results = []
     try:
-        results = ydb_wrapper.execute_scan_query(query)
-        print(f'Fetched {len(results)} GitHub issues')
-        return results
+        scan_query = ydb.ScanQuery(query, {})
+        it = driver.table_client.scan_query(scan_query)
+        
+        while True:
+            try:
+                result = next(it)
+                results.extend(result.result_set.rows)
+            except StopIteration:
+                break
     except Exception as e:
         print(f"Warning: Could not fetch GitHub issues data: {e}")
         print("This might be because the github_data/issues table doesn't exist yet.")
         return []
 
+    end_time = time.time()
+    print(f'Fetched {len(results)} GitHub issues, duration: {end_time - start_time}s')
+    return results
 
-def create_test_issue_mapping_table(ydb_wrapper, table_path):
+
+def create_test_issue_mapping_table(session, table_path):
     """Create the test-to-issue mapping table"""
     print(f"Creating test-to-issue mapping table: {table_path}")
     
@@ -70,7 +89,7 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
     """
 
     print(f"Creating table with query: {create_table_sql}")
-    ydb_wrapper.create_table(table_path, create_table_sql)
+    session.execute_scheme(create_table_sql)
 
 
 def convert_mapping_to_table_data(test_to_issue_mapping):
@@ -98,9 +117,10 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
     return table_data
 
 
-def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
+def bulk_upsert_mapping_data(table_client, table_path, mapping_data):
     """Bulk upsert mapping data into the table"""
     print(f"Bulk upserting {len(mapping_data)} test-to-issue mappings to {table_path}")
+    start_time = time.time()
     
     column_types = ydb.BulkUpsertColumns()
     column_types.add_column('full_name', ydb.PrimitiveType.Utf8)
@@ -110,9 +130,10 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('github_issue_number', ydb.OptionalType(ydb.PrimitiveType.Uint64))
     column_types.add_column('github_issue_state', ydb.PrimitiveType.Utf8)
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    table_client.bulk_upsert(table_path, mapping_data, column_types)
     
-    ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
-    print(f"Bulk upsert completed")
+    end_time = time.time()
+    print(f"Bulk upsert completed, duration: {end_time - start_time}s")
 
 
 def main():
@@ -120,47 +141,64 @@ def main():
     print("Starting GitHub issue mapping table creation")
     script_start_time = time.time()
     
-    with YDBWrapper() as ydb_wrapper:
-        # Check credentials
-        if not ydb_wrapper.check_credentials():
-            return 1
+    # Check environment variables
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 1
+    
+    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
+        "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
+    ]
+    
+    table_path = "test_results/analytics/github_issue_mapping"
+    full_table_path = f"{DATABASE_PATH}/{table_path}"
+    
+    try:
+        with ydb.Driver(
+            endpoint=DATABASE_ENDPOINT,
+            database=DATABASE_PATH,
+            credentials=ydb.credentials_from_env_variables()
+        ) as driver:
+            driver.wait(timeout=10, fail_fast=True)
+            
+            with ydb.SessionPool(driver) as pool:
+                # Get GitHub issues data
+                issues_data = get_github_issues_data(driver)
+                
+                if not issues_data:
+                    print("No GitHub issues data found")
+                    return 0
+                
+                # Create test-to-issue mapping using shared utilities
+                print("Creating test-to-issue mapping...")
+                test_to_issue = create_test_issue_mapping(issues_data)
+                print(f"Created mapping for {len(test_to_issue)} unique test names")
+                
+                # Convert mapping to table data format
+                mapping_data = convert_mapping_to_table_data(test_to_issue)
+                print(f"Converted to {len(mapping_data)} table records")
+                
+                # Create mapping table
+                def create_table_wrapper(session):
+                    create_test_issue_mapping_table(session, table_path)
+                    return True
+                
+                pool.retry_operation_sync(create_table_wrapper)
+                
+                # Bulk upsert mapping data
+                if mapping_data:
+                    bulk_upsert_mapping_data(driver.table_client, full_table_path, mapping_data)
+                else:
+                    print("No mapping data to insert")
         
-        table_path = ydb_wrapper.get_table_path("github_issue_mapping")
+        script_elapsed = time.time() - script_start_time
+        print(f"Script completed successfully, total time: {script_elapsed:.2f}s")
         
-        try:
-            # Get GitHub issues data
-            issues_data = get_github_issues_data(ydb_wrapper)
-            
-            if not issues_data:
-                print("No GitHub issues data found")
-                return 0
-            
-            # Create test-to-issue mapping using shared utilities
-            print("Creating test-to-issue mapping...")
-            test_to_issue = create_test_issue_mapping(issues_data)
-            print(f"Created mapping for {len(test_to_issue)} unique test names")
-            
-            # Convert mapping to table data format
-            mapping_data = convert_mapping_to_table_data(test_to_issue)
-            print(f"Converted to {len(mapping_data)} table records")
-            
-            # Create mapping table (wrapper will add database_path automatically)
-            create_test_issue_mapping_table(ydb_wrapper, table_path)
-            
-            # Bulk upsert mapping data (wrapper will add database_path automatically)
-            if mapping_data:
-                bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
-            else:
-                print("No mapping data to insert")
-        
-            script_elapsed = time.time() - script_start_time
-            print(f"Script completed successfully, total time: {script_elapsed:.2f}s")
-            
-        except Exception as e:
-            print(f"Error during execution: {e}")
-            return 1
-        
-        return 0
+    except Exception as e:
+        print(f"Error during execution: {e}")
+        return 1
+    
+    return 0
 
 
 if __name__ == "__main__":

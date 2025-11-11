@@ -315,18 +315,18 @@ private:
             return *Iter;
         }
 
-        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
-        TRcBuf& GetChunk() {
-            CheckValid();
-            return *Iter;
-        }
-
     private:
         friend class TRope;
 
         typename TTraits::TListIterator operator ->() const {
             CheckValid();
             return Iter;
+        }
+
+        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
+        TRcBuf& GetChunk() {
+            CheckValid();
+            return *Iter;
         }
 
         typename TTraits::TListIterator GetChainBegin() const {

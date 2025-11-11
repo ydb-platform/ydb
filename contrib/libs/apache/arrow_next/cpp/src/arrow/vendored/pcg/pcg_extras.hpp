@@ -1,4 +1,3 @@
-#pragma clang system_header
 /*
  * PCG Random Number Generation for C++
  *
@@ -84,7 +83,7 @@
     #define PCG_128BIT_CONSTANT(high,low) \
             ((pcg_extras::pcg128_t(high) << 64) + low)
 #else
-    #error #include "pcg_uint128.hpp"
+    #error include "pcg_uint128.hpp"
     namespace arrow20_vendored {
     namespace pcg_extras {
         typedef pcg_extras::uint_x4<uint32_t,uint64_t> pcg128_t;

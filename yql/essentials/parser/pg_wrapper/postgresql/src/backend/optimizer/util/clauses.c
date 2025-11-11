@@ -2309,7 +2309,7 @@ convert_saop_to_hashed_saop_walker(Node *node, void *context)
 						/* Looks good. Fill in the hash functions */
 						saop->hashfuncid = lefthashfunc;
 					}
-					return false;
+					return true;
 				}
 			}
 			else				/* !saop->useOr */
@@ -2347,7 +2347,7 @@ convert_saop_to_hashed_saop_walker(Node *node, void *context)
 						 */
 						saop->negfuncid = get_opcode(negator);
 					}
-					return false;
+					return true;
 				}
 			}
 		}
@@ -2897,25 +2897,13 @@ eval_const_expressions_mutator(Node *node,
 		case T_JsonValueExpr:
 			{
 				JsonValueExpr *jve = (JsonValueExpr *) node;
-				Node	   *raw_expr = (Node *) jve->raw_expr;
-				Node	   *formatted_expr = (Node *) jve->formatted_expr;
+				Node	   *formatted;
 
-				/*
-				 * If we can fold formatted_expr to a constant, we can elide
-				 * the JsonValueExpr altogether.  Otherwise we must process
-				 * raw_expr too.  But JsonFormat is a flat node and requires
-				 * no simplification, only copying.
-				 */
-				formatted_expr = eval_const_expressions_mutator(formatted_expr,
-																context);
-				if (formatted_expr && IsA(formatted_expr, Const))
-					return formatted_expr;
-
-				raw_expr = eval_const_expressions_mutator(raw_expr, context);
-
-				return (Node *) makeJsonValueExpr((Expr *) raw_expr,
-												  (Expr *) formatted_expr,
-												  copyObject(jve->format));
+				formatted = eval_const_expressions_mutator((Node *) jve->formatted_expr,
+														   context);
+				if (formatted && IsA(formatted, Const))
+					return formatted;
+				break;
 			}
 
 		case T_SubPlan:

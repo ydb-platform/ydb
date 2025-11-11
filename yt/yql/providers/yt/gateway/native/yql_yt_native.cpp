@@ -623,14 +623,9 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([
-                session, logCtx,
-                abort=options.Abort(),
-                detachSnapshotTxs=options.DetachSnapshotTxs(),
-                commitDumpTxs=options.CommitDumpTxs()
-            ] () {
+            return session->Queue_->Async([session, logCtx, abort=options.Abort(), detachSnapshotTxs=options.DetachSnapshotTxs()] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                return ExecFinalize(session, abort, detachSnapshotTxs, commitDumpTxs);
+                return ExecFinalize(session, abort, detachSnapshotTxs);
             });
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TFinalizeResult>());
@@ -1573,7 +1568,7 @@ public:
         }
     }
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         auto nodePos = ctx.GetPosition(node->Pos());
         try {
@@ -1756,36 +1751,6 @@ public:
         Clusters_->AddCluster(cluster, false);
     }
 
-    TFuture<TDumpResult> Dump(TDumpOptions&& options) override {
-        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
-        try {
-            TSession::TPtr session = GetSession(options.SessionId());
-
-            TVector<TFuture<void>> futures;
-            for (auto& [cluster, entries] : options.Entries()) {
-                auto execCtx = MakeExecCtx(std::move(entries), session, cluster, nullptr, nullptr);
-                futures.push_back(execCtx->Session_->Queue_->Async([execCtx]() {
-                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                    return ExecDump(execCtx);
-                }));
-            }
-
-            return WaitExceptionOrAll(futures).Apply([futures](const TFuture<void>& f) {
-                try {
-                    f.GetValue();
-
-                    TDumpResult res;
-                    res.SetSuccess();
-                    return res;
-                } catch (...) {
-                    return ResultFromCurrentException<TDumpResult>();
-                }
-            });
-        } catch (...) {
-            return MakeFuture(ResultFromCurrentException<TDumpResult>());
-        }
-    }
-
 private:
     class TNodeResultBuilder {
     public:
@@ -1921,7 +1886,7 @@ private:
         const TVector<TString> Columns_;
     };
 
-    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs, bool commitDumpTxs) {
+    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
         try {
             TFinalizeResult res;
             if (detachSnapshotTxs) {
@@ -1932,7 +1897,7 @@ private:
                 YQL_CLOG(INFO, ProviderYt) << "Aborting all transactions for hidden query";
                 session->TxCache_.AbortAll();
             } else {
-                session->TxCache_.Finalize(commitDumpTxs);
+                session->TxCache_.Finalize();
             }
             res.SetSuccess();
             return res;
@@ -4991,14 +4956,6 @@ private:
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                     TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                     execCtx->SetNodeExecProgress("Local run");
-
-                    if (transform.HasFilesToDump()) {
-                        YQL_ENSURE(execCtx->Session_->FullCapture_);
-                        execCtx->Session_->FullCapture_->ReportError(
-                            yexception() << "user files in local run"
-                        );
-                    }
-
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -5610,14 +5567,6 @@ private:
                 execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                 TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                 execCtx->SetNodeExecProgress("Local run");
-
-                if (transform.HasFilesToDump()) {
-                    YQL_ENSURE(execCtx->Session_->FullCapture_);
-                    execCtx->Session_->FullCapture_->ReportError(
-                        yexception() << "user files in local run"
-                    );
-                }
-
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,
@@ -5764,48 +5713,6 @@ private:
             });
     }
 
-    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx) {
-        auto entry = execCtx->GetEntry();
-        YQL_ENSURE(entry->DumpTx);
-        for (auto& [srcPath, dstPath] : execCtx->Options_) {
-            NYT::TRichYPath srcRichYPath;
-            NYT::ITransactionPtr srcTx;
-            auto snapshot = entry->Snapshots.FindPtr(std::make_pair(srcPath, 0));
-            if (snapshot) {
-                // use table snapshot if present
-                auto& [tableId, txId, _] = *snapshot;
-                srcRichYPath.Path(tableId).TransactionId(txId);
-                srcTx = entry->GetSnapshotTx(txId);
-            } else {
-                srcRichYPath.Path(srcPath);
-                srcTx = entry->Tx;
-            }
-
-            NYT::TNode attrs = srcTx->Get(srcRichYPath.Path_ + "&/@", NYT::TGetOptions().AttributeFilter(
-                NYT::TAttributeFilter()
-                    .AddAttribute("type")
-                    .AddAttribute("compression_codec")
-                    .AddAttribute("erasure_codec")
-                    .AddAttribute("optimize_for")
-                    .AddAttribute("schema")
-                    .AddAttribute("media")
-                    .AddAttribute("primary_medium")
-            ));
-            auto srcType = FromString<NYT::ENodeType>(attrs.At("type").AsString());
-            attrs.AsMap().erase("type");
-
-            auto userAttrs = GetUserAttributes(srcTx, srcRichYPath.Path_, true);
-            NYT::MergeNodes(attrs, userAttrs);
-
-            entry->DumpTx->Create(dstPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
-            entry->DumpTx->Concatenate(
-                { srcRichYPath },
-                NYT::TRichYPath(dstPath),
-                TConcatenateOptions()
-            );
-        }
-    }
-
     template <class TExecParamsPtr>
     static TVector<TRichYPath> PrepareDestinations(
         const TVector<TOutputInfo>& outTables,
@@ -5914,9 +5821,9 @@ private:
         const TSession::TPtr& session,
         const TString& cluster,
         const TExprNode* root,
-        TExprContext* exprCtx)
+        TExprContext* exprCtx) const
     {
-        auto ctx = MakeIntrusive<TExecContext<TOptions>>(TIntrusivePtr<TYtNativeGateway>(this), MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
+        auto ctx = MakeIntrusive<TExecContext<TOptions>>(MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
         if (root) {
             YQL_ENSURE(exprCtx);
             if (TYtTransientOpBase::Match(root)) {

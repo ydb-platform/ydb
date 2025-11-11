@@ -9,8 +9,6 @@
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
-
 using namespace NActors;
 
 namespace NInterconnect::NRdma {

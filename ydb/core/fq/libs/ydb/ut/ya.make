@@ -11,8 +11,6 @@ PEERDIR(
     ydb/library/security
 )
 
-YQL_LAST_ABI_VERSION()
-
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
 END()

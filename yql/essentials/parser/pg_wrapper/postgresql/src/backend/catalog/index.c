@@ -1046,7 +1046,6 @@ index_create(Relation heapRelation,
 	if (OidIsValid(parentIndexRelid))
 	{
 		StoreSingleInheritance(indexRelationId, parentIndexRelid, 1);
-		LockRelationOid(parentIndexRelid, ShareUpdateExclusiveLock);
 		SetRelationHasSubclass(parentIndexRelid, true);
 	}
 
@@ -2812,46 +2811,11 @@ index_update_stats(Relation rel,
 				   bool hasindex,
 				   double reltuples)
 {
-	bool		update_stats;
-	BlockNumber relpages = 0;	/* keep compiler quiet */
-	BlockNumber relallvisible = 0;
 	Oid			relid = RelationGetRelid(rel);
 	Relation	pg_class;
-	ScanKeyData key[1];
 	HeapTuple	tuple;
-	void	   *state;
 	Form_pg_class rd_rel;
 	bool		dirty;
-
-	/*
-	 * As a special hack, if we are dealing with an empty table and the
-	 * existing reltuples is -1, we leave that alone.  This ensures that
-	 * creating an index as part of CREATE TABLE doesn't cause the table to
-	 * prematurely look like it's been vacuumed.  The rd_rel we modify may
-	 * differ from rel->rd_rel due to e.g. commit of concurrent GRANT, but the
-	 * commands that change reltuples take locks conflicting with ours.  (Even
-	 * if a command changed reltuples under a weaker lock, this affects only
-	 * statistics for an empty table.)
-	 */
-	if (reltuples == 0 && rel->rd_rel->reltuples < 0)
-		reltuples = -1;
-
-	update_stats = reltuples >= 0;
-
-	/*
-	 * Finish I/O and visibility map buffer locks before
-	 * systable_inplace_update_begin() locks the pg_class buffer.  The rd_rel
-	 * we modify may differ from rel->rd_rel due to e.g. commit of concurrent
-	 * GRANT, but no command changes a relkind from non-index to index.  (Even
-	 * if one did, relallvisible doesn't break functionality.)
-	 */
-	if (update_stats)
-	{
-		relpages = RelationGetNumberOfBlocks(rel);
-
-		if (rel->rd_rel->relkind != RELKIND_INDEX)
-			visibilitymap_count(rel, &relallvisible, NULL);
-	}
 
 	/*
 	 * We always update the pg_class row using a non-transactional,
@@ -2883,12 +2847,33 @@ index_update_stats(Relation rel,
 
 	pg_class = table_open(RelationRelationId, RowExclusiveLock);
 
-	ScanKeyInit(&key[0],
-				Anum_pg_class_oid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(relid));
-	systable_inplace_update_begin(pg_class, ClassOidIndexId, true, NULL,
-								  1, key, &tuple, &state);
+	/*
+	 * Make a copy of the tuple to update.  Normally we use the syscache, but
+	 * we can't rely on that during bootstrap or while reindexing pg_class
+	 * itself.
+	 */
+	if (IsBootstrapProcessingMode() ||
+		ReindexIsProcessingHeap(RelationRelationId))
+	{
+		/* don't assume syscache will work */
+		TableScanDesc pg_class_scan;
+		ScanKeyData key[1];
+
+		ScanKeyInit(&key[0],
+					Anum_pg_class_oid,
+					BTEqualStrategyNumber, F_OIDEQ,
+					ObjectIdGetDatum(relid));
+
+		pg_class_scan = table_beginscan_catalog(pg_class, 1, key);
+		tuple = heap_getnext(pg_class_scan, ForwardScanDirection);
+		tuple = heap_copytuple(tuple);
+		table_endscan(pg_class_scan);
+	}
+	else
+	{
+		/* normal case, use syscache */
+		tuple = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(relid));
+	}
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "could not find tuple for relation %u", relid);
@@ -2896,6 +2881,15 @@ index_update_stats(Relation rel,
 
 	/* Should this be a more comprehensive test? */
 	Assert(rd_rel->relkind != RELKIND_PARTITIONED_INDEX);
+
+	/*
+	 * As a special hack, if we are dealing with an empty table and the
+	 * existing reltuples is -1, we leave that alone.  This ensures that
+	 * creating an index as part of CREATE TABLE doesn't cause the table to
+	 * prematurely look like it's been vacuumed.
+	 */
+	if (reltuples == 0 && rd_rel->reltuples < 0)
+		reltuples = -1;
 
 	/* Apply required updates, if any, to copied tuple */
 
@@ -2906,8 +2900,16 @@ index_update_stats(Relation rel,
 		dirty = true;
 	}
 
-	if (update_stats)
+	if (reltuples >= 0)
 	{
+		BlockNumber relpages = RelationGetNumberOfBlocks(rel);
+		BlockNumber relallvisible;
+
+		if (rd_rel->relkind != RELKIND_INDEX)
+			visibilitymap_count(rel, &relallvisible, NULL);
+		else					/* don't bother for indexes */
+			relallvisible = 0;
+
 		if (rd_rel->relpages != (int32) relpages)
 		{
 			rd_rel->relpages = (int32) relpages;
@@ -2930,12 +2932,11 @@ index_update_stats(Relation rel,
 	 */
 	if (dirty)
 	{
-		systable_inplace_update_finish(state, tuple);
+		heap_inplace_update(pg_class, tuple);
 		/* the above sends a cache inval message */
 	}
 	else
 	{
-		systable_inplace_update_cancel(state);
 		/* no need to change tuple, but force relcache inval anyway */
 		CacheInvalidateRelcacheByTuple(tuple);
 	}
@@ -3982,14 +3983,6 @@ reindex_relation(Oid relid, int flags, ReindexParams *params)
 					 errmsg("cannot reindex invalid index \"%s.%s\" on TOAST table, skipping",
 							get_namespace_name(indexNamespaceId),
 							get_rel_name(indexOid))));
-
-			/*
-			 * Remove this invalid toast index from the reindex pending list,
-			 * as it is skipped here due to the hard failure that would happen
-			 * in reindex_index(), should we try to process it.
-			 */
-			if (flags & REINDEX_REL_SUPPRESS_INDEX_USE)
-				RemoveReindexPending(indexOid);
 			continue;
 		}
 

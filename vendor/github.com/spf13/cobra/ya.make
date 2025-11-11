@@ -51,12 +51,6 @@ IF (OS_WINDOWS)
     )
 ENDIF()
 
-IF (OS_ANDROID)
-    SRCS(
-        command_notwin.go
-    )
-ENDIF()
-
 END()
 
 RECURSE(

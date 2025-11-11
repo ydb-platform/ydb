@@ -707,7 +707,7 @@
       "type":"list",
       "member":{"shape":"AwsLogSourceConfiguration"},
       "max":50,
-      "min":1
+      "min":0
     },
     "AwsLogSourceName":{
       "type":"string",
@@ -717,9 +717,7 @@
         "SH_FINDINGS",
         "CLOUD_TRAIL_MGMT",
         "LAMBDA_EXECUTION",
-        "S3_DATA",
-        "EKS_AUDIT",
-        "WAF"
+        "S3_DATA"
       ]
     },
     "AwsLogSourceResource":{
@@ -738,8 +736,7 @@
     },
     "AwsLogSourceResourceList":{
       "type":"list",
-      "member":{"shape":"AwsLogSourceResource"},
-      "min":1
+      "member":{"shape":"AwsLogSourceResource"}
     },
     "AwsLogSourceVersion":{
       "type":"string",
@@ -802,10 +799,7 @@
     },
     "CreateCustomLogSourceRequest":{
       "type":"structure",
-      "required":[
-        "configuration",
-        "sourceName"
-      ],
+      "required":["sourceName"],
       "members":{
         "configuration":{
           "shape":"CustomLogSourceConfiguration",
@@ -867,6 +861,7 @@
     },
     "CreateDataLakeOrganizationConfigurationRequest":{
       "type":"structure",
+      "required":["autoEnableNewAccount"],
       "members":{
         "autoEnableNewAccount":{
           "shape":"DataLakeAutoEnableNewAccountConfigurationList",
@@ -1100,8 +1095,7 @@
     },
     "DataLakeAutoEnableNewAccountConfigurationList":{
       "type":"list",
-      "member":{"shape":"DataLakeAutoEnableNewAccountConfiguration"},
-      "min":1
+      "member":{"shape":"DataLakeAutoEnableNewAccountConfiguration"}
     },
     "DataLakeConfiguration":{
       "type":"structure",
@@ -1128,8 +1122,7 @@
     },
     "DataLakeConfigurationList":{
       "type":"list",
-      "member":{"shape":"DataLakeConfiguration"},
-      "min":1
+      "member":{"shape":"DataLakeConfiguration"}
     },
     "DataLakeEncryptionConfiguration":{
       "type":"structure",
@@ -1224,14 +1217,14 @@
       "members":{
         "regions":{
           "shape":"RegionList",
-          "documentation":"<p>Specifies one or more centralized rollup Regions. The Amazon Web Services Region specified in the <code>region</code> parameter of the <a href=\"https://docs.aws.amazon.com/security-lake/latest/APIReference/API_CreateDataLake.html\"> <code>CreateDataLake</code> </a> or <a href=\"https://docs.aws.amazon.com/security-lake/latest/APIReference/API_UpdateDataLake.html\"> <code>UpdateDataLake</code> </a> operations contributes data to the rollup Region or Regions specified in this parameter.</p> <p>Replication enables automatic, asynchronous copying of objects across Amazon S3 buckets. S3 buckets that are configured for object replication can be owned by the same Amazon Web Services account or by different accounts. You can replicate objects to a single destination bucket or to multiple destination buckets. The destination buckets can be in different Regions or within the same Region as the source bucket.</p>"
+          "documentation":"<p>Replication enables automatic, asynchronous copying of objects across Amazon S3 buckets. Amazon S3 buckets that are configured for object replication can be owned by the same Amazon Web Services account or by different accounts. You can replicate objects to a single destination bucket or to multiple destination buckets. The destination buckets can be in different Amazon Web Services Regions or within the same Region as the source bucket.</p> <p>Set up one or more rollup Regions by providing the Region or Regions that should contribute to the central rollup Region.</p>"
         },
         "roleArn":{
           "shape":"RoleArn",
           "documentation":"<p>Replication settings for the Amazon S3 buckets. This parameter uses the Identity and Access Management (IAM) role you created that is managed by Security Lake, to ensure the replication setting is correct.</p>"
         }
       },
-      "documentation":"<p>Provides replication details for objects stored in the Amazon Security Lake data lake.</p>"
+      "documentation":"<p>Provides replication details of Amazon Security Lake object.</p>"
     },
     "DataLakeResource":{
       "type":"structure",
@@ -1419,6 +1412,7 @@
     },
     "DeleteDataLakeOrganizationConfigurationRequest":{
       "type":"structure",
+      "required":["autoEnableNewAccount"],
       "members":{
         "autoEnableNewAccount":{
           "shape":"DataLakeAutoEnableNewAccountConfigurationList",
@@ -1660,7 +1654,7 @@
         },
         "regions":{
           "shape":"RegionList",
-          "documentation":"<p>The Amazon Web Services Regions from which exceptions are retrieved.</p>"
+          "documentation":"<p>List the Amazon Web Services Regions from which exceptions are retrieved.</p>"
         }
       }
     },
@@ -1682,7 +1676,7 @@
       "members":{
         "regions":{
           "shape":"RegionList",
-          "documentation":"<p>The list of Regions where Security Lake is enabled.</p>",
+          "documentation":"<p>The list of regions where Security Lake is enabled.</p>",
           "location":"querystring",
           "locationName":"regions"
         }
@@ -1714,7 +1708,7 @@
         },
         "regions":{
           "shape":"RegionList",
-          "documentation":"<p>The list of Regions for which log sources are displayed.</p>"
+          "documentation":"<p>The list of regions for which log sources are displayed.</p>"
         },
         "sources":{
           "shape":"LogSourceResourceList",
@@ -1771,7 +1765,7 @@
       "members":{
         "resourceArn":{
           "shape":"AmazonResourceName",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Security Lake resource for which you want to retrieve the tags.</p>",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Amazon Security Lake resource to retrieve the tags for.</p>",
           "location":"uri",
           "locationName":"resourceArn"
         }
@@ -1915,7 +1909,7 @@
     },
     "RoleArn":{
       "type":"string",
-      "pattern":"^arn:(aws[a-zA-Z-]*)?:iam::\\d{12}:role/?[a-zA-Z_0-9+=,.@\\-_/]+$"
+      "pattern":"^arn:.*$"
     },
     "S3BucketArn":{"type":"string"},
     "S3URI":{
@@ -2197,10 +2191,6 @@
         "configurations":{
           "shape":"DataLakeConfigurationList",
           "documentation":"<p>Specify the Region or Regions that will contribute data to the rollup region.</p>"
-        },
-        "metaStoreManagerRoleArn":{
-          "shape":"RoleArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) used to create and update the Glue table. This table contains partitions generated by the ingestion and normalization of Amazon Web Services log sources and custom sources.</p>"
         }
       }
     },

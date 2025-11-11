@@ -264,21 +264,6 @@ private:
     THashMap<TString, TLayerInfo> InfoByUrl_;
     THashMap<TString, TLogicalInfo> LogicalInfoByName_;
 };
-
-class TDummyRemoteLayerProvider: public IRemoteLayerProvider {
-public:
-    TDummyRemoteLayerProvider(TString errorMessage)
-        : ErrorMessage_(std::move(errorMessage))
-    {
-    }
-
-    NThreading::TFuture<TLayerInfo> GetLayerInfo(const TMaybe<TString>&, const TString&) const override {
-        return NThreading::MakeErrorFuture<TLayerInfo>(std::make_exception_ptr(yexception() << ErrorMessage_));
-    }
-
-private:
-    TString ErrorMessage_;
-};
 } // namespace
 
 namespace NYql::NLayers {
@@ -358,9 +343,4 @@ TMaybe<TVector<TLocations>> RemoveDuplicates(const TVector<std::pair<TKey, const
 ILayersRegistryPtr MakeLayersRegistry(const THashMap<TString, IRemoteLayerProviderPtr>& remoteProviders, const THashMap<TString, ILayersIntegrationPtr>& integrations) {
     return MakeIntrusive<TLayersRegistry>(remoteProviders, integrations);
 }
-
-IRemoteLayerProviderPtr MakeDummyRemoteLayerProvider(TString errorMessage) {
-    return MakeIntrusive<TDummyRemoteLayerProvider>(std::move(errorMessage));
-}
-
 } // namespace NYql::NLayers

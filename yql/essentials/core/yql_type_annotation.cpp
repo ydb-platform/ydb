@@ -468,7 +468,7 @@ bool TModuleResolver::AddFromFile(const std::string_view& file, TExprContext& ct
         }
     }
 
-    return AddFromMemory(fullName, moduleName, IsSExpr(isYql, isYqls, body), body, ctx, syntaxVersion, packageVersion, pos);
+    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos);
 }
 
 bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos) {
@@ -497,23 +497,7 @@ bool TModuleResolver::AddFromMemory(const std::string_view& file, const TString&
         }
     }
 
-    return AddFromMemory(fullName, moduleName, IsSExpr(isYql, isYqls, body), body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
-}
-
-bool TModuleResolver::IsSExpr(bool isYql, bool isYqls, const TString& body) const {
-    if (isYqls) {
-        return true;
-    }
-
-    if (!isYql) {
-        return false;
-    }
-
-    if (UseCanonicalLibrarySuffix_) {
-        return body.StartsWith('(');
-    } else {
-        return true;
-    }
+    return AddFromMemory(fullName, moduleName, isYql || isYqls, body, ctx, syntaxVersion, packageVersion, pos, exports, imports);
 }
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool sExpr, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TPosition pos, std::vector<TString>* exports, std::vector<TString>* imports) {

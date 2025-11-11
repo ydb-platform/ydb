@@ -478,6 +478,7 @@ class Session:
         return cls(client=client)
 
     def _register_default_handlers(self):
+
         # S3 customizations
         self._session.register(
             'creating-client-class.s3',

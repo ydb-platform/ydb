@@ -43,7 +43,6 @@ TYtSectionList ConvertInputTable(TExprBase input, TExprContext& ctx, const TConv
                     .Columns(columns)
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
-                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings(settings.Cast())

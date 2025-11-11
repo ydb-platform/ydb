@@ -7,7 +7,6 @@ SRCS(
 PEERDIR(
     contrib/libs/grpc
     library/cpp/containers/stack_vector
-    ydb/public/sdk/cpp/src/library/time
 )
 
 END()

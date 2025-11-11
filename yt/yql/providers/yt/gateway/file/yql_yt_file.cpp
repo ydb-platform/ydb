@@ -681,7 +681,7 @@ public:
     }
 
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
         TRunResult res;
         auto nodePos = ctx.GetPosition(node->Pos());
 
@@ -1145,12 +1145,6 @@ public:
     }
 
     void AddCluster(const TYtClusterConfig&) override {
-    }
-
-    TFuture<TDumpResult> Dump(TDumpOptions&& /*options*/) override {
-        TDumpResult res;
-        res.SetSuccess();
-        return MakeFuture(res);
     }
 
 private:

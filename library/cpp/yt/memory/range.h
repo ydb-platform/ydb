@@ -100,7 +100,7 @@ public:
     { }
 
     //! Constructs a TRange from an std::span.
-    TRange(std::span<const T> elements)
+    TRange(const std::span<T>& elements)
         : Data_(elements.data())
         , Length_(elements.size())
     { }

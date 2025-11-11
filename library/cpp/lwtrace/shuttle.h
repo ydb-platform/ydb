@@ -198,19 +198,9 @@ namespace NLWTrace {
         }
 
         // Checks if there is at least one shuttle in orbit
-        // Uses atomic read to synchronize with NotConcurrent() and avoid data
-        // races, still optimized and no lock
-        bool HasShuttles() const
-        {
-            static_assert(sizeof(HeadNoLock) == sizeof(TAtomic));
-            const TAtomic* headPtr =
-                reinterpret_cast<const TAtomic*>(&HeadNoLock);
-            TAtomicBase value = AtomicGet(*headPtr);
-            // Return true for any non-null value (including lock sentinel 0x1)
-            // Lock sentinel means some operation is in progress
-            // This allows harmless false positives but prevents data loss from
-            // false negatives
-            return value != 0;
+        // NOTE: used by every LWTRACK macro check, so keep it optimized - do not lock
+        bool HasShuttles() const {
+            return HeadNoLock.Get();
         }
 
         void AddShuttle(const TShuttlePtr& shuttle) {

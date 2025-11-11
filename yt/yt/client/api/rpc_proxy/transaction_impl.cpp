@@ -968,36 +968,6 @@ TFuture<void> TTransaction::FinishDistributedWriteSession(
         options);
 }
 
-TFuture<TDistributedWriteFileSessionWithCookies> TTransaction::StartDistributedWriteFileSession(
-    const NYPath::TRichYPath& path,
-    const TDistributedWriteFileSessionStartOptions& options)
-{
-    ValidateActive();
-    return Client_->StartDistributedWriteFileSession(
-        path,
-        PatchTransactionId(options));
-}
-
-TFuture<void> TTransaction::PingDistributedWriteFileSession(
-    const TSignedDistributedWriteFileSessionPtr& session,
-    const TDistributedWriteFileSessionPingOptions& options)
-{
-    ValidateActive();
-    return Client_->PingDistributedWriteFileSession(
-        session,
-        options);
-}
-
-TFuture<void> TTransaction::FinishDistributedWriteFileSession(
-    const TDistributedWriteFileSessionWithResults& sessionWithResults,
-    const TDistributedWriteFileSessionFinishOptions& options)
-{
-    ValidateActive();
-    return Client_->FinishDistributedWriteFileSession(
-        sessionWithResults,
-        options);
-}
-
 TFuture<void> TTransaction::DoAbort(
     TGuard<NThreading::TSpinLock>* guard,
     const TTransactionAbortOptions& /*options*/)

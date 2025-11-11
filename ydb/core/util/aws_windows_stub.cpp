@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-void InitAwsAPI(const TAwsClientConfig&) {}
-void ShutdownAwsAPI(const TAwsClientConfig&) {}
+void InitAwsAPI() {}
+void ShutdownAwsAPI() {}
 
 } // NKikimr

@@ -57,7 +57,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Describes the rates for the specified Savings Plan.</p>"
+      "documentation":"<p>Describes the specified Savings Plans rates.</p>"
     },
     "DescribeSavingsPlans":{
       "name":"DescribeSavingsPlans",
@@ -85,7 +85,7 @@
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Describes the offering rates for the specified Savings Plans.</p>"
+      "documentation":"<p>Describes the specified Savings Plans offering rates.</p>"
     },
     "DescribeSavingsPlansOfferings":{
       "name":"DescribeSavingsPlansOfferings",
@@ -99,7 +99,7 @@
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Describes the offerings for the specified Savings Plans.</p>"
+      "documentation":"<p>Describes the specified Savings Plans offerings.</p>"
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -115,22 +115,6 @@
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Lists the tags for the specified resource.</p>"
-    },
-    "ReturnSavingsPlan":{
-      "name":"ReturnSavingsPlan",
-      "http":{
-        "method":"POST",
-        "requestUri":"/ReturnSavingsPlan"
-      },
-      "input":{"shape":"ReturnSavingsPlanRequest"},
-      "output":{"shape":"ReturnSavingsPlanResponse"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ServiceQuotaExceededException"}
-      ],
-      "documentation":"<p>Returns the specified Savings Plan.</p>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -180,19 +164,19 @@
         },
         "commitment":{
           "shape":"Amount",
-          "documentation":"<p>The hourly commitment, in the same currency of the <code>savingsPlanOfferingId</code>. This is a value between 0.001 and 1 million. You cannot specify more than five digits after the decimal point.</p>"
+          "documentation":"<p>The hourly commitment, in USD. This is a value between 0.001 and 1 million. You cannot specify more than five digits after the decimal point.</p>"
         },
         "upfrontPaymentAmount":{
           "shape":"Amount",
-          "documentation":"<p>The up-front payment amount. This is a whole number between 50 and 99 percent of the total value of the Savings Plan. This parameter is only supported if the payment option is <code>Partial Upfront</code>.</p>"
+          "documentation":"<p>The up-front payment amount. This is a whole number between 50 and 99 percent of the total value of the Savings Plan. This parameter is supported only if the payment option is <code>Partial Upfront</code>.</p>"
         },
         "purchaseTime":{
           "shape":"DateTime",
-          "documentation":"<p>The purchase time of the Savings Plan in UTC format (YYYY-MM-DDTHH:MM:SSZ).</p>"
+          "documentation":"<p>The time at which to purchase the Savings Plan, in UTC format (YYYY-MM-DDTHH:MM:SSZ).</p>"
         },
         "clientToken":{
           "shape":"ClientToken",
-          "documentation":"<p>A unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>",
+          "documentation":"<p>Unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>",
           "idempotencyToken":true
         },
         "tags":{
@@ -268,11 +252,11 @@
         },
         "searchResults":{
           "shape":"SavingsPlanRateList",
-          "documentation":"<p>Information about the Savings Plan rates.</p>"
+          "documentation":"<p>Information about the Savings Plans rates.</p>"
         },
         "nextToken":{
           "shape":"PaginationToken",
-          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return.</p>"
+          "documentation":"<p>The token to use to retrieve the next page of results. This value is null when there are no more results to return. </p>"
         }
       }
     },
@@ -293,7 +277,7 @@
         },
         "products":{
           "shape":"SavingsPlanProductTypeList",
-          "documentation":"<p>The Amazon Web Services products.</p>"
+          "documentation":"<p>The AWS products.</p>"
         },
         "serviceCodes":{
           "shape":"SavingsPlanRateServiceCodeList",
@@ -305,7 +289,7 @@
         },
         "operations":{
           "shape":"SavingsPlanRateOperationList",
-          "documentation":"<p>The specific Amazon Web Services operation for the line item in the billing report.</p>"
+          "documentation":"<p>The specific AWS operation for the line item in the billing report.</p>"
         },
         "filters":{
           "shape":"SavingsPlanOfferingRateFiltersList",
@@ -351,11 +335,11 @@
         },
         "planTypes":{
           "shape":"SavingsPlanTypeList",
-          "documentation":"<p>The plan types.</p>"
+          "documentation":"<p>The plan type.</p>"
         },
         "durations":{
           "shape":"DurationsList",
-          "documentation":"<p>The duration, in seconds.</p>"
+          "documentation":"<p>The durations, in seconds.</p>"
         },
         "currencies":{
           "shape":"CurrencyList",
@@ -375,7 +359,7 @@
         },
         "operations":{
           "shape":"SavingsPlanOperationList",
-          "documentation":"<p>The specific Amazon Web Services operation for the line item in the billing report.</p>"
+          "documentation":"<p>The specific AWS operation for the line item in the billing report.</p>"
         },
         "filters":{
           "shape":"SavingsPlanOfferingFiltersList",
@@ -425,7 +409,7 @@
         },
         "states":{
           "shape":"SavingsPlanStateList",
-          "documentation":"<p>The current states of the Savings Plans.</p>"
+          "documentation":"<p>The states.</p>"
         },
         "filters":{
           "shape":"SavingsPlanFilterList",
@@ -548,30 +532,6 @@
       "error":{"httpStatusCode":404},
       "exception":true
     },
-    "ReturnSavingsPlanRequest":{
-      "type":"structure",
-      "required":["savingsPlanId"],
-      "members":{
-        "savingsPlanId":{
-          "shape":"SavingsPlanId",
-          "documentation":"<p>The ID of the Savings Plan.</p>"
-        },
-        "clientToken":{
-          "shape":"ClientToken",
-          "documentation":"<p>A unique, case-sensitive identifier that you provide to ensure the idempotency of the request.</p>",
-          "idempotencyToken":true
-        }
-      }
-    },
-    "ReturnSavingsPlanResponse":{
-      "type":"structure",
-      "members":{
-        "savingsPlanId":{
-          "shape":"SavingsPlanId",
-          "documentation":"<p>The ID of the Savings Plan.</p>"
-        }
-      }
-    },
     "SavingsPlan":{
       "type":"structure",
       "members":{
@@ -601,11 +561,11 @@
         },
         "state":{
           "shape":"SavingsPlanState",
-          "documentation":"<p>The current state.</p>"
+          "documentation":"<p>The state.</p>"
         },
         "region":{
           "shape":"Region",
-          "documentation":"<p>The Amazon Web Services Region.</p>"
+          "documentation":"<p>The AWS Region.</p>"
         },
         "ec2InstanceFamily":{
           "shape":"EC2InstanceFamily",
@@ -629,7 +589,7 @@
         },
         "commitment":{
           "shape":"Amount",
-          "documentation":"<p>The hourly commitment amount in the specified currency.</p>"
+          "documentation":"<p>The hourly commitment, in USD.</p>"
         },
         "upfrontPaymentAmount":{
           "shape":"Amount",
@@ -646,10 +606,6 @@
         "tags":{
           "shape":"TagMap",
           "documentation":"<p>One or more tags.</p>"
-        },
-        "returnableUntil":{
-          "shape":"String",
-          "documentation":"<p>The time until when a return for the Savings Plan can be requested. If the Savings Plan is not returnable, the field reflects the Savings Plan start time.</p>"
         }
       },
       "documentation":"<p>Information about a Savings Plan.</p>"
@@ -683,7 +639,7 @@
           "documentation":"<p>The filter value.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan filter.</p>"
+      "documentation":"<p>Information about a filter.</p>"
     },
     "SavingsPlanFilterList":{
       "type":"list",
@@ -739,7 +695,7 @@
         },
         "operation":{
           "shape":"SavingsPlanOperation",
-          "documentation":"<p>The specific Amazon Web Services operation for the line item in the billing report.</p>"
+          "documentation":"<p>The specific AWS operation for the line item in the billing report.</p>"
         },
         "properties":{
           "shape":"SavingsPlanOfferingPropertyList",
@@ -767,7 +723,7 @@
           "documentation":"<p>The filter values.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan offering filter.</p>"
+      "documentation":"<p>Information about a filter.</p>"
     },
     "SavingsPlanOfferingFiltersList":{
       "type":"list",
@@ -786,7 +742,7 @@
           "documentation":"<p>The property value.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan offering property.</p>"
+      "documentation":"<p>Information about a property.</p>"
     },
     "SavingsPlanOfferingPropertyKey":{
       "type":"string",
@@ -828,7 +784,7 @@
         },
         "operation":{
           "shape":"SavingsPlanRateOperation",
-          "documentation":"<p>The specific Amazon Web Services operation for the line item in the billing report.</p>"
+          "documentation":"<p>The specific AWS operation for the line item in the billing report.</p>"
         },
         "properties":{
           "shape":"SavingsPlanOfferingRatePropertyList",
@@ -849,7 +805,7 @@
           "documentation":"<p>The filter values.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan offering rate filter.</p>"
+      "documentation":"<p>Information about a filter.</p>"
     },
     "SavingsPlanOfferingRateFiltersList":{
       "type":"list",
@@ -867,7 +823,7 @@
           "documentation":"<p>The property value.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan offering rate property.</p>"
+      "documentation":"<p>Information about a property.</p>"
     },
     "SavingsPlanOfferingRatePropertyList":{
       "type":"list",
@@ -944,7 +900,7 @@
         },
         "operation":{
           "shape":"SavingsPlanRateOperation",
-          "documentation":"<p>The specific Amazon Web Services operation for the line item in the billing report.</p>"
+          "documentation":"<p>The specific AWS operation for the line item in the billing report.</p>"
         },
         "properties":{
           "shape":"SavingsPlanRatePropertyList",
@@ -965,7 +921,7 @@
           "documentation":"<p>The filter values.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan rate filter.</p>"
+      "documentation":"<p>Information about a filter.</p>"
     },
     "SavingsPlanRateFilterAttribute":{
       "type":"string",
@@ -1021,7 +977,7 @@
           "documentation":"<p>The property value.</p>"
         }
       },
-      "documentation":"<p>Information about a Savings Plan rate property.</p>"
+      "documentation":"<p>Information about a property.</p>"
     },
     "SavingsPlanRatePropertyKey":{
       "type":"string",
@@ -1085,9 +1041,7 @@
         "active",
         "retired",
         "queued",
-        "queued-deleted",
-        "pending-return",
-        "returned"
+        "queued-deleted"
       ]
     },
     "SavingsPlanStateList":{
@@ -1219,5 +1173,5 @@
       "exception":true
     }
   },
-  "documentation":"<p>Savings Plans are a pricing model that offer significant savings on Amazon Web Services usage (for example, on Amazon EC2 instances). You commit to a consistent amount of usage per hour, in the specified currency, for a term of one or three years, and receive a lower price for that usage. For more information, see the <a href=\"https://docs.aws.amazon.com/savingsplans/latest/userguide/\">Amazon Web Services Savings Plans User Guide</a>.</p>"
+  "documentation":"<p>Savings Plans are a pricing model that offer significant savings on AWS usage (for example, on Amazon EC2 instances). You commit to a consistent amount of usage, in USD per hour, for a term of 1 or 3 years, and receive a lower price for that usage. For more information, see the <a href=\"https://docs.aws.amazon.com/savingsplans/latest/userguide/\">AWS Savings Plans User Guide</a>.</p>"
 }

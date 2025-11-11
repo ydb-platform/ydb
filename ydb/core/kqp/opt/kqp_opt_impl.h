@@ -31,7 +31,7 @@ NYql::NNodes::TKqpTable BuildTableMeta(const NYql::TKikimrTableMetadata& tableMe
 TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::TKqlReadTableIndex& index,
     const NYql::TKikimrTablesData& tables, TStringBuf cluster);
 
-TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildAffectedIndexTables(
+TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildSecondaryIndexVector(
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
     const THashSet<TStringBuf>* filter,
     const std::function<NYql::NNodes::TExprBase (const NYql::TKikimrTableMetadata&,

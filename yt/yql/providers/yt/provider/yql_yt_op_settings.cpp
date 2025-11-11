@@ -39,6 +39,29 @@ bool ValidateColumnSettings(TExprNode& columnsSettings, TExprContext& ctx, TVect
     return true;
 }
 
+bool ValidateColumnWithTypesSettings(TExprNode& columnsSettings, TExprContext& ctx, TVector<std::pair<TString, const TTypeAnnotationNode*>>& columns) {
+    if (!EnsureTupleMinSize(columnsSettings, 1U, ctx)) {
+        return false;
+    }
+
+    for (const auto& child : columnsSettings.Children()) {
+        if (!EnsureTupleMinSize(*child, 2U, ctx)) {
+            return false;
+        }
+
+        if (!EnsureAtom(child->Head(), ctx)) {
+            return false;
+        }
+
+        if (EnsureTypeRewrite(child->ChildRef(1), ctx) != IGraphTransformer::TStatus::Ok) {
+            return false;
+        }
+
+        columns.emplace_back(child->Content(), child->Child(1U)->GetTypeAnn());
+    }
+    return true;
+}
+
 bool ValidateColumnPairSettings(TExprNode& columnsSettings, TExprContext& ctx, TVector<TString>& columns) {
     if (!EnsureTupleMinSize(columnsSettings, 1, ctx)) {
         return false;
@@ -371,24 +394,9 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
-            for (const auto& child : setting->Tail().Children()) {
-                if (!EnsureTupleMinSize(*child, 2U, ctx)) {
-                    return false;
-                }
-                if (!EnsureAtom(child->Head(), ctx)) {
-                    return false;
-                }
-            }
-            break;
-        }
-        case EYtSettingType::OrderBy: {
-            if (!EnsureTupleSize(*setting, 2, ctx)) {
+            TVector<std::pair<TString, const TTypeAnnotationNode*>> columns;
+            if (!ValidateColumnWithTypesSettings(setting->Tail(), ctx, columns)) {
                 return false;
-            }
-            for (const auto& child : setting->Tail().Children()) {
-                if (!(EnsureTupleSize(*child, 2U, ctx) && EnsureTupleOfAtoms(*child, ctx))) {
-                    return false;
-                }
             }
             break;
         }
@@ -984,7 +992,8 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
-        case EYtSettingType::Actions: {
+        case EYtSettingType::Actions:
+        case EYtSettingType::PrimaryKey: {
             ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
                 << "Feature '" << nameNode->Content() << "' isn't supported."));
             return false;
@@ -1114,10 +1123,8 @@ const TString& GetSingleColumnGroupSpec() {
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, EYtSettingType type) {
     for (auto& setting : settings.Children()) {
-        if (setting->ChildrenSize() != 0) {
-            if (const auto t = TryFromString<EYtSettingType>(setting->Head().Content()); t && *t == type) {
-                return setting;
-            }
+        if (setting->ChildrenSize() != 0 && FromString<EYtSettingType>(setting->Child(0)->Content()) == type) {
+            return setting;
         }
     }
     return nullptr;

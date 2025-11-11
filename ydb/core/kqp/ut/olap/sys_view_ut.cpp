@@ -637,17 +637,6 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             auto selectQuery = TString(R"(
                 SELECT *
                 FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY PathId
-                LIMIT 10
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
             )");
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);

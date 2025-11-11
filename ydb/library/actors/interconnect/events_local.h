@@ -2,7 +2,6 @@
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
-#include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <util/generic/deque.h>
 #include <util/network/address.h>
 
@@ -124,9 +123,7 @@ namespace NActors {
                 ui64 nextPacket,
                 TAutoPtr<TProgramInfo>&& programInfo,
                 TSessionParams params,
-                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket,
-                NInterconnect::NRdma::TQueuePair::TPtr qp,
-                NInterconnect::NRdma::ICq::TPtr cq)
+                TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
             : Socket(std::move(socket))
             , Peer(peer)
             , Self(self)
@@ -134,8 +131,6 @@ namespace NActors {
             , ProgramInfo(std::move(programInfo))
             , Params(std::move(params))
             , XdcSocket(std::move(xdcSocket))
-            , RdmaQp(qp)
-            , RdmaCq(cq)
         {
         }
 
@@ -146,8 +141,6 @@ namespace NActors {
         TAutoPtr<TProgramInfo> ProgramInfo;
         const TSessionParams Params;
         TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
-        NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
-        NInterconnect::NRdma::ICq::TPtr RdmaCq;
     };
 
     struct TEvHandshakeFail: public TEventLocal<TEvHandshakeFail, ui32(ENetwork::HandshakeFail)> {

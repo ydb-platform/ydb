@@ -3,42 +3,44 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_monitoring.h>
 #include <ydb/core/grpc_services/base/base.h>
+
 #include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
+static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
+    const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    if (res.empty()) {
+        return {};
+    }
+    return TString{res[0]};
+}
+
 void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Ydb::Monitoring;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-    ReportSdkBuildInfo();
+    using namespace Ydb;
 
-#ifdef SETUP_MON_METHOD
-#error SETUP_MON_METHOD macro already defined
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
 #endif
+#define ADD_REQUEST(NAME, CB, AUDIT_MODE, TGrpcRequestOperationCallType) \
+     MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>> \
+         (this, &Service_, CQ_,                                                                                 \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));          \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
+                    new TGrpcRequestOperationCallType<Monitoring::NAME##Request, Monitoring::NAME##Response>        \
+                         (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Off, nullptr, AUDIT_MODE}));          \
+            }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                          \
+            #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
-#define SETUP_MON_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, operationCallClass) \
-    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                               \
-        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                        \
-        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                       \
-        methodCallback,                                                                                  \
-        rlMode,                                                                                          \
-        requestType,                                                                                     \
-        YDB_API_DEFAULT_COUNTER_BLOCK(monitoring, methodName),                                           \
-        auditMode,                                                                                       \
-        COMMON,                                                                                          \
-        operationCallClass,                                                                              \
-        GRpcRequestProxyId_,                                                                             \
-        CQ_,                                                                                             \
-        nullptr,                                                                                         \
-        nullptr)
+    ADD_REQUEST(SelfCheck, DoSelfCheckRequest, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    ADD_REQUEST(ClusterState, DoClusterStateRequest, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    ADD_REQUEST(NodeCheck, DoNodeCheckRequest, TAuditMode::NonModifying(), TGrpcRequestOperationCallNoAuth);
 
-    SETUP_MON_METHOD(SelfCheck, DoSelfCheckRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
-    SETUP_MON_METHOD(ClusterState, DoClusterStateRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
-    SETUP_MON_METHOD(NodeCheck, DoNodeCheckRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCallNoAuth);
 
-#undef SETUP_MON_METHOD
+#undef ADD_REQUEST
 }
 
 } // namespace NGRpcService

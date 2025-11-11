@@ -26,8 +26,7 @@
         {"shape":"DuplicateResourceException"},
         {"shape":"ThrottlingException"},
         {"shape":"InvalidRequestException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"UnsupportedOperationException"}
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>This API is in preview release and subject to change.</p> <p>Creates and persists an Application resource.</p>"
     },
@@ -67,23 +66,6 @@
       ],
       "documentation":"<p>Creates an EventIntegration, given a specified name, description, and a reference to an Amazon EventBridge bus in your account and a partner event source that pushes events to that bus. No objects are created in the your account, only metadata that is persisted on the EventIntegration control plane.</p>"
     },
-    "DeleteApplication":{
-      "name":"DeleteApplication",
-      "http":{
-        "method":"DELETE",
-        "requestUri":"/applications/{ApplicationIdentifier}"
-      },
-      "input":{"shape":"DeleteApplicationRequest"},
-      "output":{"shape":"DeleteApplicationResponse"},
-      "errors":[
-        {"shape":"InternalServiceError"},
-        {"shape":"ThrottlingException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidRequestException"},
-        {"shape":"AccessDeniedException"}
-      ],
-      "documentation":"<p>Deletes the Application. Only Applications that don't have any Application Associations can be deleted.</p>"
-    },
     "DeleteDataIntegration":{
       "name":"DeleteDataIntegration",
       "http":{
@@ -122,7 +104,7 @@
       "name":"GetApplication",
       "http":{
         "method":"GET",
-        "requestUri":"/applications/{ApplicationIdentifier}"
+        "requestUri":"/applications/{Arn}"
       },
       "input":{"shape":"GetApplicationRequest"},
       "output":{"shape":"GetApplicationResponse"},
@@ -168,23 +150,6 @@
         {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Returns information about the event integration.</p>"
-    },
-    "ListApplicationAssociations":{
-      "name":"ListApplicationAssociations",
-      "http":{
-        "method":"GET",
-        "requestUri":"/applications/{ApplicationIdentifier}/associations"
-      },
-      "input":{"shape":"ListApplicationAssociationsRequest"},
-      "output":{"shape":"ListApplicationAssociationsResponse"},
-      "errors":[
-        {"shape":"InternalServiceError"},
-        {"shape":"ThrottlingException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidRequestException"},
-        {"shape":"AccessDeniedException"}
-      ],
-      "documentation":"<p>Returns a paginated list of application associations for an application.</p>"
     },
     "ListApplications":{
       "name":"ListApplications",
@@ -320,7 +285,7 @@
       "name":"UpdateApplication",
       "http":{
         "method":"PATCH",
-        "requestUri":"/applications/{ApplicationIdentifier}"
+        "requestUri":"/applications/{Arn}"
       },
       "input":{"shape":"UpdateApplicationRequest"},
       "output":{"shape":"UpdateApplicationResponse"},
@@ -329,8 +294,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"InvalidRequestException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"UnsupportedOperationException"}
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>This API is in preview release and subject to change.</p> <p>Updates and persists an Application resource.</p>"
     },
@@ -382,30 +346,6 @@
     "ApplicationApprovedOrigins":{
       "type":"list",
       "member":{"shape":"ApplicationTrustedSource"},
-      "max":50,
-      "min":1
-    },
-    "ApplicationAssociationSummary":{
-      "type":"structure",
-      "members":{
-        "ApplicationAssociationArn":{
-          "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the Application Association.</p>"
-        },
-        "ApplicationArn":{
-          "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the Application.</p>"
-        },
-        "ClientId":{
-          "shape":"ClientId",
-          "documentation":"<p>The identifier for the client that is associated with the Application Association.</p>"
-        }
-      },
-      "documentation":"<p>Summary information about the Application Association.</p>"
-    },
-    "ApplicationAssociationsList":{
-      "type":"list",
-      "member":{"shape":"ApplicationAssociationSummary"},
       "max":50,
       "min":1
     },
@@ -522,15 +462,11 @@
         },
         "Subscriptions":{
           "shape":"SubscriptionList",
-          "documentation":"<p>The events that the application subscribes.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"Subscriptions has been replaced with Permissions"
+          "documentation":"<p>The events that the application subscribes.</p>"
         },
         "Publications":{
           "shape":"PublicationList",
-          "documentation":"<p>The events that the application publishes.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"Publications has been replaced with Permissions"
+          "documentation":"<p>The events that the application publishes.</p>"
         },
         "ClientToken":{
           "shape":"IdempotencyToken",
@@ -540,10 +476,6 @@
         "Tags":{
           "shape":"TagMap",
           "documentation":"<p>The tags used to organize, track, or control access for this resource. For example, { \"tags\": {\"key1\":\"value1\", \"key2\":\"value2\"} }.</p>"
-        },
-        "Permissions":{
-          "shape":"PermissionList",
-          "documentation":"<p>The configuration of events or requests that the application has access to.</p>"
         }
       }
     },
@@ -748,23 +680,6 @@
       "max":50,
       "min":1
     },
-    "DeleteApplicationRequest":{
-      "type":"structure",
-      "required":["Arn"],
-      "members":{
-        "Arn":{
-          "shape":"ArnOrUUID",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the Application.</p>",
-          "location":"uri",
-          "locationName":"ApplicationIdentifier"
-        }
-      }
-    },
-    "DeleteApplicationResponse":{
-      "type":"structure",
-      "members":{
-      }
-    },
     "DeleteDataIntegrationRequest":{
       "type":"structure",
       "required":["DataIntegrationIdentifier"],
@@ -802,7 +717,7 @@
     "Description":{
       "type":"string",
       "max":1000,
-      "min":0,
+      "min":1,
       "pattern":".*"
     },
     "DuplicateResourceException":{
@@ -982,7 +897,7 @@
           "shape":"ArnOrUUID",
           "documentation":"<p>The Amazon Resource Name (ARN) of the Application.</p>",
           "location":"uri",
-          "locationName":"ApplicationIdentifier"
+          "locationName":"Arn"
         }
       }
     },
@@ -1015,15 +930,11 @@
         },
         "Subscriptions":{
           "shape":"SubscriptionList",
-          "documentation":"<p>The events that the application subscribes.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"Subscriptions has been replaced with Permissions"
+          "documentation":"<p>The events that the application subscribes.</p>"
         },
         "Publications":{
           "shape":"PublicationList",
-          "documentation":"<p>The events that the application publishes.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"Publications has been replaced with Permissions"
+          "documentation":"<p>The events that the application publishes.</p>"
         },
         "CreatedTime":{
           "shape":"Timestamp",
@@ -1036,10 +947,6 @@
         "Tags":{
           "shape":"TagMap",
           "documentation":"<p>The tags used to organize, track, or control access for this resource. For example, { \"tags\": {\"key1\":\"value1\", \"key2\":\"value2\"} }.</p>"
-        },
-        "Permissions":{
-          "shape":"PermissionList",
-          "documentation":"<p>The configuration of events or requests that the application has access to.</p>"
         }
       }
     },
@@ -1171,43 +1078,6 @@
       "documentation":"<p>The request is not valid. </p>",
       "error":{"httpStatusCode":400},
       "exception":true
-    },
-    "ListApplicationAssociationsRequest":{
-      "type":"structure",
-      "required":["ApplicationId"],
-      "members":{
-        "ApplicationId":{
-          "shape":"ArnOrUUID",
-          "documentation":"<p>A unique identifier for the Application.</p>",
-          "location":"uri",
-          "locationName":"ApplicationIdentifier"
-        },
-        "NextToken":{
-          "shape":"NextToken",
-          "documentation":"<p>The token for the next set of results. Use the value returned in the previous response in the next request to retrieve the next set of results.</p>",
-          "location":"querystring",
-          "locationName":"nextToken"
-        },
-        "MaxResults":{
-          "shape":"MaxResults",
-          "documentation":"<p>The maximum number of results to return per page.</p>",
-          "location":"querystring",
-          "locationName":"maxResults"
-        }
-      }
-    },
-    "ListApplicationAssociationsResponse":{
-      "type":"structure",
-      "members":{
-        "ApplicationAssociations":{
-          "shape":"ApplicationAssociationsList",
-          "documentation":"<p>List of Application Associations for the Application.</p>"
-        },
-        "NextToken":{
-          "shape":"NextToken",
-          "documentation":"<p>If there are additional results, this is the token for the next set of results.</p>"
-        }
-      }
     },
     "ListApplicationsRequest":{
       "type":"structure",
@@ -1436,19 +1306,6 @@
       "value":{"shape":"FieldsMap"},
       "documentation":"<p>The configuration for what data should be pulled from the source.</p>"
     },
-    "Permission":{
-      "type":"string",
-      "documentation":"<p>The permission of an event or request that the application has access to.</p>",
-      "max":255,
-      "min":1,
-      "pattern":"^[a-zA-Z0-9\\/\\._\\-\\*]+$"
-    },
-    "PermissionList":{
-      "type":"list",
-      "member":{"shape":"Permission"},
-      "max":150,
-      "min":0
-    },
     "Publication":{
       "type":"structure",
       "required":[
@@ -1614,15 +1471,6 @@
       "type":"string",
       "pattern":"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
     },
-    "UnsupportedOperationException":{
-      "type":"structure",
-      "members":{
-        "Message":{"shape":"Message"}
-      },
-      "documentation":"<p>The operation is not supported.</p>",
-      "error":{"httpStatusCode":400},
-      "exception":true
-    },
     "UntagResourceRequest":{
       "type":"structure",
       "required":[
@@ -1657,7 +1505,7 @@
           "shape":"ArnOrUUID",
           "documentation":"<p>The Amazon Resource Name (ARN) of the Application.</p>",
           "location":"uri",
-          "locationName":"ApplicationIdentifier"
+          "locationName":"Arn"
         },
         "Name":{
           "shape":"ApplicationName",
@@ -1673,19 +1521,11 @@
         },
         "Subscriptions":{
           "shape":"SubscriptionList",
-          "documentation":"<p>The events that the application subscribes.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"Subscriptions has been replaced with Permissions"
+          "documentation":"<p>The events that the application subscribes.</p>"
         },
         "Publications":{
           "shape":"PublicationList",
-          "documentation":"<p>The events that the application publishes.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"Publications has been replaced with Permissions"
-        },
-        "Permissions":{
-          "shape":"PermissionList",
-          "documentation":"<p>The configuration of events or requests that the application has access to.</p>"
+          "documentation":"<p>The events that the application publishes.</p>"
         }
       }
     },

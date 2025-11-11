@@ -1,6 +1,5 @@
+from __future__ import absolute_import
 import warnings
-from typing import Optional, TypeVar, cast, overload
-
 from hamcrest.core.matcher import Matcher
 from hamcrest.core.string_description import StringDescription
 
@@ -12,20 +11,7 @@ __unittest = True
 # py.test integration; hide these frames from tracebacks
 __tracebackhide__ = True
 
-T = TypeVar("T")
-
-
-@overload
-def assert_that(actual_or_assertion: T, matcher: Matcher[T], reason: str = "") -> None:
-    ...
-
-
-@overload
-def assert_that(actual_or_assertion: bool, reason: str = "") -> None:
-    ...
-
-
-def assert_that(actual_or_assertion, matcher=None, reason=""):
+def assert_that(arg1, arg2=None, arg3=''):
     """Asserts that actual value satisfies matcher. (Can also assert plain
     boolean condition.)
 
@@ -54,27 +40,28 @@ def assert_that(actual_or_assertion, matcher=None, reason=""):
     writing by being a standalone function.
 
     """
-    if isinstance(matcher, Matcher):
-        _assert_match(actual=actual_or_assertion, matcher=matcher, reason=reason)
+    if isinstance(arg2, Matcher):
+        _assert_match(actual=arg1, matcher=arg2, reason=arg3)
     else:
-        if isinstance(actual_or_assertion, Matcher):
-            warnings.warn("arg1 should be boolean, but was {}".format(type(actual_or_assertion)))
-        _assert_bool(assertion=cast(bool, actual_or_assertion), reason=cast(str, matcher))
+        if isinstance(arg1, Matcher):
+            warnings.warn("arg1 should be boolean, but was {}".format(type(arg1)))
+        _assert_bool(assertion=arg1, reason=arg2)
 
 
-def _assert_match(actual: T, matcher: Matcher[T], reason: str) -> None:
+def _assert_match(actual, matcher, reason):
     if not matcher.matches(actual):
         description = StringDescription()
-        description.append_text(reason).append_text("\nExpected: ").append_description_of(
-            matcher
-        ).append_text("\n     but: ")
+        description.append_text(reason)             \
+                   .append_text('\nExpected: ')     \
+                   .append_description_of(matcher)  \
+                   .append_text('\n     but: ')
         matcher.describe_mismatch(actual, description)
-        description.append_text("\n")
+        description.append_text('\n')
         raise AssertionError(description)
 
 
-def _assert_bool(assertion: bool, reason: Optional[str] = None) -> None:
+def _assert_bool(assertion, reason=None):
     if not assertion:
         if not reason:
-            reason = "Assertion failed"
+            reason = 'Assertion failed'
         raise AssertionError(reason)

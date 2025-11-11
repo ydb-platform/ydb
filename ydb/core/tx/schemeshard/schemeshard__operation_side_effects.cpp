@@ -655,7 +655,7 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         const ui32 msgType = message->Type();
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send tablet strongly msg"
+                    "Send tablet strongly msg "
                         << " operationId: " << opId
                         << " from tablet: " << ss->TabletID()
                         << " to tablet: " << tablet

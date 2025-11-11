@@ -1,10 +1,6 @@
 #include "helpers.h"
 
-#include <yt/yt/core/http/helpers.h>
-
 namespace NYT::NRpc::NHttp {
-
-using namespace NYT::NHttp::NHeaders;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -12,11 +8,11 @@ std::string ToHttpContentType(EMessageFormat format)
 {
     switch (format) {
         case EMessageFormat::Protobuf:
-            return ApplicationXProtobufContentType;
+            return "application/x-protobuf";
         case EMessageFormat::Json:
-            return ApplicationJsonContentType + ";charset=utf8";
+            return "application/json;charset=utf8";
         case EMessageFormat::Yson:
-            return ApplicationXYsonContentType;
+            return "application/x-yson";
         default:
             YT_ABORT();
     }
@@ -24,11 +20,11 @@ std::string ToHttpContentType(EMessageFormat format)
 
 std::optional<EMessageFormat> FromHttpContentType(TStringBuf contentType)
 {
-    if (contentType == ApplicationXProtobufContentType) {
+    if (contentType == "application/x-protobuf") {
         return EMessageFormat::Protobuf;
-    } else if (contentType.StartsWith(ApplicationJsonContentType)) {
+    } else if (contentType.StartsWith("application/json")) {
         return EMessageFormat::Json;
-    } else if (contentType == ApplicationXYsonContentType) {
+    } else if (contentType == "application/x-yson") {
         return EMessageFormat::Yson;
     }
 

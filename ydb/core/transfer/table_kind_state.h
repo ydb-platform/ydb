@@ -10,9 +10,8 @@ class ITableKindState {
 public:
     using TPtr = std::unique_ptr<ITableKindState>;
 
-    ITableKindState(const TActorId& selfId, const TString& database, const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result)
+    ITableKindState(const TActorId& selfId, const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result)
         : SelfId(selfId)
-        , Database(database)
         , Scheme(BuildScheme(result))
     {}
 
@@ -56,7 +55,6 @@ public:
 
 protected:
     const TActorId SelfId;
-    const TString Database;
     const TScheme::TPtr Scheme;
 
     std::map<TString, NKqp::IDataBatcherPtr> Batchers;
@@ -64,7 +62,7 @@ protected:
 };
 
 
-std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, const TString& database, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result);
-std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, const TString& database, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result);
+std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result);
+std::unique_ptr<ITableKindState> CreateRowTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result);
 
 }

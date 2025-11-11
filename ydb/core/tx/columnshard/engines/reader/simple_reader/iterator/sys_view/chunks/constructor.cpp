@@ -45,8 +45,7 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             }
             constructors.emplace_back(
                 pathIdTranslator.GetUnifiedByInternalVerified(p->GetPathId()), tabletId, p, p->GetSchema(originalSchemaInfo));
-            if (!pkFilter->IsUsed(
-                    constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
                 constructors.pop_back();
             }
         }

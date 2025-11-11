@@ -254,18 +254,7 @@ be_tls_init(bool isServerStart)
 		}
 	}
 
-	/*
-	 * Disallow SSL session tickets. OpenSSL use both stateful and stateless
-	 * tickets for TLSv1.3, and stateless ticket for TLSv1.2. SSL_OP_NO_TICKET
-	 * is available since 0.9.8f but only turns off stateless tickets. In
-	 * order to turn off stateful tickets we need SSL_CTX_set_num_tickets,
-	 * which is available since OpenSSL 1.1.1. LibreSSL 3.5.4 (from OpenBSD
-	 * 7.1) introduced this API for compatibility, but doesn't support session
-	 * tickets at all so it's a no-op there.
-	 */
-#ifdef HAVE_SSL_CTX_SET_NUM_TICKETS
-	SSL_CTX_set_num_tickets(context, 0);
-#endif
+	/* disallow SSL session tickets */
 	SSL_CTX_set_options(context, SSL_OP_NO_TICKET);
 
 	/* disallow SSL session caching, too */
@@ -1380,11 +1369,10 @@ SSLerrmessage(unsigned long ecode)
 		return errreason;
 
 	/*
-	 * In OpenSSL 3.0.0 and later, ERR_reason_error_string does not map system
-	 * errno values anymore.  (See OpenSSL source code for the explanation.)
-	 * We can cover that shortcoming with this bit of code.  Older OpenSSL
-	 * versions don't have the ERR_SYSTEM_ERROR macro, but that's okay because
-	 * they don't have the shortcoming either.
+	 * In OpenSSL 3.0.0 and later, ERR_reason_error_string randomly refuses to
+	 * map system errno values.  We can cover that shortcoming with this bit
+	 * of code.  Older OpenSSL versions don't have the ERR_SYSTEM_ERROR macro,
+	 * but that's okay because they don't have the shortcoming either.
 	 */
 #ifdef ERR_SYSTEM_ERROR
 	if (ERR_SYSTEM_ERROR(ecode))

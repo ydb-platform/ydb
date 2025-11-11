@@ -80,7 +80,7 @@ std::string_view TDictStats::GetColumnName(const ui32 index) const {
 TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
     : Original(original) {
     AFL_VERIFY(Original->num_columns() == 4)("count", Original->num_columns());
-    AFL_VERIFY(Original->column(0)->type()->id() == arrow::binary()->id());
+    AFL_VERIFY(Original->column(0)->type()->id() == arrow::utf8()->id());
     AFL_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
@@ -130,7 +130,7 @@ IChunkedArray::EType TDictStats::GetAccessorType(const ui32 columnIndex) const {
 TDictStats::TBuilder::TBuilder() {
     Builders = NArrow::MakeBuilders(GetStatsSchema());
     AFL_VERIFY(Builders.size() == 4);
-    AFL_VERIFY(Builders[0]->type()->id() == arrow::binary()->id());
+    AFL_VERIFY(Builders[0]->type()->id() == arrow::utf8()->id());
     AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
     AFL_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());

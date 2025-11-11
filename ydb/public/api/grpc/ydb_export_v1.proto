@@ -14,8 +14,4 @@ service ExportService {
     // Exports data to S3.
     // Method starts an asynchronous operation that can be cancelled while it is in progress.
     rpc ExportToS3(Export.ExportToS3Request) returns (Export.ExportToS3Response);
-
-    // Exports data to file system.
-    // Method starts an asynchronous operation that can be cancelled while it is in progress.
-    rpc ExportToFs(ExportToFsRequest) returns (ExportToFsResponse);
 }

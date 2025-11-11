@@ -128,7 +128,6 @@ namespace {
             entry.RedirectRequired = false;
 
             auto request = MakeHolder<TNavigate>();
-            request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             request->ResultSet.emplace_back(std::move(entry));
             request->DomainOwnerId = DomainOwnerId;
 

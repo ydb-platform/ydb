@@ -2,12 +2,11 @@
 
 #include <string.h>
 
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
-#include <ydb/library/actors/interconnect/address/interconnect_address.h>
+#include <ydb/library/actors/interconnect/interconnect_address.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
@@ -142,22 +141,12 @@ TEST_F(TRdmaLow, ReadInOneProcessWithQpInterruption) {
             auto qp1num = rdma->Qp1->GetQpNum();
 
             {
-                int err = rdma->Qp2->ToRtsState(NInterconnect::NRdma::THandshakeData {
-                    .QpNum = qp1num,
-                    .SubnetPrefix = rdma->Ctx->GetGid().global.subnet_prefix,
-                    .InterfaceId = rdma->Ctx->GetGid().global.interface_id,
-                    .MtuIndex = rdma->Ctx->GetPortAttr().active_mtu
-                 });
+                int err = rdma->Qp2->ToRtsState(qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
                 EXPECT_TRUE(err == 0);
             }
 
             {
-                int err = rdma->Qp1->ToRtsState(NInterconnect::NRdma::THandshakeData {
-                    .QpNum = rdma->Qp2->GetQpNum(),
-                    .SubnetPrefix = rdma->Ctx->GetGid().global.subnet_prefix,
-                    .InterfaceId = rdma->Ctx->GetGid().global.interface_id,
-                    .MtuIndex = rdma->Ctx->GetPortAttr().active_mtu
-                });
+                int err = rdma->Qp1->ToRtsState(rdma->Qp2->GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
                 EXPECT_TRUE(err == 0);
             }
         }

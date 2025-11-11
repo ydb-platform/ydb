@@ -24,8 +24,8 @@ public:
         return PathId;
     }
 
-    virtual bool OrderByLimitAllowed() const override {
-        return false;
+    virtual TString GetOverridenScanType(const TString& /*defScanType*/) const override {
+        return "SIMPLE";
     }
 
     virtual bool NeedDuplicateFiltering() const override {

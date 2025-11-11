@@ -1706,7 +1706,6 @@ bool TOutHorizontalJoinOptimizer::MakeJoinedMap(TPositionHandle pos, const TGrou
                             .Columns(columns)
                             .Ranges(ctx.ShallowCopy(*std::get<3>(key)))
                             .Stat<TCoVoid>().Build()
-                            .QLFilter<TCoVoid>().Build()
                         .Build()
                     .Build()
                     .Settings(sectionSettingsBuilder.Done())

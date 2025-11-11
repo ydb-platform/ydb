@@ -10,7 +10,6 @@ import functools
 import os
 import signal
 import sys
-import threading
 import time
 from collections import namedtuple
 
@@ -33,6 +32,7 @@ from ._psutil_windows import HIGH_PRIORITY_CLASS
 from ._psutil_windows import IDLE_PRIORITY_CLASS
 from ._psutil_windows import NORMAL_PRIORITY_CLASS
 from ._psutil_windows import REALTIME_PRIORITY_CLASS
+
 
 try:
     from . import _psutil_windows as cext
@@ -184,21 +184,12 @@ pio = namedtuple('pio', ['read_count', 'write_count',
 @functools.lru_cache(maxsize=512)
 def convert_dos_path(s):
     r"""Convert paths using native DOS format like:
-        "\Device\HarddiskVolume1\Windows\systemew\file.txt" or
-        "\??\C:\Windows\systemew\file.txt"
+        "\Device\HarddiskVolume1\Windows\systemew\file.txt"
     into:
         "C:\Windows\systemew\file.txt".
     """
-    if s.startswith('\\\\'):
-        return s
     rawdrive = '\\'.join(s.split('\\')[:3])
-    if rawdrive in {"\\??\\UNC", "\\Device\\Mup"}:
-        rawdrive = '\\'.join(s.split('\\')[:5])
-        driveletter = '\\\\' + '\\'.join(s.split('\\')[3:5])
-    elif rawdrive.startswith('\\??\\'):
-        driveletter = s.split('\\')[2]
-    else:
-        driveletter = cext.QueryDosDevice(rawdrive)
+    driveletter = cext.QueryDosDevice(rawdrive)
     remainder = s[len(rawdrive) :]
     return os.path.join(driveletter, remainder)
 
@@ -331,31 +322,22 @@ def cpu_freq():
     return [_common.scpufreq(float(curr), min_, float(max_))]
 
 
-_loadavg_initialized = False
-_lock = threading.Lock()
-
-
-def _getloadavg_impl():
-    # Drop to 2 decimal points which is what Linux does
-    raw_loads = cext.getloadavg()
-    return tuple(round(load, 2) for load in raw_loads)
+_loadavg_inititialized = False
 
 
 def getloadavg():
     """Return the number of processes in the system run queue averaged
     over the last 1, 5, and 15 minutes respectively as a tuple.
     """
-    global _loadavg_initialized
+    global _loadavg_inititialized
 
-    if _loadavg_initialized:
-        return _getloadavg_impl()
+    if not _loadavg_inititialized:
+        cext.init_loadavg_counter()
+        _loadavg_inititialized = True
 
-    with _lock:
-        if not _loadavg_initialized:
-            cext.init_loadavg_counter()
-            _loadavg_initialized = True
-
-    return _getloadavg_impl()
+    # Drop to 2 decimal points which is what Linux does
+    raw_loads = cext.getloadavg()
+    return tuple(round(load, 2) for load in raw_loads)
 
 
 # =====================================================================
@@ -444,14 +426,12 @@ _last_btime = 0
 
 
 def boot_time():
-    """The system boot time expressed in seconds since the epoch. This
-    also includes the time spent during hybernate / suspend.
-    """
+    """The system boot time expressed in seconds since the epoch."""
     # This dirty hack is to adjust the precision of the returned
     # value which may have a 1 second fluctuation, see:
     # https://github.com/giampaolo/psutil/issues/1007
     global _last_btime
-    ret = time.time() - cext.uptime()
+    ret = float(cext.boot_time())
     if abs(ret - _last_btime) <= 1:
         return _last_btime
     else:

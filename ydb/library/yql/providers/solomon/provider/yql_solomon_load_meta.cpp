@@ -16,7 +16,7 @@ namespace {
 struct TLoadSolomonMetaRequest {
     NSo::ISolomonAccessorClient::TPtr SolomonClient;
     NThreading::TFuture<NSo::TGetLabelsResponse> LabelNamesRequest;
-    NThreading::TFuture<NSo::TListMetricsLabelsResponse> LabelValuesRequest;
+    NThreading::TFuture<NSo::TListMetricsResponse> ListMetricsRequest;
 };
 
 TMaybe<TString> ExtractSetting(const TExprNode& settings, const TString& settingName) {
@@ -93,24 +93,25 @@ public:
                     return TStatus::Error;
                 }
 
-                auto enableSolomonClientPostApi = State_->Configuration->_EnableSolomonClientPostApi.Get().OrElse(false);
-                source.MutableSettings()->insert({ "enableSolomonClientPostApi", ToString(enableSolomonClientPostApi) });
+                auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
+                auto solomonClientDefaultReplica = State_->Configuration->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
+                source.MutableSettings()->insert({ "solomonClientDefaultReplica", ToString(solomonClientDefaultReplica) });
 
                 auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
 
                 auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
                 auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
-                auto listMetricsLabelsFuture = solomonClient->ListMetricsLabels(selectors, from, to);
+                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to, 30, 0);
 
                 LabelNamesRequests_[soReadObject.Raw()] = {
                     .SolomonClient = solomonClient,
                     .LabelNamesRequest = labelNamesFuture,
-                    .LabelValuesRequest = listMetricsLabelsFuture
+                    .ListMetricsRequest = listMetricsFuture
                 };
 
                 futures.push_back(labelNamesFuture.IgnoreResult());
-                futures.push_back(listMetricsLabelsFuture.IgnoreResult());
+                futures.push_back(listMetricsFuture.IgnoreResult());
             }
         }
 
@@ -141,10 +142,10 @@ public:
                 return TStatus::Error;
             }
 
-            auto listMetricLabelsValue = request.LabelValuesRequest.GetValue();
-            if (listMetricLabelsValue.Status != NSo::EStatus::STATUS_OK) {
+            auto listMetricsValue = request.ListMetricsRequest.GetValue();
+            if (listMetricsValue.Status != NSo::EStatus::STATUS_OK) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                        TStringBuilder() << "Failed to get total metrics count, details: " << listMetricLabelsValue.Error));
+                        TStringBuilder() << "Failed to get total metrics count, details: " << listMetricsValue.Error));
                 return TStatus::Error;
             }
 
@@ -160,7 +161,7 @@ public:
                     .RequiredLabelNames()
                         .Add(labelNames)
                         .Build()
-                    .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricLabelsValue.Result.TotalCount))
+                    .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricsValue.Result.TotalCount))
                 .Done().Ptr());
         }
 

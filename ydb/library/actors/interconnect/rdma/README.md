@@ -7,7 +7,3 @@ and allows to get ibv context associated with given ip address.
 registered in the RDMA hardware.
 
   rdma.* - Primitives to perform RDMA ops.
-
-  cq_actor/ - The actor interface into rdma CQ
-
-  dummy.cpp - Some dummy implementation for unsupported from RDMA perspective platforms.

@@ -151,11 +151,6 @@ public:
         const TSignedWriteFragmentCookiePtr& cookie,
         const TTableFragmentWriterOptions& options) override;
 
-    // Distributed file client
-    IFileFragmentWriterPtr CreateFileFragmentWriter(
-        const TSignedWriteFileFragmentCookiePtr& cookie,
-        const TFileFragmentWriterOptions& options) override;
-
     // Queues.
     TFuture<NQueueClient::IQueueRowsetPtr> PullQueue(
         const NYPath::TRichYPath& queuePath,

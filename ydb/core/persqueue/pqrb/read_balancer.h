@@ -216,7 +216,6 @@ private:
     std::unordered_set<ui64> PipesRequested;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
-    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedExtendedCounters;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
 
     NMonitoring::TDynamicCounterPtr DynamicCounters;

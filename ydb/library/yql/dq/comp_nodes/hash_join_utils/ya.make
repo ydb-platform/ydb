@@ -7,6 +7,11 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
     library/cpp/digest/crc32c
+)
+
+IF (ARCH_X86_64 AND OS_LINUX)
+
+PEERDIR(
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
 )
 
@@ -14,11 +19,8 @@ SRCS(
     tuple.cpp
     accumulator.cpp
     block_layout_converter.cpp
-    layout_converter_common.cpp
     page_hash_table.cpp
 )
-
-IF (ARCH_X86_64 AND OS_LINUX)
 
 CFLAGS(
     -mprfchw

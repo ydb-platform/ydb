@@ -3468,8 +3468,7 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .WatermarkMode<TCoAtom>().Build(ToString(false))
-        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
+        .template WatermarkMode<TCoAtom>().Build(ToString(false));
 
     return Build<TCoPartitionsByKeys>(ctx, pos)
         .Input(aggregate.Input())
@@ -3482,10 +3481,10 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .SortKeySelectorLambda(timeExtractorLambda)
         .ListHandlerLambda()
             .Args(streamArg)
-            .Body<TCoForwardList>()
+            .template Body<TCoForwardList>()
                 .Stream(Build<TCoMap>(ctx, pos)
                     .Input(multiHoppingCoreBuilder
-                        .Input<TCoIterator>()
+                        .template Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())

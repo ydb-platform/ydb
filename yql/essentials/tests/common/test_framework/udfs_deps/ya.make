@@ -12,7 +12,6 @@ SET(
     yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/topfreq
     yql/essentials/udfs/common/top
-    yql/essentials/udfs/common/reservoir_sampling
     yql/essentials/udfs/common/string
     yql/essentials/udfs/common/histogram
     yql/essentials/udfs/common/json2

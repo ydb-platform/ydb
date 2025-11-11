@@ -2,7 +2,7 @@
 _ssl_compat.py
 websocket - WebSocket client library for Python
 
-Copyright 2025 engn33r
+Copyright 2024 engn33r
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,24 +16,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import ssl as _ssl_module
-    from ssl import (
-        SSLError as _SSLErrorType,
-        SSLEOFError as _SSLEOFErrorType,
-        SSLWantReadError as _SSLWantReadErrorType,
-        SSLWantWriteError as _SSLWantWriteErrorType,
-    )
-else:
-    _ssl_module = None
-    _SSLErrorType = None
-    _SSLEOFErrorType = None
-    _SSLWantReadErrorType = None
-    _SSLWantWriteErrorType = None
-
 __all__ = [
     "HAVE_SSL",
     "ssl",
@@ -45,22 +27,22 @@ __all__ = [
 
 try:
     import ssl
-    from ssl import SSLError, SSLEOFError, SSLWantReadError, SSLWantWriteError  # type: ignore[attr-defined]
+    from ssl import SSLError, SSLEOFError, SSLWantReadError, SSLWantWriteError
 
     HAVE_SSL = True
 except ImportError:
     # dummy class of SSLError for environment without ssl support
-    class SSLError(Exception):  # type: ignore[no-redef]
+    class SSLError(Exception):
         pass
 
-    class SSLEOFError(Exception):  # type: ignore[no-redef]
+    class SSLEOFError(Exception):
         pass
 
-    class SSLWantReadError(Exception):  # type: ignore[no-redef]
+    class SSLWantReadError(Exception):
         pass
 
-    class SSLWantWriteError(Exception):  # type: ignore[no-redef]
+    class SSLWantWriteError(Exception):
         pass
 
-    ssl = None  # type: ignore[assignment,no-redef]
+    ssl = None
     HAVE_SSL = False

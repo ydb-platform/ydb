@@ -6,7 +6,7 @@ yag make -DBUILD_POSTGRES_ONLY || exit $?
 
 echo -n "Checking static variables: "
 
-data=$(objdump libessentials-parser-pg_wrapper.a -t | grep -E "\.data\.|\.bss\." | \
+data=$(objdump libyql-parser-pg_wrapper.a -t | grep -E "\.data\.|\.bss\." | \
 	grep -v -E "\.data\.rel\.ro\." | \
         grep -v -E "pg_comp_crc32c|pg_popcount32|pg_popcount64" | \
         grep -v -E "BlockSig|StartupBlockSig|UnBlockSig"

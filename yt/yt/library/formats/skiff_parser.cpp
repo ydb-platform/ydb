@@ -426,6 +426,7 @@ TSkiffToUnversionedValueConverter CreateComplexValueConverter(
 
 class TSkiffParserImpl
 {
+
 public:
     TSkiffParserImpl(
         std::shared_ptr<TSkiffSchema> skiffSchema,

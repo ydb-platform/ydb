@@ -147,8 +147,9 @@ TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 // Stream<Multi<...>> -> List<Tuple<...>>
 TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     return pgmBuilder.Collect(
-        pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream),
-                             [&](TRuntimeNode::TList items) -> TRuntimeNode { return pgmBuilder.NewTuple(items); }));
+        pgmBuilder.NarrowMap(pgmBuilder.ToFlow(stream), [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pgmBuilder.NewTuple(items);
+        }));
 }
 
 // List<Tuple<...>> -> WideFlow
@@ -167,8 +168,9 @@ TRuntimeNode ToWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
 
 // WideFlow -> List<Tuple<...>>
 TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode wideFlow) {
-    return pgmBuilder.Collect(pgmBuilder.NarrowMap(
-        wideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode { return pgmBuilder.NewTuple(items); }));
+    return pgmBuilder.Collect(pgmBuilder.NarrowMap(wideFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
+        return pgmBuilder.NewTuple(items);
+    }));
 }
 
 TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list) {
@@ -235,7 +237,7 @@ void CompareVectorsIgnoringOrder(const TType* type, TVector<NYql::NUdf::TUnboxed
     bool isTupleStub = false;
     const TValueLess valueLess(keyTypesStub, isTupleStub, compare.Get());
     const TValueEqual valueEqual(keyTypesStub, isTupleStub, equate.Get());
-    Cout << Endl;
+
     UNIT_ASSERT_VALUES_EQUAL(expectedItems.size(), gotItems.size());
     Sort(expectedItems, valueLess);
     Sort(gotItems, valueLess);

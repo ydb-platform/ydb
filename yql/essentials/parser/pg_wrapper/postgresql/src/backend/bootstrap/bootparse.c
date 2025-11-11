@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.8.2.  */
+/* A Bison parser, made by GNU Bison 3.7.5.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -46,10 +46,10 @@
    USER NAME SPACE" below.  */
 
 /* Identify Bison output, and Bison version.  */
-#define YYBISON 30802
+#define YYBISON 30705
 
 /* Bison version string.  */
-#define YYBISON_VERSION "3.8.2"
+#define YYBISON_VERSION "3.7.5"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -391,18 +391,12 @@ typedef int yy_state_fast_t;
 # define YY_USE(E) /* empty */
 #endif
 
+#if defined __GNUC__ && ! defined __ICC && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
 /* Suppress an incorrect diagnostic about yylval being uninitialized.  */
-#if defined __GNUC__ && ! defined __ICC && 406 <= __GNUC__ * 100 + __GNUC_MINOR__
-# if __GNUC__ * 100 + __GNUC_MINOR__ < 407
-#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
-    _Pragma ("GCC diagnostic push")                                     \
-    _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")
-# else
-#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
+# define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                            \
     _Pragma ("GCC diagnostic push")                                     \
     _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")              \
     _Pragma ("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
-# endif
 # define YY_IGNORE_MAYBE_UNINITIALIZED_END      \
     _Pragma ("GCC diagnostic pop")
 #else
@@ -619,7 +613,7 @@ static const yytype_int8 yytranslate[] =
 };
 
 #if YYDEBUG
-/* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
+  /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
        0,   112,   112,   113,   117,   118,   122,   123,   124,   125,
@@ -665,6 +659,17 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
+#ifdef YYPRINT
+/* YYTOKNUM[NUM] -- (External) token number corresponding to the
+   (internal) symbol number NUM (which must be that of a token).  */
+static const yytype_int16 yytoknum[] =
+{
+       0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
+     265,   266,   267,   268,   269,   270,   271,   272,   273,   274,
+     275,   276,   277,   278,   279,   280,   281,   282
+};
+#endif
+
 #define YYPACT_NINF (-53)
 
 #define yypact_value_is_default(Yyn) \
@@ -675,8 +680,8 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 #define yytable_value_is_error(Yyn) \
   0
 
-/* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
-   STATE-NUM.  */
+  /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
+     STATE-NUM.  */
 static const yytype_int16 yypact[] =
 {
       -4,   142,   142,   142,   -53,     2,   -14,    25,    -4,   -53,
@@ -692,9 +697,9 @@ static const yytype_int16 yypact[] =
      -53,   -53,    11,    -3,   -53,   -53,   -53,    18,   -53,   -53
 };
 
-/* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
-   Performed when YYTABLE does not specify something else to do.  Zero
-   means the default is an error.  */
+  /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
+     Performed when YYTABLE does not specify something else to do.  Zero
+     means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
        3,     0,     0,     0,    19,     0,     0,     0,     2,     4,
@@ -710,7 +715,7 @@ static const yytype_int8 yydefact[] =
       21,    27,     0,     0,    36,    25,    22,     0,    38,    37
 };
 
-/* YYPGOTO[NTERM-NUM].  */
+  /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
      -53,   -53,   -53,    38,   -53,   -53,   -53,   -53,   -53,   -53,
@@ -718,7 +723,7 @@ static const yytype_int8 yypgoto[] =
      -53,   -39,   -53,   -41,   -53,   -46,    -1
 };
 
-/* YYDEFGOTO[NTERM-NUM].  */
+  /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
        0,     7,     8,     9,    10,    11,    12,    81,    90,    13,
@@ -726,9 +731,9 @@ static const yytype_int8 yydefgoto[] =
       84,    85,   104,    48,    57,    58,    49
 };
 
-/* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
-   positive, shift that token.  If negative, reduce the rule whose
-   number is the opposite.  If YYTABLE_NINF, syntax error.  */
+  /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
+     positive, shift that token.  If negative, reduce the rule whose
+     number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
       38,    39,    40,    53,    45,     1,     2,     3,     4,     5,
@@ -771,8 +776,8 @@ static const yytype_int8 yycheck[] =
       18,    19,    20,    21,    22,    23,    24,    25,    26,    27
 };
 
-/* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
-   state STATE-NUM.  */
+  /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
+     symbol of state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
        0,     9,    10,    11,    12,    13,    17,    29,    30,    31,
@@ -788,7 +793,7 @@ static const yytype_int8 yystos[] =
        7,    54,    43,    25,    50,    44,     7,    26,    27,    27
 };
 
-/* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
+  /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
 static const yytype_int8 yyr1[] =
 {
        0,    28,    29,    29,    30,    30,    31,    31,    31,    31,
@@ -800,7 +805,7 @@ static const yytype_int8 yyr1[] =
       54,    54,    54,    54,    54,    54
 };
 
-/* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
+  /* YYR2[YYN] -- Number of symbols on the right hand side of rule YYN.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     1,     0,     1,     2,     1,     1,     1,     1,
@@ -821,7 +826,6 @@ enum { YYENOMEM = -2 };
 #define YYACCEPT        goto yyacceptlab
 #define YYABORT         goto yyabortlab
 #define YYERROR         goto yyerrorlab
-#define YYNOMEM         goto yyexhaustedlab
 
 
 #define YYRECOVERING()  (!!yyerrstatus)
@@ -862,7 +866,10 @@ do {                                            \
     YYFPRINTF Args;                             \
 } while (0)
 
-
+/* This macro is provided for backward compatibility. */
+# ifndef YY_LOCATION_PRINT
+#  define YY_LOCATION_PRINT(File, Loc) ((void) 0)
+# endif
 
 
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)                    \
@@ -889,6 +896,10 @@ yy_symbol_value_print (FILE *yyo,
   YY_USE (yyoutput);
   if (!yyvaluep)
     return;
+# ifdef YYPRINT
+  if (yykind < YYNTOKENS)
+    YYPRINT (yyo, yytoknum[yykind], *yyvaluep);
+# endif
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   YY_USE (yykind);
   YY_IGNORE_MAYBE_UNINITIALIZED_END
@@ -1073,7 +1084,6 @@ yyparse (void)
   YYDPRINTF ((stderr, "Starting parse\n"));
 
   yychar = YYEMPTY; /* Cause a token to be read.  */
-
   goto yysetstate;
 
 
@@ -1099,7 +1109,7 @@ yysetstate:
 
   if (yyss + yystacksize - 1 <= yyssp)
 #if !defined yyoverflow && !defined YYSTACK_RELOCATE
-    YYNOMEM;
+    goto yyexhaustedlab;
 #else
     {
       /* Get the current used size of the three stacks, in elements.  */
@@ -1127,7 +1137,7 @@ yysetstate:
 # else /* defined YYSTACK_RELOCATE */
       /* Extend the stack our own way.  */
       if (YYMAXDEPTH <= yystacksize)
-        YYNOMEM;
+        goto yyexhaustedlab;
       yystacksize *= 2;
       if (YYMAXDEPTH < yystacksize)
         yystacksize = YYMAXDEPTH;
@@ -1138,7 +1148,7 @@ yysetstate:
           YY_CAST (union yyalloc *,
                    YYSTACK_ALLOC (YY_CAST (YYSIZE_T, YYSTACK_BYTES (yystacksize))));
         if (! yyptr)
-          YYNOMEM;
+          goto yyexhaustedlab;
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
 #  undef YYSTACK_RELOCATE
@@ -1159,7 +1169,6 @@ yysetstate:
         YYABORT;
     }
 #endif /* !defined yyoverflow && !defined YYSTACK_RELOCATE */
-
 
   if (yystate == YYFINAL)
     YYACCEPT;
@@ -1279,7 +1288,7 @@ yyreduce:
 					boot_openrel((yyvsp[0].str));
 					do_end();
 				}
-#line 1283 "bootparse.c"
+#line 1292 "bootparse.c"
     break;
 
   case 15: /* Boot_CloseStmt: XCLOSE boot_ident  */
@@ -1289,7 +1298,7 @@ yyreduce:
 					closerel((yyvsp[0].str));
 					do_end();
 				}
-#line 1293 "bootparse.c"
+#line 1302 "bootparse.c"
     break;
 
   case 16: /* $@1: %empty  */
@@ -1303,7 +1312,7 @@ yyreduce:
 						 (yyvsp[-5].str),
 						 (yyvsp[-4].oidval));
 				}
-#line 1307 "bootparse.c"
+#line 1316 "bootparse.c"
     break;
 
   case 17: /* $@2: %empty  */
@@ -1311,7 +1320,7 @@ yyreduce:
                                 {
 					do_end();
 				}
-#line 1315 "bootparse.c"
+#line 1324 "bootparse.c"
     break;
 
   case 18: /* Boot_CreateStmt: XCREATE boot_ident oidspec optbootstrap optsharedrelation optrowtypeoid LPAREN $@1 boot_column_list $@2 RPAREN  */
@@ -1395,7 +1404,7 @@ yyreduce:
 					}
 					do_end();
 				}
-#line 1399 "bootparse.c"
+#line 1408 "bootparse.c"
     break;
 
   case 19: /* $@3: %empty  */
@@ -1405,7 +1414,7 @@ yyreduce:
 					elog(DEBUG4, "inserting row");
 					num_columns_read = 0;
 				}
-#line 1409 "bootparse.c"
+#line 1418 "bootparse.c"
     break;
 
   case 20: /* Boot_InsertStmt: INSERT_TUPLE $@3 LPAREN boot_column_val_list RPAREN  */
@@ -1419,7 +1428,7 @@ yyreduce:
 					InsertOneTuple();
 					do_end();
 				}
-#line 1423 "bootparse.c"
+#line 1432 "bootparse.c"
     break;
 
   case 21: /* Boot_DeclareIndexStmt: XDECLARE INDEX boot_ident oidspec ON boot_ident USING boot_ident LPAREN boot_index_params RPAREN  */
@@ -1473,7 +1482,7 @@ yyreduce:
 								false);
 					do_end();
 				}
-#line 1477 "bootparse.c"
+#line 1486 "bootparse.c"
     break;
 
   case 22: /* Boot_DeclareUniqueIndexStmt: XDECLARE UNIQUE INDEX boot_ident oidspec ON boot_ident USING boot_ident LPAREN boot_index_params RPAREN  */
@@ -1527,7 +1536,7 @@ yyreduce:
 								false);
 					do_end();
 				}
-#line 1531 "bootparse.c"
+#line 1540 "bootparse.c"
     break;
 
   case 23: /* Boot_DeclareToastStmt: XDECLARE XTOAST oidspec oidspec ON boot_ident  */
@@ -1540,7 +1549,7 @@ yyreduce:
 					BootstrapToastTable((yyvsp[0].str), (yyvsp[-3].oidval), (yyvsp[-2].oidval));
 					do_end();
 				}
-#line 1544 "bootparse.c"
+#line 1553 "bootparse.c"
     break;
 
   case 24: /* Boot_BuildIndsStmt: XBUILD INDICES  */
@@ -1550,19 +1559,19 @@ yyreduce:
 					build_indices();
 					do_end();
 				}
-#line 1554 "bootparse.c"
+#line 1563 "bootparse.c"
     break;
 
   case 25: /* boot_index_params: boot_index_params COMMA boot_index_param  */
 #line 395 "bootparse.y"
                                                                 { (yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].ielem)); }
-#line 1560 "bootparse.c"
+#line 1569 "bootparse.c"
     break;
 
   case 26: /* boot_index_params: boot_index_param  */
 #line 396 "bootparse.y"
                                                                                         { (yyval.list) = list_make1((yyvsp[0].ielem)); }
-#line 1566 "bootparse.c"
+#line 1575 "bootparse.c"
     break;
 
   case 27: /* boot_index_param: boot_ident boot_ident  */
@@ -1579,43 +1588,43 @@ yyreduce:
 					n->nulls_ordering = SORTBY_NULLS_DEFAULT;
 					(yyval.ielem) = n;
 				}
-#line 1583 "bootparse.c"
+#line 1592 "bootparse.c"
     break;
 
   case 28: /* optbootstrap: XBOOTSTRAP  */
 #line 416 "bootparse.y"
                                         { (yyval.ival) = 1; }
-#line 1589 "bootparse.c"
+#line 1598 "bootparse.c"
     break;
 
   case 29: /* optbootstrap: %empty  */
 #line 417 "bootparse.y"
                                                 { (yyval.ival) = 0; }
-#line 1595 "bootparse.c"
+#line 1604 "bootparse.c"
     break;
 
   case 30: /* optsharedrelation: XSHARED_RELATION  */
 #line 421 "bootparse.y"
                                                 { (yyval.ival) = 1; }
-#line 1601 "bootparse.c"
+#line 1610 "bootparse.c"
     break;
 
   case 31: /* optsharedrelation: %empty  */
 #line 422 "bootparse.y"
                                                                 { (yyval.ival) = 0; }
-#line 1607 "bootparse.c"
+#line 1616 "bootparse.c"
     break;
 
   case 32: /* optrowtypeoid: XROWTYPE_OID oidspec  */
 #line 426 "bootparse.y"
                                                 { (yyval.oidval) = (yyvsp[0].oidval); }
-#line 1613 "bootparse.c"
+#line 1622 "bootparse.c"
     break;
 
   case 33: /* optrowtypeoid: %empty  */
 #line 427 "bootparse.y"
                                                                         { (yyval.oidval) = InvalidOid; }
-#line 1619 "bootparse.c"
+#line 1628 "bootparse.c"
     break;
 
   case 36: /* boot_column_def: boot_ident EQUALS boot_ident boot_column_nullness  */
@@ -1625,167 +1634,167 @@ yyreduce:
 						elog(FATAL, "too many columns");
 				   DefineAttr((yyvsp[-3].str), (yyvsp[-1].str), numattr-1, (yyvsp[0].ival));
 				}
-#line 1629 "bootparse.c"
+#line 1638 "bootparse.c"
     break;
 
   case 37: /* boot_column_nullness: XFORCE XNOT XNULL  */
 #line 445 "bootparse.y"
                                                 { (yyval.ival) = BOOTCOL_NULL_FORCE_NOT_NULL; }
-#line 1635 "bootparse.c"
+#line 1644 "bootparse.c"
     break;
 
   case 38: /* boot_column_nullness: XFORCE XNULL  */
 #line 446 "bootparse.y"
                                                 {  (yyval.ival) = BOOTCOL_NULL_FORCE_NULL; }
-#line 1641 "bootparse.c"
+#line 1650 "bootparse.c"
     break;
 
   case 39: /* boot_column_nullness: %empty  */
 #line 447 "bootparse.y"
                   { (yyval.ival) = BOOTCOL_NULL_AUTO; }
-#line 1647 "bootparse.c"
+#line 1656 "bootparse.c"
     break;
 
   case 40: /* oidspec: boot_ident  */
 #line 451 "bootparse.y"
                                                                                         { (yyval.oidval) = atooid((yyvsp[0].str)); }
-#line 1653 "bootparse.c"
+#line 1662 "bootparse.c"
     break;
 
   case 44: /* boot_column_val: boot_ident  */
 #line 462 "bootparse.y"
                         { InsertOneValue((yyvsp[0].str), num_columns_read++); }
-#line 1659 "bootparse.c"
+#line 1668 "bootparse.c"
     break;
 
   case 45: /* boot_column_val: NULLVAL  */
 #line 464 "bootparse.y"
                         { InsertOneNull(num_columns_read++); }
-#line 1665 "bootparse.c"
+#line 1674 "bootparse.c"
     break;
 
   case 46: /* boot_ident: ID  */
 #line 468 "bootparse.y"
                                         { (yyval.str) = (yyvsp[0].str); }
-#line 1671 "bootparse.c"
+#line 1680 "bootparse.c"
     break;
 
   case 47: /* boot_ident: OPEN  */
 #line 469 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1677 "bootparse.c"
+#line 1686 "bootparse.c"
     break;
 
   case 48: /* boot_ident: XCLOSE  */
 #line 470 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1683 "bootparse.c"
+#line 1692 "bootparse.c"
     break;
 
   case 49: /* boot_ident: XCREATE  */
 #line 471 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1689 "bootparse.c"
+#line 1698 "bootparse.c"
     break;
 
   case 50: /* boot_ident: INSERT_TUPLE  */
 #line 472 "bootparse.y"
                                 { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1695 "bootparse.c"
+#line 1704 "bootparse.c"
     break;
 
   case 51: /* boot_ident: XDECLARE  */
 #line 473 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1701 "bootparse.c"
+#line 1710 "bootparse.c"
     break;
 
   case 52: /* boot_ident: INDEX  */
 #line 474 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1707 "bootparse.c"
+#line 1716 "bootparse.c"
     break;
 
   case 53: /* boot_ident: ON  */
 #line 475 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1713 "bootparse.c"
+#line 1722 "bootparse.c"
     break;
 
   case 54: /* boot_ident: USING  */
 #line 476 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1719 "bootparse.c"
+#line 1728 "bootparse.c"
     break;
 
   case 55: /* boot_ident: XBUILD  */
 #line 477 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1725 "bootparse.c"
+#line 1734 "bootparse.c"
     break;
 
   case 56: /* boot_ident: INDICES  */
 #line 478 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1731 "bootparse.c"
+#line 1740 "bootparse.c"
     break;
 
   case 57: /* boot_ident: UNIQUE  */
 #line 479 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1737 "bootparse.c"
+#line 1746 "bootparse.c"
     break;
 
   case 58: /* boot_ident: XTOAST  */
 #line 480 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1743 "bootparse.c"
+#line 1752 "bootparse.c"
     break;
 
   case 59: /* boot_ident: OBJ_ID  */
 #line 481 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1749 "bootparse.c"
+#line 1758 "bootparse.c"
     break;
 
   case 60: /* boot_ident: XBOOTSTRAP  */
 #line 482 "bootparse.y"
                                 { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1755 "bootparse.c"
+#line 1764 "bootparse.c"
     break;
 
   case 61: /* boot_ident: XSHARED_RELATION  */
 #line 483 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1761 "bootparse.c"
+#line 1770 "bootparse.c"
     break;
 
   case 62: /* boot_ident: XROWTYPE_OID  */
 #line 484 "bootparse.y"
                                 { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1767 "bootparse.c"
+#line 1776 "bootparse.c"
     break;
 
   case 63: /* boot_ident: XFORCE  */
 #line 485 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1773 "bootparse.c"
+#line 1782 "bootparse.c"
     break;
 
   case 64: /* boot_ident: XNOT  */
 #line 486 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1779 "bootparse.c"
+#line 1788 "bootparse.c"
     break;
 
   case 65: /* boot_ident: XNULL  */
 #line 487 "bootparse.y"
                                         { (yyval.str) = pstrdup((yyvsp[0].kw)); }
-#line 1785 "bootparse.c"
+#line 1794 "bootparse.c"
     break;
 
 
-#line 1789 "bootparse.c"
+#line 1798 "bootparse.c"
 
       default: break;
     }
@@ -1867,7 +1876,6 @@ yyerrorlab:
      label yyerrorlab therefore never appears in user code.  */
   if (0)
     YYERROR;
-  ++yynerrs;
 
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYERROR.  */
@@ -1928,7 +1936,7 @@ yyerrlab1:
 `-------------------------------------*/
 yyacceptlab:
   yyresult = 0;
-  goto yyreturnlab;
+  goto yyreturn;
 
 
 /*-----------------------------------.
@@ -1936,22 +1944,24 @@ yyacceptlab:
 `-----------------------------------*/
 yyabortlab:
   yyresult = 1;
-  goto yyreturnlab;
+  goto yyreturn;
 
 
-/*-----------------------------------------------------------.
-| yyexhaustedlab -- YYNOMEM (memory exhaustion) comes here.  |
-`-----------------------------------------------------------*/
+#if !defined yyoverflow
+/*-------------------------------------------------.
+| yyexhaustedlab -- memory exhaustion comes here.  |
+`-------------------------------------------------*/
 yyexhaustedlab:
   yyerror (YY_("memory exhausted"));
   yyresult = 2;
-  goto yyreturnlab;
+  goto yyreturn;
+#endif
 
 
-/*----------------------------------------------------------.
-| yyreturnlab -- parsing is finished, clean up and return.  |
-`----------------------------------------------------------*/
-yyreturnlab:
+/*-------------------------------------------------------.
+| yyreturn -- parsing is finished, clean up and return.  |
+`-------------------------------------------------------*/
+yyreturn:
   if (yychar != YYEMPTY)
     {
       /* Make sure we have latest lookahead translation.  See comments at

@@ -252,7 +252,9 @@ public:
             if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
                 alterConfig.SetMonitoringProjectId(it->second);
             }
-            alterConfig.SetYdbDatabasePath(CanonizePath(context.SS->RootPathElements));
+            const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
+            alterConfig.SetYdbDatabasePath(databasePath);
+
 
             if (alterConfig.HasOffloadConfig()) {
                 // TODO: check validity

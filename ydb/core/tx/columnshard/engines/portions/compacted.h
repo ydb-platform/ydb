@@ -41,10 +41,6 @@ public:
     virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const override;
     virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
     virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& /*snapshotDefault*/) const override;
-
-    const TSnapshot& GetAppeared() const {
-        return AppearanceSnapshot;
-    }
 };
 
 /// Ensure that TPortionInfo can be effectively assigned by moving the value.

@@ -3,7 +3,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_fq_internal.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -20,24 +20,37 @@ void TGRpcFqPrivateTaskService::InitService(grpc::ServerCompletionQueue* cq, NYd
 }
 
 void TGRpcFqPrivateTaskService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Fq::Private;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef SETUP_FQ_METHOD
-#error SETUP_FQ_METHOD macro already defined
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
 #endif
+#define ADD_REQUEST(NAME, CB)                                                                                  \
+MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Response, TGRpcFqPrivateTaskService, TSecurityTextFormatPrinter<Fq::Private::NAME##Request>, TSecurityTextFormatPrinter<Fq::Private::NAME##Response>>>(                                                                  \
+    this, &Service_, CQ_,                                                                                      \
+    [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
+        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
+        ActorSystem_->Send(GRpcRequestProxyId_,                                                                \
+            new TGrpcRequestOperationCall<Fq::Private::NAME##Request, Fq::Private::NAME##Response>             \
+                (ctx, &CB));                                                                                   \
+    },                                                                                                         \
+    &Fq::Private::V1::FqPrivateTaskService::AsyncService::Request##NAME,                                       \
+    #NAME, logger, getCounterBlock("fq_internal", #NAME))                                                      \
+    ->Run();                                                                                                   \
+    /**/
 
-#define SETUP_FQ_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, fq_internal, auditMode)
+    ADD_REQUEST(PingTask, DoFqPrivatePingTaskRequest)
 
-    SETUP_FQ_METHOD(PingTask, DoFqPrivatePingTaskRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_FQ_METHOD(GetTask, DoFqPrivateGetTaskRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_FQ_METHOD(WriteTaskResult, DoFqPrivateWriteTaskResultRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
-    SETUP_FQ_METHOD(NodesHealthCheck, DoFqPrivateNodesHealthCheckRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_FQ_METHOD(CreateRateLimiterResource, DoFqPrivateCreateRateLimiterResourceRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
-    SETUP_FQ_METHOD(DeleteRateLimiterResource, DoFqPrivateDeleteRateLimiterResourceRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    ADD_REQUEST(GetTask, DoFqPrivateGetTaskRequest)
 
-#undef SETUP_FQ_METHOD
+    ADD_REQUEST(WriteTaskResult, DoFqPrivateWriteTaskResultRequest)
+
+    ADD_REQUEST(NodesHealthCheck, DoFqPrivateNodesHealthCheckRequest)
+
+    ADD_REQUEST(CreateRateLimiterResource, DoFqPrivateCreateRateLimiterResourceRequest)
+    ADD_REQUEST(DeleteRateLimiterResource, DoFqPrivateDeleteRateLimiterResourceRequest)
+
+#undef ADD_REQUEST
 }
 
 } // namespace NGRpcService

@@ -391,30 +391,6 @@ struct TTestHelper {
         }
     }
 
-    void CreateCustomTable(const TString & name, TVector<TShardedTableOptions::TColumn> columns) {
-        auto &runtime = *Server->GetRuntime();
-
-        auto& table1 = Tables[name];
-        table1.Name = name;
-
-        auto opts = TShardedTableOptions()
-            .Shards(ShardCount)
-            .Columns(columns);
-        if (WithFollower)
-            opts.Followers(1);
-        auto [shards, tableId] = CreateShardedTable(Server, Sender, "/Root", name, opts);
-
-        table1.TableId = tableId;
-        table1.TabletId = shards.at(0);
-
-        auto [tables, ownerId] = GetTables(Server, table1.TabletId);
-        table1.UserTable = tables[name];
-
-        table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
-
-        table1.Columns = columns;
-    }
-
     void UpsertMany(ui32 startRow, ui32 rowCount) {
         auto &runtime = *Server->GetRuntime();
         const auto& table = Tables["table-1-many"];
@@ -496,7 +472,7 @@ struct TTestHelper {
         if (!snapshot) {
             readVersion = CreateVolatileSnapshot(
                 Server,
-                {"/Root/"+tableName},
+                {"/Root/movies", "/Root/table-1"},
                 TDuration::Hours(1));
         } else {
             readVersion = snapshot;
@@ -5186,126 +5162,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         );
     }
 
-    Y_UNIT_TEST(WriteLockUncommittedConflictFailure) {
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetNodeCount(1)
-            .SetUseRealThreads(false);
-
-        // The bug requires restoring lock from persistent storage
-        serverSettings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
-
-        TServer::TPtr server = new TServer(serverSettings);
-
-        auto& runtime = *server->GetRuntime();
-        auto sender = runtime.AllocateEdgeActor();
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-
-        InitRoot(server, sender);
-
-        TDisableDataShardLogBatching disableDataShardLogBatching;
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSchemeExec(runtime, R"(
-                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key));
-            )"),
-            "SUCCESS"
-        );
-
-        const auto shards = GetTableShards(server, sender, "/Root/table");
-        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
-
-        // Populate tables with initial values
-        ExecSQL(server, sender, R"(
-            UPSERT INTO `/Root/table` (key, value) VALUES
-                (1, 1001),
-                (2, 1002);
-        )");
-
-        // Block reads so read locks are not established yet
-        TBlockEvents<TEvDataShard::TEvRead> blockedReads(runtime);
-
-        // Begin the 1st transaction upserting to and reading from table
-        TString session1, tx1;
-        auto future1 = KqpSimpleBeginSend(runtime, session1, R"(
-                UPSERT INTO `/Root/table` (key, value) VALUES (3, 3003);
-                SELECT key, value FROM `/Root/table` ORDER BY key;
-            )");
-
-        // Begin the 2nd transaction upserting to and reading from table
-        TString session2, tx2;
-        auto future2 = KqpSimpleBeginSend(runtime, session2, R"(
-                UPSERT INTO `/Root/table` (key, value) VALUES (4, 4004);
-                SELECT key, value FROM `/Root/table` ORDER BY key;
-            )");
-
-        // Wait until both transactions are stuck at their read phases
-        runtime.WaitFor("blocked TEvRead x2", [&]{ return blockedReads.size() >= 2; });
-
-        // Force read iterators to read rows one-by-one
-        auto changeMaxRowsObserver = runtime.AddObserver<TEvDataShard::TEvRead>(
-            [&](auto& ev) {
-                auto* msg = ev->Get();
-                msg->Record.SetMaxRowsInResult(1);
-            });
-
-        // Block TEvReadContinue so it stops after the first result
-        TBlockEvents<TEvDataShard::TEvReadContinue> blockedReadContinue(runtime);
-
-        // Unblock reads and wait for corresponding TEvReadContinue
-        blockedReads.Stop().Unblock();
-
-        runtime.WaitFor("blocked TEvReadContinue x2", [&]{ return blockedReadContinue.size() >= 2; });
-        runtime.SimulateSleep(TDuration::Seconds(1));
-
-        // Block further commits
-        TBlockEvents<TEvBlobStorage::TEvPut> blockedCommits(runtime, [&](auto& ev) {
-            auto* msg = ev->Get();
-            if (msg->Id.Channel() == 0 && msg->Id.TabletID() == shards.at(0)) {
-                Cerr << "... blocking commit " << msg->Id << Endl;
-                return true;
-            }
-            return false;
-        });
-
-        // Unblock TEvReadContinue and let kqp potentially receive results
-        blockedReadContinue.Stop().Unblock();
-        runtime.SimulateSleep(TDuration::Seconds(1));
-
-        // Stop blocking commits and make them fail (will cause shards to restart)
-        blockedCommits.Stop();
-        for (auto& ev : blockedCommits) {
-            auto proxy = ev->Recipient;
-            ui32 groupId = GroupIDFromBlobStorageProxyID(proxy);
-            auto response = ev->Get()->MakeErrorResponse(NKikimrProto::ERROR, "Something went wrong", TGroupId::FromValue(groupId));
-            runtime.Send(new IEventHandle(ev->Sender, proxy, response.release()), 0, true);
-        }
-        runtime.SimulateSleep(TDuration::Seconds(1));
-
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleBeginWait(runtime, tx1, std::move(future1)),
-            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
-            "{ items { int32_value: 2 } items { int32_value: 1002 } }, "
-            "{ items { int32_value: 3 } items { int32_value: 3003 } }");
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleBeginWait(runtime, tx2, std::move(future2)),
-            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
-            "{ items { int32_value: 2 } items { int32_value: 1002 } }, "
-            "{ items { int32_value: 4 } items { int32_value: 4004 } }");
-
-        // Commit the 1st transaction, it should succeed
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleCommit(runtime, session1, tx1, R"(SELECT 1)"),
-            "{ items { int32_value: 1 } }");
-
-        // Try to commit the 2nd transaction, it must fail
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleCommit(runtime, session2, tx2, R"(SELECT 1)"),
-            "ERROR: ABORTED");
-    }
-
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorLatency) {
@@ -5590,119 +5446,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 
         auto ev = runtime.GrabEdgeEvent<TEvDataShard::TEvReadResult>(sender, TDuration::Seconds(1));
         UNIT_ASSERT_C(!ev, "Unexpected response received (should have been cancelled)");
-    }
-
-}
-
-Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
-
-    Y_UNIT_TEST(BadRequest) {
-        TTestHelper helper;
-        TVector<TShardedTableOptions::TColumn> columns = {
-            {"key", "Uint32", true, false},
-            {"emb", "String", false, false}};
-        helper.CreateCustomTable("table-vector", columns);
-
-        auto createRequest = [&]() {
-            auto request1 = helper.GetBaseReadRequest("table-vector", 1, NKikimrDataEvents::FORMAT_CELLVEC);
-            AddRangeQuery<ui32>(*request1, { 1 }, true, { 20 }, true);
-            auto topK = request1->Record.MutableVectorTopK();
-            topK->SetColumn(1);
-            topK->SetTargetVector("\xE4\x16\x02");
-            topK->SetLimit(3);
-            auto idx = topK->MutableSettings();
-            idx->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
-            idx->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
-            idx->set_vector_dimension(2);
-            return request1;
-        };
-
-        auto request1 = createRequest();
-        request1->Record.MutableVectorTopK()->SetLimit(0);
-        auto readResult1 = helper.SendRead("table-vector", request1.release());
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
-        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("limit is 0"));
-
-        request1 = createRequest();
-        request1->Record.MutableVectorTopK()->SetColumn(2);
-        readResult1 = helper.SendRead("table-vector", request1.release());
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
-        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Too large topK column index"));
-
-        request1 = createRequest();
-        request1->Record.MutableVectorTopK()->ClearTargetVector();
-        readResult1 = helper.SendRead("table-vector", request1.release());
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
-        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Target vector is not specified"));
-
-        request1 = createRequest();
-        request1->Record.MutableVectorTopK()->SetTargetVector("\xE4\x16\x10");
-        readResult1 = helper.SendRead("table-vector", request1.release());
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
-        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Target vector has invalid format"));
-
-        request1 = createRequest();
-        request1->Record.MutableVectorTopK()->MutableSettings()->set_metric(Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED);
-        readResult1 = helper.SendRead("table-vector", request1.release());
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);
-        UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("either distance or similarity"));
-    }
-
-    Y_UNIT_TEST_TWIN(Simple, Batch) {
-        TTestHelper helper;
-        TVector<TShardedTableOptions::TColumn> columns = {
-            {"key", "Uint32", true, false},
-            {"emb", "String", false, false}};
-        helper.CreateCustomTable("table-vector", columns);
-
-        // Insert initial data
-        ExecSQL(helper.Server, helper.Sender, R"(UPSERT INTO `/Root/table-vector` (key, emb) VALUES
-            ( 1, "\x00\xFF\x02"),
-            ( 2, "\x10\xF0\x02"),
-            ( 3, "\x20\xE0\x02"),
-            ( 4, "\x30\xD0\x02"),
-            ( 5, "\x40\xC0\x02"),
-            ( 6, "\x50\xB0\x02"),
-            ( 7, "\x60\xA0\x02"),
-            ( 8, "\x70\x90\x02"),
-            ( 9, "\x80\x80\x02"),
-            (10, "\x90\x70\x02"),
-            (11, "\xA0\x60\x02"),
-            (12, "\xB0\x50\x02"),
-            (13, "\xC0\x40\x02"),
-            (14, "\xD0\x30\x02"),
-            (15, "\xE0\x20\x02"),
-            (16, "\xF0\x10\x02"),
-            (17, "\xFF\x00\x02");)");
-
-        auto request1 = helper.GetBaseReadRequest("table-vector", 1, NKikimrDataEvents::FORMAT_CELLVEC);
-        if (Batch) {
-            request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
-        }
-        AddRangeQuery<ui32>(*request1, { 1 }, true, { 20 }, true);
-        auto topK = request1->Record.MutableVectorTopK();
-        topK->SetColumn(1);
-        topK->SetTargetVector("\xE4\x16\x02");
-        topK->SetLimit(3);
-        auto idx = topK->MutableSettings();
-        idx->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
-        idx->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
-        idx->set_vector_dimension(2);
-        auto readResult1 = helper.SendRead("table-vector", request1.release());
-        UNIT_ASSERT(readResult1->Record.GetFinished());
-        CheckResult(helper.Tables.at("table-vector").UserTable, *readResult1, {
-            {TCell::Make(16), TCell("\xF0\x10\x02", 3)},
-            {TCell::Make(15), TCell("\xE0\x20\x02", 3)},
-            {TCell::Make(17), TCell("\xFF\x00\x02", 3)},
-        }, {
-            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
-            NScheme::TTypeInfo(NScheme::NTypeIds::String)
-        });
     }
 
 }

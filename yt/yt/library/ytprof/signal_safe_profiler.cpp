@@ -143,7 +143,7 @@ void TSignalSafeProfiler::RecordSample(NBacktrace::TFramePointerCursor* cursor, 
     auto tagsPtr = GetCpuProfilerTags();
 
     uintptr_t threadName[2] = {};
-    prctl(PR_GET_NAME, reinterpret_cast<unsigned long>(&threadName[0]), 0UL, 0UL, 0UL);
+    prctl(PR_GET_NAME, (unsigned long)threadName, 0UL, 0UL, 0UL);
     int namePushed = 0;
 
     auto ok = Queue_.TryPush([&] () -> std::pair<const void*, bool> {

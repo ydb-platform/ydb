@@ -13,7 +13,7 @@
 
 namespace NYdb::inline Dev::NOperation {
 
-constexpr TDeadline::Duration OPERATION_CLIENT_TIMEOUT = std::chrono::seconds(5);
+constexpr TDuration OPERATION_CLIENT_TIMEOUT = TDuration::Seconds(5);
 
 class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl> {
     template <typename TRequest, typename TResponse>
@@ -37,7 +37,7 @@ class TOperationClient::TImpl : public TClientImplCommon<TOperationClient::TImpl
             };
 
         TRpcRequestSettings rpcSettings;
-        rpcSettings.Deadline = TDeadline::AfterDuration(OPERATION_CLIENT_TIMEOUT);
+        rpcSettings.ClientTimeout = OPERATION_CLIENT_TIMEOUT;
 
         Connections_->Run<Ydb::Operation::V1::OperationService, TRequest, TResponse>(
             std::move(request),
@@ -103,7 +103,7 @@ public:
             };
 
         TRpcRequestSettings rpcSettings;
-        rpcSettings.Deadline = TDeadline::AfterDuration(OPERATION_CLIENT_TIMEOUT);
+        rpcSettings.ClientTimeout = OPERATION_CLIENT_TIMEOUT;
 
         Connections_->Run<Ydb::Operation::V1::OperationService, 
                           Ydb::Operations::ListOperationsRequest,

@@ -225,14 +225,14 @@ namespace NKikimr {
 
             using TLogoBlobIdHigh = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdHigh;
 
-            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(10, 0, 0, 0));
-            UNIT_ASSERT(high->GetLowRangeEndIndex() == 2);
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(10, 0, 0, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 2);
             ++high;
-            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(20, 0, 0, 0));
-            UNIT_ASSERT(high->GetLowRangeEndIndex() == 4);
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 0, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 4);
             ++high;
-            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(20, 0, 300, 0));
-            UNIT_ASSERT(high->GetLowRangeEndIndex() == 5);
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 300, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 5);
             ++high;
             UNIT_ASSERT(high == indexHigh.end());
 
@@ -241,15 +241,15 @@ namespace NKikimr {
 
             using TLogoBlobIdLow = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdLow;
 
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 1, 0));
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 1, 0));
             ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(10, 0, 0, 2, 0));
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 2, 0));
             ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 3, 0));
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 3, 0));
             ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(10, 0, 0, 4, 0));
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 4, 0));
             ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(300, 0, 0, 5, 0));
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(300, 0, 0, 5, 0));
             ++low;
             UNIT_ASSERT(low == indexLow.end());
 
@@ -257,7 +257,7 @@ namespace NKikimr {
             ptr->SaveLinearIndex(&checkIndex);
 
             for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
-                UNIT_ASSERT(i->GetKey() == c->GetKey());
+                UNIT_ASSERT(i->Key == c->Key);
             }
         }
     } // TBlobStorageHullSstIt

@@ -95,7 +95,7 @@ protected:
         }
         if (NCSIndex::TServiceOperator::IsEnabled()) {
             TBase::Send(
-                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), DatabaseName, Path,
+                NCSIndex::MakeServiceId(TBase::SelfId().NodeId()), new NCSIndex::TEvAddData(accessor->GetDeserializedBatch(), Path,
                                                                        std::make_shared<NCSIndex::TNaiveDataUpsertController>(TBase::SelfId())));
         } else {
             IndexReady = true;

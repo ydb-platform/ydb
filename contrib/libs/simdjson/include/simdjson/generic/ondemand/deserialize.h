@@ -1,4 +1,4 @@
-#if SIMDJSON_SUPPORTS_CONCEPTS
+#if SIMDJSON_SUPPORTS_DESERIALIZATION
 
 #ifndef SIMDJSON_ONDEMAND_DESERIALIZE_H
 #ifndef SIMDJSON_CONDITIONAL_INCLUDE
@@ -7,7 +7,54 @@
 #include "simdjson/generic/ondemand/array.h"
 #endif // SIMDJSON_CONDITIONAL_INCLUDE
 
+#include <concepts>
 namespace simdjson {
+
+namespace tag_invoke_fn_ns {
+void tag_invoke();
+
+struct tag_invoke_fn {
+  template <typename Tag, typename... Args>
+    requires requires(Tag tag, Args &&...args) {
+      tag_invoke(std::forward<Tag>(tag), std::forward<Args>(args)...);
+    }
+  constexpr auto operator()(Tag tag, Args &&...args) const
+      noexcept(noexcept(tag_invoke(std::forward<Tag>(tag),
+                                   std::forward<Args>(args)...)))
+          -> decltype(tag_invoke(std::forward<Tag>(tag),
+                                 std::forward<Args>(args)...)) {
+    return tag_invoke(std::forward<Tag>(tag), std::forward<Args>(args)...);
+  }
+};
+} // namespace tag_invoke_fn_ns
+
+inline namespace tag_invoke_ns {
+inline constexpr tag_invoke_fn_ns::tag_invoke_fn tag_invoke = {};
+} // namespace tag_invoke_ns
+
+template <typename Tag, typename... Args>
+concept tag_invocable = requires(Tag tag, Args... args) {
+  tag_invoke(std::forward<Tag>(tag), std::forward<Args>(args)...);
+};
+
+template <typename Tag, typename... Args>
+concept nothrow_tag_invocable =
+    tag_invocable<Tag, Args...> && requires(Tag tag, Args... args) {
+      {
+        tag_invoke(std::forward<Tag>(tag), std::forward<Args>(args)...)
+      } noexcept;
+    };
+
+template <typename Tag, typename... Args>
+using tag_invoke_result =
+    std::invoke_result<decltype(tag_invoke), Tag, Args...>;
+
+template <typename Tag, typename... Args>
+using tag_invoke_result_t =
+    std::invoke_result_t<decltype(tag_invoke), Tag, Args...>;
+
+template <auto &Tag> using tag_t = std::decay_t<decltype(Tag)>;
+
 
 struct deserialize_tag;
 
@@ -30,7 +77,7 @@ template <typename T, typename ValT = SIMDJSON_IMPLEMENTATION::ondemand::value>
 concept custom_deserializable = tag_invocable<deserialize_tag, ValT&, T&>;
 
 template <typename T, typename ValT = SIMDJSON_IMPLEMENTATION::ondemand::value>
-concept deserializable = custom_deserializable<T, ValT> || is_builtin_deserializable_v<T> || concepts::optional_type<T>;
+concept deserializable = custom_deserializable<T, ValT> || is_builtin_deserializable_v<T>;
 
 template <typename T, typename ValT = SIMDJSON_IMPLEMENTATION::ondemand::value>
 concept nothrow_custom_deserializable = nothrow_tag_invocable<deserialize_tag, ValT&, T&>;
@@ -41,44 +88,28 @@ concept nothrow_deserializable = nothrow_custom_deserializable<T, ValT> || is_bu
 
 /// Deserialize Tag
 inline constexpr struct deserialize_tag {
-  using array_type = SIMDJSON_IMPLEMENTATION::ondemand::array;
-  using object_type = SIMDJSON_IMPLEMENTATION::ondemand::object;
   using value_type = SIMDJSON_IMPLEMENTATION::ondemand::value;
   using document_type = SIMDJSON_IMPLEMENTATION::ondemand::document;
   using document_reference_type = SIMDJSON_IMPLEMENTATION::ondemand::document_reference;
 
-  // Customization Point for array
-  template <typename T>
-    requires custom_deserializable<T, value_type>
-  simdjson_warn_unused constexpr /* error_code */ auto operator()(array_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, value_type>) {
-    return tag_invoke(*this, object, output);
-  }
-
-  // Customization Point for object
-  template <typename T>
-    requires custom_deserializable<T, value_type>
-  simdjson_warn_unused constexpr /* error_code */ auto operator()(object_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, value_type>) {
-    return tag_invoke(*this, object, output);
-  }
-
   // Customization Point for value
   template <typename T>
     requires custom_deserializable<T, value_type>
-  simdjson_warn_unused constexpr /* error_code */ auto operator()(value_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, value_type>) {
+  [[nodiscard]] constexpr /* error_code */ auto operator()(value_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, value_type>) {
     return tag_invoke(*this, object, output);
   }
 
   // Customization Point for document
   template <typename T>
     requires custom_deserializable<T, document_type>
-  simdjson_warn_unused constexpr /* error_code */ auto operator()(document_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, document_type>) {
+  [[nodiscard]] constexpr /* error_code */ auto operator()(document_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, document_type>) {
     return tag_invoke(*this, object, output);
   }
 
   // Customization Point for document reference
   template <typename T>
     requires custom_deserializable<T, document_reference_type>
-  simdjson_warn_unused constexpr /* error_code */ auto operator()(document_reference_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, document_reference_type>) {
+  [[nodiscard]] constexpr /* error_code */ auto operator()(document_reference_type &object, T& output) const noexcept(nothrow_custom_deserializable<T, document_reference_type>) {
     return tag_invoke(*this, object, output);
   }
 
@@ -88,5 +119,5 @@ inline constexpr struct deserialize_tag {
 } // namespace simdjson
 
 #endif // SIMDJSON_ONDEMAND_DESERIALIZE_H
-#endif // SIMDJSON_SUPPORTS_CONCEPTS
+#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
 

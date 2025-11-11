@@ -131,11 +131,6 @@ bool ParseBraces(const TString& content, TPositionHandle pos, size_t idx, TRegex
         return false;
     }
 
-    if (name == MrPartitionListViewMember) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << errStr << name << " is a reserved name for table view and can not be used"));
-        return false;
-    }
-
     if (!extraColumns.insert({name, type}).second) {
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << errStr << "duplicate column name '" << name << "'"));
         return false;
@@ -515,70 +510,47 @@ TExprNode::TPtr ExpandMrPartitions(TYtRead read, TExprContext& ctx, TTypeAnnotat
         .Seal()
         .Build();
 
-    auto partitionList = ctx.Builder(pos)
-        .Callable("FlatMap")
-            .Callable(0, "Right!")
-                .Callable(0, "Read!")
-                    .Add(0, read.World().Ptr())
-                    .Add(1, read.DataSource().Ptr())
-                    .Callable(2, "MrWalkFolders")
-                        .Atom(0, startDir)       // startDir
-                        .Atom(1, "")             // attrs
-                        .Callable(2, "Pickle")   // pickled initial state
-                            .Add(0, initState)
-                        .Seal()
-                        .Add(3, stateType)       // type of state
-                        .Callable(4, "Void")     // pre handler
-                        .Seal()
-                        .Callable(5, "Callable") // resolve handler
-                            .Add(0, resolveDiveHandlerType)
-                            .Add(1, anyNodeDiveHandler)
-                        .Seal()
-                        .Callable(6, "Callable") // dive handler
-                            .Add(0, resolveDiveHandlerType)
-                            .Add(1, diveHandler)
-                        .Seal()
-                        .Add(7, postHandler)      // post handler
-                    .Seal()
-                    .Callable(3, "Void")
-                    .Seal()
-                    .List(4)
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Lambda(1)
-                .Param("walkStruct")
-                .Callable("Member")
-                    .Arg(0, "walkStruct")
-                    .Atom(1, "State")
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-
-    if (key.GetView()) {
-        partitionList = ctx.Builder(pos)
-            .Callable("Map")
-                .Add(0, partitionList)
-                .Lambda(1)
-                    .Param("item")
-                    .Callable("AddMember")
-                        .Arg(0, "item")
-                        .Atom(1, MrPartitionListViewMember)
-                        .Callable(2, "String")
-                            .Atom(0, key.GetView())
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
-    }
-
-
     auto partitionListNode = ctx.Builder(pos)
         .Callable(partitionsNode.IsCallable(MrPartitionListStrictName) ? MrPartitionListStrictName : MrPartitionListName)
             .Callable(0, "EvaluateExpr")
-                .Add(0, partitionList)
+                .Callable(0, "FlatMap")
+                    .Callable(0, "Right!")
+                        .Callable(0, "Read!")
+                            .Add(0, read.World().Ptr())
+                            .Add(1, read.DataSource().Ptr())
+                            .Callable(2, "MrWalkFolders")
+                                .Atom(0, startDir)       // startDir
+                                .Atom(1, "")             // attrs
+                                .Callable(2, "Pickle")   // pickled initial state
+                                    .Add(0, initState)
+                                .Seal()
+                                .Add(3, stateType)       // type of state
+                                .Callable(4, "Void")     // pre handler
+                                .Seal()
+                                .Callable(5, "Callable") // resolve handler
+                                    .Add(0, resolveDiveHandlerType)
+                                    .Add(1, anyNodeDiveHandler)
+                                .Seal()
+                                .Callable(6, "Callable") // dive handler
+                                    .Add(0, resolveDiveHandlerType)
+                                    .Add(1, diveHandler)
+                                .Seal()
+                                .Add(7, postHandler)      // post handler
+                            .Seal()
+                            .Callable(3, "Void")
+                            .Seal()
+                            .List(4)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Lambda(1)
+                        .Param("walkStruct")
+                        .Callable("Member")
+                            .Arg(0, "walkStruct")
+                            .Atom(1, "State")
+                        .Seal()
+                    .Seal()
+                .Seal()
             .Seal()
         .Seal()
         .Build();

@@ -24,8 +24,9 @@ inline ResultContainer GenDataForLZ4(const ui64 size, const ui64 seed = 0) {
     return data;
 }
 
-template <class ResultContainer>
-inline void FastGenDataForLZ4(size_t size, ui64 seed, ResultContainer& data) {
+template <class ResultContainer = TString>
+inline ResultContainer FastGenDataForLZ4(size_t size, ui64 seed = 0) {
+    ResultContainer data = ResultContainer::Uninitialized(size);
     char *ptr = [&]() -> char * {
         if constexpr(std::is_same<ResultContainer, TString>::value) {
             return data.Detach();
@@ -58,38 +59,43 @@ inline void FastGenDataForLZ4(size_t size, ui64 seed, ResultContainer& data) {
         if constexpr (LEN >= 60) {                              \
             x7 = rng() | (ui64)rng() << 32;                     \
         }                                                       \
-        alignas(ui64) char blk[LEN];                            \
-        *reinterpret_cast<ui64*>(blk) = x0;                     \
-        *reinterpret_cast<ui64*>(blk + 8) = x1;                 \
-        *reinterpret_cast<ui64*>(blk + 16) = x2;                \
-        *reinterpret_cast<ui64*>(blk + 24) = x3;                \
-        if constexpr (LEN == 36) {                              \
-            *reinterpret_cast<ui32*>(blk + 32) = x4;            \
-        } else if constexpr (LEN >= 40) {                       \
-            *reinterpret_cast<ui64*>(blk + 32) = x4;            \
-        }                                                       \
-        if constexpr (LEN == 44) {                              \
-            *reinterpret_cast<ui32*>(blk + 40) = x5;            \
-        } else if constexpr (LEN >= 48) {                       \
-            *reinterpret_cast<ui64*>(blk + 40) = x5;            \
-        }                                                       \
-        if constexpr (LEN == 52) {                              \
-            *reinterpret_cast<ui32*>(blk + 48) = x6;            \
-        } else if constexpr (LEN >= 56) {                       \
-            *reinterpret_cast<ui64*>(blk + 48) = x6;            \
-        }                                                       \
-        if constexpr (LEN == 60) {                              \
-            *reinterpret_cast<ui32*>(blk + 56) = x7;            \
-        } else if constexpr (LEN >= 64) {                       \
-            *reinterpret_cast<ui64*>(blk + 56) = x7;            \
-        }                                                       \
         while (size >= LEN) {                                   \
-            memcpy(ptr, blk, LEN);                              \
+            *reinterpret_cast<ui64*>(ptr) = x0;                 \
+            *reinterpret_cast<ui64*>(ptr + 8) = x1;             \
+            *reinterpret_cast<ui64*>(ptr + 16) = x2;            \
+            *reinterpret_cast<ui64*>(ptr + 24) = x3;            \
+            if constexpr (LEN == 36) {                          \
+                *reinterpret_cast<ui32*>(ptr + 32) = x4;        \
+            } else if constexpr (LEN >= 40) {                   \
+                *reinterpret_cast<ui64*>(ptr + 32) = x4;        \
+            }                                                   \
+            if constexpr (LEN == 44) {                          \
+                *reinterpret_cast<ui32*>(ptr + 40) = x5;        \
+            } else if constexpr (LEN >= 48) {                   \
+                *reinterpret_cast<ui64*>(ptr + 40) = x5;        \
+            }                                                   \
+            if constexpr (LEN == 52) {                          \
+                *reinterpret_cast<ui32*>(ptr + 48) = x6;        \
+            } else if constexpr (LEN >= 56) {                   \
+                *reinterpret_cast<ui64*>(ptr + 48) = x6;        \
+            }                                                   \
+            if constexpr (LEN == 60) {                          \
+                *reinterpret_cast<ui32*>(ptr + 56) = x7;        \
+            } else if constexpr (LEN >= 64) {                   \
+                *reinterpret_cast<ui64*>(ptr + 56) = x7;        \
+            }                                                   \
             ptr += LEN;                                         \
             size -= LEN;                                        \
         }                                                       \
-        if (size) {                                             \
-            memcpy(ptr, blk, size);                             \
+        for (ui64 x : {x0, x1, x2, x3, x4, x5, x6, x7}) {       \
+            if (size >= 8) {                                    \
+                *reinterpret_cast<ui64*>(ptr) = x;              \
+                ptr += 8;                                       \
+                size -= 8;                                      \
+            } else {                                            \
+                memcpy(ptr, &x, size);                          \
+                break;                                          \
+            }                                                   \
         }                                                       \
     } while (false);
 
@@ -105,12 +111,7 @@ inline void FastGenDataForLZ4(size_t size, ui64 seed, ResultContainer& data) {
         case 64: UNROLL(64); break;
         default: Y_ABORT();
     }
-}
 
-template <class ResultContainer = TString>
-inline ResultContainer FastGenDataForLZ4(size_t size, ui64 seed = 0) {
-    ResultContainer data = ResultContainer::Uninitialized(size);
-    FastGenDataForLZ4<ResultContainer>(size, seed, data);
     return data;
 }
 

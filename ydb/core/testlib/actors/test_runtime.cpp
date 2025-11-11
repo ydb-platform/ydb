@@ -69,9 +69,9 @@ namespace NActors {
         Initialize();
     }
 
-    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
+    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
         : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
     {
         Initialize();
     }

@@ -265,7 +265,7 @@ namespace NYql::NConnector {
                 std::move(request),
                 std::move(callback),
                 &NApi::Connector::Stub::AsyncDescribeTable,
-                { .Timeout = timeout ? NYdb::TDeadline::SafeDurationCast(timeout) : NYdb::TDeadline::Duration::max() },
+                { .Timeout = timeout },
                 context.get()
             );
 
@@ -412,7 +412,7 @@ namespace NYql::NConnector {
                 std::move(request),
                 std::move(callback),
                 rpc,
-                { .Timeout = timeout ? NYdb::TDeadline::SafeDurationCast(timeout) : NYdb::TDeadline::Duration::max() },
+                { .Timeout = timeout },
                 context.get()
             );
 

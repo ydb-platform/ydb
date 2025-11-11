@@ -1,10 +1,8 @@
 
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/generic/yexception.h>
-#include <util/generic/map.h>
 
 using namespace NYql;
 using namespace NJson;
@@ -13,16 +11,16 @@ int Main(int argc, const char* argv[])
 {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
-    NJsonWriter::TBuf jsonAll;
-    jsonAll.BeginObject();
+    NJsonWriter::TBuf json;
+    json.BeginObject();
+    json.WriteKey("proc");
+    json.BeginList();
 
-    TMap<ui32, TString> procs;
     NPg::EnumProc([&](ui32 oid, const NPg::TProcDesc& desc) {
         if (desc.ReturnSet || desc.Kind != NPg::EProcKind::Function) {
             return;
         }
 
-        NJsonWriter::TBuf json;
         json.BeginObject();
         json.WriteKey("oid").WriteInt(oid);
         json.WriteKey("src").WriteString(desc.Src);
@@ -47,24 +45,16 @@ int Main(int argc, const char* argv[])
         }
         json.EndList();
         json.EndObject();
-        procs[oid] = json.Str();
     });
 
-    jsonAll.WriteKey("proc");
-    jsonAll.BeginList();
-    for (const auto& [_, json] : procs) {
-        jsonAll.UnsafeWriteValue(json);
-    }
-
-    jsonAll.EndList();
-
-    TMap<ui32, TString> aggs;
+    json.EndList();
+    json.WriteKey("aggregation");
+    json.BeginList();
     NPg::EnumAggregation([&](ui32 oid, const NPg::TAggregateDesc& desc) {
         if (desc.Kind != NPg::EAggKind::Normal) {
             return;
         }
 
-        NJsonWriter::TBuf json;
         json.BeginObject();
         json.WriteKey("agg_id").WriteInt(oid);
         json.WriteKey("name").WriteString(desc.Name);
@@ -105,18 +95,11 @@ int Main(int argc, const char* argv[])
 
         json.WriteKey("has_init_value").WriteBool(!desc.InitValue.empty());
         json.EndObject();
-        aggs[oid] = json.Str();
     });
 
-    jsonAll.WriteKey("aggregation");
-    jsonAll.BeginList();
-    for (const auto& [_, json] : aggs) {
-        jsonAll.UnsafeWriteValue(json);
-    }
-
-    jsonAll.EndList();
-    jsonAll.EndObject();
-    Cout << jsonAll.Str();
+    json.EndList();
+    json.EndObject();
+    Cout << json.Str();
 
     return 0;
 }

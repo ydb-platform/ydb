@@ -29,8 +29,6 @@
 
 /* Define to 1 if you have the `strchrnul' function. */
 #undef HAVE_STRCHRNUL
-#undef HAVE_DECL_STRCHRNUL
-#define HAVE_DECL_STRCHRNUL 0
 
 /* Define to 1 if you have the `syncfs' function. */
 #undef HAVE_SYNCFS

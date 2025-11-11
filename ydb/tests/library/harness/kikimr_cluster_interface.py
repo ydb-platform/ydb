@@ -8,6 +8,7 @@ from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
 from ydb.tests.library.clients.kikimr_scheme_client import scheme_client_factory
+from ydb.tests.library.clients.kikimr_config_client import config_client_factory
 from ydb.tests.library.common.protobuf_console import (
     CreateTenantRequest, AlterTenantRequest, GetTenantStatusRequest,
     RemoveTenantRequest, GetOperationRequest)
@@ -114,15 +115,13 @@ class KiKiMRClusterInterface(object):
     @property
     def config_client(self):
         if self.__config_client is None:
-            self.__config_client = self._create_config_client()
+            self.__config_client = config_client_factory(
+                server=self.nodes[1].host,
+                port=self.nodes[1].grpc_port,
+                cluster=self,
+                retry_count=10,
+            )
         return self.__config_client
-
-    @abc.abstractmethod
-    def _create_config_client(self):
-        """
-        Factory method for ConfigClient, must be implemented by subclasses.
-        """
-        pass
 
     def _send_get_tenant_status_request(self, database_name, token=None):
         req = GetTenantStatusRequest(database_name)

@@ -1,55 +1,39 @@
 #include "db_pool.h"
 #include "log.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 
-namespace NDbPool {
 
-namespace {
+namespace NDbPool {
 
 using namespace NActors;
 
 class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
+
     struct TCounters {
-        const NMonitoring::TDynamicCounterPtr CountersSubGroup;
-
+        const ::NMonitoring::TDynamicCounterPtr Counters;
         const NMonitoring::THistogramPtr QueueSize;
-        const NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
         const NMonitoring::THistogramPtr RequestsTime;
-        const NMonitoring::THistogramPtr QueuedTime;
-        const NMonitoring::TDynamicCounters::TCounterPtr IncomingRate;
-        const NMonitoring::TDynamicCounters::TCounterPtr SessionsCountLimit;
-        const NMonitoring::TDynamicCounters::TCounterPtr ActiveTime;
-        const NMonitoring::TDynamicCounters::TCounterPtr TotalQueuedTime;
-
-        const NMonitoring::TDynamicCounterPtr StatusSubgroup;
-        TMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> Status;
+        const ::NMonitoring::TDynamicCounterPtr StatusSubgroup;
+        TMap<TString, ::NMonitoring::TDynamicCounters::TCounterPtr> Status;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRate;
 
         TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
-            : CountersSubGroup(counters->GetSubgroup("subcomponent", "DbPool"))
-            , QueueSize(CountersSubGroup->GetHistogram("InFlight",  NMonitoring::ExponentialHistogram(10, 2, 3)))
-            , TotalInFlight(CountersSubGroup->GetCounter("TotalInflight"))
-            , RequestsTime(CountersSubGroup->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
-            , QueuedTime(CountersSubGroup->GetHistogram("QueuedTimeMs", NMonitoring::ExponentialHistogram(6, 3, 10)))
-            , IncomingRate(CountersSubGroup->GetCounter("IncomingRate", true))
-            , SessionsCountLimit(CountersSubGroup->GetCounter("SessionsCountLimit"))
-            , ActiveTime(CountersSubGroup->GetCounter("ActiveTimeUs", true))
-            , TotalQueuedTime(CountersSubGroup->GetCounter("TotalQueuedTimeUs", true))
-            , StatusSubgroup(CountersSubGroup->GetSubgroup("component", "status"))
-        {
-            SessionsCountLimit->Inc();
-        }
+            : Counters(counters)
+            , QueueSize(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("InFlight",  NMonitoring::ExponentialHistogram(10, 2, 10)))
+            , TotalInFlight(counters->GetSubgroup("subcomponent",  "DbPool")->GetCounter("TotalInflight"))
+            , RequestsTime(counters->GetSubgroup("subcomponent", "DbPool")->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
+            , StatusSubgroup(counters->GetSubgroup("subcomponent", "DbPool")->GetSubgroup("component", "status"))
+            , IncomingRate(counters->GetSubgroup("subcomponent",  "DbPool")->GetCounter("IncomingRate", true))
+        {}
 
-        ~TCounters() {
-            SessionsCountLimit->Dec();
-        }
-
-        NMonitoring::TDynamicCounters::TCounterPtr GetStatus(const NYdb::TStatus& status) {
+        ::NMonitoring::TDynamicCounters::TCounterPtr GetStatus(const NYdb::TStatus& status) {
             const TString statusStr = ToString(status.GetStatus());
             auto& counter = Status[statusStr];
             if (counter) {
@@ -57,22 +41,6 @@ class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
             }
             return counter = StatusSubgroup->GetCounter(statusStr, true);
         }
-
-        void ReportStats(ui64 newQueuedRequests, bool newRequestInProgress) {
-            const auto now = TInstant::Now();
-            const auto delta = (now - LastReportTime).MicroSeconds();
-            ActiveTime->Add(RequestInProgress * delta);
-            TotalQueuedTime->Add(QueuedRequests * delta);
-
-            QueuedRequests = newQueuedRequests;
-            RequestInProgress = newRequestInProgress;
-            LastReportTime = now;
-        }
-
-    private:
-        ui64 QueuedRequests = 0;
-        bool RequestInProgress = false;
-        TInstant LastReportTime = TInstant::Now();
     };
 
 public:
@@ -92,7 +60,6 @@ public:
         hFunc(TEvents::TEvDbResponse, HandleResponse)
         hFunc(TEvents::TEvDbFunctionRequest, HandleRequest)
         hFunc(TEvents::TEvDbFunctionResponse, HandleResponse)
-        sFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
     )
 
     void PassAway() override {
@@ -121,8 +88,6 @@ public:
         RequestInProgress = true;
         RequestInProgressTimestamp = TInstant::Now();
         const auto& requestVariant = Requests.front();
-        Counters.QueuedTime->Collect((RequestInProgressTimestamp - std::visit([](auto&& arg) { return arg.StartTime; }, requestVariant)).MilliSeconds());
-        ReportStats();
 
         LOG_T("TDbPoolActor: ProcessQueue " << SelfId() << " Queue size = " << Requests.size());
 
@@ -169,7 +134,6 @@ public:
         Counters.IncomingRate->Inc();
         auto request = ev->Get();
         Requests.emplace_back(TRequest{ev->Sender, ev->Cookie, request->Sql, std::move(request->Params), request->Idempotent});
-        ReportStats();
         ProcessQueue();
     }
 
@@ -178,7 +142,6 @@ public:
         Counters.RequestsTime->Collect(TInstant::Now().MilliSeconds() - RequestInProgressTimestamp.MilliSeconds());
         Requests.pop_front();
         Counters.TotalInFlight->Dec();
-        ReportStats();
         ProcessQueue();
     }
 
@@ -195,7 +158,6 @@ public:
         Counters.IncomingRate->Inc();
         auto request = ev->Get();
         Requests.emplace_back(TFunctionRequest{ev->Sender, ev->Cookie, std::move(request->Handler)});
-        ReportStats();
         ProcessQueue();
     }
 
@@ -207,21 +169,6 @@ public:
         PopFromQueueAndProcess();
     }
 
-    void HandleWakeup() {
-        WakeupScheduled = false;
-        ReportStats();
-    }
-
-private:
-    void ReportStats() {
-        Counters.ReportStats(Requests.size(), RequestInProgress);
-
-        if (!WakeupScheduled) {
-            WakeupScheduled = true;
-            Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup());
-        }
-    }
-
 private:
     struct TRequest {
         TActorId Sender;
@@ -229,7 +176,6 @@ private:
         TString Sql;
         NYdb::TParams Params;
         bool Idempotent;
-        TInstant StartTime = TInstant::Now();
 
         TRequest() = default;
         TRequest(const TActorId sender, ui64 cookie, const TString& sql, NYdb::TParams&& params, bool idempotent)
@@ -246,7 +192,6 @@ private:
         TActorId Sender;
         ui64 Cookie;
         TFunction Handler;
-        TInstant StartTime = TInstant::Now();
 
         TFunctionRequest() = default;
         TFunctionRequest(const TActorId sender, ui64 cookie, TFunction&& handler)
@@ -262,10 +207,7 @@ private:
     bool RequestInProgress = false;
     TInstant RequestInProgressTimestamp = TInstant::Now();
     std::shared_ptr<int> State = std::make_shared<int>();
-    bool WakeupScheduled = false;
 };
-
-} // anonymous namespace
 
 TDbPool::TDbPool(
     ui32 sessionsCount,

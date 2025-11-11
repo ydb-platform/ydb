@@ -5,7 +5,6 @@
 #include "actors/schema_actors.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include <algorithm>
@@ -16,7 +15,8 @@ using namespace NKikimrClient;
 using grpc::Status;
 
 namespace NKikimr {
-namespace NGRpcProxy::V1 {
+namespace NGRpcProxy {
+namespace V1 {
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -164,20 +164,19 @@ void TPQReadService::Handle(NGRpcService::TEvStreamPQMigrationReadRequest::TPtr&
 }
 
 
-void TPQReadService::HandleReadInfo(TAutoPtr<NActors::IEventHandle>& evHandle, const TActorContext& ctx) {
-    evHandle->DropRewrite();
-    auto* ev = evHandle->Get<TEvPQReadInfoRequest>();
+void TPQReadService::Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx) {
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new read info request");
 
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new read info request failed - cluster is not known yet");
 
-        ev->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
-        ev->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
+        ev->Get()->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
+        ev->Get()->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));
         return;
     } else {
-        ctx.Register(new TReadInfoActor(evHandle->Release<TEvPQReadInfoRequest>().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+        //ctx.Register(new TReadInfoActor(ev->Release().Release(), Clusters, LocalCluster, SchemeCache, NewSchemeCache, Counters));
+        ctx.Register(new TReadInfoActor(ev->Release().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
     }
 }
 
@@ -187,25 +186,10 @@ bool TPQReadService::TooMuchSessions() {
     return Sessions.size() >= MaxSessions;
 }
 
-} // namespace NGRpcProxy::V1
 
-namespace NGRpcService {
-
-void DoPQReadInfoRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider&) {
-    auto ev = dynamic_cast<TEvPQReadInfoRequest*>(ctx.release());
-    Y_ENSURE(ev);
-
-    auto evHandle = std::make_unique<NActors::IEventHandle>(
-        NGRpcProxy::V1::GetPQReadServiceActorID(),
-        NGRpcProxy::V1::GetPQReadServiceActorID(),
-        ev
-    );
-    evHandle->Rewrite(TRpcServices::EvPQReadInfo, NGRpcProxy::V1::GetPQReadServiceActorID());
-    NActors::TActivationContext::Send(std::move(evHandle));
 }
-
-} // namespace NGRpcService
-} // namespace NKikimr
+}
+}
 
 
 void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx) {
@@ -218,5 +202,9 @@ void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRp
 
 
 void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
+}
+
+void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
 }

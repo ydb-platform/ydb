@@ -26,20 +26,15 @@ enum class EUnitKind {
 };
 
 struct TRangePattern {
-    static constexpr const char* EmbeddedPythonBegin = "@@#py";
-    static constexpr const char* EmbeddedJavaScriptBegin = "@@//js";
-
-    TString BeginPlain;
-    TString EndPlain;
-    TMaybe<TString> EscapeRegex;
+    TString Begin;
+    TString End;
 };
 
-// Range patterns are expected to be matched before others.
 struct TUnit {
     EUnitKind Kind;
-    TVector<TRangePattern> RangePatterns;
     TVector<NSQLTranslationV1::TRegexPattern> Patterns;
     TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
+    TMaybe<TRangePattern> RangePattern;
     bool IsPlain = true;
     bool IsCodeGenExcluded = false;
 };

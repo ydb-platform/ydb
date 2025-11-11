@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
 
-[[maybe_unused]] static void
+static void
 PackTupleFallbackRowImpl(const ui8 *const src_cols[], ui8 *const dst_rows,
                          const size_t cols, const size_t size,
                          const size_t col_sizes[], const size_t offsets[],
@@ -42,7 +42,7 @@ PackTupleFallbackRowImpl(const ui8 *const src_cols[], ui8 *const dst_rows,
     }
 }
 
-[[maybe_unused]] static void
+static void
 UnpackTupleFallbackRowImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
                            const size_t cols, const size_t size,
                            const size_t col_sizes[], const size_t offsets[],
@@ -285,11 +285,9 @@ template <class TTraits> struct SIMDPack {
 
     /// 128-bit lane iters
     static const ui8 LaneIters = [] {
-#ifdef USE_X86_SIMD
         if constexpr (std::is_same_v<TTraits, NSimd::TSimdAVX2Traits>) {
             return 1;
         }
-#endif
         return 0;
     }();
 

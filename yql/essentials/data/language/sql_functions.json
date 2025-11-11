@@ -420,19 +420,11 @@
     "kind": "Normal"
   },
   {
-    "name": "EmptyDictType",
-    "kind": "Normal"
-  },
-  {
     "name": "EmptyDictTypeHandle",
     "kind": "Normal"
   },
   {
     "name": "EmptyList",
-    "kind": "Normal"
-  },
-  {
-    "name": "EmptyListType",
     "kind": "Normal"
   },
   {
@@ -1040,14 +1032,6 @@
     "kind": "Window"
   },
   {
-    "name": "NullIf",
-    "kind": "Normal"
-  },
-  {
-    "name": "NullType",
-    "kind": "Normal"
-  },
-  {
     "name": "NullTypeHandle",
     "kind": "Normal"
   },
@@ -1168,16 +1152,8 @@
     "kind": "Normal"
   },
   {
-    "name": "RandomSample",
-    "kind": "Agg"
-  },
-  {
     "name": "RandomUuid",
     "kind": "Normal"
-  },
-  {
-    "name": "RandomValue",
-    "kind": "Agg"
   },
   {
     "name": "Rank",
@@ -1272,31 +1248,11 @@
     "kind": "Normal"
   },
   {
-    "name": "SimplePg::ceil",
-    "kind": "Normal"
-  },
-  {
-    "name": "SimplePg::date_part",
-    "kind": "Normal"
-  },
-  {
-    "name": "SimplePg::date_trunc",
-    "kind": "Normal"
-  },
-  {
-    "name": "SimplePg::floor",
-    "kind": "Normal"
-  },
-  {
     "name": "SimplePg::now",
     "kind": "Normal"
   },
   {
     "name": "SimplePg::round",
-    "kind": "Normal"
-  },
-  {
-    "name": "SimplePg::to_char",
     "kind": "Normal"
   },
   {

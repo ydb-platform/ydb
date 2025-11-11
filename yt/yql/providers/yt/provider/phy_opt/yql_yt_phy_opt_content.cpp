@@ -258,7 +258,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                                             .Columns<TCoVoid>().Build()
                                             .Ranges<TCoVoid>().Build()
                                             .Stat<TCoVoid>().Build()
-                                            .QLFilter<TCoVoid>().Build()
                                         .Build()
                                     .Build()
                                     .Settings<TCoNameValueTupleList>()

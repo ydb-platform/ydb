@@ -92,7 +92,7 @@ class BaseUploadTest(BaseGeneralInterfaceTest):
                 data=params['Body'],
             )
             self.client.meta.events.emit(
-                f'request-created.s3.{model.name}',
+                'request-created.s3.%s' % model.name,
                 request=request,
                 operation_name=model.name,
             )
@@ -142,12 +142,9 @@ class TestNonMultipartUpload(BaseUploadTest):
     __test__ = True
 
     def add_put_object_response_with_default_expected_params(
-        self, extra_expected_params=None, bucket=None
+        self, extra_expected_params=None
     ):
-        if bucket is None:
-            bucket = self.bucket
-
-        expected_params = {'Body': ANY, 'Bucket': bucket, 'Key': self.key}
+        expected_params = {'Body': ANY, 'Bucket': self.bucket, 'Key': self.key}
         if extra_expected_params:
             expected_params.update(extra_expected_params)
         upload_response = self.create_stubbed_responses()[0]
@@ -170,27 +167,12 @@ class TestNonMultipartUpload(BaseUploadTest):
         self.assert_put_object_body_was_correct()
 
     def test_upload_with_checksum(self):
-        self.extra_args['ChecksumAlgorithm'] = 'sha256'
+        self.extra_args['ChecksumAlgorithm'] = 'crc32'
         self.add_put_object_response_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'sha256'}
+            extra_expected_params={'ChecksumAlgorithm': 'crc32'}
         )
         future = self.manager.upload(
             self.filename, self.bucket, self.key, self.extra_args
-        )
-        future.result()
-        self.assert_expected_client_calls_were_correct()
-        self.assert_put_object_body_was_correct()
-
-    def test_upload_with_s3express_default_checksum(self):
-        s3express_bucket = "mytestbucket--usw2-az6--x-s3"
-        self.assertFalse("ChecksumAlgorithm" in self.extra_args)
-
-        self.add_put_object_response_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'crc32'},
-            bucket=s3express_bucket,
-        )
-        future = self.manager.upload(
-            self.filename, s3express_bucket, self.key, self.extra_args
         )
         future.result()
         self.assert_expected_client_calls_were_correct()
@@ -360,14 +342,9 @@ class TestMultipartUpload(BaseUploadTest):
         self.assertEqual(self.sent_bodies, expected_contents)
 
     def add_create_multipart_response_with_default_expected_params(
-        self,
-        extra_expected_params=None,
-        bucket=None,
+        self, extra_expected_params=None
     ):
-        if bucket is None:
-            bucket = self.bucket
-
-        expected_params = {'Bucket': bucket, 'Key': self.key}
+        expected_params = {'Bucket': self.bucket, 'Key': self.key}
         if extra_expected_params:
             expected_params.update(extra_expected_params)
         response = self.create_stubbed_responses()[0]
@@ -375,19 +352,14 @@ class TestMultipartUpload(BaseUploadTest):
         self.stubber.add_response(**response)
 
     def add_upload_part_responses_with_default_expected_params(
-        self,
-        extra_expected_params=None,
-        bucket=None,
+        self, extra_expected_params=None
     ):
-        if bucket is None:
-            bucket = self.bucket
-
         num_parts = 3
         upload_part_responses = self.create_stubbed_responses()[1:-1]
         for i in range(num_parts):
             upload_part_response = upload_part_responses[i]
             expected_params = {
-                'Bucket': bucket,
+                'Bucket': self.bucket,
                 'Key': self.key,
                 'UploadId': self.multipart_id,
                 'Body': ANY,
@@ -398,7 +370,7 @@ class TestMultipartUpload(BaseUploadTest):
                 # If ChecksumAlgorithm is present stub the response checksums
                 if 'ChecksumAlgorithm' in extra_expected_params:
                     name = extra_expected_params['ChecksumAlgorithm']
-                    checksum_member = f'Checksum{name.upper()}'
+                    checksum_member = 'Checksum%s' % name.upper()
                     response = upload_part_response['service_response']
                     response[checksum_member] = 'sum%s==' % (i + 1)
 
@@ -406,15 +378,10 @@ class TestMultipartUpload(BaseUploadTest):
             self.stubber.add_response(**upload_part_response)
 
     def add_complete_multipart_response_with_default_expected_params(
-        self,
-        extra_expected_params=None,
-        bucket=None,
+        self, extra_expected_params=None
     ):
-        if bucket is None:
-            bucket = self.bucket
-
         expected_params = {
-            'Bucket': bucket,
+            'Bucket': self.bucket,
             'Key': self.key,
             'UploadId': self.multipart_id,
             'MultipartUpload': {
@@ -629,54 +596,6 @@ class TestMultipartUpload(BaseUploadTest):
 
         future = self.manager.upload(
             self.filename, self.bucket, self.key, self.extra_args
-        )
-        future.result()
-        self.assert_expected_client_calls_were_correct()
-
-    def test_multipart_upload_sets_s3express_default_checksum(self):
-        s3express_bucket = "mytestbucket--usw2-az6--x-s3"
-        self.assertFalse('ChecksumAlgorithm' in self.extra_args)
-
-        # ChecksumAlgorithm should be passed on the create_multipart call
-        self.add_create_multipart_response_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'crc32'},
-            bucket=s3express_bucket,
-        )
-
-        # ChecksumAlgorithm should be forwarded and a SHA1 will come back
-        self.add_upload_part_responses_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'crc32'},
-            bucket=s3express_bucket,
-        )
-
-        # The checksums should be used in the complete call like etags
-        self.add_complete_multipart_response_with_default_expected_params(
-            extra_expected_params={
-                'MultipartUpload': {
-                    'Parts': [
-                        {
-                            'ETag': 'etag-1',
-                            'PartNumber': 1,
-                            'ChecksumCRC32': 'sum1==',
-                        },
-                        {
-                            'ETag': 'etag-2',
-                            'PartNumber': 2,
-                            'ChecksumCRC32': 'sum2==',
-                        },
-                        {
-                            'ETag': 'etag-3',
-                            'PartNumber': 3,
-                            'ChecksumCRC32': 'sum3==',
-                        },
-                    ]
-                }
-            },
-            bucket=s3express_bucket,
-        )
-
-        future = self.manager.upload(
-            self.filename, s3express_bucket, self.key, self.extra_args
         )
         future.result()
         self.assert_expected_client_calls_were_correct()

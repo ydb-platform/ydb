@@ -5,5 +5,3 @@ items:
     href: scd1-transfer.md
   - name: SCD2 с использованием TRANSFER
     href: scd2-transfer.md
-  - name: SCD2 с использованием подмерживания изменений
-    href: scd2-merge.md

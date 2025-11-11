@@ -117,16 +117,16 @@ struct TPerfomancer {
             std::chrono::steady_clock::time_point end01 =
                 std::chrono::steady_clock::now();
 
-            Cout << "Loaded col1 ";
-            readReg1.template Log<ui32>(Cout);
-            Cout << "Loaded col2 ";
-            readReg2.template Log<ui32>(Cout);;
-            Cout << "Permuted col1 ";
-            permReg11.template Log<ui32>(Cout);;
-            Cout << "Permuted col2 ";
-            permReg21.template Log<ui32>(Cout);
-            Cout << "Blended ";
-            blended1.template Log<ui32>(Cout);
+            Cerr << "Loaded col1 ";
+            readReg1.template Log<ui32>(Cerr);
+            Cerr << "Loaded col2 ";
+            readReg2.template Log<ui32>(Cerr);;
+            Cerr << "Permuted col1 ";
+            permReg11.template Log<ui32>(Cerr);;
+            Cerr << "Permuted col2 ";
+            permReg21.template Log<ui32>(Cerr);
+            Cerr << "Blended ";
+            blended1.template Log<ui32>(Cerr);
 
             ui64 microseconds =
                 std::chrono::duration_cast<std::chrono::microseconds>(end01 - begin01).count();

@@ -34,36 +34,40 @@ std::set<std::string> TPKRangeFilter::GetColumnNames() const {
     return result;
 }
 
-bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
-    return GetUsageClass(info.IndexKeyStart().BuildSortablePosition(), info.IndexKeyEnd().BuildSortablePosition()) !=
-           TPKRangeFilter::EUsageClass::NoUsage;
+NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
+    auto result = PredicateTo.BuildFilter(data);
+    return result.And(PredicateFrom.BuildFilter(data));
 }
 
-TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(
-    const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const {
+bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
+    return GetUsageClass(info.IndexKeyStart(), info.IndexKeyEnd()) != TPKRangeFilter::EUsageClass::NoUsage;
+}
+
+TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
     {
-        std::partial_ordering equalityFromWithStart = std::partial_ordering::less;
-        if (!PredicateFrom.IsAll()) {
-            equalityFromWithStart = PredicateFrom.ComparePartial(start);
+        std::partial_ordering equalityStartWithFrom = std::partial_ordering::greater;
+        if (const auto& from = PredicateFrom.GetReplaceKey()) {
+            equalityStartWithFrom = start.ComparePartNotNull(*from, from->GetColumnsCount());
         }
-        std::partial_ordering equalityToWithEnd = std::partial_ordering::greater;
-        if (!PredicateTo.IsAll()) {
-            equalityToWithEnd = PredicateTo.ComparePartial(end);
+        std::partial_ordering equalityEndWithTo = std::partial_ordering::less;
+        if (const auto& to = PredicateTo.GetReplaceKey()) {
+            equalityEndWithTo = end.ComparePartNotNull(*to, to->GetColumnsCount());
         }
-        const bool startInternal = (equalityFromWithStart == std::partial_ordering::less) ||
-                                   (equalityFromWithStart == std::partial_ordering::equivalent && PredicateFrom.IsInclude());
-        const bool endInternal = (equalityToWithEnd == std::partial_ordering::greater) ||
-                                 (equalityToWithEnd == std::partial_ordering::equivalent && PredicateTo.IsInclude());
+        const bool startInternal = (equalityStartWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
+                                   (equalityStartWithFrom == std::partial_ordering::greater);
+        const bool endInternal = (equalityEndWithTo == std::partial_ordering::equivalent && PredicateTo.IsInclude()) ||
+                                 (equalityEndWithTo == std::partial_ordering::less);
         if (startInternal && endInternal) {
             return EUsageClass::FullUsage;
         }
     }
+    
 
-    if (!PredicateFrom.IsAll()) {
-        const std::partial_ordering equalityFromWithEnd = PredicateFrom.ComparePartial(end);
-        if (equalityFromWithEnd == std::partial_ordering::greater) {
+    if (const auto& from = PredicateFrom.GetReplaceKey()) {
+        const std::partial_ordering equalityEndWithFrom = end.ComparePartNotNull(*from, from->GetColumnsCount());
+        if (equalityEndWithFrom == std::partial_ordering::less) {
             return EUsageClass::NoUsage;
-        } else if (equalityFromWithEnd == std::partial_ordering::equivalent) {
+        } else if (equalityEndWithFrom == std::partial_ordering::equivalent) {
             if (PredicateFrom.IsInclude()) {
                 return EUsageClass::PartialUsage;
             } else {
@@ -72,11 +76,11 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(
         }
     }
 
-    if (!PredicateTo.IsAll()) {
-        const std::partial_ordering equalityToWithStart = PredicateTo.ComparePartial(start);
-        if (equalityToWithStart == std::partial_ordering::less) {
+    if (const auto& to = PredicateTo.GetReplaceKey()) {
+        const std::partial_ordering equalityStartWithTo = start.ComparePartNotNull(*to, to->GetColumnsCount());
+        if (equalityStartWithTo == std::partial_ordering::greater) {
             return EUsageClass::NoUsage;
-        } else if (equalityToWithStart == std::partial_ordering::equivalent) {
+        } else if (equalityStartWithTo == std::partial_ordering::equivalent) {
             if (PredicateTo.IsInclude()) {
                 return EUsageClass::PartialUsage;
             } else {
@@ -99,19 +103,20 @@ TConclusion<TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TP
     return TPKRangeFilter(std::move(from), std::move(to));
 }
 
-bool TPKRangeFilter::CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const {
-    std::partial_ordering equalityFromWithPoint = std::partial_ordering::less;
-    if (!PredicateFrom.IsAll()) {
-        equalityFromWithPoint = PredicateFrom.ComparePartial(point);
+bool TPKRangeFilter::CheckPoint(const NArrow::TSimpleRow& point) const {
+    std::partial_ordering equalityWithFrom = std::partial_ordering::greater;
+    if (const auto& from = PredicateFrom.GetReplaceKey()) {
+        equalityWithFrom = point.ComparePartNotNull(*from, from->GetColumnsCount());
     }
-    std::partial_ordering equalityToWithPoint = std::partial_ordering::greater;
-    if (!PredicateTo.IsAll()) {
-        equalityToWithPoint = PredicateTo.ComparePartial(point);
+    std::partial_ordering equalityWithTo = std::partial_ordering::less;
+    if (const auto& to = PredicateTo.GetReplaceKey()) {
+        equalityWithTo = point.ComparePartNotNull(*to, to->GetColumnsCount());
     }
-    const bool startInternal = (equalityFromWithPoint == std::partial_ordering::less) ||
-                               (equalityFromWithPoint == std::partial_ordering::equivalent && PredicateFrom.IsInclude());
-    const bool endInternal = (equalityToWithPoint == std::partial_ordering::greater) ||
-                             (equalityToWithPoint == std::partial_ordering::equivalent && PredicateTo.IsInclude());
+    const bool startInternal = (equalityWithFrom == std::partial_ordering::equivalent && PredicateFrom.IsInclude()) ||
+                               (equalityWithFrom == std::partial_ordering::greater);
+    const bool endInternal = (equalityWithTo == std::partial_ordering::equivalent && PredicateTo.IsInclude()) ||
+                             (equalityWithTo == std::partial_ordering::less);
     return startInternal && endInternal;
 }
+
 }

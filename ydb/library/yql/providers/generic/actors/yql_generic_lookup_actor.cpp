@@ -174,18 +174,16 @@ namespace NYql::NDq {
         }
 
     private: // events
-        STRICT_STFUNC_EXC(StateFunc,
-            hFunc(TEvLookupRequest, Handle)
-            hFunc(TEvListSplitsIterator, Handle)
-            hFunc(TEvListSplitsPart, Handle)
-            hFunc(TEvReadSplitsIterator, Handle)
-            hFunc(TEvReadSplitsPart, Handle)
-            hFunc(TEvReadSplitsFinished, Handle)
-            hFunc(TEvError, Handle)
-            hFunc(TEvLookupRetry, Handle)
-            hFunc(NActors::TEvents::TEvPoison, Handle)
-            , ExceptionFunc(std::exception, HandleException)
-        )
+        STRICT_STFUNC(StateFunc,
+                      hFunc(TEvLookupRequest, Handle);
+                      hFunc(TEvListSplitsIterator, Handle);
+                      hFunc(TEvListSplitsPart, Handle);
+                      hFunc(TEvReadSplitsIterator, Handle);
+                      hFunc(TEvReadSplitsPart, Handle);
+                      hFunc(TEvReadSplitsFinished, Handle);
+                      hFunc(TEvError, Handle);
+                      hFunc(TEvLookupRetry, Handle);
+                      hFunc(NActors::TEvents::TEvPoison, Handle);)
 
         void Handle(TEvListSplitsIterator::TPtr ev) {
             auto& iterator = ev->Get()->Iterator;
@@ -254,17 +252,13 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvError::TPtr ev) {
-            const auto error = ev->Get()->Error;
-            auto issues = NConnector::ErrorToIssues(error);
-            auto fatalCode = NDqProto::StatusIds::INTERNAL_ERROR;
-
-            try {
-                fatalCode = NConnector::ErrorToDqStatus(error);
-            } catch (const std::exception& e) {
-                issues.AddIssue(TStringBuilder() << "Failed to convert YDB status code: " << e.what());
-            }
-
-            Send(ParentId, new IDqComputeActorAsyncInput::TEvAsyncInputError(-1, std::move(issues), fatalCode));
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto error = ev->Get()->Error;
+            auto errEv = std::make_unique<IDqComputeActorAsyncInput::TEvAsyncInputError>(
+                                  -1,
+                                  NConnector::ErrorToIssues(error),
+                                  NConnector::ErrorToDqStatus(error));
+            actorSystem->Send(new NActors::IEventHandle(ParentId, SelfId(), errEv.release()));
         }
 
         void Handle(TEvLookupRetry::TPtr) {
@@ -279,11 +273,6 @@ namespace NYql::NDq {
         void Handle(TEvLookupRequest::TPtr ev) {
             auto guard = Guard(*Alloc);
             CreateRequest(ev->Get()->Request.lock());
-        }
-
-        void HandleException(const std::exception& e) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
-            SendError(TActivationContext::ActorSystem(), SelfId(), TStringBuilder() << "Internal error. Got unexpected exception: " << e.what());
         }
 
     private:
@@ -424,7 +413,7 @@ namespace NYql::NDq {
         }
 
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, const NConnector::NApi::TError& error) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector: " << error.Getmessage();
+            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << selfId << " Got GrpcError from Connector:" << error.Getmessage();
             actorSystem->Send(
                 selfId,
                 new TEvError(std::move(error)));
@@ -443,7 +432,6 @@ namespace NYql::NDq {
         static void SendError(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TString error) {
             NConnector::NApi::TError dst;
             *dst.mutable_message() = error;
-            dst.set_status(Ydb::StatusIds::INTERNAL_ERROR);
             SendError(actorSystem, selfId, std::move(dst));
         }
 
@@ -567,6 +555,9 @@ namespace NYql::NDq {
     {
         auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
             secureParams.Value(lookupSource.GetTokenName(), TString()),
+            lookupSource.GetToken(),
+            lookupSource.GetServiceAccountId(),
+            lookupSource.GetServiceAccountIdSignature(),
             securedServiceAccountCredentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(

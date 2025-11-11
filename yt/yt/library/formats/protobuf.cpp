@@ -345,6 +345,9 @@ void ValidateSimpleType(
             case ESimpleLogicalValueType::Timestamp64:
             case ESimpleLogicalValueType::Date32:
             case ESimpleLogicalValueType::Datetime64:
+            case ESimpleLogicalValueType::TzTimestamp64:
+            case ESimpleLogicalValueType::TzDate32:
+            case ESimpleLogicalValueType::TzDatetime64:
                 return EKind::SignedInteger;
             case ESimpleLogicalValueType::Uint8:
             case ESimpleLogicalValueType::Uint16:
@@ -353,6 +356,9 @@ void ValidateSimpleType(
             case ESimpleLogicalValueType::Timestamp:
             case ESimpleLogicalValueType::Date:
             case ESimpleLogicalValueType::Datetime:
+            case ESimpleLogicalValueType::TzTimestamp:
+            case ESimpleLogicalValueType::TzDate:
+            case ESimpleLogicalValueType::TzDatetime:
                 return EKind::UnsignedInteger;
             default:
                 return EKind::Other;
@@ -597,7 +603,7 @@ private:
 class TProtobufTypeConfigBuilder
 {
 public:
-    explicit TProtobufTypeConfigBuilder(bool enumsAsStrings)
+    TProtobufTypeConfigBuilder(bool enumsAsStrings)
         : EnumsAsStrings_(enumsAsStrings)
         , Enumerations_(GetEphemeralNodeFactory()->CreateMap())
     { }
@@ -925,7 +931,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
 
     parent->AddChild(
             std::nullopt,
-            std::move(child), // KMP
+            std::move(child), //KMP
             fieldIndex);
 
     for (auto& fieldConfig : columnConfig->Type->Fields) {

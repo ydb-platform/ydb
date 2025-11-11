@@ -121,7 +121,7 @@ public:
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        if (Cache->GetDependentsCount() > 1U) {
+        if (Cache->GetDependencesCount() > 1U) {
             const auto cache = Cache->GetValue(ctx);
             if (IsTupleOptional(Strategy) && !cache) {
                 return NUdf::TUnboxedValue();
@@ -194,7 +194,7 @@ public:
     }
 
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        if (Cache->GetDependentsCount() <= 1U) {
+        if (Cache->GetDependencesCount() <= 1U) {
             return DoGenerateGetElement(ctx, pointer, block);
         }
 

@@ -15,26 +15,6 @@
 
 namespace NYdb::NTPCC {
 
-namespace {
-
-//-----------------------------------------------------------------------------
-
-void PrintErrorStatus(const TStatus& status, const TString& what) {
-    TStringStream ss;
-    ss << what << ": " << ToString(status.GetStatus());
-    const auto& issues = status.GetIssues();
-    if (issues) {
-        ss << ", issues: ";
-        issues.PrintTo(ss, true);
-    }
-
-    Cerr << ss.Str() << Endl;
-}
-
-} // anonymous
-
-//-----------------------------------------------------------------------------
-
 std::string GetFormattedSize(size_t size) {
     constexpr size_t TiB = 1024ULL * 1024 * 1024 * 1024;
     constexpr size_t GiB = 1024ULL * 1024 * 1024;
@@ -63,7 +43,15 @@ void ExitIfError(const TStatus& status, const TString& what) {
         return;
     }
 
-    PrintErrorStatus(status, what);
+    TStringStream ss;
+    ss << what << ": " << ToString(status.GetStatus());
+    const auto& issues = status.GetIssues();
+    if (issues) {
+        ss << ", issues: ";
+        issues.PrintTo(ss, true);
+    }
+
+    Cerr << ss.Str() << Endl;
     std::exit(1);
 }
 
@@ -127,14 +115,6 @@ size_t NumberOfComputeCpus(TDriver& driver) {
     }).GetValueSync();
 
     if (!result.IsSuccess()) {
-        TString what = "failed to get number of compute cores";
-        if (result.GetStatus() == EStatus::UNAUTHORIZED) {
-            // in this case no reason to continue
-            ExitIfError(result, what);
-        } else {
-            // print error and try to continue workload execution
-            PrintErrorStatus(result, what);
-        }
         return 0;
     }
 

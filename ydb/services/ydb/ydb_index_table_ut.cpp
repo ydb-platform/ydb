@@ -48,11 +48,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     Y_UNIT_TEST(AlterIndexImplBySuperUser) {
         TKikimrWithGrpcAndRootSchema server;
 
-        NYdb::TDriver driver(
-            TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())
-                .SetDatabase("/Root")
-        );
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
         NYdb::NTable::TTableClient client(driver);
         NFlatTests::TFlatMsgBusClient oldClient(server.ServerSettings->Port);
 
@@ -69,7 +65,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             auto type = TTypeBuilder().BeginOptional().Primitive(EPrimitiveType::Uint64).EndOptional().Build();
             auto alter = TAlterTableSettings().AppendAddColumns(TColumn("FinishedTimestamp", type));
 
-            auto alterResult = session.AlterTable("/Root/Foo/TimestampIndex/indexImplTable", alter).GetValueSync();
+            auto alterResult = session.AlterTable("Root/Foo/TimestampIndex/indexImplTable", alter).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SCHEME_ERROR,
                                        "Alter of index impl table must fail");
         }
@@ -215,7 +211,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             operation.result().UnpackTo(&result);
 
             auto partitioning = result.partitioning_settings().ShortDebugString();
-            UNIT_ASSERT_STRINGS_EQUAL(partitioning,
+            UNIT_ASSERT_STRINGS_EQUAL(partitioning, 
                 "partitioning_by_size: DISABLED "
                 "partitioning_by_load: ENABLED "
                 "min_partitions_count: 5"
@@ -249,7 +245,6 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
         }
         {
             grpc::ClientContext context;
-            context.AddMetadata("x-ydb-database", "/Root");
             Ydb::Table::AlterTableRequest request;
             UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(R"(
                 path: "/Root/TheTable"
@@ -297,7 +292,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
             operation.result().UnpackTo(&result);
 
             auto partitioning = result.partitioning_settings().ShortDebugString();
-            UNIT_ASSERT_STRINGS_EQUAL(partitioning,
+            UNIT_ASSERT_STRINGS_EQUAL(partitioning, 
                 "partitioning_by_size: DISABLED "
                 "partitioning_by_load: ENABLED "
                 "min_partitions_count: 5"

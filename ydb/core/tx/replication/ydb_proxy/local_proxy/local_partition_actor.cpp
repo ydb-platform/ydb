@@ -31,8 +31,6 @@ void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
     auto path = MakeAbsolutePath(topicPath);
     LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
-    request->DatabaseName = Database;
-
     request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpPath));
     Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     Become(&TThis::StateDescribe);

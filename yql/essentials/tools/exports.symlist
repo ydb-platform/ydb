@@ -992,6 +992,9 @@ UdfUnregisterObject;
 # PG functions
 AggCheckCallContext;
 AllocSetContextCreateInternal;
+appendStringInfo;
+appendStringInfoChar;
+appendStringInfoString;
 array_create_iterator;
 array_free_iterator;
 array_iterate;
@@ -1067,6 +1070,7 @@ HeapTupleHeaderGetDatum;
 index_close;
 index_open;
 init_MultiFuncCall;
+initStringInfo;
 is_pseudo_constant_for_index;
 j2date;
 jsonb_in;
@@ -1079,6 +1083,7 @@ LookupFuncName;
 make_opclause;
 makeFuncExpr;
 makeString;
+makeStringInfo;
 MemoryContextAlloc;
 MemoryContextAllocZero;
 MemoryContextDelete;
@@ -1151,11 +1156,6 @@ yql_palloc0;
 yql_pfree;
 yql_pstrdup;
 yql_repalloc;
-yql_initStringInfo;
-yql_makeStringInfo;
-yql_appendStringInfo;
-yql_appendStringInfoChar;
-yql_appendStringInfoString;
 
 # PG global vars
 ImplPtrBufferBlocks;

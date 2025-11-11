@@ -1,25 +1,25 @@
 from hamcrest.core.base_matcher import BaseMatcher
-from hamcrest.core.description import Description
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
-from hamcrest.core.matcher import Matcher
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
 
-class HasString(BaseMatcher[object]):
-    def __init__(self, str_matcher: Matcher[str]) -> None:
+class HasString(BaseMatcher):
+
+    def __init__(self, str_matcher):
         self.str_matcher = str_matcher
 
-    def _matches(self, item: object) -> bool:
+    def _matches(self, item):
         return self.str_matcher.matches(str(item))
 
-    def describe_to(self, description: Description) -> None:
-        description.append_text("an object with str ").append_description_of(self.str_matcher)
+    def describe_to(self, description):
+        description.append_text('an object with str ')          \
+                    .append_description_of(self.str_matcher)
 
 
-def has_string(match) -> Matcher[object]:
+def has_string(match):
     """Matches if ``str(item)`` satisfies a given matcher.
 
     :param match: The matcher to satisfy, or an expected value for

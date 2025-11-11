@@ -163,9 +163,7 @@ NKikimrSchemeOp::TColumnTableSchema TSchemaDiffView::ApplyDiff(const NKikimrSche
                 *result.AddIndexes() = *itSchema;
                 ++itSchema;
             } else if (itSchema == schema.GetIndexes().end()) {
-                if (itDiff->second) {
-                    *result.AddIndexes() = *itDiff->second;
-                }
+                *result.AddIndexes() = *itDiff->second;
                 ++itDiff;
             } else if (itSchema->GetId() < itDiff->first) {
                 *result.AddIndexes() = *itSchema;

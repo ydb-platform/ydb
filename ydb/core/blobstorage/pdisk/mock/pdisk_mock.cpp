@@ -768,41 +768,28 @@ public:
 
             const auto chunkIt = owner->ChunkData.find(msg->ChunkIdx);
             if (chunkIt == owner->ChunkData.end()) {
-                res->Data.AddGap(offset, offset + size); // no data at all
-                memset(data.GetDataMut(), '~', size);
+                res->Data.AddGap(0, size); // no data at all
             } else {
                 TImpl::TChunkData& chunk = chunkIt->second;
                 const ui64 chunkOffset = (ui64)msg->ChunkIdx * Impl.ChunkSize;
-                const bool hasCorruptedParts = static_cast<bool>(Impl.Corrupted & TIntervalSet<ui64>(chunkOffset + offset,
-                    chunkOffset + offset + size));
-                if (hasCorruptedParts && RandomNumber(2u)) {
+                if (Impl.Corrupted & TIntervalSet<ui64>(chunkOffset + offset, chunkOffset + offset + size)) {
                     res->Status = NKikimrProto::CORRUPTED;
                 } else {
-                    size_t offsetInBuffer = 0;
-                    ui32 blockIdx = offset / Impl.AppendBlockSize;
-                    ui32 offsetInBlock = offset % Impl.AppendBlockSize;
+                    char *begin = data.GetDataMut(), *ptr = begin;
                     while (size) {
+                        const ui32 blockIdx = offset / Impl.AppendBlockSize;
+                        const ui32 offsetInBlock = offset % Impl.AppendBlockSize;
                         const ui32 num = Min(size, Impl.AppendBlockSize - offsetInBlock);
-
                         const auto it = chunk.Blocks.find(blockIdx);
-
-                        const bool corrupted = hasCorruptedParts && (Impl.Corrupted & TIntervalSet<ui64>(
-                            chunkOffset + blockIdx * Impl.AppendBlockSize,
-                            chunkOffset + (blockIdx + 1) * Impl.AppendBlockSize));
-
-                        if (it == chunk.Blocks.end() || corrupted) {
-                            res->Data.AddGap(offset, offset + num);
-                            memset(data.GetDataMut() + offsetInBuffer, '~', num);
+                        if (it == chunk.Blocks.end()) {
+                            const ui32 base = ptr - begin;
+                            res->Data.AddGap(base, base + num);
                         } else {
-                            memcpy(data.GetDataMut() + offsetInBuffer, it->second->data() + offsetInBlock, num);
+                            memcpy(ptr, it->second->data() + offsetInBlock, num);
                         }
-
+                        ptr += num;
                         offset += num;
-                        offsetInBuffer += num;
                         size -= num;
-
-                        ++blockIdx;
-                        offsetInBlock = 0;
                     }
                 }
             }

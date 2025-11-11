@@ -23,7 +23,7 @@ jobs:
       ) || (
         github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        github.event.comment.user.id != 199975426 &&
+        github.event.comment.user.id != 97796249 &&
         startsWith(github.event.comment.body, '/backport')
       )
     steps:
@@ -32,5 +32,4 @@ jobs:
         uses: korthout/backport-action@v3
         with:
           label_pattern: '^backport\/([^ ]+)$'
-          github_token: ${{ secrets.YDBOT_TOKEN }}
-          experimental: '{"conflict_resolution": "draft_commit_conflicts"}'
+          conflict_resolution: 'draft_commit_conflicts'

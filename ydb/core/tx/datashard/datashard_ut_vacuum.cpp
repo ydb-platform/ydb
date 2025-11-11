@@ -43,19 +43,19 @@ Y_UNIT_TEST_SUITE(Vacuum) {
             });
         auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
 
-        UploadRows(runtime, "/Root", "/Root/table-1",
+        UploadRows(runtime, "/Root/table-1",
             {{"key", Ydb::Type::UINT32}, {"subkey", Ydb::Type::STRING}, {"value", Ydb::Type::UTF8}},
             {TCell::Make(ui32(1)), TCell(DeletedSubkey1)}, {TCell(DeletedShortValue1)}
         );
-        UploadRows(runtime, "/Root", "/Root/table-1",
+        UploadRows(runtime, "/Root/table-1",
             {{"key", Ydb::Type::UINT32}, {"subkey", Ydb::Type::STRING}, {"value", Ydb::Type::UTF8}},
             {TCell::Make(ui32(2)), TCell(PresentSubkey2)}, {TCell(PresentLongValue2)}
         );
-        UploadRows(runtime, "/Root", "/Root/table-1",
+        UploadRows(runtime, "/Root/table-1",
             {{"key", Ydb::Type::UINT32}, {"subkey", Ydb::Type::STRING}, {"value", Ydb::Type::UTF8}},
             {TCell::Make(ui32(3)), TCell(PresentSubkey3)}, {TCell(PresentShortValue3)}
         );
-        UploadRows(runtime, "/Root", "/Root/table-1",
+        UploadRows(runtime, "/Root/table-1",
             {{"key", Ydb::Type::UINT32}, {"subkey", Ydb::Type::STRING}, {"value", Ydb::Type::UTF8}},
             {TCell::Make(ui32(4)), TCell(DeletedSubkey4)}, {TCell(DeletedLongValue4)}
         );

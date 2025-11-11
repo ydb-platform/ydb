@@ -1,24 +1,6 @@
 #include "mem_pool.h"
 #include "link_manager.h"
-
-#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
 #include "ctx.h"
-#else
-extern "C" {
-
-struct ibv_mr {
-    struct ibv_context     *context;
-    struct ibv_pd	       *pd;
-    void		       *addr;
-    size_t			length;
-    ui32		handle;
-    ui32		lkey;
-    ui32		rkey;
-};
-
-}
-
-#endif
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -30,30 +12,18 @@ struct ibv_mr {
 #include <vector>
 #include <list>
 
+#include <unistd.h>
+#include <sys/syscall.h>
 #include <mutex>
 #include <thread>
 
-#include <cstdlib>
-#include <cstring>
-#include <cerrno>
-
-#if defined(_win_)
-#include <malloc.h> // _aligned_malloc, _aligned_free
-#else
-#include <sys/mman.h>   // madvise
-#include <unistd.h>
-#include <sys/syscall.h>
-#endif
+#include <sys/mman.h>
 
 static constexpr size_t HPageSz = (1 << 21);
 
 using ::NMonitoring::TDynamicCounters;
 
 namespace NInterconnect::NRdma {
-
-    // Cross-platform memory management
-    static void* allocateMemory(size_t size, size_t alignment, bool hp);
-    static void freeMemory(void* ptr) noexcept;
 
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
@@ -65,7 +35,16 @@ namespace NInterconnect::NRdma {
     }
 
     ~TChunk() {
-        MemPool->DealocateMr(MRs);
+        MemPool->NotifyDealocated();
+        if (Empty()) {
+            return;
+        }
+        auto addr = MRs.front()->addr;
+        for (auto& m: MRs) {
+            ibv_dereg_mr(m);
+        }
+        std::free(addr);
+        MRs.clear();
     }
 
     ibv_mr* GetMr(size_t deviceIndex) noexcept {
@@ -201,86 +180,39 @@ namespace NInterconnect::NRdma {
         );
     }
 
-    static void* allocateMemory(size_t size, size_t alignment, bool hp) {
+    void* allocateMemory(size_t size, size_t alignment, bool hp) {
         if (size % alignment != 0) {
             return nullptr;
         }
-
-        void* buf = nullptr;
-
-#if defined(_win_)
-        // Windows: use _aligned_malloc
-        buf = _aligned_malloc(size, alignment);
-        if (!buf) {
-            fprintf(stderr, "Failed to allocate aligned memory on Windows\n");
-            return nullptr;
-        }
-#else
-        // POSIX/C++: std::aligned_alloc (C++17)
-        buf = std::aligned_alloc(alignment, size);
-        if (!buf) {
-            fprintf(stderr, "Failed to allocate aligned memory on Unix\n");
-            return nullptr;
-        }
-#endif
-
+        void* buf = std::aligned_alloc(alignment, size);
         if (hp) {
-#if defined(_linux_)
             if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
                 fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
                     strerror(errno), errno);
             }
-#endif
             for (size_t i = 0; i < size; i += HPageSz) {
                 // We use THP right now. We need to touch each page to promote it to HUGE.
-                static_cast<char*>(buf)[i] = 0;
+                ((char*)buf)[i] = 0;
             }
         }
         return buf;
     }
 
-    static void freeMemory(void* ptr) noexcept {
-        if (!ptr) {
-            return;
-        }
-#if defined(_win_)
-        _aligned_free(ptr);
-#else
-        std::free(ptr);
-#endif
-    }
-
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
         std::vector<ibv_mr*> res;
-
-// In case of windows windows we can't use ibv_dereg_mr - compile error
-// In case of linux but absent librray we can't register memory, but we need mem pool for tests - emulate registration
-#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
-        if (!ctxs.empty()) {
-            res.reserve(ctxs.size());
-            for (const auto& [_, ctx]: ctxs) {
-                ibv_mr* mr = ibv_reg_mr(
-                    ctx->GetProtDomain(), addr, size,
-                    IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-                );
-                if (!mr) {
-                    for (ibv_mr* tmp : res) {
-                        ibv_dereg_mr(tmp);
-                    }
-                    return {};
+        res.reserve(ctxs.size());
+        for (const auto& [_, ctx]: ctxs) {
+            ibv_mr* mr = ibv_reg_mr(
+                ctx->GetProtDomain(), addr, size,
+                IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+            );
+            if (!mr) {
+                for (ibv_mr* tmp : res) {
+                    ibv_dereg_mr(tmp);
                 }
-                res.push_back(mr);
+                return {};
             }
-        } else
-#endif
-        {
-#ifdef MEM_POOL_DISABLE_RDMA_SUPPORT
-        Y_UNUSED(ctxs);
-#endif
-            struct ibv_mr* dummy = (struct ibv_mr*)calloc(1, sizeof(struct ibv_mr));
-            dummy->addr = addr;
-            dummy->length = size;
-            res.push_back(dummy);
+            res.push_back(mr);
         }
         return res;
     }
@@ -309,15 +241,10 @@ namespace NInterconnect::NRdma {
         return counters;
     }
 
-    static const NInterconnect::NRdma::NLinkMgr::TCtxsMap& GetAllCtxs() {
-        NInterconnect::NRdma::NLinkMgr::Init();
-        return NInterconnect::NRdma::NLinkMgr::GetAllCtxs();
-    }
-
     class TMemPoolBase: public IMemPool {
     public:
         TMemPoolBase(size_t maxChunk, NMonitoring::TDynamicCounterPtr counter)
-            : Ctxs(GetAllCtxs())
+            : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
             , MaxChunk(maxChunk)
             , Alignment(NSystemInfo::GetPageSize())
         {
@@ -344,7 +271,7 @@ namespace NInterconnect::NRdma {
 
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
-                freeMemory(ptr);
+                std::free(ptr);
                 return nullptr;
             }
 
@@ -354,28 +281,10 @@ namespace NInterconnect::NRdma {
             return MakeIntrusive<TChunk>(std::move(mrs), this);
         }
 
-        void DealocateMr(std::vector<ibv_mr*>& mrs) noexcept override {
-            {
-                const std::lock_guard<std::mutex> lock(Mutex);
-                AllocatedChunks--;
-                AllocatedChunksCounter->Dec();
-            }
-            if (mrs.empty()) {
-                return;
-            }
-            auto addr = mrs.front()->addr;
-#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
-            if (!Ctxs.empty()) {
-                for (auto& m: mrs) {
-                    ibv_dereg_mr(m);
-                }
-            } else
-#endif
-            {
-                free(mrs.front());
-            }
-            freeMemory(addr);
-            mrs.clear();
+        void NotifyDealocated() noexcept override {
+            const std::lock_guard<std::mutex> lock(Mutex);
+            AllocatedChunks--;
+            AllocatedChunksCounter->Dec();
         }
 
         const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;

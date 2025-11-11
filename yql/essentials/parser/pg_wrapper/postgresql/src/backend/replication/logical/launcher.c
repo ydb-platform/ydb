@@ -190,14 +190,12 @@ WaitForReplicationWorkerAttach(LogicalRepWorker *worker,
 							   uint16 generation,
 							   BackgroundWorkerHandle *handle)
 {
-	bool		result = false;
-	bool		dropped_latch = false;
+	BgwHandleStatus status;
+	int			rc;
 
 	for (;;)
 	{
-		BgwHandleStatus status;
 		pid_t		pid;
-		int			rc;
 
 		CHECK_FOR_INTERRUPTS();
 
@@ -206,9 +204,8 @@ WaitForReplicationWorkerAttach(LogicalRepWorker *worker,
 		/* Worker either died or has started. Return false if died. */
 		if (!worker->in_use || worker->proc)
 		{
-			result = worker->in_use;
 			LWLockRelease(LogicalRepWorkerLock);
-			break;
+			return worker->in_use;
 		}
 
 		LWLockRelease(LogicalRepWorkerLock);
@@ -223,7 +220,7 @@ WaitForReplicationWorkerAttach(LogicalRepWorker *worker,
 			if (generation == worker->generation)
 				logicalrep_worker_cleanup(worker);
 			LWLockRelease(LogicalRepWorkerLock);
-			break;				/* result is already false */
+			return false;
 		}
 
 		/*
@@ -238,18 +235,8 @@ WaitForReplicationWorkerAttach(LogicalRepWorker *worker,
 		{
 			ResetLatch(MyLatch);
 			CHECK_FOR_INTERRUPTS();
-			dropped_latch = true;
 		}
 	}
-
-	/*
-	 * If we had to clear a latch event in order to wait, be sure to restore
-	 * it before exiting.  Otherwise caller may miss events.
-	 */
-	if (dropped_latch)
-		SetLatch(MyLatch);
-
-	return result;
 }
 
 /*
@@ -1187,20 +1174,9 @@ ApplyLauncherMain(Datum main_arg)
 				(elapsed = TimestampDifferenceMilliseconds(last_start, now)) >= wal_retrieve_retry_interval)
 			{
 				ApplyLauncherSetWorkerStartTime(sub->oid, now);
-				if (!logicalrep_worker_launch(sub->dbid, sub->oid, sub->name,
-											  sub->owner, InvalidOid,
-											  DSM_HANDLE_INVALID))
-				{
-					/*
-					 * We get here either if we failed to launch a worker
-					 * (perhaps for resource-exhaustion reasons) or if we
-					 * launched one but it immediately quit.  Either way, it
-					 * seems appropriate to try again after
-					 * wal_retrieve_retry_interval.
-					 */
-					wait_time = Min(wait_time,
-									wal_retrieve_retry_interval);
-				}
+				logicalrep_worker_launch(sub->dbid, sub->oid, sub->name,
+										 sub->owner, InvalidOid,
+										 DSM_HANDLE_INVALID);
 			}
 			else
 			{

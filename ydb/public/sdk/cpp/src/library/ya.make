@@ -7,6 +7,5 @@ RECURSE(
     persqueue/obfuscate
     persqueue/topic_parser_public
     string_utils/helpers
-    time
     uuid
 )

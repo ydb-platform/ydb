@@ -250,18 +250,6 @@ public:
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options = {}) override;
 
-    TFuture<TDistributedWriteFileSessionWithCookies> StartDistributedWriteFileSession(
-        const NYPath::TRichYPath& path,
-        const TDistributedWriteFileSessionStartOptions& options = {}) override;
-
-    TFuture<void> PingDistributedWriteFileSession(
-        const TSignedDistributedWriteFileSessionPtr& session,
-        const TDistributedWriteFileSessionPingOptions& options = {}) override;
-
-    TFuture<void> FinishDistributedWriteFileSession(
-        const TDistributedWriteFileSessionWithResults& sessionWithResults,
-        const TDistributedWriteFileSessionFinishOptions& options = {}) override;
-
     // Custom methods.
 
     //! Returns proxy address this transaction is sticking to.

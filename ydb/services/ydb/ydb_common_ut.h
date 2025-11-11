@@ -367,7 +367,6 @@ using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSc
 Ydb::StatusIds::StatusCode WaitForStatus(
     std::shared_ptr<grpc::Channel> channel, const TString& opId,
     TString* error = nullptr,
-    const TString& database = "/Root",
     int retries = 10,
     TDuration sleepDuration = NYdb::ITERATION_DURATION
 );

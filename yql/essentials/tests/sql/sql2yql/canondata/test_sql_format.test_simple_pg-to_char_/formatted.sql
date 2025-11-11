@@ -1,3 +1,0 @@
-SELECT
-    SimplePg::to_char(Date('2020-01-02'), 'YY-MM')
-;

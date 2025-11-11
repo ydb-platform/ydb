@@ -1,5 +1,7 @@
 #pragma once
 
+#include "statistics.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -10,6 +12,7 @@
 
 extern const TDuration DefaultReactionTime;
 extern const TDuration ReactionTimeDelay;
+extern const TDuration GlobalTimeout;
 extern const std::uint64_t PartitionsCount;
 
 struct TRecordData {
@@ -47,18 +50,23 @@ struct TCommonOptions {
     std::uint32_t MaxCallbackThreads = 50;
     std::uint32_t MaxInfly = 500;
     std::uint32_t MaxRetries = 50;
+    std::uint64_t A_ReactionTime = 70; //ms
     TDuration ReactionTime = DefaultReactionTime;
     bool StopOnError = false;
     bool UseApplicationTimeout = false;
     bool SendPreventiveRequest = false;
 
-    // Generator options:
+    //Generator options:
     std::uint32_t MinLength = 20;
     std::uint32_t MaxLength = 200;
 
-    // Output options:
-    bool DontPushMetrics = false;
-    std::string MetricsPushUrl = "http://localhost:9090/api/v1/otlp/v1/metrics";
+    //Output options:
+    bool DontPushMetrics = true;
+    std::string ResultFileName = "slo_result.json";
+
+    bool UseFollowers = false;
+    bool RetryMode = false;
+    bool SaveResult = false;
 };
 
 struct TCreateOptions {
@@ -71,10 +79,9 @@ struct TRunOptions {
     TCommonOptions CommonOptions;
     bool DontRunA = false;
     bool DontRunB = false;
+    bool DontRunC = false;
     std::uint32_t Read_rps = 1000;
     std::uint32_t Write_rps = 10;
-    TDuration ReadTimeout = DefaultReactionTime;
-    TDuration WriteTimeout = DefaultReactionTime;
 };
 
 class TRpsProvider {
@@ -152,9 +159,7 @@ std::uint32_t GetShardSpecialId(std::uint64_t shardNo);
 
 std::uint32_t GetHash(std::uint32_t value);
 
-std::string YdbStatusToString(NYdb::EStatus status);
-
 TTableStats GetTableStats(TDatabaseOptions& dbOptions, const std::string& tableName);
 
-bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions);
-bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions);
+bool ParseOptionsCreate(int argc, char** argv, TCreateOptions& createOptions, bool followers = false);
+bool ParseOptionsRun(int argc, char** argv, TRunOptions& runOptions, bool followers = false);

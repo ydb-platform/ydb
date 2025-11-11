@@ -394,7 +394,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         }
     }
 
-    const auto inFlightLocksRangesBytes = NOlap::TPKRangesFilter::GetFiltersTotalMemorySize();
+    const auto inFlightLocksRangesBytes = NOlap::TPKRangeFilter::GetFiltersTotalMemorySize();
     const ui64 inFlightLocksRangesBytesLimit = AppDataVerified().ColumnShardConfig.GetInFlightLocksRangesBytesLimit();
     if (behaviour == EOperationBehaviour::WriteWithLock && inFlightLocksRangesBytes > inFlightLocksRangesBytesLimit) {
         if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock) {
@@ -573,13 +573,13 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
         if (snapshotSchema->GetVersion() != schema->GetVersion()) {
             const TString errorMessage = TStringBuilder() << "schema version mismatch with snapshot: "
-                << "tx_id=" << record.GetTxId()
+                << "tx_id=" << record.GetTxId() 
                 << ", snapshot=" << mvccSnapshot
                 << ", snapshot_schema_version=" << snapshotSchema->GetVersion()
                 << ", request_schema_version=" << schema->GetVersion()
                 << ", table_id=" << schemeShardLocalPathId
                 << ", lock_id=" << lockId;
-
+            
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
                 ("tx_id", record.GetTxId())
                 ("snapshot", TStringBuilder() << mvccSnapshot)
@@ -590,7 +590,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 ("path_id", pathId)
                 ("source", source.ToString())
                 ("cookie", cookie);
-
+            
             LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
                 operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), errorMessage);
             sendError(errorMessage, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);

@@ -37,8 +37,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase)
-            {
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     if (hashBase) {
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
@@ -50,9 +49,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
                     }
                 }
             },
-            [&](const NJson::TJsonValue& data, const ui64 hashBase) {
+            [&](const std::string_view data, const ui64 hashBase) {
                 for (ui64 i = 0; i < HashesCount; ++i) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data.GetStringRobust(), i);
+                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
                     if (hashBase) {
                         filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
                     } else {

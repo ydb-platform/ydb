@@ -44,7 +44,6 @@ PEERDIR(
     yt/yql/providers/yt/expr_nodes
     yt/yql/providers/yt/gateway/lib
     yt/yql/providers/yt/job
-    yt/yql/providers/yt/lib/dump_helpers
     yt/yql/providers/yt/lib/expr_traits
     yt/yql/providers/yt/lib/infer_schema
     yt/yql/providers/yt/lib/lambda_builder

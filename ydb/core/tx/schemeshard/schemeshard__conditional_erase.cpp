@@ -155,7 +155,6 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         const TInstant wallClock = ctx.Now() - *expireAfter;
 
         NKikimrTxDataShard::TEvConditionalEraseRowsRequest request;
-        request.SetDatabaseName(CanonizePath(Self->RootPathElements));
         request.SetTableId(shardInfo.PathId.LocalPathId);
         request.SetSchemaVersion(tableInfo->AlterVersion);
 
@@ -209,6 +208,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             auto ev = MakeHolder<TEvDataShard::TEvConditionalEraseRowsRequest>();
             ev->Record = std::move(request);
+
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Run conditional erase"
                 << ", tabletId: " << tabletId
                 << ", request: " << ev->Record.ShortDebugString()

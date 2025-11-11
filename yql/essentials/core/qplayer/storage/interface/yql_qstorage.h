@@ -92,27 +92,19 @@ public:
 
 using IQStoragePtr = std::shared_ptr<IQStorage>;
 
-enum class EQPlayerCaptureMode {
-    None /* "none" */,
-    MetaOnly /* "meta" */,
-    Full /* "full" */,
-};
-
 class TQContext {
 public:
     TQContext()
     {
     }
 
-    TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
-        : CaptureMode_(captureMode)
-        , Reader_(reader)
+    TQContext(IQReaderPtr reader)
+        : Reader_(reader)
     {
     }
 
-    TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
-        : CaptureMode_(captureMode)
-        , Writer_(writer)
+    TQContext(IQWriterPtr writer)
+        : Writer_(writer)
     {
     }
 
@@ -121,10 +113,6 @@ public:
 
     operator bool() const {
         return CanRead() || CanWrite();
-    }
-
-    EQPlayerCaptureMode CaptureMode() const {
-        return CaptureMode_;
     }
 
     bool CanRead() const {
@@ -144,8 +132,6 @@ public:
     }
 
 private:
-    EQPlayerCaptureMode CaptureMode_ = EQPlayerCaptureMode::None;
-
     IQReaderPtr Reader_;
     IQWriterPtr Writer_;
 };

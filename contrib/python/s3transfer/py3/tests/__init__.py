@@ -72,7 +72,9 @@ def assert_files_equal(first, second):
     second_md5 = md5_checksum(second)
     if first_md5 != second_md5:
         raise AssertionError(
-            f"Files are not equal: {first}(md5={first_md5}) != {second}(md5={second_md5})"
+            "Files are not equal: {}(md5={}) != {}(md5={})".format(
+                first, first_md5, second, second_md5
+            )
         )
 
 

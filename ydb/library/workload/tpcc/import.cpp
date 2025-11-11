@@ -47,21 +47,17 @@ using Clock = std::chrono::steady_clock;
 
 //-----------------------------------------------------------------------------
 
-constexpr int UPSERT_MAX_RETRIES = 100;
-constexpr int UPSERT_BACKOFF_MILLIS = 10;
-constexpr int UPSERT_BACKOFF_CEILING = 5;
-
-constexpr int INDEX_CHECK_MAX_RETRIES = 10;
-constexpr int INDEX_CHECK_BACKOFF_MILLIS = 1000;
-constexpr int INDEX_CHECK_BACKOFF_CEILING = 10000;
+constexpr int MAX_RETRIES = 100;
+constexpr int BACKOFF_MILLIS = 10;
+constexpr int BACKOFF_CEILING = 5;
 
 constexpr auto INDEX_PROGRESS_CHECK_INTERVAL = std::chrono::seconds(1);
 
 //-----------------------------------------------------------------------------
 
-int GetBackoffWaitMs(int retryCount, int millis, int ceiling) {
-    const int waitTimeCeilingMs = (1 << ceiling) * millis;
-    int waitTimeMs = millis;
+int GetBackoffWaitMs(int retryCount) {
+    const int waitTimeCeilingMs = (1 << BACKOFF_CEILING) * BACKOFF_MILLIS;
+    int waitTimeMs = BACKOFF_MILLIS;
 
     for (int i = 0; i < retryCount; ++i) {
         waitTimeMs = std::min(waitTimeMs * 2, waitTimeCeilingMs);
@@ -580,7 +576,7 @@ NTable::TBulkUpsertResult LoadOrderLines(
 
 template<typename LoadFunc>
 void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::protobuf::Arena& arena, TLog* Log) {
-    for (int retryCount = 0; retryCount < UPSERT_MAX_RETRIES; ++retryCount) {
+    for (int retryCount = 0; retryCount < MAX_RETRIES; ++retryCount) {
         if (GetGlobalInterruptSource().stop_requested()) {
             break;
         }
@@ -601,13 +597,13 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
             return;
         }
 
-        if (retryCount < UPSERT_MAX_RETRIES - 1) {
-            int waitMs = GetBackoffWaitMs(retryCount, UPSERT_BACKOFF_MILLIS, UPSERT_BACKOFF_CEILING);
+        if (retryCount < MAX_RETRIES - 1) {
+            int waitMs = GetBackoffWaitMs(retryCount);
             LOG_T("Retrying " << operationName << " after " << waitMs << " ms due to: "
                     << result.GetStatus() << ", " << result.GetIssues().ToOneLineString());
             Sleep(TDuration::MilliSeconds(waitMs));
         } else {
-            LOG_E(operationName << " failed after " << UPSERT_MAX_RETRIES << " retries: "
+            LOG_E(operationName << " failed after " << MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
             RequestStop();
             return;
@@ -634,16 +630,12 @@ void LoadSmallTables(
     ExecuteWithRetry("LoadItems", [&]() {
         return LoadItems(tableClient, itemTablePath, arena, fastRng, Log);
     }, arena, Log);
-
-    for (int wh = 1; wh <= warehouseCount; wh += MAX_WAREHOUSES_PER_IMPORT_BATCH) {
-        int lastId = Min(wh + MAX_WAREHOUSES_PER_IMPORT_BATCH - 1, warehouseCount);
-        ExecuteWithRetry("LoadWarehouses", [&]() {
-            return LoadWarehouses(tableClient, warehouseTablePath, wh, lastId, arena, fastRng, Log);
-        }, arena, Log);
-        ExecuteWithRetry("LoadDistricts", [&]() {
-            return LoadDistricts(tableClient, districtTablePath, wh, lastId, arena, fastRng, Log);
-        }, arena, Log);
-    }
+    ExecuteWithRetry("LoadWarehouses", [&]() {
+        return LoadWarehouses(tableClient, warehouseTablePath, 1, warehouseCount, arena, fastRng, Log);
+    }, arena, Log);
+    ExecuteWithRetry("LoadDistricts", [&]() {
+        return LoadDistricts(tableClient, districtTablePath, 1, warehouseCount, arena, fastRng, Log);
+    }, arena, Log);
 }
 
 //-----------------------------------------------------------------------------
@@ -809,42 +801,21 @@ void CreateIndices(TDriver& driver, const TString& path, TImportState& loadState
 // returns either progress (100 – done) or string with error
 std::expected<double, std::string> GetIndexProgress(
     NOperation::TOperationClient& client,
-    const TOperation::TOperationId& id,
-    TLog* Log) noexcept
+    const TOperation::TOperationId& id)
 {
-    for (int i = 0; i < INDEX_CHECK_MAX_RETRIES; ++i) {
-        try {
-            auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
-            if (operation.Ready()) {
-                if (operation.Status().IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
-                    return 100;
-                }
-
-                TStringStream ss;
-                ss << "Failed to create index, operation id " << id.ToString() << ": " << operation.Status()
-                    << ", build state: " << operation.Metadata().State << ", " << operation.Metadata().Path;
-                return std::unexpected(ss.Str());
-            } else {
-                return operation.Metadata().Progress;
-            }
-        } catch (const std::exception& ex) {
-            if (i + 1 < INDEX_CHECK_MAX_RETRIES) {
-                LOG_W("Failed to check index operation " << id.ToString() << ": " << ex.what() << ", retrying");
-            } else {
-                TStringStream ss;
-                ss << "Failed to check index operation id " << id.ToString() << ", exception: " << ex.what();
-                return std::unexpected(ss.Str());
-            }
+    auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
+    if (operation.Ready()) {
+        if (operation.Status().IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
+            return 100;
         }
 
-        int waitMs = GetBackoffWaitMs(i, INDEX_CHECK_BACKOFF_MILLIS, INDEX_CHECK_BACKOFF_CEILING);
-        Sleep(TDuration::MilliSeconds(waitMs));
+        TStringStream ss;
+        ss << "Failed to create index, operation id " << id.ToString() << ": " << operation.Status()
+            << ", build state: " << operation.Metadata().State << ", " << operation.Metadata().Path;
+        return std::unexpected(ss.Str());
+    } else {
+        return operation.Metadata().Progress;
     }
-
-    TStringStream ss;
-    ss << "Failed to check index operation id " << id.ToString() << ", after " << INDEX_CHECK_MAX_RETRIES << " retries";
-
-    return std::unexpected(ss.Str());
 }
 
 //-----------------------------------------------------------------------------
@@ -977,16 +948,7 @@ public:
             }
 
             auto now = Clock::now();
-
-            try {
-                UpdateDisplayIfNeeded(now);
-            } catch (const std::exception& ex) {
-                // in theory might happen when TUI loop has exited
-                // and we haven't seen stop requested yet
-                LOG_E("Exception while updating display: " << ex.what());
-                GetGlobalInterruptSource().request_stop();
-                break;
-            }
+            UpdateDisplayIfNeeded(now);
 
             switch (LoadState.State) {
             case TImportState::ELOAD_INDEXED_TABLES: {
@@ -1029,7 +991,7 @@ public:
                 // update progress of all indices and advance LoadState.CurrentIndex
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     auto& indexState = LoadState.IndexBuildStates[i];
-                    auto progress = GetIndexProgress(operationClient, indexState.Id, Log.get());
+                    auto progress = GetIndexProgress(operationClient, indexState.Id);
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
                         RequestStop();
@@ -1039,9 +1001,6 @@ public:
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
                         ++LoadState.CurrentIndex;
                     }
-                }
-                if (GetGlobalInterruptSource().stop_requested()) {
-                    break;
                 }
 
                 if (LoadState.State == TImportState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
@@ -1068,9 +1027,7 @@ public:
         }
 
         for (auto& thread : threads) {
-            if (thread.joinable()) {
-                thread.join();
-            }
+            thread.join();
         }
 
         // if there is either error we have failed to retry or user wants to cancel import,

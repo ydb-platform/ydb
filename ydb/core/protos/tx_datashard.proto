@@ -1445,7 +1445,6 @@ message TEvConditionalEraseRowsRequest {
     optional uint64 SchemaVersion = 3;
     repeated TIndexDescription Indexes = 4;
     optional TLimits Limits = 5;
-    optional string DatabaseName = 6;
 
     oneof Condition {
         TExpirationCondition Expiration = 2;
@@ -1502,8 +1501,6 @@ message TEvBuildIndexCreateRequest {
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
-
-    optional string DatabaseName = 18;
 }
 
 message TEvBuildIndexProgressResponse {
@@ -1614,8 +1611,6 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
-
-    optional string DatabaseName = 23;
 }
 
 message TEvLocalKMeansResponse {
@@ -1664,8 +1659,6 @@ message TEvReshuffleKMeansRequest {
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
-
-    optional string DatabaseName = 17;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1732,7 +1725,7 @@ message TEvIncrementalRestoreResponse {
         RETRY = 1;
         ERROR = 2;
     }
-
+    
     optional uint64 TxId = 1;
     optional uint64 TableId = 2;
     optional uint64 OperationId = 3;
@@ -1777,8 +1770,6 @@ message TEvPrefixKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 
     repeated string SourcePrimaryKeyColumns = 19;
-
-    optional string DatabaseName = 20;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1815,8 +1806,6 @@ message TEvBuildFulltextIndexRequest {
     repeated string DataColumns = 10;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
-
-    optional string DatabaseName = 12;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -2098,16 +2087,6 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
-
-    optional TReadVectorTopK VectorTopK = 905;
-}
-
-message TReadVectorTopK {
-    // Top-K pushdown by vector distance between Column and TargetVector
-    optional uint32 Column = 1;
-    optional Ydb.Table.VectorIndexSettings Settings = 2;
-    optional string TargetVector = 3;
-    optional uint32 Limit = 4;
 }
 
 message TReadContinuationToken {

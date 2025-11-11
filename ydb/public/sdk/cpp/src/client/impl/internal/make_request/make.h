@@ -25,7 +25,7 @@ void FillOperationParams(const TRequestSettings& settings, TProtoRequest& params
 
     if (settings.OperationTimeout_) {
         SetDuration(settings.OperationTimeout_, *operationParams.mutable_operation_timeout());
-    } else if (settings.ClientTimeout_ && settings.ClientTimeout_ != TDuration::Max() && settings.UseClientTimeoutForOperation_) {
+    } else if (settings.ClientTimeout_ && settings.UseClientTimeoutForOperation_) {
         SetDuration(settings.ClientTimeout_, *operationParams.mutable_operation_timeout());
     }
 

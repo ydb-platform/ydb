@@ -2,9 +2,6 @@
 
 #include "context.h"
 
-#include <util/generic/overloaded.h>
-#include <util/generic/scope.h>
-
 namespace NSQLTranslationV1 {
 
 bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
@@ -15,48 +12,6 @@ bool Init(TContext& ctx, ISource* src, const TVector<TNodePtr>& nodes) {
     }
     return true;
 }
-
-class TYqlTableRefNode final: public INode, private TYqlTableRefArgs {
-public:
-    TYqlTableRefNode(TPosition position, TYqlTableRefArgs&& args)
-        : INode(std::move(position))
-        , TYqlTableRefArgs(std::move(args))
-    {
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src);
-
-        const TString ref = ctx.MakeName("yql_read");
-        TNodePtr read = Y("Read!", "world", BuildDataSource(), BuildKey(), Y("Void"), Q(Y()));
-
-        TBlocks& blocks = ctx.GetCurrentBlocks();
-        blocks.emplace_back(Y("let", ref, std::move(read)));
-        blocks.emplace_back(Y("let", "world", Y("Left!", ref)));
-        Node_ = Y("Right!", ref);
-
-        return true;
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node_->Translate(ctx);
-    }
-
-    TNodePtr DoClone() const override {
-        return new TYqlTableRefNode(*this);
-    }
-
-private:
-    TNodePtr BuildDataSource() const {
-        return Y("DataSource", Q(Service), Q(Cluster));
-    }
-
-    TNodePtr BuildKey() const {
-        return Y("Key", Q(Y(Q("table"), Y("String", Q(Key)))));
-    }
-
-    TNodePtr Node_;
-};
 
 class TYqlValuesNode final: public INode, private TYqlValuesArgs {
 public:
@@ -177,16 +132,13 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        if (!InitProjection(ctx, src) ||
-            (Source && !Source->Node->Init(ctx, src)) ||
-            (Where && !Where->GetRef().Init(ctx, src)) ||
-            !InitOrderBy(ctx, src)) {
+        if (!InitTerms(ctx, src) || (Source && !Source->Node->Init(ctx, src))) {
             return false;
         }
 
         TNodePtr item = Y();
         {
-            TNodePtr items = BuildYqlResultItems(Projection);
+            TNodePtr items = BuildYqlResultItems(Terms);
             if (!items) {
                 return false;
             }
@@ -223,35 +175,27 @@ public:
             item->Add(Q(Y(Q("join_ops"), Q(Y(Q(Y(Q(Y(Q("push"))))))))));
         }
 
-        if (Where) {
-            if (!Source) {
-                ctx.Error() << "Filtering is not allowed without FROM";
-                return false;
-            }
+        TNodePtr output =
+            Y("YqlSelect",
+              Q(Y(Q(Y(Q("set_items"),
+                      Q(Y(Y("YqlSetItem", Q(std::move(item))))))),
+                  Q(Y(Q("set_ops"), Q(Y(Q("push"))))))));
 
-            item->Add(Q(Y(Q("where"), Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), *Where)))));
-        }
-
-        if (OrderBy) {
-            item->Add(Q(Y(Q("sort"), Q(BuildSortSpecification(OrderBy->Keys)))));
-        }
-
-        TNodePtr body = Y();
+        TNodePtr block = Y();
         {
-            body->Add(Q(Y(Q("set_items"), Q(Y(Y("YqlSetItem", Q(std::move(item))))))));
-            body->Add(Q(Y(Q("set_ops"), Q(Y(Q("push"))))));
+            block->Add(Y("let", "output", std::move(output)));
+
+            block->Add(Y("let", "result_sink",
+                         Y("DataSink", Q("result"))));
+
+            block->Add(Y("let", "world",
+                         Y("Write!", "world", "result_sink", Y("Key"), "output",
+                           Q(Y(Q(Y(Q("type"))), Q(Y(Q("autoref"))), Q(Y(Q("unordered"))))))));
+
+            block->Add(Y("return", Y("Commit!", "world", "result_sink")));
         }
 
-        if (Limit) {
-            body->Add(Q(Y(Q("limit"), *Limit)));
-        }
-
-        if (Offset) {
-            body->Add(Q(Y(Q("offset"), *Offset)));
-        }
-
-        Node_ = Y("YqlSelect", Q(std::move(body)));
-
+        Node_ = Y("block", Q(std::move(block)));
         return true;
     }
 
@@ -264,39 +208,13 @@ public:
     }
 
 private:
-    bool InitProjection(TContext& ctx, ISource* src) const {
-        return std::visit(
-            TOverloaded{
-                [&](const TVector<TNodePtr>& terms) {
-                    return InitTerms(ctx, src, terms);
-                },
-                [](const TPlainAsterisk&) {
-                    return true;
-                },
-            }, Projection);
-    }
-
-    bool InitTerms(TContext& ctx, ISource* src, const TVector<TNodePtr>& terms) const {
-        for (size_t i = 0; i < terms.size(); ++i) {
-            const TNodePtr& term = terms[i];
+    bool InitTerms(TContext& ctx, ISource* src) {
+        for (size_t i = 0; i < Terms.size(); ++i) {
+            const TNodePtr& term = Terms[i];
             term->SetLabel(TermAlias(term, i));
         }
 
-        return ::NSQLTranslationV1::Init(ctx, src, terms);
-    }
-
-    bool InitOrderBy(TContext& ctx, ISource* src) const {
-        if (!OrderBy) {
-            return true;
-        }
-
-        for (const auto& key : OrderBy->Keys) {
-            if (!key->OrderExpr->Init(ctx, src)) {
-                return false;
-            }
-        }
-
-        return true;
+        return ::NSQLTranslationV1::Init(ctx, src, Terms);
     }
 
     TString TermAlias(const TNodePtr& term, size_t i) const {
@@ -310,14 +228,6 @@ private:
         return TStringBuilder() << "column" << i;
     }
 
-    TNodePtr BuildYqlResultItems(const TProjection& projection) const {
-        return std::visit(
-            TOverloaded{
-                [&](const TVector<TNodePtr>& terms) { return BuildYqlResultItems(terms); },
-                [&](const TPlainAsterisk& terms) { return BuildYqlResultItems(terms); },
-            }, projection);
-    }
-
     TNodePtr BuildYqlResultItems(const TVector<TNodePtr>& terms) const {
         TNodePtr items = Y();
         for (const TNodePtr& term : terms) {
@@ -326,86 +236,12 @@ private:
         return items;
     }
 
-    TNodePtr BuildYqlResultItems(const TPlainAsterisk&) const {
-        return Y(BuildYqlResultItem("", Y("YqlStar")));
-    }
-
     TNodePtr BuildYqlResultItem(const TString& name, const TNodePtr& term) const {
         return Y("YqlResultItem", Q(name), Y("Void"), Y("lambda", Q(Y()), term));
     }
 
-    TNodePtr BuildSortSpecification(const TVector<TSortSpecificationPtr>& keys) const {
-        TNodePtr specification = Y();
-        for (const TSortSpecificationPtr& key : keys) {
-            specification->Add(BuildSortSpecification(key));
-        }
-        return specification;
-    }
-
-    TNodePtr BuildSortSpecification(const TSortSpecificationPtr& key) const {
-        TString modifier = key->Ascending ? "asc" : "desc";
-        return Y("YqlSort", Y("Void"), Y("lambda", Q(Y()), key->OrderExpr), Q(modifier), Q("first"));
-    }
-
     TNodePtr Node_;
 };
-
-class TYqlStatementNode final: public INode {
-public:
-    explicit TYqlStatementNode(TNodePtr source)
-        : INode(source->GetPos())
-        , Source_(std::move(source))
-    {
-    }
-
-    bool DoInit(TContext& ctx, ISource* src) override {
-        TBlocks dependencies;
-        {
-            ctx.PushCurrentBlocks(&dependencies);
-            Y_DEFER {
-                ctx.PopCurrentBlocks();
-            };
-
-            if (!Source_->Init(ctx, src)) {
-                return false;
-            }
-        }
-
-        TNodePtr block = BuildList(GetPos(), std::move(dependencies));
-        {
-            block->Add(Y("let", "output", Source_));
-
-            block->Add(Y("let", "result_sink",
-                         Y("DataSink", Q("result"))));
-
-            block->Add(Y("let", "world",
-                         Y("Write!", "world", "result_sink", Y("Key"), "output",
-                           Q(Y(Q(Y(Q("type"))), Q(Y(Q("autoref"))))))));
-
-            block->Add(Y("return", Y("Commit!", "world", "result_sink")));
-        }
-
-        Node_ = Y("block", Q(std::move(block)));
-
-        return true;
-    }
-
-    TAstNode* Translate(TContext& ctx) const override {
-        return Node_->Translate(ctx);
-    }
-
-    TNodePtr DoClone() const override {
-        return new TYqlStatementNode(*this);
-    }
-
-private:
-    TNodePtr Source_;
-    TNodePtr Node_;
-};
-
-TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args) {
-    return new TYqlTableRefNode(std::move(position), std::move(args));
-}
 
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {
     return new TYqlValuesNode(std::move(position), std::move(args));
@@ -413,10 +249,6 @@ TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args) {
 
 TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args) {
     return new TYqlSelectNode(std::move(position), std::move(args));
-}
-
-TNodePtr BuildYqlStatement(TNodePtr node) {
-    return new TYqlStatementNode(std::move(node));
 }
 
 } // namespace NSQLTranslationV1

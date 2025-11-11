@@ -88,9 +88,9 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
 
     const TVector<TType*> resultTypesArr = [&] {
         TVector<TType*> arr;
-        TDqUserRenames dqRenames = FromGraceFormat(renames);
+        TDqRenames dqRenames = FromGraceFormat(renames);
         for (auto rename : dqRenames) {
-            if (rename.Side == EJoinSide::kLeft) {
+            if (rename.Side == JoinSide::kLeft) {
                 auto* resType = descr.LeftSource.ColumnTypes[rename.Index];
                 arr.push_back([&] {
                     if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {

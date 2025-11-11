@@ -3,11 +3,18 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/service_auth.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr {
 namespace NGRpcService {
+
+static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
+    const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    if (res.empty()) {
+        return {};
+    }
+    return TString{res[0]};
+}
 
 void TGRpcAuthService::SetServerOptions(const NYdbGrpc::TServerOptions& options) {
     // !!! WARN: The login request should be available without auth token !!!
@@ -20,20 +27,29 @@ void TGRpcAuthService::SetServerOptions(const NYdbGrpc::TServerOptions& options)
 }
 
 void TGRpcAuthService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Ydb::Auth;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-    ReportSdkBuildInfo();
-
-#ifdef SETUP_LOGIN_METHOD
-#error SETUP_LOGIN_METHOD macro already defined
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
 #endif
 
-#define SETUP_LOGIN_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, login, auditMode)
+#define ADD_REQUEST_LIMIT(NAME, CB, RATE_LIMITER_MODE, AUDIT_MODE)                                     \
+    MakeIntrusive<TGRpcRequest<Ydb::Auth::NAME##Request, Ydb::Auth::NAME##Response, TGRpcAuthService>> \
+        (this, this->GetService(), CQ_,                                                                \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                               \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx)); \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                \
+                    new TGrpcRequestOperationCall<Ydb::Auth::NAME##Request, Ydb::Auth::NAME##Response> \
+                        (ctx, &CB, TRequestAuxSettings{                                                \
+                            .RlMode = RATE_LIMITER_MODE,                                               \
+                            .AuditMode = AUDIT_MODE,                                                   \
+                        }));                                                                           \
+            }, &Ydb::Auth::V1::AuthService::AsyncService::Request ## NAME,                             \
+            #NAME, logger, getCounterBlock("login", #NAME))->Run();
 
-    SETUP_LOGIN_METHOD(Login, DoLoginRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Login));
+    ADD_REQUEST_LIMIT(Login, DoLoginRequest, TRateLimiterMode::Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Login));
 
-#undef SETUP_LOGIN_METHOD
+#undef ADD_REQUEST_LIMIT
+
 }
 
 } // namespace NGRpcService

@@ -579,17 +579,11 @@ DoLockModesConflict(LOCKMODE mode1, LOCKMODE mode2)
 }
 
 /*
- * LockHeldByMeExtended -- test whether lock 'locktag' is held by the current
- *		transaction
- *
- * Returns true if current transaction holds a lock on 'tag' of mode
- * 'lockmode'.  If 'orstronger' is true, a stronger lockmode is also OK.
- * ("Stronger" is defined as "numerically higher", which is a bit
- * semantically dubious but is OK for the purposes we use this for.)
+ * LockHeldByMe -- test whether lock 'locktag' is held with mode 'lockmode'
+ *		by the current transaction
  */
-static bool
-LockHeldByMeExtended(const LOCKTAG *locktag,
-					 LOCKMODE lockmode, bool orstronger)
+bool
+LockHeldByMe(const LOCKTAG *locktag, LOCKMODE lockmode)
 {
 	LOCALLOCKTAG localtag;
 	LOCALLOCK  *locallock;
@@ -605,35 +599,7 @@ LockHeldByMeExtended(const LOCKTAG *locktag,
 										  &localtag,
 										  HASH_FIND, NULL);
 
-	if (locallock && locallock->nLocks > 0)
-		return true;
-
-	if (orstronger)
-	{
-		LOCKMODE	slockmode;
-
-		for (slockmode = lockmode + 1;
-			 slockmode <= MaxLockMode;
-			 slockmode++)
-		{
-			if (LockHeldByMeExtended(locktag, slockmode, false))
-				return true;
-		}
-	}
-
-	return false;
-}
-
-bool
-LockHeldByMe(const LOCKTAG *locktag, LOCKMODE lockmode)
-{
-	return LockHeldByMeExtended(locktag, lockmode, false);
-}
-
-bool
-LockOrStrongerHeldByMe(const LOCKTAG *locktag, LOCKMODE lockmode)
-{
-	return LockHeldByMeExtended(locktag, lockmode, true);
+	return (locallock && locallock->nLocks > 0);
 }
 
 #ifdef USE_ASSERT_CHECKING
@@ -2250,16 +2216,6 @@ LockReleaseAll(LOCKMETHODID lockmethodid, bool allLocks)
 			else
 				locallock->numLockOwners = 0;
 		}
-
-#ifdef USE_ASSERT_CHECKING
-
-		/*
-		 * Tuple locks are currently held only for short durations within a
-		 * transaction. Check that we didn't forget to release one.
-		 */
-		if (LOCALLOCK_LOCKTAG(*locallock) == LOCKTAG_TUPLE && !allLocks)
-			elog(WARNING, "tuple lock held at commit");
-#endif
 
 		/*
 		 * If the lock or proclock pointers are NULL, this lock was taken via

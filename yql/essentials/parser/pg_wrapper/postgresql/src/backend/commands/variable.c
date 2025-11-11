@@ -479,7 +479,7 @@ show_log_timezone(void)
  */
 
 /*
- * GUC check_hook for timezone_abbreviations
+ * GUC check_hook for assign_timezone_abbreviations
  */
 bool
 check_timezone_abbreviations(char **newval, void **extra, GucSource source)
@@ -511,7 +511,7 @@ check_timezone_abbreviations(char **newval, void **extra, GucSource source)
 }
 
 /*
- * GUC assign_hook for timezone_abbreviations
+ * GUC assign_hook for assign_timezone_abbreviations
  */
 void
 assign_timezone_abbreviations(const char *newval, void *extra)
@@ -811,78 +811,40 @@ check_session_authorization(char **newval, void **extra, GucSource source)
 	if (*newval == NULL)
 		return true;
 
-	if (InitializingParallelWorker)
+	if (!IsTransactionState())
 	{
 		/*
-		 * In parallel worker initialization, we want to copy the leader's
-		 * state even if it no longer matches the catalogs. ParallelWorkerMain
-		 * already installed the correct role OID and superuser state.
+		 * Can't do catalog lookups, so fail.  The result of this is that
+		 * session_authorization cannot be set in postgresql.conf, which seems
+		 * like a good thing anyway, so we don't work hard to avoid it.
 		 */
-		roleid = GetSessionUserId();
-		is_superuser = GetSessionUserIsSuperuser();
+		return false;
 	}
-	else
-	{
-		if (!IsTransactionState())
-		{
-			/*
-			 * Can't do catalog lookups, so fail.  The result of this is that
-			 * session_authorization cannot be set in postgresql.conf, which
-			 * seems like a good thing anyway, so we don't work hard to avoid
-			 * it.
-			 */
-			return false;
-		}
 
+	/* Look up the username */
+	roleTup = SearchSysCache1(AUTHNAME, PointerGetDatum(*newval));
+	if (!HeapTupleIsValid(roleTup))
+	{
 		/*
 		 * When source == PGC_S_TEST, we don't throw a hard error for a
-		 * nonexistent user name or insufficient privileges, only a NOTICE.
-		 * See comments in guc.h.
+		 * nonexistent user name, only a NOTICE.  See comments in guc.h.
 		 */
-
-		/* Look up the username */
-		roleTup = SearchSysCache1(AUTHNAME, PointerGetDatum(*newval));
-		if (!HeapTupleIsValid(roleTup))
+		if (source == PGC_S_TEST)
 		{
-			if (source == PGC_S_TEST)
-			{
-				ereport(NOTICE,
-						(errcode(ERRCODE_UNDEFINED_OBJECT),
-						 errmsg("role \"%s\" does not exist", *newval)));
-				return true;
-			}
-			GUC_check_errmsg("role \"%s\" does not exist", *newval);
-			return false;
+			ereport(NOTICE,
+					(errcode(ERRCODE_UNDEFINED_OBJECT),
+					 errmsg("role \"%s\" does not exist", *newval)));
+			return true;
 		}
-
-		roleform = (Form_pg_authid) GETSTRUCT(roleTup);
-		roleid = roleform->oid;
-		is_superuser = roleform->rolsuper;
-
-		ReleaseSysCache(roleTup);
-
-		/*
-		 * Only superusers may SET SESSION AUTHORIZATION a role other than
-		 * itself. Note that in case of multiple SETs in a single session, the
-		 * original authenticated user's superuserness is what matters.
-		 */
-		if (roleid != GetAuthenticatedUserId() &&
-			!GetAuthenticatedUserIsSuperuser())
-		{
-			if (source == PGC_S_TEST)
-			{
-				ereport(NOTICE,
-						(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-						 errmsg("permission will be denied to set session authorization \"%s\"",
-								*newval)));
-				return true;
-			}
-			GUC_check_errcode(ERRCODE_INSUFFICIENT_PRIVILEGE);
-			GUC_check_errmsg("permission denied to set session authorization \"%s\"",
-							 *newval);
-			return false;
-		}
+		GUC_check_errmsg("role \"%s\" does not exist", *newval);
+		return false;
 	}
+
+	roleform = (Form_pg_authid) GETSTRUCT(roleTup);
+	roleid = roleform->oid;
+	is_superuser = roleform->rolsuper;
+
+	ReleaseSysCache(roleTup);
 
 	/* Set up "extra" struct for assign_session_authorization to use */
 	myextra = (role_auth_extra *) guc_malloc(LOG, sizeof(role_auth_extra));
@@ -932,16 +894,6 @@ check_role(char **newval, void **extra, GucSource source)
 		roleid = InvalidOid;
 		is_superuser = false;
 	}
-	else if (InitializingParallelWorker)
-	{
-		/*
-		 * In parallel worker initialization, we want to copy the leader's
-		 * state even if it no longer matches the catalogs. ParallelWorkerMain
-		 * already installed the correct role OID and superuser state.
-		 */
-		roleid = GetCurrentRoleId();
-		is_superuser = session_auth_is_superuser;
-	}
 	else
 	{
 		if (!IsTransactionState())
@@ -981,8 +933,13 @@ check_role(char **newval, void **extra, GucSource source)
 
 		ReleaseSysCache(roleTup);
 
-		/* Verify that session user is allowed to become this role */
-		if (!member_can_set_role(GetSessionUserId(), roleid))
+		/*
+		 * Verify that session user is allowed to become this role, but skip
+		 * this in parallel mode, where we must blindly recreate the parallel
+		 * leader's state.
+		 */
+		if (!InitializingParallelWorker &&
+			!member_can_set_role(GetSessionUserId(), roleid))
 		{
 			if (source == PGC_S_TEST)
 			{
@@ -1082,8 +1039,6 @@ check_application_name(char **newval, void **extra, GucSource source)
 		return false;
 	}
 
-	guc_free(*newval);
-
 	pfree(clean);
 	*newval = ret;
 	return true;
@@ -1119,8 +1074,6 @@ check_cluster_name(char **newval, void **extra, GucSource source)
 		pfree(clean);
 		return false;
 	}
-
-	guc_free(*newval);
 
 	pfree(clean);
 	*newval = ret;

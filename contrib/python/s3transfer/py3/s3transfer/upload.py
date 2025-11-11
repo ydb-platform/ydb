@@ -550,7 +550,9 @@ class UploadSubmissionTask(SubmissionTask):
             if upload_manager_cls.is_compatible(fileobj):
                 return upload_manager_cls
         raise RuntimeError(
-            f'Input {fileobj} of type: {type(fileobj)} is not supported.'
+            'Input {} of type: {} is not supported.'.format(
+                fileobj, type(fileobj)
+            )
         )
 
     def _submit(

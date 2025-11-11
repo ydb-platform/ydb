@@ -40,60 +40,39 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
 
 TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuilder,
     std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators, const TStringBuf key, NBinaryJson::TEntryCursor& value) const {
-    std::variant<NBinaryJson::TBinaryJson, TString> res;
-    bool addRes = true;
-
     if (value.GetType() == NBinaryJson::EEntryType::String) {
-        NJson::TJsonValue jsonValue(value.GetString());
-        NJsonWriter::TBuf sout;
-        sout.WriteJsonValue(&jsonValue);
-        res = NBinaryJson::SerializeToBinaryJson(sout.Str(), false);
+        dataBuilder.AddKV(key, value.GetString());
     } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
         const double val = value.GetNumber();
         double integer;
         if (modf(val, &integer)) {
-            res = NBinaryJson::SerializeToBinaryJson(std::to_string(val), false);
+            dataBuilder.AddKVOwn(key, std::to_string(val));
         } else {
-            res = NBinaryJson::SerializeToBinaryJson(std::to_string((i64)integer), false);
+            dataBuilder.AddKVOwn(key, std::to_string((i64)integer));
         }
     } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
-        static const TString falseString = "false";
-        res = NBinaryJson::SerializeToBinaryJson(falseString, false);
+        static const TString zeroString = "0";
+        dataBuilder.AddKV(key, TStringBuf(zeroString.data(), zeroString.size()));
     } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
-        static const TString trueString = "true";
-        res = NBinaryJson::SerializeToBinaryJson(trueString, false);
+        static const TString oneString = "1";
+        dataBuilder.AddKV(key, TStringBuf(oneString.data(), oneString.size()));
     } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
         auto container = value.GetContainer();
-        if (FirstLevelOnly || container.GetType() == NBinaryJson::EContainerType::Array) {
-            res = NBinaryJson::SerializeToBinaryJson(NBinaryJson::SerializeToJson(container), false);
-        // TODO: add support for arrays if needed
-        // } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
-        //     iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
-        //     addRes = false;
+        if (FirstLevelOnly) {
+            dataBuilder.AddKVOwn(key, NBinaryJson::SerializeToJson(container));
+        } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
+            iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
         } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
             iterators.emplace_back(std::make_unique<TKVExtractor>(container.GetObjectIterator(), key));
-            addRes = false;
         } else {
             return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
         }
 
     } else if (value.GetType() == NBinaryJson::EEntryType::Null) {
-        static const TString nullString = "null";
-        res = NBinaryJson::SerializeToBinaryJson(nullString, false);
+        dataBuilder.AddKVNull(key);
     } else {
         return TConclusionStatus::Fail("unexpected json value type: " + ::ToString((int)value.GetType()));
     }
-
-    if (addRes) {
-        if (const TString* val = std::get_if<TString>(&res)) {
-            return TConclusionStatus::Fail(*val);
-        } else if (const NBinaryJson::TBinaryJson* resBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res)) {
-            dataBuilder.AddKV(key, *resBinaryJson);
-        } else {
-            return TConclusionStatus::Fail("undefined case for binary json construction");
-        }
-    }
-
     return TConclusionStatus::Success();
 }
 

@@ -240,10 +240,12 @@ public:
     bool OnlineReadOnly = false;
     NYdb::TParamsBuilder ParamsBuilder;
     bool NeedParams = false;
+    bool FilterOptionalSide = true;
 
     TTester& Run() {
         auto settings = TKikimrSettings();
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetFilterPushdownOverJoinOptionalSide(FilterOptionalSide);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1180,6 +1182,7 @@ Y_UNIT_TEST_TWIN(TestEntityFramework, StreamLookupJoin) {
         ])",
         .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
+        .FilterOptionalSide=false // remove this to get failure
     };
     tester.Run();
 }

@@ -89,28 +89,6 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
         UNIT_ASSERT(GetOutputValue(html, "TotalBytesRead").front() == 0U);
     }
 
-    Y_UNIT_TEST(SimpleRdma) {
-        TTetsEnv env;
-
-        const TString conf(R"(DurationSeconds: 30
-            Tablets: {
-                Tablets: { TabletId: 1 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
-                WriteSizes: { Weight: 1.0 Min: 1000000 Max: 4000000 }
-                WriteIntervals: { Weight: 1.0 Uniform: { MinUs: 100000 MaxUs: 100000 } }
-                MaxInFlightWriteRequests: 10
-                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
-                PutHandleClass: TabletLog
-                RdmaMode: 1
-            })"
-        );
-
-        const auto html = env.RunSingleLoadTest(conf);
-        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 300U);
-        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
-        UNIT_ASSERT(GetOutputValue(html, "TotalBytesWritten").front() >= 300000000U);
-        UNIT_ASSERT(GetOutputValue(html, "TotalBytesRead").front() == 0U);
-    }
-
     Y_UNIT_TEST(ByTableName) {
         TTetsEnv env;
 

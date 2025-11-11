@@ -100,7 +100,7 @@ private:
     }
 
 protected:
-    TDeadline Deadline_;
+    gpr_timespec Deadline_ = {};
 
 private:
     std::mutex Mutex_;
@@ -200,8 +200,7 @@ public:
         TDeferredOperationCb&& userCb,
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
-        TDeadline::Duration delay,
-        TDeadline globalDeadline,
+        TDuration timeout,
         TDbDriverStatePtr dbState,
         const std::string& endpoint);
 
@@ -209,9 +208,7 @@ public:
     void OnError() override;
 
 private:
-    TDeadline::Duration NextDelay_;
-    TDeadline GlobalDeadline_;
-
+    TDuration NextDelay_;
     TDbDriverStatePtr DbDriverState_;
     const std::string OperationId_;
     const std::string Endpoint_;
@@ -225,12 +222,12 @@ public:
         TPeriodicCb&& userCb,
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
-        TDeadline::Duration period);
+        TDuration period);
 
     void OnAlarm() override;
     void OnError() override;
 private:
-    TDeadline::Duration Period_;
+    TDuration Period_;
 };
 
 } // namespace NYdb

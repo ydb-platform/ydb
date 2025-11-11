@@ -9,7 +9,7 @@
 #include <Psapi.h>
 #include <pdh.h>
 
-#include "../../arch/all/init.h"
+#include "../../_psutil_common.h"
 
 
 PyObject *

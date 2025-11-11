@@ -21,19 +21,12 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     const TString textColumn = settings.columns().at(0).column();
     const auto& analyzers = settings.columns().at(0).analyzers();
     
+    // Serialize analyzer settings for runtime usage
+    TString settingsProto;
+    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
+    
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
-
-    auto readInputRows = inputRows.Maybe<TDqPhyPrecompute>()
-        ? inputRows
-        : Build<TDqPhyPrecompute>(ctx, pos)
-            .Connection<TDqCnUnionAll>()
-                .Output()
-                    .Stage(ReadInputToStage(inputRows, ctx))
-                    .Index().Build("0")
-                    .Build()
-                .Build()
-            .Done();
     
     // Build output row structure for each token
     TVector<TExprBase> tokenRowTuples;
@@ -100,15 +93,12 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
         .Name().Build(textColumn)
         .Done();
     
-    // Serialize analyzer settings for FulltextAnalyze
-    TString settingsProto;
-    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
+    // Create callable for fulltext tokenization
+    // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
     auto settingsLiteral = Build<TCoString>(ctx, pos)
         .Literal().Build(settingsProto)
         .Done();
     
-    // Create callable for fulltext tokenization
-    // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
     auto analyzeCallable = ctx.Builder(pos)
         .Callable("FulltextAnalyze")
             .Add(0, textMember.Ptr())
@@ -118,7 +108,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()
-            .Add(readInputRows)
+            .Add(inputRows)
             .Build()
         .Program()
             .Args({"rows"})

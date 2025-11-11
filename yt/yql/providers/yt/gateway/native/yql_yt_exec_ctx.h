@@ -36,7 +36,6 @@ namespace NNative {
 class TExecContextBase: public TExecContextBaseSimple {
 protected:
     TExecContextBase(
-        const IYtGateway::TPtr& gateway,
         const TYtNativeServices::TPtr& services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
@@ -85,14 +84,11 @@ protected:
 
     TExpressionResorceUsage ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput);
 
-    void DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const;
-
     NThreading::TFuture<NThreading::TAsyncSemaphore::TPtr> AcquireOperationLock() {
         return Session_->OperationSemaphore->AcquireAsync();
     }
 
 public:
-    IYtGateway::TPtr Gateway;
     TFileStoragePtr FileStorage_;
     ISecretMasker::TPtr SecretMasker;
     TSession::TPtr Session_;
@@ -106,7 +102,6 @@ public:
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
     TOperationProgress::EOpBlockStatus BlockStatus = TOperationProgress::EOpBlockStatus::None;
-    THashMap<TString, TString> JobFilesDumpPaths;  // yt job basename -> dump path
 };
 
 
@@ -117,7 +112,6 @@ public:
     using TOptions = T;
 
     TExecContext(
-        const IYtGateway::TPtr& gateway,
         const TYtNativeServices::TPtr services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
@@ -126,7 +120,7 @@ public:
         const TString& cluster,
         const TYtUrlMapper& urlMapper,
         IMetricsRegistryPtr metrics)
-        : TExecContextBase(gateway, services, clusters, mkqlCompiler, session, cluster, urlMapper, std::move(metrics))
+        : TExecContextBase(services, clusters, mkqlCompiler, session, cluster, urlMapper, std::move(metrics))
         , Options_(std::move(options))
     {
     }
@@ -227,17 +221,6 @@ public:
                         op->Start();
                     } catch (...) {
                         // Promise will be initialized with exception inside of TOperation::Start()
-                    }
-                    if (self->Session_->FullCapture_) {
-                        try {
-                            auto attrs = op->GetAttributes(NYT::TGetOperationOptions().AttributeFilter(
-                                NYT::TOperationAttributeFilter().Add(NYT::EOperationAttribute::Spec)
-                            ));
-                            YQL_ENSURE(attrs.Spec.Defined());
-                            self->DumpFilesFromJob(*attrs.Spec, self->Options_.Config());
-                        } catch (const std::exception& e) {
-                            self->Session_->FullCapture_->ReportError(e);
-                        }
                     }
                 }
             });

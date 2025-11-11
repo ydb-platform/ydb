@@ -142,7 +142,6 @@ public:
                 // Log format can be distinct from that is YqlLogger,
                 // but we do not care as it is a debug buffer.
                 TString out = NLog::LegacyFormat(record);
-                out.append('\n');
 
                 const char* ptr = out.data();
                 size_t remaining = out.length();

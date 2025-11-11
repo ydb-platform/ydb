@@ -78,7 +78,7 @@ NThreading::TFuture<void> TTableClient::TImpl::Stop() {
     return Drain();
 }
 
-void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDeadline::Duration timeout) {
+void TTableClient::TImpl::ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) {
     Connections_->ScheduleOneTimeTask(std::move(fn), timeout);
 }
 
@@ -332,7 +332,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
             //TODO: Do we realy need it?
             Client->ScheduleTaskUnsafe([promise{std::move(Promise)}, val{std::move(val)}]() mutable {
                 promise.SetValue(std::move(val));
-            }, TDeadline::Duration::zero());
+            }, TDuration());
         }
         NThreading::TPromise<TCreateSessionResult> Promise;
         std::shared_ptr<TTableClient::TImpl> Client;

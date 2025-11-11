@@ -11,6 +11,7 @@ from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
@@ -45,7 +46,6 @@ class DistConfKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 0
-    protected_mode = False
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -73,17 +73,17 @@ class DistConfKiKiMRTest(object):
             separate_node_configs=cls.separate_node_configs,
             simple_config=True,
             use_self_management=True,
-            protected_mode=cls.protected_mode,
             extra_grpc_services=['config'],
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
 
-        if not cls.protected_mode:
-            cms.request_increase_ratio_limit(cls.cluster.client)
+        cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
+        grpc_port = cls.cluster.nodes[1].port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
+        cls.config_client = ConfigClient(host, grpc_port)
 
     @classmethod
     def teardown_class(cls):
@@ -135,7 +135,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
         node_port_allocator = self.configurator.port_allocator.get_node_port_allocator(expected_new_node_id)
 
-        fetched_config = fetch_config(self.cluster.config_client)
+        fetched_config = fetch_config(self.config_client)
         dumped_fetched_config = yaml.safe_load(fetched_config)
         config_section = dumped_fetched_config["config"]
 
@@ -170,7 +170,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         dumped_fetched_config["metadata"]["version"] = 1
 
         # replace config
-        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
         # start new node
@@ -219,7 +219,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
         node_port_allocator = self.configurator.port_allocator.get_node_port_allocator(expected_new_node_id)
 
-        fetched_config = fetch_config(self.cluster.config_client)
+        fetched_config = fetch_config(self.config_client)
         dumped_fetched_config = yaml.safe_load(fetched_config)
         config_section = dumped_fetched_config["config"]
 
@@ -264,7 +264,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         dumped_fetched_config["metadata"]["version"] = 1
 
         # replace config
-        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
         # start new node
@@ -299,24 +299,24 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 os.unlink(seed_nodes_file.name)
 
     def test_invalid_host_config_id(self):
-        fetched_config = fetch_config(self.cluster.config_client)
+        fetched_config = fetch_config(self.config_client)
         dumped_fetched_config = yaml.safe_load(fetched_config)
 
         # replace config with invalid host config id
         dumped_fetched_config['metadata']['version'] = 1
         dumped_fetched_config["config"]["host_configs"][0]["host_config_id"] = 1000
-        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
 
     def test_invalid_change_host_config_disk(self):
-        fetched_config = fetch_config(self.cluster.config_client)
+        fetched_config = fetch_config(self.config_client)
         dumped_fetched_config = yaml.safe_load(fetched_config)
 
         # replace config with invalid host config disk path
         dumped_fetched_config["config"]["host_configs"][0]["drive"].append(dumped_fetched_config["config"]["host_configs"][0]["drive"][0])
         dumped_fetched_config['metadata']['version'] = 1
-        replace_config_response = self.cluster.config_client.replace_config(yaml.dump(dumped_fetched_config))
+        replace_config_response = self.config_client.replace_config(yaml.dump(dumped_fetched_config))
         logger.debug(f"replace_config_response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.INTERNAL_ERROR)
 
@@ -348,18 +348,3 @@ class TestDistConfBootstrapValidation:
         with pytest.raises(Exception) as ei:
             cluster.start()
         assert 'YAML validation failed' in str(ei.value)
-
-
-class TestDistConfWithAuth(DistConfKiKiMRTest):
-    protected_mode = True
-
-    def test_auth_v2_initialization(self):
-        table_path = '/Root/mydb/mytable_with_auth'
-        self.cluster.create_database(
-            table_path,
-            storage_pool_units_count={
-                'rot': 1
-            },
-            timeout_seconds=60,
-            token=self.cluster.root_token
-        )

@@ -4,12 +4,8 @@
     * `LOCAL` — a local index within a shard of a row-oriented or column-oriented table. Does not require distributed transactions for updates, but does not provide pruning during search.
 
 * `<index_name>` — unique index name that will be used to access data.
-* `SYNC/ASYNC` — the index synchronization mode.
-
-    * `SYNC` — a [synchronous](../../../../concepts/secondary_indexes.md#sync) index. This is the default value.
-    * `ASYNC` — an [asynchronous](../../../../concepts/secondary_indexes.md#async) index.
-
-* `<index_type>` — index type, currently supported:
+* `SYNC/ASYNC` — synchronous or asynchronous writes to the index, synchronous by default.
+* `<index_type>` - index type, currently supported:
 
     * `secondary` — secondary index. Only `GLOBAL` is available. This is the default value.
     * `vector_kmeans_tree` — vector index. Described in detail in [{#T}](../create_table/vector_index.md).

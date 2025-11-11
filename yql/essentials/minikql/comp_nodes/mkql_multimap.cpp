@@ -438,7 +438,7 @@ public:
             auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U || PasstroughtMap[i]) {
+                if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i]) {
                     fields[i] = &Items[i]->RefValue(ctx);
                 }
             }
@@ -503,7 +503,7 @@ public:
 
             Value* head = nullptr;
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U || PasstroughtMap[i]) {
+                if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i]) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, NewItems.front() == Items[i] ? (head = getres.second[i](ctx, block)) : getres.second[i](ctx, block));
                 }
             }

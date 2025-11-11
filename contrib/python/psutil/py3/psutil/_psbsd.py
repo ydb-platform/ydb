@@ -15,6 +15,7 @@ from xml.etree import ElementTree  # noqa: ICN001
 from . import _common
 from . import _psposix
 from . import _psutil_bsd as cext
+from . import _psutil_posix as cext_posix
 from ._common import FREEBSD
 from ._common import NETBSD
 from ._common import OPENBSD
@@ -27,6 +28,7 @@ from ._common import debug
 from ._common import memoize
 from ._common import memoize_when_activated
 from ._common import usage_percent
+
 
 __extra__all__ = []
 
@@ -93,10 +95,13 @@ TCP_STATUSES = {
     cext.PSUTIL_CONN_NONE: _common.CONN_NONE,
 }
 
-PAGESIZE = cext.getpagesize()
-AF_LINK = cext.AF_LINK
+PAGESIZE = cext_posix.getpagesize()
+AF_LINK = cext_posix.AF_LINK
 
+HAS_PER_CPU_TIMES = hasattr(cext, "per_cpu_times")
 HAS_PROC_NUM_THREADS = hasattr(cext, "proc_num_threads")
+HAS_PROC_OPEN_FILES = hasattr(cext, 'proc_open_files')
+HAS_PROC_NUM_FDS = hasattr(cext, 'proc_num_fds')
 
 kinfo_proc_map = dict(
     ppid=0,
@@ -235,14 +240,36 @@ def cpu_times():
     return scputimes(user, nice, system, idle, irq)
 
 
-def per_cpu_times():
-    """Return system CPU times as a namedtuple."""
-    ret = []
-    for cpu_t in cext.per_cpu_times():
-        user, nice, system, idle, irq = cpu_t
-        item = scputimes(user, nice, system, idle, irq)
-        ret.append(item)
-    return ret
+if HAS_PER_CPU_TIMES:
+
+    def per_cpu_times():
+        """Return system CPU times as a namedtuple."""
+        ret = []
+        for cpu_t in cext.per_cpu_times():
+            user, nice, system, idle, irq = cpu_t
+            item = scputimes(user, nice, system, idle, irq)
+            ret.append(item)
+        return ret
+
+else:
+    # XXX
+    # Ok, this is very dirty.
+    # On FreeBSD < 8 we cannot gather per-cpu information, see:
+    # https://github.com/giampaolo/psutil/issues/226
+    # If num cpus > 1, on first call we return single cpu times to avoid a
+    # crash at psutil import time.
+    # Next calls will fail with NotImplementedError
+    def per_cpu_times():
+        """Return system CPU times as a namedtuple."""
+        if cpu_count_logical() == 1:
+            return [cpu_times()]
+        if per_cpu_times.__called__:
+            msg = "supported only starting from FreeBSD 8"
+            raise NotImplementedError(msg)
+        per_cpu_times.__called__ = True
+        return [cpu_times()]
+
+    per_cpu_times.__called__ = False
 
 
 def cpu_count_logical():
@@ -379,7 +406,7 @@ disk_io_counters = cext.disk_io_counters
 
 
 net_io_counters = cext.net_io_counters
-net_if_addrs = cext.net_if_addrs
+net_if_addrs = cext_posix.net_if_addrs
 
 
 def net_if_stats():
@@ -388,9 +415,9 @@ def net_if_stats():
     ret = {}
     for name in names:
         try:
-            mtu = cext.net_if_mtu(name)
-            flags = cext.net_if_flags(name)
-            duplex, speed = cext.net_if_duplex_speed(name)
+            mtu = cext_posix.net_if_mtu(name)
+            flags = cext_posix.net_if_flags(name)
+            duplex, speed = cext_posix.net_if_duplex_speed(name)
         except OSError as err:
             # https://github.com/giampaolo/psutil/issues/1279
             if err.errno != errno.ENODEV:
@@ -478,36 +505,15 @@ def boot_time():
     return cext.boot_time()
 
 
-if NETBSD:
-
-    try:
-        INIT_BOOT_TIME = boot_time()
-    except Exception as err:  # noqa: BLE001
-        # Don't want to crash at import time.
-        debug(f"ignoring exception on import: {err!r}")
-        INIT_BOOT_TIME = 0
-
-    def adjust_proc_create_time(ctime):
-        """Account for system clock updates."""
-        if INIT_BOOT_TIME == 0:
-            return ctime
-
-        diff = INIT_BOOT_TIME - boot_time()
-        if diff == 0 or abs(diff) < 1:
-            return ctime
-
-        debug("system clock was updated; adjusting process create_time()")
-        if diff < 0:
-            return ctime - diff
-        return ctime + diff
-
-
 def users():
     """Return currently connected users as a list of namedtuples."""
     retlist = []
     rawlist = cext.users()
     for item in rawlist:
         user, tty, hostname, tstamp, pid = item
+        if pid == -1:
+            assert OPENBSD
+            pid = None
         if tty == '~':
             continue  # reboot or shutdown
         nt = _common.suser(user, tty or None, hostname, tstamp, pid)
@@ -773,17 +779,13 @@ class Process:
     memory_full_info = memory_info
 
     @wrap_exceptions
-    def create_time(self, monotonic=False):
-        ctime = self.oneshot()[kinfo_proc_map['create_time']]
-        if NETBSD and not monotonic:
-            # NetBSD: ctime subject to system clock updates.
-            ctime = adjust_proc_create_time(ctime)
-        return ctime
+    def create_time(self):
+        return self.oneshot()[kinfo_proc_map['create_time']]
 
     @wrap_exceptions
     def num_threads(self):
         if HAS_PROC_NUM_THREADS:
-            # FreeBSD / NetBSD
+            # FreeBSD
             return cext.proc_num_threads(self.pid)
         else:
             return len(self.threads())
@@ -839,11 +841,11 @@ class Process:
 
     @wrap_exceptions
     def nice_get(self):
-        return cext.proc_priority_get(self.pid)
+        return cext_posix.getpriority(self.pid)
 
     @wrap_exceptions
     def nice_set(self, value):
-        return cext.proc_priority_set(self.pid, value)
+        return cext_posix.setpriority(self.pid, value)
 
     @wrap_exceptions
     def status(self):
@@ -868,7 +870,14 @@ class Process:
         # it into None
         if OPENBSD and self.pid == 0:
             return ""  # ...else it would raise EINVAL
-        return cext.proc_cwd(self.pid)
+        elif NETBSD or HAS_PROC_OPEN_FILES:
+            # FreeBSD < 8 does not support functions based on
+            # kinfo_getfile() and kinfo_getvmmap()
+            return cext.proc_cwd(self.pid)
+        else:
+            raise NotImplementedError(
+                "supported only starting from FreeBSD 8" if FREEBSD else ""
+            )
 
     nt_mmap_grouped = namedtuple(
         'mmap', 'path rss, private, ref_count, shadow_count'
@@ -877,19 +886,36 @@ class Process:
         'mmap', 'addr, perms path rss, private, ref_count, shadow_count'
     )
 
-    @wrap_exceptions
-    def open_files(self):
-        """Return files opened by process as a list of namedtuples."""
-        rawlist = cext.proc_open_files(self.pid)
-        return [_common.popenfile(path, fd) for path, fd in rawlist]
+    def _not_implemented(self):
+        raise NotImplementedError
 
-    @wrap_exceptions
-    def num_fds(self):
-        """Return the number of file descriptors opened by this process."""
-        ret = cext.proc_num_fds(self.pid)
-        if NETBSD:
-            self._assert_alive()
-        return ret
+    # FreeBSD < 8 does not support functions based on kinfo_getfile()
+    # and kinfo_getvmmap()
+    if HAS_PROC_OPEN_FILES:
+
+        @wrap_exceptions
+        def open_files(self):
+            """Return files opened by process as a list of namedtuples."""
+            rawlist = cext.proc_open_files(self.pid)
+            return [_common.popenfile(path, fd) for path, fd in rawlist]
+
+    else:
+        open_files = _not_implemented
+
+    # FreeBSD < 8 does not support functions based on kinfo_getfile()
+    # and kinfo_getvmmap()
+    if HAS_PROC_NUM_FDS:
+
+        @wrap_exceptions
+        def num_fds(self):
+            """Return the number of file descriptors opened by this process."""
+            ret = cext.proc_num_fds(self.pid)
+            if NETBSD:
+                self._assert_alive()
+            return ret
+
+    else:
+        num_fds = _not_implemented
 
     # --- FreeBSD only APIs
 

@@ -27,7 +27,6 @@ struct TFilePathWithMd5 {
     {
     }
 
-    TFilePathWithMd5(const TFilePathWithMd5& other) = default;
     TFilePathWithMd5& operator=(const TFilePathWithMd5& other) = default;
 };
 

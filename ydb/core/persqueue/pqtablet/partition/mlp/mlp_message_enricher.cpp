@@ -2,10 +2,10 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-TMessageEnricherActor::TMessageEnricherActor(const TActorId& tabletActorId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
+TMessageEnricherActor::TMessageEnricherActor(ui32 partitionId, const TActorId& partitionActor, const TString& consumerName, std::deque<TReadResult>&& replies)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_ENRICHER)
-    , TabletActorId(tabletActorId)
     , PartitionId(partitionId)
+    , PartitionActorId(partitionActor)
     , ConsumerName(consumerName)
     , Queue(std::move(replies))
     , Backoff(5, TDuration::MilliSeconds(50))
@@ -28,17 +28,22 @@ void TMessageEnricherActor::PassAway() {
     TBase::PassAway();
 }
 
-void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvProxyResponse");
+    if (Cookie != GetCookie(ev)) {
+        // TODO MLP
+        LOG_D("Cookie mismatch: " << Cookie << " != " << GetCookie(ev));
+        //return PassAway();
+    }
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        LOG_W("Fetch messages failed: " << ev->Get()->Response->DebugString());
         return PassAway();
     }
 
-    auto& response = ev->Get()->Record;
-    if (response.GetPartitionResponse().HasCmdReadResult()) {
-        for (auto& result : response.GetPartitionResponse().GetCmdReadResult().GetResult()) {
+    auto& response = ev->Get()->Response;
+    if (response->GetPartitionResponse().HasCmdReadResult()) {
+        for (auto& result : response->GetPartitionResponse().GetCmdReadResult().GetResult()) {
             auto offset = result.GetOffset();
 
             while(!Queue.empty()) {
@@ -49,6 +54,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
                 while (!reply.Offsets.empty() && offset > reply.Offsets.front()) {
                     reply.Offsets.pop_front();
                 }
+                // TODO MLP multi part messages
                 if (!reply.Offsets.empty() && offset == reply.Offsets.front()) {
                     auto* message = PendingResponse->Record.AddMessage();
                     message->MutableId()->SetPartitionId(PartitionId);
@@ -94,7 +100,7 @@ void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {
 
 STFUNC(TMessageEnricherActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPersQueue::TEvResponse, Handle);
+        hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -116,17 +122,8 @@ void TMessageEnricherActor::ProcessQueue() {
         auto firstOffset = reply.Offsets.front();
         auto lastOffset = Queue.back().Offsets.back();
         auto count = lastOffset - firstOffset + 1;
-        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletActorId);
-
-        auto request = std::make_unique<TEvPersQueue::TEvRequest>();
-        auto* partitionRequest = request->Record.MutablePartitionRequest();
-        partitionRequest->SetPartition(PartitionId);
-        auto* read = partitionRequest->MutableCmdRead();
-        read->SetClientId(ConsumerName);
-        read->SetOffset(firstOffset);
-        read->SetTimeoutMs(0);
-
-        Send(TabletActorId, std::move(request), 0, ++Cookie);
+        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << PartitionActorId);
+        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, firstOffset, count, ++Cookie));
 
         return;
     }

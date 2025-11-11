@@ -13,7 +13,7 @@ private:
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
     bool HasValueFlag = false;
-    std::string_view RawValue;
+    std::string_view Value;
     bool IsColumnKeyFlag = false;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
@@ -21,7 +21,7 @@ private:
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        Value = iterator.GetValue();
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
@@ -29,7 +29,7 @@ private:
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        Value = iterator.GetValue();
     }
 
     bool Initialize() {
@@ -148,13 +148,10 @@ public:
         AFL_VERIFY(IsValidFlag);
         return KeyIndex;
     }
-
-    std::string_view GetRawValue() const {
-        return RawValue;
+    std::string_view GetValue() const {
+        AFL_VERIFY(IsValidFlag);
+        return Value;
     }
-
-    NJson::TJsonValue GetValue() const;
-
     bool HasValue() const {
         AFL_VERIFY(IsValidFlag);
         return HasValueFlag;
@@ -324,7 +321,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetRawValue(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

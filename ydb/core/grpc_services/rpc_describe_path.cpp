@@ -37,7 +37,7 @@ public:
 private:
     void ResolvePath(const TActorContext& ctx) {
         auto request = MakeHolder<TSchemeCacheNavigate>();
-        request->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
+        request->DatabaseName = NKikimr::CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TSchemeCacheNavigate::OpList; // we need ListNodeEntry

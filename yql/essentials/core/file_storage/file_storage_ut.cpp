@@ -3,7 +3,7 @@
 #include <yql/essentials/utils/test_http_server/test_http_server.h>
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/core/file_storage/http_download/http_download.h>
-#include <yql/essentials/utils/fetch/proto/fetch_config.pb.h>
+#include <yql/essentials/core/file_storage/http_download/proto/http_download.pb.h>
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
@@ -26,7 +26,7 @@ static TString ReadFileContent(const TString& path) {
     return TIFStream(path).ReadAll();
 }
 
-static TFileStoragePtr CreateTestFS(TFileStorageConfig params = {}, const TFetchConfig* httpCfg = nullptr) {
+static TFileStoragePtr CreateTestFS(TFileStorageConfig params = {}, const THttpDownloaderConfig* httpCfg = nullptr) {
     if (httpCfg) {
         TStringStream strCfg;
         SerializeToTextFormat(*httpCfg, strCfg);
@@ -550,8 +550,8 @@ Y_UNIT_TEST(SocketTimeout) {
         return TTestHttpServer::TReply::Ok("ABC");
     });
 
-    TFetchConfig httpCfg;
-    httpCfg.SetTimeoutMs(1000);
+    THttpDownloaderConfig httpCfg;
+    httpCfg.SetSocketTimeoutMs(1000);
     TFileStorageConfig params;
     TFileStoragePtr fs = CreateTestFS(params, &httpCfg);
 

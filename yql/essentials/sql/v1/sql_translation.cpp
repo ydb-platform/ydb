@@ -2789,16 +2789,6 @@ static bool StoreTopicSettingsEntry(
             }
             settings.AutoPartitioningStrategy.Set(valueExprNode);
         }
-    } else if (to_lower(id.Name) == "metrics_level") {
-        if (reset) {
-            settings.MetricsLevel.Reset();
-        } else {
-            if (!valueExprNode->IsIntegerLiteral()) {
-                ctx.Error() << to_upper(id.Name) << " value should be an integer";
-                return false;
-            }
-            settings.MetricsLevel.Set(valueExprNode);
-        }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
         return false;

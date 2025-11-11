@@ -296,7 +296,8 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::ListKeys() const -> std:
 {
     std::vector<TKey> keys;
 
-    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
+    auto* provider = Owner_->GetBuiltinAttributeProvider();
+    if (provider) {
         std::vector<ISystemAttributeProvider::TAttributeDescriptor> descriptors;
         provider->ReserveAndListSystemAttributes(&descriptors);
         for (const auto& descriptor : descriptors) {
@@ -306,9 +307,13 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::ListKeys() const -> std:
         }
     }
 
-    auto customKeys = Owner_->CustomAttributes().ListKeys();
-    keys.insert(keys.end(), std::make_move_iterator(customKeys.begin()), std::make_move_iterator(customKeys.end()));
-
+    auto* customAttributes = Owner_->GetCustomAttributes();
+    if (customAttributes) {
+        auto customKeys = customAttributes->ListKeys();
+        for (auto&& key : customKeys) {
+            keys.push_back(std::move(key));
+        }
+    }
     return keys;
 }
 
@@ -331,15 +336,20 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::ListPairs() const -> std
         }
     }
 
-    auto customPairs = Owner_->CustomAttributes().ListPairs();
-    pairs.insert(pairs.end(), std::make_move_iterator(customPairs.begin()), std::make_move_iterator(customPairs.end()));
+    auto* customAttributes = Owner_->GetCustomAttributes();
+    if (customAttributes) {
+        for (const auto& pair : customAttributes->ListPairs()) {
+            pairs.push_back(pair);
+        }
+    }
 
     return pairs;
 }
 
 auto TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TKeyView key) const -> TValue
 {
-    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
+    auto* provider = Owner_->GetBuiltinAttributeProvider();
+    if (provider) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
@@ -349,12 +359,17 @@ auto TSupportsAttributes::TCombinedAttributeDictionary::FindYson(TKeyView key) c
         }
     }
 
-    return Owner_->CustomAttributes().FindYson(key);
+    auto* customAttributes = Owner_->GetCustomAttributes();
+    if (!customAttributes) {
+        return TYsonString();
+    }
+    return customAttributes->FindYson(key);
 }
 
 void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(TKeyView key, const TYsonString& value)
 {
-    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
+    auto* provider = Owner_->GetBuiltinAttributeProvider();
+    if (provider) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
@@ -367,17 +382,17 @@ void TSupportsAttributes::TCombinedAttributeDictionary::SetYson(TKeyView key, co
         }
     }
 
-    auto* customAttributes = Owner_->MutableCustomAttributesOrNull();
+    auto* customAttributes = Owner_->GetCustomAttributes();
     if (!customAttributes) {
         ThrowNoSuchBuiltinAttribute(key);
     }
-
     customAttributes->SetYson(key, value);
 }
 
 bool TSupportsAttributes::TCombinedAttributeDictionary::Remove(TKeyView key)
 {
-    if (auto* provider = Owner_->GetBuiltinAttributeProvider()) {
+    auto* provider = Owner_->GetBuiltinAttributeProvider();
+    if (provider) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             const auto& builtinKeys = provider->GetBuiltinAttributeKeys();
@@ -387,11 +402,10 @@ bool TSupportsAttributes::TCombinedAttributeDictionary::Remove(TKeyView key)
         }
     }
 
-    auto* customAttributes = Owner_->MutableCustomAttributesOrNull();
+    auto* customAttributes = Owner_->GetCustomAttributes();
     if (!customAttributes) {
         ThrowNoSuchBuiltinAttribute(key);
     }
-
     return customAttributes->Remove(key);
 }
 
@@ -422,11 +436,17 @@ IYPathService::TResolveResult TSupportsAttributes::ResolveAttributes(
 
 TFuture<TYsonString> TSupportsAttributes::DoFindAttribute(TStringBuf key)
 {
-    if (auto attribute = CustomAttributes().FindYson(key)) {
-        return MakeFuture(attribute);
+    auto* customAttributes = GetCustomAttributes();
+    auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
+
+    if (customAttributes) {
+        auto attribute = customAttributes->FindYson(key);
+        if (attribute) {
+            return MakeFuture(attribute);
+        }
     }
 
-    if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
+    if (builtinAttributeProvider) {
         auto internedKey = TInternedAttributeKey::Lookup(key);
         if (internedKey != InvalidInternedAttribute) {
             if (auto builtinYson = builtinAttributeProvider->FindBuiltinAttribute(internedKey)) {
@@ -434,7 +454,8 @@ TFuture<TYsonString> TSupportsAttributes::DoFindAttribute(TStringBuf key)
             }
         }
 
-        if (auto asyncResult = builtinAttributeProvider->GetBuiltinAttributeAsync(internedKey)) {
+        auto asyncResult = builtinAttributeProvider->GetBuiltinAttributeAsync(internedKey);
+        if (asyncResult) {
             return asyncResult;
         }
     }
@@ -501,9 +522,12 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
                 }
             }
 
-            for (const auto& [key, value] : CustomAttributes().ListPairs()) {
-                writer.OnKeyedItem(key);
-                Serialize(value, &writer);
+            auto* customAttributes = GetCustomAttributes();
+            if (customAttributes) {
+                for (const auto& [key, value] : customAttributes->ListPairs()) {
+                    writer.OnKeyedItem(key);
+                    Serialize(value, &writer);
+                }
             }
         }
 
@@ -609,13 +633,17 @@ TFuture<TYsonString> TSupportsAttributes::DoListAttribute(const TYPath& path)
 
         writer.OnBeginList();
 
-        auto userKeys = CustomAttributes().ListKeys();
-        for (const auto& key : userKeys) {
-            writer.OnListItem();
-            writer.OnStringScalar(key);
+        auto* customAttributes = GetCustomAttributes();
+        if (customAttributes) {
+            auto userKeys = customAttributes->ListKeys();
+            for (const auto& key : userKeys) {
+                writer.OnListItem();
+                writer.OnStringScalar(key);
+            }
         }
 
-        if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
+        auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
+        if (builtinAttributeProvider) {
             std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
             builtinAttributeProvider->ListBuiltinAttributes(&builtinDescriptors);
             for (const auto& descriptor : builtinDescriptors) {
@@ -693,11 +721,13 @@ TFuture<bool> TSupportsAttributes::DoExistsAttribute(const TYPath& path)
     auto key = tokenizer.GetLiteralValue();
 
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
-        if (CustomAttributes().FindYson(key)) {
+        auto* customAttributes = GetCustomAttributes();
+        if (customAttributes && customAttributes->FindYson(key)) {
             return TrueFuture;
         }
 
-        if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
+        auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
+        if (builtinAttributeProvider) {
             auto internedKey = TInternedAttributeKey::Lookup(key);
             if (internedKey != InvalidInternedAttribute) {
                 auto optionalDescriptor = builtinAttributeProvider->FindBuiltinAttributeDescriptor(internedKey);
@@ -746,7 +776,7 @@ void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& 
 {
     TCachingAdHocPermissionValidator permissionValidator(this);
 
-    auto* customAttributes = MutableCustomAttributesOrNull();
+    auto* customAttributes = GetCustomAttributes();
     auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
 
     NYPath::TTokenizer tokenizer(path);
@@ -761,6 +791,7 @@ void TSupportsAttributes::DoSetAttribute(const TYPath& path, const TYsonString& 
 
             // Set custom attributes.
             if (customAttributes) {
+
                 auto modifyPermission = builtinAttributeProvider
                     ? builtinAttributeProvider->GetCustomAttributeModifyPermission()
                     : EPermission::Write;
@@ -925,7 +956,7 @@ void TSupportsAttributes::DoRemoveAttribute(const TYPath& path, bool force)
 {
     TCachingAdHocPermissionValidator permissionValidator(this);
 
-    auto* customAttributes = MutableCustomAttributesOrNull();
+    auto* customAttributes = GetCustomAttributes();
     auto* builtinAttributeProvider = GetBuiltinAttributeProvider();
 
     NYPath::TTokenizer tokenizer(path);
@@ -1080,22 +1111,12 @@ void TSupportsAttributes::SetAttributes(
     }
 }
 
-const IAttributeDictionary& TSupportsAttributes::CombinedAttributes() const
-{
-    return *CombinedAttributes_;
-}
-
-IAttributeDictionary* TSupportsAttributes::MutableCombinedAttributes()
+IAttributeDictionary* TSupportsAttributes::GetCombinedAttributes()
 {
     return CombinedAttributes_.Get();
 }
 
-const IAttributeDictionary& TSupportsAttributes::CustomAttributes() const
-{
-    return EmptyAttributes();
-}
-
-IAttributeDictionary* TSupportsAttributes::MutableCustomAttributesOrNull()
+IAttributeDictionary* TSupportsAttributes::GetCustomAttributes()
 {
     return nullptr;
 }

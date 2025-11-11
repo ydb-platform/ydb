@@ -57,7 +57,6 @@
 #include "access/htup_details.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_control.h"
-#include "common/string.h"
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "utils/builtins.h"
@@ -284,16 +283,6 @@ check_locale(int category, const char *locale, char **canonname)
 	char	   *save;
 	char	   *res;
 
-	/* Don't let Windows' non-ASCII locale names in. */
-	if (!pg_is_ascii(locale))
-	{
-		ereport(WARNING,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("locale name \"%s\" contains non-ASCII characters",
-						locale)));
-		return false;
-	}
-
 	if (canonname)
 		*canonname = NULL;		/* in case of failure */
 
@@ -315,18 +304,6 @@ check_locale(int category, const char *locale, char **canonname)
 	if (!setlocale(category, save))
 		elog(WARNING, "failed to restore old locale \"%s\"", save);
 	pfree(save);
-
-	/* Don't let Windows' non-ASCII locale names out. */
-	if (canonname && *canonname && !pg_is_ascii(*canonname))
-	{
-		ereport(WARNING,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("locale name \"%s\" contains non-ASCII characters",
-						*canonname)));
-		pfree(*canonname);
-		*canonname = NULL;
-		return false;
-	}
 
 	return (res != NULL);
 }
@@ -1714,7 +1691,7 @@ get_collation_actual_version(char collprovider, const char *collcollate)
 		locale_t	loc;
 
 		/* Look up FreeBSD collation version. */
-		loc = newlocale(LC_COLLATE_MASK, collcollate, NULL);
+		loc = newlocale(LC_COLLATE, collcollate, NULL);
 		if (loc)
 		{
 			collversion =
@@ -2319,9 +2296,9 @@ pg_strxfrm_enabled(pg_locale_t locale)
  * The provided 'src' must be nul-terminated. If 'destsize' is zero, 'dest'
  * may be NULL.
  *
- * Returns the number of bytes needed (or more) to store the transformed
- * string, excluding the terminating nul byte. If the value returned is
- * 'destsize' or greater, the resulting contents of 'dest' are undefined.
+ * Returns the number of bytes needed to store the transformed string,
+ * excluding the terminating nul byte. If the value returned is 'destsize' or
+ * greater, the resulting contents of 'dest' are undefined.
  */
 size_t
 pg_strxfrm(char *dest, const char *src, size_t destsize, pg_locale_t locale)
@@ -2351,9 +2328,9 @@ pg_strxfrm(char *dest, const char *src, size_t destsize, pg_locale_t locale)
  * 'src' does not need to be nul-terminated. If 'destsize' is zero, 'dest' may
  * be NULL.
  *
- * Returns the number of bytes needed (or more) to store the transformed
- * string, excluding the terminating nul byte. If the value returned is
- * 'destsize' or greater, the resulting contents of 'dest' are undefined.
+ * Returns the number of bytes needed to store the transformed string,
+ * excluding the terminating nul byte. If the value returned is 'destsize' or
+ * greater, the resulting contents of 'dest' are undefined.
  *
  * This function may need to nul-terminate the argument for libc functions;
  * so if the caller already has a nul-terminated string, it should call

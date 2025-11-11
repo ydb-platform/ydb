@@ -209,7 +209,7 @@ retry:
 
 		PushActiveSnapshot(GetLatestSnapshot());
 
-		res = table_tuple_lock(rel, &(outslot->tts_tid), GetActiveSnapshot(),
+		res = table_tuple_lock(rel, &(outslot->tts_tid), GetLatestSnapshot(),
 							   outslot,
 							   GetCurrentCommandId(false),
 							   lockmode,
@@ -393,7 +393,7 @@ retry:
 
 		PushActiveSnapshot(GetLatestSnapshot());
 
-		res = table_tuple_lock(rel, &(outslot->tts_tid), GetActiveSnapshot(),
+		res = table_tuple_lock(rel, &(outslot->tts_tid), GetLatestSnapshot(),
 							   outslot,
 							   GetCurrentCommandId(false),
 							   lockmode,
@@ -518,12 +518,8 @@ ExecSimpleRelationUpdate(ResultRelInfo *resultRelInfo,
 	Relation	rel = resultRelInfo->ri_RelationDesc;
 	ItemPointer tid = &(searchslot->tts_tid);
 
-	/*
-	 * We support only non-system tables, with
-	 * check_publication_add_relation() accountable.
-	 */
+	/* For now we support only tables. */
 	Assert(rel->rd_rel->relkind == RELKIND_RELATION);
-	Assert(!IsCatalogRelation(rel));
 
 	CheckCmdReplicaIdentity(rel, CMD_UPDATE);
 

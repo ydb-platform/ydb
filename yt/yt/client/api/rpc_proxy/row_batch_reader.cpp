@@ -130,7 +130,7 @@ TFuture<TSharedRange<TUnversionedRow>> TRowBatchReader::GetRows()
             }
 
             if (rows.Empty()) {
-                return ExpectEndOfStream(Underlying_).Apply(BIND([=] () mutable {
+                return ExpectEndOfStream(Underlying_).Apply(BIND([=] {
                     return std::move(rows);
                 }));
             }

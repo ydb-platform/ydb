@@ -2830,6 +2830,7 @@
     },
     "OriginDetails":{
       "type":"structure",
+      "required":["ProductId"],
       "members":{
         "ProductId":{
           "shape":"__string",

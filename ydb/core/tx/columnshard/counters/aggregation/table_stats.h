@@ -11,7 +11,7 @@ namespace NKikimr::NColumnShard {
 class TTableStatsBuilder {
 private:
     TCountersManager& Counters;
-    const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
+    const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& Executor;
 
     void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from) const {
         to.SetRowCount(from.GetRecordsCount());
@@ -19,9 +19,9 @@ private:
     }
 
 public:
-    TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor = nullptr)
+    TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor)
         : Counters(counters)
-        , Executor(executor) {
+        , Executor(*executor) {
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
@@ -34,10 +34,8 @@ public:
     void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTotalTableStats(tableStats);
 
-        if (Executor) {
-            tableStats.SetInFlightTxCount(Executor->GetStats().TxInFly);
-            tableStats.SetHasLoanedParts(Executor->HasLoanedParts());
-        }
+        tableStats.SetInFlightTxCount(Executor.GetStats().TxInFly);
+        tableStats.SetHasLoanedParts(Executor.HasLoanedParts());
 
         auto activeStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TActivePortions());
         FillPortionStats(tableStats, activeStats);

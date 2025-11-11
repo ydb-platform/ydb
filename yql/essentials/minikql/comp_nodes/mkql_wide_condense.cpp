@@ -55,7 +55,7 @@ public:
 
         while (true) {
             for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U || ItemsOnInit[i] || ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem) {
+                if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i] || ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem) {
                     fields[i] = &Items[i]->RefValue(ctx);
                 }
             }
@@ -169,7 +169,7 @@ public:
 
         std::vector<Value*> items(Items.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
-            if (Items[i]->GetDependentsCount() > 0U || ItemsOnInit[i]) {
+            if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
             } else if (ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem) {
                 items[i] = getres.second[i](ctx, block);

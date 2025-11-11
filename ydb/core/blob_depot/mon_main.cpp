@@ -5,10 +5,6 @@
 #include "space_monitor.h"
 #include "mon_main.h"
 #include "s3.h"
-#include "types.h"
-#include <ydb/public/api/protos/ydb_export.pb.h>
-#include <ydb/core/protos/s3_settings.pb.h>
-#include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -89,7 +85,6 @@ namespace NKikimr::NBlobDepot {
             }
 
             HTML(Stream) {
-                Stream << "<a href='app?TabletID=" << Self->TabletID() << "'>Back to main page</a>";
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         Stream << "Data";
@@ -385,153 +380,6 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    class TBlobDepot::TTxMonS3Config : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        std::unique_ptr<NMon::TEvRemoteHttpInfo::THandle> Request;
-        TStringStream Stream;
-
-    public:
-        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_MON_DATA; }
-
-        TTxMonS3Config(TBlobDepot *self, NMon::TEvRemoteHttpInfo::TPtr ev)
-            : TTransactionBase(self)
-            , Request(ev.Release())
-        {}
-
-        bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
-            HTML(Stream) {
-                Stream << "<a href='app?TabletID=" << Self->TabletID() << "'>Back to main page</a>";
-                DIV_CLASS("panel panel-info") {
-                    DIV_CLASS("panel-heading") {
-                        Stream << "S3 Configuration";
-                    }
-                    DIV_CLASS("panel-body") {
-                        TABLE_CLASS("table") {
-                            TABLEHEAD() {
-                                TABLER() {
-                                    TABLEH() { Stream << "Setting"; }
-                                    TABLEH() { Stream << "Value"; }
-                                }
-                            }
-                            TABLEBODY() {
-                                // Check if S3 is configured
-                                if (!Self->Config.HasS3BackendSettings()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "Status"; }
-                                        TABLED() { Stream << "S3 not configured"; }
-                                    }
-                                    return true;
-                                }
-
-                                const auto& s3BackendSettings = Self->Config.GetS3BackendSettings();
-
-#define BD_MON_TABLE_ROW(key, value) \
-        do { \
-            TABLER() { \
-                TABLED() { Stream << key ;} \
-                TABLED() { Stream << value ;} \
-            } \
-        } while(false)
-
-#define BD_MON_TABLE_ROW_WITH_FORMATTER(config, key, formatter) \
-        do { \
-            if (config.Has##key()) { \
-                BD_MON_TABLE_ROW(#key, formatter(config.Get##key())); \
-            } \
-        } while(false)
-
-
-                                if (!s3BackendSettings.HasSettings()) {
-                                    BD_MON_TABLE_ROW("Status", "S3 settings not configured");
-                                    return true;
-                                }
-
-                                const auto& s3Settings = s3BackendSettings.GetSettings();
-
-                                TString mode;
-                                if (s3BackendSettings.HasAsyncMode()) {
-                                    mode = "Async";
-                                } else if (s3BackendSettings.HasSyncMode()) {
-                                    mode = "Sync";
-                                } else {
-                                    mode = "Unknown";
-                                }
-                                BD_MON_TABLE_ROW("Mode", mode);
-
-                                auto id_formatter = [] (auto x) { return x; };
-
-                                // Display async mode settings if applicable
-                                if (s3BackendSettings.HasAsyncMode()) {
-                                    const auto& asyncMode = s3BackendSettings.GetAsyncMode();
-
-                                    auto formatBytePerSecond = [](ui64 bytes) -> TString {
-                                        return FormatByteSize(bytes) + "/s";
-                                    };
-
-                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, MaxPendingBytes, FormatByteSize);
-                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleStartBytes, FormatByteSize);
-                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleMaxBytesPerSecond, formatBytePerSecond);
-                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, UploadPutsInFlight, id_formatter);
-
-                                }
-
-                                BD_MON_TABLE_ROW("Endpoint", s3Settings.GetEndpoint());
-
-                                TString schemeStr;
-                                if (s3Settings.HasScheme()) {
-                                    switch (s3Settings.GetScheme()) {
-                                    case NKikimrSchemeOp::TS3Settings::HTTPS:
-                                        schemeStr = "https";
-                                        break;
-                                    case NKikimrSchemeOp::TS3Settings::HTTP:
-                                        schemeStr = "http";
-                                        break;
-                                    }
-                                } else {
-                                    schemeStr = "unspecified";
-                                }
-                                BD_MON_TABLE_ROW("Scheme", schemeStr);
-
-                                BD_MON_TABLE_ROW("Bucket", s3Settings.GetBucket());
-
-                                                                // Helper function to mask sensitive data
-                                auto maskSensitive = [](const TString& value) -> TString {
-                                    if (value.empty()) {
-                                        return value;
-                                    }
-                                    if (value.size() <= 12) {
-                                        return TString(4, '*');
-                                    }
-                                    return value.substr(0, 2) + "****" + value.substr(value.size() - 2);
-                                };
-                                BD_MON_TABLE_ROW("AccessKey", maskSensitive(s3Settings.GetAccessKey()));
-                                BD_MON_TABLE_ROW("SecretKey", maskSensitive(s3Settings.GetSecretKey()));
-
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, Region, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, StorageClass, Ydb::Export::ExportToS3Settings::StorageClass_Name);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, UseVirtualAddressing, ToString);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, VerifySSL, ToString);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ProxyHost, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ProxyPort, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ConnectionTimeoutMs, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, RequestTimeoutMs, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, HttpRequestTimeoutMs, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ExecutorThreadsCount, id_formatter);
-                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, MaxConnectionsCount, id_formatter);
-                            }
-                        }
-                    }
-                }
-            }
-
-            return true;
-        }
-
-        void Complete(const TActorContext&) override {
-            TActivationContext::Send(new IEventHandle(Request->Sender, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(
-                Stream.Str()), 0, Request->Cookie));
-        }
-    };
-
     bool TBlobDepot::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
         if (!Executor() || !Executor()->GetStats().IsActive) {
             return false;
@@ -550,9 +398,6 @@ namespace NKikimr::NBlobDepot {
             const TString& page = cgi.Get("page");
             if (page == "data") {
                 Execute(std::make_unique<TTxMonData>(this, ev));
-                return true;
-            } if (page == "s3config") {
-                Execute(std::make_unique<TTxMonS3Config>(this, ev));
                 return true;
             } else {
                 Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder()
@@ -573,10 +418,6 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::RenderMainPage(IOutputStream& s) {
         HTML(s) {
-            if (S3Manager) {
-                s << "<a href='app?TabletID=" << TabletID() << "&page=s3config'>S3 config</a><br>";
-            }
-
             s << "<a href='app?TabletID=" << TabletID() << "&page=data'>Contained data</a><br>";
 
             s << R"(<script>

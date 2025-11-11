@@ -322,7 +322,7 @@ int TCube<T>::ReadSensors(
             continue;
         }
 
-        auto rangeValues = [&, window = &window] (auto cb) {
+        auto rangeValues = [&, window=&window] (auto cb) {
             for (const auto& [indices, time] : options.Times) {
                 if (!options.EnableSolomonAggregationWorkaround && skipSparse(*window, indices)) {
                     continue;
@@ -347,7 +347,7 @@ int TCube<T>::ReadSensors(
             consumer->OnMemOnly(options.MemOnly);
         };
 
-        auto writeSummary = [&, tagIds = tagIds] (auto makeSummary) {
+        auto writeSummary = [&, tagIds=tagIds] (auto makeSummary) {
             bool omitSuffix = Any(options.SummaryPolicy & ESummaryPolicy::OmitNameLabelSuffix);
 
             auto writeMetric = [&] (
@@ -450,7 +450,7 @@ int TCube<T>::ReadSensors(
             writeFlags();
             writeLabels(tagIds, (options.ConvertCountersToRateGauge && options.RenameConvertedCounters) ? rateNameLabel : nameLabel, true);
 
-            rangeValues([&, window = &window] (auto value, auto time, const auto& indices) {
+            rangeValues([&, window=&window] (auto value, auto time, const auto& indices) {
                 sensorCount += 1;
                 if (options.ConvertCountersToRateGauge) {
                     if (options.RateDenominator < 0.1) {
@@ -489,7 +489,7 @@ int TCube<T>::ReadSensors(
             writeFlags();
             writeLabels(tagIds, nameLabel, true);
 
-            rangeValues([&, window = &window] (auto /* value */, auto time, const auto& indices) {
+            rangeValues([&, window=&window] (auto /* value */, auto time, const auto& indices) {
                 if (options.DisableDefault && !window->HasValue[indices.back()]) {
                     return;
                 }
@@ -523,7 +523,7 @@ int TCube<T>::ReadSensors(
             writeFlags();
             writeLabels(tagIds, nameLabel, true);
 
-            rangeValues([&, window = &window] (auto value, auto time, const auto& indices) {
+            rangeValues([&, window=&window] (auto value, auto time, const auto& indices) {
                 size_t n = value.Bounds.size();
                 auto hist = NMonitoring::TExplicitHistogramSnapshot::New(n + 1);
 

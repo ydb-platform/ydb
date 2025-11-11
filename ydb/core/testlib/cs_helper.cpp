@@ -74,7 +74,8 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
     std::atomic<size_t> responses = 0;
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
     auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
-    future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) {
+    future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) mutable {
+        responses.fetch_add(1);
         auto op = f.GetValueSync().operation();
         TStringBuilder issues;
         if (op.status() != Ydb::StatusIds::SUCCESS) {
@@ -86,7 +87,6 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_pt
         Cerr << issues;
         UNIT_ASSERT_VALUES_EQUAL(op.status(), expectedStatus);
         UNIT_ASSERT(issues.StartsWith(expectedIssuePrefix));
-        responses.fetch_add(1);
     });
 
     TDispatchOptions options;

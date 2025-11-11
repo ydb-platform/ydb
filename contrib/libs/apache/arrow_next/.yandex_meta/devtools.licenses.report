@@ -1833,8 +1833,6 @@ BELONGS ya.make
         src/arrow/util/config.h [2:17]
         src/arrow/util/config_internal.h [2:17]
         src/parquet/parquet_version.h [2:17]
-    Belongs difference:
-        - cpp/src/generated/ya.make
 
 KEEP     Apache-2.0           8bcb53ef10c66a13f3367500f22e3a7d
 BELONGS ya.make

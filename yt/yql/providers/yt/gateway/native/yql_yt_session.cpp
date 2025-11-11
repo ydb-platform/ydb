@@ -21,8 +21,6 @@ TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
     , OperationSemaphore(nullptr)
     , LocalCalcSemaphore_(nullptr)
     , TxCache_(UserName_)
-    , QContext_(options.QContext())
-    , FullCapture_(options.FullCapture())
 {
     InitYtApiOnce(OperationOptions_.AttrsYson);
 

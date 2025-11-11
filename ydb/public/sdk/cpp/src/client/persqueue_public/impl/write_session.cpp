@@ -86,7 +86,7 @@ TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
         subSettings.EventHandlers_.CommonHandler({});
     }
     Writer = std::make_shared<TWriteSession>(subSettings, client, connections, dbDriverState);
-    Writer->Start(TDuration::Zero());
+    Writer->Start(TDuration::Max());
 }
 
 ui64 TSimpleBlockingWriteSession::GetInitSeqNo() {

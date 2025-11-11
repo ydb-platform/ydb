@@ -17,7 +17,7 @@ struct TJoinDescription {
     TJoinSourceData LeftSource;
     TJoinSourceData RightSource;
     TDqSetup<false>* Setup;
-    std::optional<TDqUserRenames> CustomRenames;
+    std::optional<TDqRenames> CustomRenames;
 };
 
 bool IsBlockJoin(ETestedJoinAlgo algo);

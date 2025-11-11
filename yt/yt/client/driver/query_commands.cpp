@@ -432,11 +432,13 @@ void TGetQueryTrackerInfoCommand::DoExecute(ICommandContextPtr context)
             .Item("supported_features").Value(result.SupportedFeatures)
             .Item("access_control_objects").Value(result.AccessControlObjects)
             .Item("clusters").Value(result.Clusters)
-            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))))
-            .OptionalItem("expected_tables_version", result.ExpectedTablesVersion)
-        .EndMap();
+            .Item("engines_info").Value(result.EnginesInfo.value_or(TYsonString(TString("{}"))));
 
-    context->ProduceOutputValue(serialized);
+    if (result.ExpectedTablesVersion) {
+        serialized.Item("expected_tables_version").Value(result.ExpectedTablesVersion);
+    }
+
+    context->ProduceOutputValue(serialized.EndMap());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

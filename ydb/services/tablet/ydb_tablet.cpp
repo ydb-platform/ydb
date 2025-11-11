@@ -3,7 +3,6 @@
 #include <ydb/core/grpc_services/tablet/service_tablet.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -18,42 +17,39 @@ TGRpcYdbTabletService::TGRpcYdbTabletService(
 {}
 
 void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Ydb::Tablet;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+
     size_t proxyCounter = 0;
 
-#ifdef SETUP_TABLET_METHOD
-#error SETUP_TABLET_METHOD macro already defined
+#ifdef ADD_REQUEST_LIMIT
+#error ADD_REQUEST_LIMIT macro already defined
 #endif
 
-#define SETUP_TABLET_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                          \
-        for (auto* cq: CQS) {                                                          \
-            SETUP_RUNTIME_EVENT_METHOD(                                                \
-                methodName,                                                            \
-                YDB_API_DEFAULT_REQUEST_TYPE(methodName),                              \
-                YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                             \
-                methodCallback,                                                        \
-                rlMode,                                                                \
-                requestType,                                                           \
-                YDB_API_DEFAULT_COUNTER_BLOCK(tablet, methodName),                     \
-                auditMode,                                                             \
-                COMMON,                                                                \
-                ::NKikimr::NGRpcService::TGrpcRequestNoOperationCall,                  \
-                GRpcProxies_[proxyCounter % GRpcProxies_.size()],                      \
-                cq,                                                                    \
-                nullptr,                                                               \
-                nullptr                                                                \
-            );                                                                         \
-            ++proxyCounter;                                                            \
-        }                                                                              \
-    }
+#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, AUDIT_MODE) do {                                                        \
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                           \
+        for (auto* cq: CQS) {                                                                                           \
+            auto proxy = GRpcProxies_[proxyCounter++ % GRpcProxies_.size()];                                            \
+            MakeIntrusive<TGRpcRequest<Ydb::Tablet::NAME##Request, Ydb::Tablet::NAME##Response, TGRpcYdbTabletService>> \
+                (this, &Service_, cq,                                                                                   \
+                    [this, proxy](NYdbGrpc::IRequestContextBase *ctx) {                                                 \
+                        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
+                        ActorSystem_->Send(proxy,                                                                       \
+                            new TGrpcRequestNoOperationCall<Ydb::Tablet::NAME##Request, Ydb::Tablet::NAME##Response>    \
+                                (ctx, &CB, TRequestAuxSettings {                                                        \
+                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                   \
+                                    .AuditMode = AUDIT_MODE,                                                            \
+                                }));                                                                                    \
+                    }, &Ydb::Tablet::V1::TabletService::AsyncService::Request ## NAME,                                  \
+                    #NAME, logger, getCounterBlock("tablet", #NAME))->Run();                                            \
+        }                                                                                                               \
+    }                                                                                                                   \
+} while(0)
 
-    SETUP_TABLET_METHOD(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_TABLET_METHOD(ChangeTabletSchema, DoChangeTabletSchemaRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_TABLET_METHOD(RestartTablet, DoRestartTabletRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST_LIMIT(ExecuteTabletMiniKQL, DoExecuteTabletMiniKQLRequest, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST_LIMIT(ChangeTabletSchema, DoChangeTabletSchemaRequest, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    ADD_REQUEST_LIMIT(RestartTablet, DoRestartTabletRequest, Rps, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
-#undef SETUP_TABLET_METHOD
+#undef ADD_REQUEST_LIMIT
 }
 
 } // namespace NKikimr::NGRpcService

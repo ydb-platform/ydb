@@ -3,7 +3,6 @@ import logging
 import os
 import yatest.common
 import ydb
-import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -46,16 +45,9 @@ class TestDataReadCorrectness(object):
             data,
         )
 
-    @pytest.mark.parametrize(
-        "table_name",
-        [
-            "table",
-            "primary_index_stats"
-        ]
-    )
-    def test(self, table_name):
+    def test(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
-        table_path = f"{test_dir}/{table_name}"
+        table_path = f"{test_dir}/table"
         self.ydb_client.query(f"DROP TABLE IF EXISTS `{table_path}`")
 
         self.ydb_client.query(

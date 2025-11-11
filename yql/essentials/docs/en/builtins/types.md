@@ -155,7 +155,7 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType, VoidType, NullType, EmptyListType, EmptyDictType {#generictype}
+## GenericType, UnitType, and VoidType {#generictype}
 
 Return the same-name [special data types](../types/special.md). They have no arguments because they are not parameterized.
 

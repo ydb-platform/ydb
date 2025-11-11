@@ -31,9 +31,8 @@
 #include <cassert>
 #include <istream>
 #include <limits>
-#include <ostream>
+#include <type_traits>
 
-#include "y_absl/base/config.h"
 #include "y_absl/base/optimization.h"
 #include "y_absl/random/internal/fast_uniform_bits.h"
 #include "y_absl/random/internal/iostream_state_saver.h"

@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "partition_stats", ESysViewType::EPartitionStats,
                                           describedPathId);
@@ -295,14 +295,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/ds_pdisks");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "ds_pdisks", ESysViewType::EPDisks, describedPathId);
         }
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/query_metrics_one_minute");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute,
                                           describedPathId);
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "partition_stats", ESysViewType::EPartitionStats,
                                           describedPathId);
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/ds_pdisks");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "ds_pdisks", ESysViewType::EPDisks, describedPathId);
         }
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_sys_view");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("root@builtin")});
             ExpectEqualSysViewDescription(describeResult, "new_sys_view", ESysViewType::EShowCreate, describedPathId);
         }
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_ds_pdisks");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "new_ds_pdisks", ESysViewType::EPDisks, describedPathId);
         }
@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_partition_stats");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("root@builtin")});
             ExpectEqualSysViewDescription(describeResult, "new_partition_stats", ESysViewType::EPartitionStats,
                                           describedPathId);
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/partition_stats");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("metadata@system")});
             ExpectEqualSysViewDescription(describeResult, "partition_stats", ESysViewType::EPartitionStats,
                                           describedPathId);
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/new_partition_stats");
             const auto& domainKey = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey();
-            const auto describedPathId = TPathId::FromDomainKey(domainKey);
+            const auto describedPathId = TPathId(domainKey.GetSchemeShard(), domainKey.GetPathId());
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView, NLs::HasOwner("root@builtin")});
             ExpectEqualSysViewDescription(describeResult, "new_partition_stats", ESysViewType::EPartitionStats,
                                           describedPathId);

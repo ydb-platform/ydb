@@ -63,7 +63,7 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     return x;
 }
 
-[[maybe_unused]] void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
+void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
     ui64 x = 0;
     for (size_t ind = 0; ind != 8; ++ind) {
         x |= ui64(*src[ind]) << (ind * 8);
@@ -77,7 +77,7 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     }
 }
 
-[[maybe_unused]] void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
+void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
     ui64 x = 0;
     for (size_t ind = 0; ind != 8; ++ind) {
         x |= ui64(src[ind * row_size]) << (ind * 8);
@@ -218,7 +218,7 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
 
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
-#ifdef USE_X86_SIMD
+
     if (NX86::HaveAVX2())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
             columns);
@@ -226,7 +226,6 @@ TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
     if (NX86::HaveSSE42())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>>(
             columns);
-#endif
 
     return MakeHolder<TTupleLayoutFallback>(
         columns);
@@ -1549,7 +1548,6 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
     }
 }
 
-#ifdef USE_X86_SIMD
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
@@ -1584,7 +1582,6 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
-#endif
 
 void TTupleLayout::CalculateColumnSizes(
     const ui8 *res, ui32 count,
@@ -1626,29 +1623,6 @@ void TTupleLayout::TupleDeepCopy(
             std::memcpy(outOverflow, inOverflow + overflowOffset, overflowSize);
             WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), outOverflowSize);
             outOverflowSize += overflowSize;
-        }
-    }
-}
-
-void TTupleLayout::TupleDeepCopy(
-    const ui8* inTuple, const ui8* inOverflow,
-    TTupleData& outTuple, TTupleData& outOverflow) const
-{
-    auto appendRange = [](TTupleData& to, std::span<const ui8> range) {
-        int offset = std::ssize(to);
-        int writeSize = std::ssize(range);    
-        to.resize( offset + writeSize);
-        std::memcpy(to.data() + offset, range.data(), writeSize);
-    };
-    appendRange(outTuple, {inTuple, TotalRowSize});
-    for (const auto& col: VariableColumns) {
-        ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
-        if (size == 255) { // overflow buffer used
-            auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
-            auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
-            int outOverflowOffset = std::ssize(outOverflow);
-            appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
-            WriteUnaligned<ui32>(outTuple.data() + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
         }
     }
 }

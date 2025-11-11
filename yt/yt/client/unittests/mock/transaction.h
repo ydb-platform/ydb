@@ -1,7 +1,6 @@
 #pragma once
 
 #include <yt/yt/client/api/distributed_table_session.h>
-#include <yt/yt/client/api/distributed_file_session.h>
 #include <yt/yt/client/api/file_writer.h>
 #include <yt/yt/client/api/journal_reader.h>
 #include <yt/yt/client/api/journal_writer.h>
@@ -165,21 +164,6 @@ public:
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
-        (override));
-
-    MOCK_METHOD(TFuture<TDistributedWriteFileSessionWithCookies>, StartDistributedWriteFileSession, (
-        const NYPath::TRichYPath& path,
-        const TDistributedWriteFileSessionStartOptions& options),
-        (override));
-
-    MOCK_METHOD(TFuture<void>, PingDistributedWriteFileSession, (
-        const TSignedDistributedWriteFileSessionPtr& session,
-        const TDistributedWriteFileSessionPingOptions& options),
-        (override));
-
-    MOCK_METHOD(TFuture<void>, FinishDistributedWriteFileSession, (
-        const TDistributedWriteFileSessionWithResults& sessionWithResults,
-        const TDistributedWriteFileSessionFinishOptions& options),
         (override));
 
     // ITransaction

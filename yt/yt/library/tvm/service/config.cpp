@@ -1,40 +1,6 @@
 #include "config.h"
 
-#include <util/system/env.h>
-#include <util/stream/file.h>
-
 namespace NYT::NAuth {
-
-////////////////////////////////////////////////////////////////////////////////
-
-TTvmId TTvmServiceConfig::GetClientSelfId() const
-{
-    if (ClientSelfId.has_value()) {
-        return *ClientSelfId;
-    } else if (ClientSelfIdEnv.has_value()) {
-        try {
-            return FromString<TTvmId>(GetEnv(TString(*ClientSelfIdEnv)));
-        } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv) << TError(ex);
-        }
-    } else {
-        return 0;
-    }
-}
-
-std::optional<std::string> TTvmServiceConfig::GetClientSelfSecret() const
-{
-    if (ClientSelfSecret.has_value()) {
-        return ClientSelfSecret;
-    } else if (ClientSelfSecretEnv.has_value()) {
-        return GetEnv(TString(*ClientSelfSecretEnv));
-    } else if (ClientSelfSecretPath.has_value()) {
-        TFileInput input(*ClientSelfSecretPath);
-        return input.ReadLine();
-    } else {
-        return std::nullopt;
-    }
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,9 +9,7 @@ void TTvmServiceConfig::Register(TRegistrar registrar)
     registrar.Parameter("use_tvm_tool", &TThis::UseTvmTool)
         .Default(false);
     registrar.Parameter("client_self_id", &TThis::ClientSelfId)
-        .Optional();
-    registrar.Parameter("client_self_id_env", &TThis::ClientSelfIdEnv)
-        .Optional();
+        .Default(0);
     registrar.Parameter("client_disk_cache_dir", &TThis::ClientDiskCacheDir)
         .Optional();
     registrar.Parameter("tvm_host", &TThis::TvmHost)

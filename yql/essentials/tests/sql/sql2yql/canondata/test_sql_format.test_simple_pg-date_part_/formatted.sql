@@ -1,3 +1,0 @@
-SELECT
-    SimplePg::date_part('minute', DateTime('2015-01-01T02:03:04Z'))
-;

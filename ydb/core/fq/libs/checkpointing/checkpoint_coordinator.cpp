@@ -9,7 +9,6 @@
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
 #include <util/string/builder.h>
-#include <util/system/env.h>
 
 #include <utility>
 
@@ -25,16 +24,6 @@
 namespace NFq {
 
 using namespace NActors;
-
-TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings() {
-    ui64 ms = 0;
-    if (!TryFromString<ui64>(GetEnv("YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"), ms)) {
-        return;
-    }
-    if (ms) {
-        CheckpointingPeriod = TDuration::MilliSeconds(ms);
-    }
-}
 
 TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config)
     : CheckpointingPeriod(TDuration::MilliSeconds(config.GetCheckpointingPeriodMillis() ? config.GetCheckpointingPeriodMillis() : 30'000))
@@ -65,9 +54,7 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 }
 
 void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr& ev) {
-    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition 
-        << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode)
-        << ", checkpointing period " << Settings.GetCheckpointingPeriod());
+    CC_LOG_D("TEvReadyState, streaming disposition " << StreamingDisposition << ", state load mode " << FederatedQuery::StateLoadMode_Name(StateLoadMode));
     ControlId = ev->Sender;
 
     for (const auto& task : ev->Get()->Tasks) {

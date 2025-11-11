@@ -76,18 +76,18 @@ private:
     using IThreadRef = TAutoPtr<IThreadFactory::IThread>;
 
 
-    NActors::TActorSystem* ActorSystem_;
-    NActors::TActorId PQMeta_;
-    NActors::TActorId MsgBusProxy_;
+    NActors::TActorSystem* ActorSystem;
+    NActors::TActorId PQMeta;
+    NActors::TActorId MsgBusProxy;
 
-    grpc::ServerCompletionQueue* CQ_ = nullptr;
-    NYdbGrpc::TLoggerPtr Logger_;
+    grpc::ServerCompletionQueue* CQ = nullptr;
+    NYdbGrpc::TLoggerPtr Logger;
 
-    size_t PersQueueWriteSessionsMaxCount_ = 1000000;
-    size_t PersQueueReadSessionsMaxCount_  = 100000;
+    size_t PersQueueWriteSessionsMaxCount = 1000000;
+    size_t PersQueueReadSessionsMaxCount  = 100000;
 
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
-    NActors::TActorId GRpcRequestProxyId_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    NActors::TActorId GRpcRequestProxyId;
 
     std::function<void()> InitCb_;
     // In flight request management.

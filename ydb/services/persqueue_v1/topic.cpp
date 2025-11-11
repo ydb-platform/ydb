@@ -8,7 +8,6 @@
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 #include "actors/update_offsets_in_transaction_actor.h"
 
@@ -66,62 +65,148 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
 }
 
 void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+
     using namespace std::placeholders;
-    using namespace Ydb::Topic;
-    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef SETUP_TOPIC_METHOD
-#error SETUP_TOPIC_METHOD macro already defined
+    {
+        using TBiRequest = Ydb::Topic::StreamWriteMessage::FromClient;
+
+        using TBiResponse = Ydb::Topic::StreamWriteMessage::FromServer;
+
+        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+                    TBiRequest,
+                    TBiResponse,
+                    TGRpcTopicService,
+                    NKikimrServices::GRPC_SERVER>;
+
+
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::Topic::V1::TopicService::AsyncService::RequestStreamWrite,
+                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicWriteRequest(context,
+                            TRequestAuxSettings{
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
+                                .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
+                                .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMWRITE,
+                            }));
+                    },
+                    *ActorSystem_, "StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
+                );
+    }
+
+    {
+        using TBiRequest = Ydb::Topic::StreamReadMessage::FromClient;
+
+        using TBiResponse = Ydb::Topic::StreamReadMessage::FromServer;
+
+        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+                    TBiRequest,
+                    TBiResponse,
+                    TGRpcTopicService,
+                    NKikimrServices::GRPC_SERVER>;
+
+
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::Topic::V1::TopicService::AsyncService::RequestStreamRead,
+                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicReadRequest(context,
+                            TRequestAuxSettings{
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
+                                .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
+                                .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD,
+                            }));
+                    },
+                    *ActorSystem_, "StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
+                );
+    }
+
+    {
+        using TBiRequest = Ydb::Topic::StreamDirectReadMessage::FromClient;
+
+        using TBiResponse = Ydb::Topic::StreamDirectReadMessage::FromServer;
+
+        using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
+                    TBiRequest,
+                    TBiResponse,
+                    TGRpcTopicService,
+                    NKikimrServices::GRPC_SERVER>;
+
+
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ_, &Ydb::Topic::V1::TopicService::AsyncService::RequestStreamDirectRead,
+                    [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
+                        ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicDirectReadRequest(context,
+                            TRequestAuxSettings{
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
+                                .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
+                                .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMDIRECTREAD,
+                            }));
+                    },
+                    *ActorSystem_, "StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
+                );
+    }
+
+
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
+#endif
+#define ADD_REQUEST(NAME, SVC, IN, OUT, ACTION) \
+    MakeIntrusive<TGRpcRequest<Ydb::Topic::IN, Ydb::Topic::OUT, NGRpcService::V1::TGRpcTopicService>>(this, this->GetService(), CQ_, \
+        [this](NYdbGrpc::IRequestContextBase *ctx) { \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ACTION; \
+        }, &Ydb::Topic::V1::SVC::AsyncService::Request ## NAME, \
+        #NAME, logger, getCounterBlock("topic", #NAME))->Run();
+
+    ADD_REQUEST(CommitOffset, TopicService, CommitOffsetRequest, CommitOffsetResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx, &DoCommitOffsetRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), .RequestType =  NJaegerTracing::ERequestType::TOPIC_COMMITOFFSET}));
+    })
+
+    ADD_REQUEST(DropTopic, TopicService, DropTopicRequest, DropTopicResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDropTopicRequest(ctx, &DoDropTopicRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), .RequestType = NJaegerTracing::ERequestType::TOPIC_DROPTOPIC}));
+    })
+
+    ADD_REQUEST(CreateTopic, TopicService, CreateTopicRequest, CreateTopicResponse, {
+        auto clusterCfg = ClustersCfgProvider->GetCfg();
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCreateTopicRequest(ctx, std::bind(DoCreateTopicRequest, _1, _2, clusterCfg), TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), .RequestType = NJaegerTracing::ERequestType::TOPIC_CREATETOPIC}));
+    })
+
+    ADD_REQUEST(AlterTopic, TopicService, AlterTopicRequest, AlterTopicResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvAlterTopicRequest(ctx, &DoAlterTopicRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), .RequestType = NJaegerTracing::ERequestType::TOPIC_ALTERTOPIC}));
+    })
+
+    ADD_REQUEST(DescribeTopic, TopicService, DescribeTopicRequest, DescribeTopicResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeTopicRequest(ctx, &DoDescribeTopicRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::NonModifying(), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBETOPIC}));
+    })
+
+    ADD_REQUEST(DescribeConsumer, TopicService, DescribeConsumerRequest, DescribeConsumerResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribeConsumerRequest(ctx, &DoDescribeConsumerRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::NonModifying(), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBECONSUMER}));
+    })
+
+    ADD_REQUEST(DescribePartition, TopicService, DescribePartitionRequest, DescribePartitionResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDescribePartitionRequest(ctx, &DoDescribePartitionRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .CustomAttributeProcessor = YdsProcessAttr, .AuditMode = TAuditMode::NonModifying(), .RequestType = NJaegerTracing::ERequestType::TOPIC_DESCRIBEPARTITION}));
+    })
+#undef ADD_REQUEST
+
+#ifdef ADD_REQUEST_LIMIT
+#error ADD_REQUEST_LIMIT macro already defined
 #endif
 
-#ifdef SETUP_TOPIC_STREAM_METHOD
-#error SETUP_TOPIC_STREAM_METHOD macro already defined
-#endif
+#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE, REQUEST_TYPE, AUDIT_MODE)                                 \
+    MakeIntrusive<TGRpcRequest<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response, TGRpcTopicService>> \
+        (this, this->GetService(), CQ_,                                                                   \
+            [this](NYdbGrpc::IRequestContextBase* ctx) {                                                  \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                          \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                   \
+                    new TGrpcRequestOperationCall<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response>  \
+                        (ctx, &CB, TRequestAuxSettings{                                                   \
+                            .RlMode = TRateLimiterMode::LIMIT_TYPE,                                       \
+                            .AuditMode = AUDIT_MODE,                                                      \
+                            .RequestType = NJaegerTracing::ERequestType::REQUEST_TYPE}));                 \
+            }, &Ydb::Topic::V1::TopicService::AsyncService::Request ## NAME,                              \
+            #NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
-#define SETUP_TOPIC_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, customAttributeProcessorCallback) \
-    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                \
-        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                         \
-        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                        \
-        methodCallback,                                                                                   \
-        rlMode,                                                                                           \
-        requestType,                                                                                      \
-        YDB_API_DEFAULT_COUNTER_BLOCK(topic, methodName),                                                 \
-        auditMode,                                                                                        \
-        COMMON,                                                                                           \
-        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                               \
-        GRpcRequestProxyId_,                                                                              \
-        CQ_,                                                                                              \
-        nullptr,                                                                                          \
-        customAttributeProcessorCallback)
+    ADD_REQUEST_LIMIT(UpdateOffsetsInTransaction, DoUpdateOffsetsInTransaction, Ru, TOPIC_UPDATEOFFSETSINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
 
-#define SETUP_TOPIC_STREAM_METHOD(methodName, rlMode, requestType, auditMode, operationCallClass) \
-        SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName,                \
-            Y_CAT(methodName, Message)::FromClient,                  \
-            Y_CAT(methodName, Message)::FromServer,                  \
-            rlMode,                                                  \
-            requestType,                                             \
-            YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(topic, methodName), \
-            auditMode,                                               \
-            operationCallClass,                                      \
-            GRpcRequestProxyId_,                                     \
-            CQ_,                                                     \
-            nullptr,                                                 \
-            nullptr)
-
-    SETUP_TOPIC_METHOD(CommitOffset, DoCommitOffsetRequest, RLSWITCH(Rps), TOPIC_COMMITOFFSET, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
-    SETUP_TOPIC_METHOD(DropTopic, DoDropTopicRequest, RLSWITCH(Rps), TOPIC_DROPTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
-    SETUP_TOPIC_METHOD(CreateTopic, std::bind(DoCreateTopicRequest, _1, _2, ClustersCfgProvider->GetCfg()), RLSWITCH(Rps), TOPIC_CREATETOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
-    SETUP_TOPIC_METHOD(AlterTopic, DoAlterTopicRequest, RLSWITCH(Rps), TOPIC_ALTERTOPIC, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
-    SETUP_TOPIC_METHOD(DescribeTopic, DoDescribeTopicRequest, RLSWITCH(Rps), TOPIC_DESCRIBETOPIC, TAuditMode::NonModifying(), nullptr);
-    SETUP_TOPIC_METHOD(DescribeConsumer, DoDescribeConsumerRequest, RLSWITCH(Rps), TOPIC_DESCRIBECONSUMER, TAuditMode::NonModifying(), nullptr);
-    SETUP_TOPIC_METHOD(DescribePartition, DoDescribePartitionRequest, RLSWITCH(Rps), TOPIC_DESCRIBEPARTITION, TAuditMode::NonModifying(), YdsProcessAttr);
-    SETUP_TOPIC_METHOD(UpdateOffsetsInTransaction, DoUpdateOffsetsInTransaction, RLSWITCH(Ru), TOPIC_UPDATEOFFSETSINTRANSACTION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), nullptr);
-    SETUP_TOPIC_STREAM_METHOD(StreamRead, RLSWITCH(RuTopic), TOPIC_STREAMREAD, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TEvStreamTopicReadRequest);
-    SETUP_TOPIC_STREAM_METHOD(StreamDirectRead, RLSWITCH(RuTopic), TOPIC_STREAMDIRECTREAD, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TEvStreamTopicDirectReadRequest);
-    SETUP_TOPIC_STREAM_METHOD(StreamWrite, RLSWITCH(RuTopic), TOPIC_STREAMWRITE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TEvStreamTopicWriteRequest);
-
-#undef SETUP_TOPIC_METHOD
-#undef SETUP_TOPIC_STREAM_METHOD
+#undef ADD_REQUEST_LIMIT
 }
 
 void TGRpcTopicService::StopService() noexcept {

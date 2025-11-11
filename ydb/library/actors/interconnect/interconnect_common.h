@@ -15,10 +15,6 @@
 
 #include <atomic>
 
-namespace NInterconnect::NRdma {
-    class IMemPool;
-}
-
 namespace NActors {
     enum class EEncryptionMode {
         DISABLED, // no encryption is required at all
@@ -66,7 +62,6 @@ namespace NActors {
         double ErrorSleepRetryMultiplier = 4.0;
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
-        bool RdmaChecksum = true;
     };
 
     struct TWhiteboardSessionStatus {
@@ -155,8 +150,6 @@ namespace NActors {
         std::optional<TString> CompatibilityInfo;
         std::function<bool(const TString&, TString&)> ValidateCompatibilityInfo;
         std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
-
-        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

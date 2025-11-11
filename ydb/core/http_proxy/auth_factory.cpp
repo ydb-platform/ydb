@@ -1,6 +1,5 @@
 #include "auth_factory.h"
 #include "http_req.h"
-#include "auth_actors.h"
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/http_req.h>
@@ -99,3 +98,4 @@ NActors::IActor* TIamAuthFactory::CreateAuthActor(const TActorId sender, THttpRe
 
 
 }
+

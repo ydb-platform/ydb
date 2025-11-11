@@ -20,9 +20,10 @@ public:
 };
 
 //How often run session pool keep alive check
-constexpr TDeadline::Duration PERIODIC_ACTION_INTERVAL = std::chrono::seconds(5);
-constexpr TDuration MAX_WAIT_SESSION_TIMEOUT = TDuration::Seconds(5); // Max time to wait session
-constexpr std::uint64_t PERIODIC_ACTION_BATCH_SIZE = 10; // Max number of tasks to perform during one interval
+constexpr TDuration PERIODIC_ACTION_INTERVAL = TDuration::Seconds(5);
+constexpr TDuration MAX_WAIT_SESSION_TIMEOUT = TDuration::Seconds(5); //Max time to wait session
+constexpr ui64 PERIODIC_ACTION_BATCH_SIZE = 10; //Max number of tasks to perform during one interval
+constexpr TDuration CREATE_SESSION_INTERNAL_TIMEOUT = TDuration::Seconds(2); //Timeout for createSession call inside session pool
 
 TStatus GetStatus(const TOperation& operation);
 TStatus GetStatus(const TStatus& status);

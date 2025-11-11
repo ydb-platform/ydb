@@ -977,8 +977,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 
     RestartAndClearCache(env, 10_MB);
 
@@ -1016,8 +1014,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Basics) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 }
 
 Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
@@ -1103,8 +1099,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 
     RestartAndClearCache(env, 10_MB);
 
@@ -1142,8 +1136,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 232);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 }
 
 Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
@@ -1230,8 +1222,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 112);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 
     RestartAndClearCache(env, 10_MB);
 
@@ -1269,8 +1259,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_Disabling) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 348);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 }
 
 Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
@@ -1370,8 +1358,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 129);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 
     // should not be fetches for in-mem table
     UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 0);
@@ -1416,8 +1402,6 @@ Y_UNIT_TEST(TryKeepInMemoryMode_AfterCompaction) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 249);
     UNIT_ASSERT_DOUBLES_EQUAL(counters->TargetInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(10_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_DOUBLES_EQUAL(counters->CacheMissInMemoryBytes->Val(), static_cast<i64>(0_MB), static_cast<i64>(1_MB / 3));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissInMemoryPages->Val(), 0);
 
     // no more fetches
     UNIT_ASSERT_VALUES_EQUAL(inMemFetchesCount, 2);

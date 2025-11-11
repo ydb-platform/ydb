@@ -156,7 +156,10 @@ public:
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
-        BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
+
+        if (executerConfig.TableServiceConfig.HasBufferPageAllocSize()) {
+            BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
+        }
 
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
@@ -602,7 +605,7 @@ protected:
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
 
-        if (IsSchedulable()) {
+        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
@@ -1194,12 +1197,6 @@ protected:
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
-        if (IsSchedulable()) {
-            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-            removeQueryEvent->QueryId = TxId;
-            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
-        }
-
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 
@@ -1266,7 +1263,7 @@ protected:
 
     bool RestoreTasksGraph() {
         if (Request.QueryPhysicalGraph) {
-            TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
+            TasksGraph.RestoreTasksGraphInfo(*Request.QueryPhysicalGraph);
         }
 
         return TasksGraph.GetMeta().IsRestored;
@@ -1274,12 +1271,6 @@ protected:
 
     NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
         return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
-    }
-
-    inline bool IsSchedulable() const {
-        const auto& databaseId = GetUserRequestContext()->DatabaseId;
-        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
-        return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
 protected:

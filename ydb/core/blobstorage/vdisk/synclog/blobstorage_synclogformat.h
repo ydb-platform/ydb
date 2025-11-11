@@ -30,15 +30,13 @@ namespace NKikimr {
             }
 
             TLogoBlobID LogoBlobID() const {
-                return ReadUnaligned<TLogoBlobID>(Raw);
+                return TLogoBlobID(Raw);
             }
 
             TString ToString() const {
                 return Sprintf("[%s %" PRIu64 "]", LogoBlobID().ToString().data(), Ingress.Raw());
             }
         };
-
-        static_assert(sizeof(TLogoBlobRec) == 32, "expect sizeof(TLogoBlobRec) == 32");
 
         struct TBlockRec {
             ui64 TabletId;
@@ -53,8 +51,6 @@ namespace NKikimr {
                 return Sprintf("[TabletId# %" PRIu64 " Generation# %" PRIu32 "]", TabletId, Generation);
             }
         };
-
-        static_assert(sizeof(TBlockRec) == 12, "expect sizeof(TBlockRec) == 12");
 
         struct TBlockRecV2 {
             ui64 TabletId;
@@ -72,8 +68,6 @@ namespace NKikimr {
                      << " IssuerGuid# " << IssuerGuid << "]";
             }
         };
-
-        static_assert(sizeof(TBlockRecV2) == 20, "expect sizeof(TBlockRecV2) == 20");
 
         struct TBarrierRec {
             ui64 TabletId;
@@ -103,8 +97,6 @@ namespace NKikimr {
                 return Sprintf("[TabletId# %" PRIu64 " Channel# %" PRIu32 " %s]", TabletId, Channel, Hard ? "hard" : "soft");
             }
         };
-
-        static_assert(sizeof(TBarrierRec) == 32, "expect sizeof(TBarrierRec) == 32");
 
         struct TRecordHdr {
             enum ESyncLogRecType {
@@ -181,9 +173,6 @@ namespace NKikimr {
                 }
             }
         };
-
-        static_assert(sizeof(TRecordHdr) == 8, "expect sizeof(TRecordHdr) == 8");
-
 #pragma pack(pop)
 
         namespace {

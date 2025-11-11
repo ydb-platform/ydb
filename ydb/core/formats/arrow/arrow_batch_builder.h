@@ -191,9 +191,6 @@ public:
     size_t Bytes() const override {
         return NumBytes;
     }
-    size_t Rows() const {
-        return NumRows;
-    }
 
     arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
     arrow::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& columns);

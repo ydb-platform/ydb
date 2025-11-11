@@ -265,9 +265,9 @@ TDriverConfig TDriver::GetConfig() const {
     );
     config.SetDrainOnDtors(Impl_->DrainOnDtors_);
     config.SetBalancingPolicy(std::make_unique<TBalancingPolicy::TImpl>(Impl_->BalancingSettings_));
-    config.SetGRpcKeepAliveTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->GRpcKeepAliveTimeout_));
+    config.SetGRpcKeepAliveTimeout(Impl_->GRpcKeepAliveTimeout_);
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
-    config.SetSocketIdleTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->SocketIdleTimeout_));
+    config.SetSocketIdleTimeout(Impl_->SocketIdleTimeout_);
     config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
     config.SetMaxMessageSize(Impl_->MaxMessageSize_);

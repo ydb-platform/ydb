@@ -117,10 +117,6 @@
    to 0 if you don't. */
 /* #undef HAVE_DECL_LLVMORCGETSYMBOLADDRESSIN */
 
-/* Define to 1 if you have the declaration of `memset_s', and to 0 if you
-   don't. */
-#define HAVE_DECL_MEMSET_S 0
-
 /* Define to 1 if you have the declaration of `posix_fadvise', and to 0 if you
    don't. */
 #define HAVE_DECL_POSIX_FADVISE 1
@@ -132,10 +128,6 @@
 /* Define to 1 if you have the declaration of `pwritev', and to 0 if you
    don't. */
 #define HAVE_DECL_PWRITEV 1
-
-/* Define to 1 if you have the declaration of `strchrnul', and to 0 if you
-   don't. */
-#define HAVE_DECL_STRCHRNUL 1
 
 /* Define to 1 if you have the declaration of `strlcat', and to 0 if you
    don't. */
@@ -322,6 +314,9 @@
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
 
+/* Define to 1 if you have the `memset_s' function. */
+/* #undef HAVE_MEMSET_S */
+
 /* Define to 1 if you have the `mkdtemp' function. */
 #define HAVE_MKDTEMP 1
 
@@ -406,14 +401,17 @@
 /* Define to 1 if you have the `SSL_CTX_set_cert_cb' function. */
 #define HAVE_SSL_CTX_SET_CERT_CB 1
 
-/* Define to 1 if you have the `SSL_CTX_set_num_tickets' function. */
-#define HAVE_SSL_CTX_SET_NUM_TICKETS 1
+/* Define to 1 if stdbool.h conforms to C99. */
+#define HAVE_STDBOOL_H 1
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #define HAVE_STDINT_H 1
 
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
+
+/* Define to 1 if you have the `strchrnul' function. */
+#define HAVE_STRCHRNUL 1
 
 /* Define to 1 if you have the `strerror_r' function. */
 #define HAVE_STRERROR_R 1
@@ -535,6 +533,9 @@
 /* Define to 1 if the assembler supports X86_64's POPCNTQ instruction. */
 #define HAVE_X86_64_POPCNTQ 1
 
+/* Define to 1 if the system has the type `_Bool'. */
+#define HAVE__BOOL 1
+
 /* Define to 1 if your compiler understands __builtin_bswap16. */
 #define HAVE__BUILTIN_BSWAP16 1
 
@@ -603,7 +604,7 @@
 #define PACKAGE_NAME "PostgreSQL"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PostgreSQL 16.10"
+#define PACKAGE_STRING "PostgreSQL 16.3"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "postgresql"
@@ -612,7 +613,7 @@
 #define PACKAGE_URL "https://www.postgresql.org/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "16.10"
+#define PACKAGE_VERSION "16.3"
 
 /* Define to the name of a signed 128-bit integer type. */
 #define PG_INT128_TYPE __int128
@@ -631,7 +632,7 @@
 #define PG_MAJORVERSION_NUM 16
 
 /* PostgreSQL minor version number */
-#define PG_MINORVERSION_NUM 10
+#define PG_MINORVERSION_NUM 3
 
 /* Define to best printf format archetype, usually gnu_printf if available. */
 #define PG_PRINTF_ATTRIBUTE gnu_printf
@@ -640,13 +641,13 @@
 #define PG_USE_STDBOOL 1
 
 /* PostgreSQL version as a string */
-#define PG_VERSION "16.10"
+#define PG_VERSION "16.3"
 
 /* PostgreSQL version as a number */
-#define PG_VERSION_NUM 160010
+#define PG_VERSION_NUM 160003
 
 /* A string containing the version number, platform, and C compiler */
-#define PG_VERSION_STR "PostgreSQL 16.10 on x86_64-pc-linux-gnu, compiled by clang version 20.1.8, 64-bit"
+#define PG_VERSION_STR "PostgreSQL 16.3 on x86_64-pc-linux-gnu, compiled by clang version 16.0.6, 64-bit"
 
 /* Define to 1 to allow profiling output to be saved separately for each
    process. */

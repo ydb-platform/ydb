@@ -782,11 +782,8 @@ similar_escape_internal(text *pat_text, text *esc_text)
 	int			plen,
 				elen;
 	bool		afterescape = false;
+	bool		incharclass = false;
 	int			nquotes = 0;
-	int			charclass_depth = 0;	/* Nesting level of character classes,
-										 * encompassed by square brackets */
-	int			charclass_start = 0;	/* State of the character class start,
-										 * for carets */
 
 	p = VARDATA_ANY(pat_text);
 	plen = VARSIZE_ANY_EXHDR(pat_text);
@@ -916,7 +913,7 @@ similar_escape_internal(text *pat_text, text *esc_text)
 		/* fast path */
 		if (afterescape)
 		{
-			if (pchar == '"' && charclass_depth < 1)	/* escape-double-quote? */
+			if (pchar == '"' && !incharclass)	/* escape-double-quote? */
 			{
 				/* emit appropriate part separator, per notes above */
 				if (nquotes == 0)
@@ -965,41 +962,18 @@ similar_escape_internal(text *pat_text, text *esc_text)
 			/* SQL escape character; do not send to output */
 			afterescape = true;
 		}
-		else if (charclass_depth > 0)
+		else if (incharclass)
 		{
 			if (pchar == '\\')
 				*r++ = '\\';
 			*r++ = pchar;
-
-			/*
-			 * Ignore a closing bracket at the start of a character class.
-			 * Such a bracket is taken literally rather than closing the
-			 * class.  "charclass_start" is 1 right at the beginning of a
-			 * class and 2 after an initial caret.
-			 */
-			if (pchar == ']' && charclass_start > 2)
-				charclass_depth--;
-			else if (pchar == '[')
-				charclass_depth++;
-
-			/*
-			 * If there is a caret right after the opening bracket, it negates
-			 * the character class, but a following closing bracket should
-			 * still be treated as a normal character.  That holds only for
-			 * the first caret, so only the values 1 and 2 mean that closing
-			 * brackets should be taken literally.
-			 */
-			if (pchar == '^')
-				charclass_start++;
-			else
-				charclass_start = 3;	/* definitely past the start */
+			if (pchar == ']')
+				incharclass = false;
 		}
 		else if (pchar == '[')
 		{
-			/* start of a character class */
 			*r++ = pchar;
-			charclass_depth++;
-			charclass_start = 1;
+			incharclass = true;
 		}
 		else if (pchar == '%')
 		{

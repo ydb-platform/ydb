@@ -33,18 +33,17 @@ YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline __m128i AlignedPrefixLoad(
     const void* p,
     int* length) Y_NO_SANITIZE("memory")
 {
-    int offset = reinterpret_cast<ui64>(p) & 15;
-    *length = 16 - offset;
+    int offset = (size_t)p & 15; *length = 16 - offset;
 
     if (offset) {
         // Load and shift to the right.
         // (Kudos to glibc authors for fast implementation).
         return _mm_shuffle_epi8(
-            _mm_load_si128(reinterpret_cast<const __m128i*>((char*)p - offset)),
-            _mm_loadu_si128(reinterpret_cast<const __m128i*>(_m128i_shift_right + offset)));
+            _mm_load_si128((__m128i*)((char*)p - offset)),
+            _mm_loadu_si128((__m128i*)(_m128i_shift_right + offset)));
     } else {
         // Just load.
-        return _mm_load_si128(reinterpret_cast<const __m128i*>(p));
+        return _mm_load_si128((__m128i*)p);
     }
 }
 
@@ -107,7 +106,7 @@ YT_ATTRIBUTE_NO_SANITIZE_ADDRESS inline const char* FindNextSymbol(
         if (length > 0) {
             // We may load more bytes than needed (but within memory page, due to 16-byte alignment)
             // but subsequent call to _mm_cmpestri compares only appropriate bytes.
-            value = _mm_load_si128(reinterpret_cast<const __m128i*>(current));
+            value = _mm_load_si128((__m128i*)current);
             tmp = Min(16, length);
         } else {
             break;

@@ -19,6 +19,196 @@ using Clock = std::chrono::steady_clock;
 
 //-----------------------------------------------------------------------------
 
+// We have two types of coroutines:
+// * Outter or Internal (in TPC-C this is a terminal task). It can sleep (co_awaiting) or wait for another "inner" task.
+// * Inner or External (in TPC-C this is a transaction task). E.g. it might perform async requests to YDB.
+// when it is finished, terminal task continues. It is called external, because usually it has to use
+// thread-safe interface of ITaskQueue (future used to co_await is normally set by another thread).
+
+template <typename T>
+struct TTask {
+    struct TPromiseType;
+    using TCoroHandle = std::coroutine_handle<TPromiseType>;
+
+    struct TPromiseType {
+        TTask get_return_object() {
+            return TTask{std::coroutine_handle<TPromiseType>::from_promise(*this)};
+        }
+
+        std::suspend_always initial_suspend() { return {}; }
+
+        auto final_suspend() noexcept {
+            struct TFinalAwaiter {
+                bool await_ready() noexcept { return false; }
+                std::coroutine_handle<> await_suspend(TCoroHandle h) noexcept {
+                    if (h.promise().Continuation) {
+                        return h.promise().Continuation;
+                    }
+                    return std::noop_coroutine();
+                }
+                void await_resume() noexcept {}
+            };
+            return TFinalAwaiter{};
+        }
+
+        template <typename U>
+        void return_value(U&& v) {
+            Value = std::forward<U>(v);
+        }
+
+        void unhandled_exception() {
+            Exception = std::current_exception();
+        }
+
+        T Value;
+        std::exception_ptr Exception;
+        std::coroutine_handle<> Continuation;
+    };
+
+    using promise_type = TPromiseType;
+
+    TTask(TCoroHandle h)
+        : Handle(h)
+    {
+    }
+
+    // note, default move constructors doesn't null Handle,
+    // so that we need to add our own
+    TTask(TTask&& other) noexcept
+        : Handle(std::exchange(other.Handle, nullptr))
+    {}
+
+    TTask& operator=(TTask&& other) noexcept {
+        if (this != &other) {
+            if (Handle) {
+                Handle.destroy();
+            }
+            Handle = std::exchange(other.Handle, nullptr);
+        }
+        return *this;
+    }
+
+    TTask(const TTask&) = delete;
+    TTask& operator=(const TTask&) = delete;
+
+    ~TTask() {
+        if (Handle) {
+            Handle.destroy();
+        }
+    }
+
+    // awaitable task
+
+    bool await_ready() const noexcept {
+        return Handle.done();
+    }
+
+    void await_suspend(std::coroutine_handle<> awaiting) {
+        Handle.promise().Continuation = awaiting;
+        Handle.resume();  // start inner task
+    }
+
+    T&& await_resume() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
+
+        return std::move(Handle.promise().Value);
+    }
+
+    TCoroHandle Handle;
+};
+
+template <>
+struct TTask<void> {
+    struct TPromiseType;
+    using TCoroHandle = std::coroutine_handle<TPromiseType>;
+
+    struct TPromiseType {
+        TTask get_return_object() {
+            return TTask{std::coroutine_handle<TPromiseType>::from_promise(*this)};
+        }
+
+        std::suspend_always initial_suspend() { return {}; }
+
+        auto final_suspend() noexcept {
+            struct TFinalAwaiter {
+                bool await_ready() noexcept { return false; }
+                std::coroutine_handle<> await_suspend(TCoroHandle h) noexcept {
+                    if (h.promise().Continuation) {
+                        return h.promise().Continuation;
+                    }
+                    return std::noop_coroutine();
+                }
+                void await_resume() noexcept {}
+            };
+            return TFinalAwaiter{};
+        }
+
+        void return_void() {}
+
+        void unhandled_exception() {
+            Exception = std::current_exception();
+        }
+
+        std::exception_ptr Exception;
+        std::coroutine_handle<> Continuation;
+    };
+
+    using promise_type = TPromiseType;
+
+    TTask(TCoroHandle h)
+        : Handle(h)
+    {
+    }
+
+    // note, default move constructors doesn't null Handle,
+    // so that we need to add our own
+    TTask(TTask&& other) noexcept
+        : Handle(std::exchange(other.Handle, nullptr))
+    {}
+
+    TTask& operator=(TTask&& other) noexcept {
+        if (this != &other) {
+            if (Handle) {
+                Handle.destroy();
+            }
+            Handle = std::exchange(other.Handle, nullptr);
+        }
+        return *this;
+    }
+
+    TTask(const TTask&) = delete;
+    TTask& operator=(const TTask&) = delete;
+
+    ~TTask() {
+        if (Handle) {
+            Handle.destroy();
+        }
+    }
+
+    // awaitable task
+
+    bool await_ready() const noexcept {
+        return Handle.done();
+    }
+
+    void await_suspend(std::coroutine_handle<> awaiting) {
+        Handle.promise().Continuation = awaiting;
+        Handle.resume();  // start inner task
+    }
+
+    void await_resume() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
+    }
+
+    TCoroHandle Handle;
+};
+
+//-----------------------------------------------------------------------------
+
 class ITaskQueue {
 public:
     struct TThreadStats {

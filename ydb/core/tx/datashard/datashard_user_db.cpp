@@ -189,12 +189,8 @@ void TDataShardUserDb::InsertRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected InsertRow for an unknown table");
 
-    if (RowExists(tableId, key)) {
-        // Compatibility with old stats.
-        // We count read only if row exists.
-        IncreaseSelectCounters(key);
+    if (RowExists(tableId, key))
         throw TUniqueConstrainException();
-    }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
@@ -209,15 +205,11 @@ void TDataShardUserDb::UpdateRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
-    if (!RowExists(tableId, key)) {
-        // Compatibility with old stats.
-        // We count read only if row exists.
+    if (!RowExists(tableId, key))
         return;
-    }
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, ops);
 
-    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -262,7 +254,6 @@ void TDataShardUserDb::IncrementRow(
 
     UpsertRowInt(NTable::ERowOp::Upsert, tableId, localTableId, key, newOps);
 
-    IncreaseSelectCounters(key);
     IncreaseUpdateCounters(key, ops);
 }
 
@@ -300,16 +291,6 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 
     Counters.NUpdateRow++;
     Counters.UpdateRowBytes += keyBytes + valueBytes;
-}
-
-void TDataShardUserDb::IncreaseSelectCounters(
-    const TArrayRef<const TRawTypeValue> key) 
-{
-    ui64 keyBytes = CalculateKeyBytes(key);
-
-    Counters.NSelectRow++;
-    Counters.SelectRowRows++;
-    Counters.SelectRowBytes += keyBytes;
 }
 
 void TDataShardUserDb::UpsertRowInt(

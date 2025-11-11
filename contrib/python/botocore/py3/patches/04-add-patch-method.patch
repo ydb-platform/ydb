@@ -1,6 +1,6 @@
---- contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(5718cbe7c8ad633beee9e1eac79e295dea4b8966)
-+++ contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(0f7e89156b6ce9f3947ef47273baefe09dd0c1ad)
-@@ -1233,6 +1246,21 @@
+--- contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(e035e6a001bce129cf5b55dd3b909de5cff9b0ab)
++++ contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(cf1d3bd37058ca841449300119cddcb6fee50e49)
+@@ -1032,6 +1032,21 @@
          "requestChecksumRequired":false
        }
      },
@@ -22,24 +22,18 @@
      "PutObjectAcl":{
        "name":"PutObjectAcl",
        "http":{
-@@ -9501,6 +9627,76 @@
+@@ -9105,6 +9120,80 @@
        },
        "payload":"Body"
      },
-+    "PatchAppendPartSize":{"type": "integer"},
-+    "PatchedObjectInfo":{
++    "PatchObjectOutput":{
 +      "type":"structure",
 +      "members":{
 +        "ETag":{"shape":"ETag"},
 +        "LastModified":{"shape":"LastModified"}
 +      }
 +    },
-+    "PatchObjectOutput":{
-+      "type":"structure",
-+      "members":{
-+        "Object":{"shape":"PatchedObjectInfo"}
-+      }
-+    },
++    "PatchAppendPartSize":{"type": "integer"},
 +    "PatchObjectRequest":{
 +      "type":"structure",
 +      "required":[
@@ -78,6 +72,16 @@
 +          "location":"header",
 +          "locationName":"If-Match"
 +        },
++        "IfModifiedSince":{
++          "shape":"IfModifiedSince",
++          "location":"header",
++          "locationName":"If-Modified-Since"
++        },
++        "IfNoneMatch":{
++          "shape":"IfNoneMatch",
++          "location":"header",
++          "locationName":"If-None-Match"
++        },
 +        "IfUnmodifiedSince":{
 +          "shape":"IfUnmodifiedSince",
 +          "location":"header",
@@ -99,9 +103,9 @@
      "PutObjectRetentionOutput":{
        "type":"structure",
        "members":{
---- contrib/python/botocore/py3/botocore/handlers.py	(5718cbe7c8ad633beee9e1eac79e295dea4b8966)
-+++ contrib/python/botocore/py3/botocore/handlers.py	(0f7e89156b6ce9f3947ef47273baefe09dd0c1ad)
-@@ -1173,6 +1194,11 @@ BUILTIN_HANDLERS = [
+--- contrib/python/botocore/py3/botocore/handlers.py	(e035e6a001bce129cf5b55dd3b909de5cff9b0ab)
++++ contrib/python/botocore/py3/botocore/handlers.py	(cf1d3bd37058ca841449300119cddcb6fee50e49)
+@@ -1189,6 +1189,11 @@ BUILTIN_HANDLERS = [
          convert_body_to_file_like_object,
          REGISTER_LAST,
      ),
@@ -113,15 +117,15 @@
      ('creating-client-class', add_generate_presigned_url),
      ('creating-client-class.s3', add_generate_presigned_post),
      ('creating-client-class.iot-data', check_openssl_supports_tls_version_1_2),
-@@ -1213,6 +1239,7 @@ BUILTIN_HANDLERS = [
+@@ -1229,6 +1234,7 @@ BUILTIN_HANDLERS = [
      ('before-call.glacier', add_glacier_version),
      ('before-call.apigateway', add_accept_header),
-     ('before-call.s3.PutObject', conditionally_calculate_checksum),
+     ('before-call.s3.PutObject', conditionally_calculate_md5),
 +    ('before-call.s3.PatchObject', conditionally_calculate_md5),
      ('before-call.s3.UploadPart', conditionally_calculate_md5),
      ('before-call.s3.DeleteObjects', escape_xml_payload),
-     ('before-call.s3.DeleteObjects', conditionally_calculate_checksum),
-@@ -1242,6 +1269,7 @@ BUILTIN_HANDLERS = [
+     ('before-call.s3.PutBucketLifecycleConfiguration', escape_xml_payload),
+@@ -1257,6 +1263,7 @@ BUILTIN_HANDLERS = [
      ('before-parameter-build.s3.HeadObject', sse_md5),
      ('before-parameter-build.s3.GetObject', sse_md5),
      ('before-parameter-build.s3.PutObject', sse_md5),

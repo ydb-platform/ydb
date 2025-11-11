@@ -1271,9 +1271,6 @@ private:
 
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
         auto& msg = *ev->Get();
-        if (msg.Stats && Stats) {
-            Stats->AddBufferStats(std::move(*msg.Stats));
-        }
         TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }
 
@@ -1967,12 +1964,7 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = 0;
-
-        if (!graphRestored) {
-            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
-        }
-
+        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), &ShardsWithEffects);
         OnEmptyResult();
 
         TIssue validateIssue;
@@ -2864,7 +2856,8 @@ private:
 
     void StartCheckpointCoordinator() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
+        bool enableCheckpointCoordinator = QueryServiceConfig.HasStreamingQueries()
+            && QueryServiceConfig.GetStreamingQueries().HasExternalStorage()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
             && context && context->CheckpointId;
         if (!enableCheckpointCoordinator) {

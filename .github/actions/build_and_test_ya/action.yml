@@ -116,6 +116,3 @@ runs:
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
         add_vcs_info: ${{ inputs.add_vcs_info }}
-        telegram_ydbot_token:  ${{ fromJSON( inputs.secs ).TELEGRAM_YDBOT_TOKEN || '' }}
-        telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
-        telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}

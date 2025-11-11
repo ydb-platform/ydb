@@ -35,7 +35,7 @@ What's currently not supported:
 
 | Data type | Can be used in<br/>column-oriented tables | Can be used<br/>as primary key |
 ---|---|---
-| `Bool` | ✓ | ✓ |
+| `Bool` | ☓ | ☓ |
 | `Date` | ✓ | ✓ |
 | `Datetime` | ✓ | ✓ |
 | `Decimal` | ✓ | ☓ |

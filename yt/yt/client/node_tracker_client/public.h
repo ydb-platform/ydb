@@ -42,12 +42,8 @@ DEFINE_ENUM(EAddressType,
 );
 
 YT_DEFINE_STRONG_TYPEDEF(TNodeId, ui32);
-// Node ids of real (non-sentinel) nodes are in the range [1, MaxRealNodeId].
-constexpr TNodeId MaxRealNodeId = TNodeId((1 << 24) - 128 - 1); // Leave some room for sentinels.
-constexpr TNodeId MaxNodeId = TNodeId((1 << 24) - 1); // TNodeId must fit into 24 bits (see TChunkReplica)
-// Sentinels.
 constexpr TNodeId InvalidNodeId = TNodeId(0);
-constexpr TNodeId OffshoreNodeId = TNodeId((1 << 24) - 1);
+constexpr TNodeId MaxNodeId = TNodeId((1 << 24) - 1); // TNodeId must fit into 24 bits (see TChunkReplica)
 
 YT_DEFINE_STRONG_TYPEDEF(TChunkLocationIndex, ui32);
 constexpr TChunkLocationIndex InvalidChunkLocationIndex = TChunkLocationIndex(0);

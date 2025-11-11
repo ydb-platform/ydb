@@ -1,35 +1,12 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
-#include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <util/random/fast.h>
-#include <util/string/vector.h>
 
 using namespace NActors;
 
-static TString ExtractPattern(TTestICCluster& testCluster, ui32 me, ui32 peer, TString patternStart, TString patternEnd) {
-    auto httpResp = testCluster.GetSessionDbg(me, peer);
-    const TString& resp = httpResp.GetValueSync();
-    auto pos = resp.find(patternStart);
-    UNIT_ASSERT_C(pos != std::string::npos, "rdma qp status field was not found in http info");
-    pos += patternStart.size();
-    size_t end = resp.find(patternEnd, pos);
-    UNIT_ASSERT(end != std::string::npos);
-    return resp.substr(pos, end - pos);
-
-}
-
-static TString GetRdmaQpStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaQp</td><td>[", "]<");
-}
-
-static TString GetRdmaChecksumStatus(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-    return ExtractPattern(testCluster, me, peer, "<tr><td>RdmaMode</td><td>", "<");
-}
-
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
     const TActorId Recipient;
-    const size_t SendLimit;
     using TSessionToCookie = std::unordered_multimap<TActorId, ui64, THash<TActorId>>;
     TSessionToCookie SessionToCookie;
     std::unordered_map<ui64, std::pair<TSessionToCookie::iterator, TString>> InFlight;
@@ -39,9 +16,8 @@ class TSenderActor : public TActorBootstrapped<TSenderActor> {
     bool SubscribeInFlight = false;
 
 public:
-    TSenderActor(TActorId recipient, size_t sendLimit = -1)
+    TSenderActor(TActorId recipient)
         : Recipient(recipient)
-        , SendLimit(sendLimit)
     {}
 
     void Bootstrap() {
@@ -60,7 +36,7 @@ public:
         if (!SessionId) {
             return;
         }
-        while (InFlight.size() < 10 && NextCookie < SendLimit) {
+        while (InFlight.size() < 10) {
             size_t len = RandomNumber<size_t>(65536) + 1;
             TString data = TString::Uninitialized(len);
             TReallyFastRng32 rng(RandomNumber<ui32>());
@@ -144,7 +120,6 @@ class TRecipientActor : public TActor<TRecipientActor> {
 public:
     TRecipientActor()
         : TActor(&TThis::StateFunc)
-        , Recieved(0)
     {}
 
     void HandlePing(TAutoPtr<IEventHandle>& ev) {
@@ -152,18 +127,11 @@ public:
         const TString& response = MD5::CalcRaw(data);
         TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Pong, 0, ev->Sender, SelfId(),
             MakeIntrusive<TEventSerializedData>(response, TEventSerializationInfo{}), ev->Cookie));
-        Recieved.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    size_t GetRecieved() const noexcept {
-        return Recieved.load(std::memory_order_relaxed);
     }
 
     STRICT_STFUNC(StateFunc,
         fFunc(TEvents::THelloWorld::Ping, HandlePing);
     )
-private:
-    std::atomic<size_t> Recieved;
 };
 
 Y_UNIT_TEST_SUITE(Interconnect) {
@@ -206,32 +174,4 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         }
     }
 
-    Y_UNIT_TEST(SetupRdmaSession) {
-        if (NRdmaTest::IsRdmaTestDisabled()) {
-            Cerr << "SetupRdmaSession test skipped" << Endl;
-            return;
-        }
-        TTestICCluster cluster(2);
-        const size_t limit = 10;
-        auto recieverPtr = new TRecipientActor;
-        const TActorId recipient = cluster.RegisterActor(recieverPtr, 1);
-        auto senderPtr = new TSenderActor(recipient, limit);
-        cluster.RegisterActor(senderPtr, 2);
-
-        while (recieverPtr->GetRecieved() < limit) {
-            Sleep(TDuration::MilliSeconds(100));
-        }
-
-        {
-            auto s = GetRdmaQpStatus(cluster, 1, 2);
-            auto tokens = SplitString(s, ",");
-            UNIT_ASSERT(tokens.size() == 2);
-            UNIT_ASSERT(tokens[1] == "QPS_RTS");
-        }
-
-        {
-            auto s = GetRdmaChecksumStatus(cluster, 2, 1);
-            UNIT_ASSERT_VALUES_EQUAL(s, "On | SoftwareChecksum");
-        }
-    }
 }

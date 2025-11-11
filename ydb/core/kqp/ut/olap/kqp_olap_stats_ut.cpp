@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(1));
 
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
         auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(10));
+        Sleep(TDuration::Seconds(1));
 
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
         auto describeResult =

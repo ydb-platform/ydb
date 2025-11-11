@@ -27,12 +27,6 @@
       "limit_key": "MaxItems",
       "more_results": "StreamingDistributionList.IsTruncated",
       "result_key": "StreamingDistributionList.Items"
-    },
-    "ListKeyValueStores": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "KeyValueStoreList.NextMarker",
-      "result_key": "KeyValueStoreList.Items"
     }
   }
 }

@@ -2,12 +2,6 @@
 
 #include <ydb/core/scheme/protos/pathid.pb.h>
 
-namespace NKikimrSubDomains {
-
-class TDomainKey;
-
-} // NKikimrSubDomains
-
 namespace NKikimr {
 
 using TOwnerId = ui64;
@@ -54,7 +48,6 @@ struct TPathId {
     void ToProto(NKikimrProto::TPathID& proto) const;
     void ToProto(NKikimrProto::TPathID* proto) const;
     NKikimrProto::TPathID ToProto() const;
-    static TPathId FromDomainKey(const NKikimrSubDomains::TDomainKey& proto);
 
 }; // TPathId
 

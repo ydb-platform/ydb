@@ -2285,8 +2285,6 @@ FindTriggerIncompatibleWithInheritance(TriggerDesc *trigdesc)
 		{
 			Trigger    *trigger = &trigdesc->triggers[i];
 
-			if (!TRIGGER_FOR_ROW(trigger->tgtype))
-				continue;
 			if (trigger->tgoldtable != NULL || trigger->tgnewtable != NULL)
 				return trigger->tgname;
 		}
@@ -2545,15 +2543,6 @@ ExecARInsertTriggers(EState *estate, ResultRelInfo *relinfo,
 {
 	TriggerDesc *trigdesc = relinfo->ri_TrigDesc;
 
-	if (relinfo->ri_FdwRoutine && transition_capture &&
-		transition_capture->tcs_insert_new_table)
-	{
-		Assert(relinfo->ri_RootResultRelInfo);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot collect transition tuples from child foreign tables")));
-	}
-
 	if ((trigdesc && trigdesc->trig_insert_after_row) ||
 		(transition_capture && transition_capture->tcs_insert_new_table))
 		AfterTriggerSaveEvent(estate, relinfo, NULL, NULL,
@@ -2796,15 +2785,6 @@ ExecARDeleteTriggers(EState *estate,
 					 bool is_crosspart_update)
 {
 	TriggerDesc *trigdesc = relinfo->ri_TrigDesc;
-
-	if (relinfo->ri_FdwRoutine && transition_capture &&
-		transition_capture->tcs_delete_old_table)
-	{
-		Assert(relinfo->ri_RootResultRelInfo);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot collect transition tuples from child foreign tables")));
-	}
 
 	if ((trigdesc && trigdesc->trig_delete_after_row) ||
 		(transition_capture && transition_capture->tcs_delete_old_table))
@@ -3131,16 +3111,6 @@ ExecARUpdateTriggers(EState *estate, ResultRelInfo *relinfo,
 					 bool is_crosspart_update)
 {
 	TriggerDesc *trigdesc = relinfo->ri_TrigDesc;
-
-	if (relinfo->ri_FdwRoutine && transition_capture &&
-		(transition_capture->tcs_update_old_table ||
-		 transition_capture->tcs_update_new_table))
-	{
-		Assert(relinfo->ri_RootResultRelInfo);
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot collect transition tuples from child foreign tables")));
-	}
 
 	if ((trigdesc && trigdesc->trig_update_after_row) ||
 		(transition_capture &&
@@ -4040,6 +4010,13 @@ afterTriggerCopyBitmap(Bitmapset *src)
 	if (src == NULL)
 		return NULL;
 
+	/* Create event context if we didn't already */
+	if (afterTriggers.event_cxt == NULL)
+		afterTriggers.event_cxt =
+			AllocSetContextCreate(TopTransactionContext,
+								  "AfterTriggerEvents",
+								  ALLOCSET_DEFAULT_SIZES);
+
 	oldcxt = MemoryContextSwitchTo(afterTriggers.event_cxt);
 
 	dst = bms_copy(src);
@@ -4141,21 +4118,16 @@ afterTriggerAddEvent(AfterTriggerEventList *events,
 		 (char *) newshared >= chunk->endfree;
 		 newshared--)
 	{
-		/* compare fields roughly by probability of them being different */
 		if (newshared->ats_tgoid == evtshared->ats_tgoid &&
-			newshared->ats_event == evtshared->ats_event &&
-			newshared->ats_firing_id == 0 &&
-			newshared->ats_table == evtshared->ats_table &&
 			newshared->ats_relid == evtshared->ats_relid &&
-			bms_equal(newshared->ats_modifiedcols,
-					  evtshared->ats_modifiedcols))
+			newshared->ats_event == evtshared->ats_event &&
+			newshared->ats_table == evtshared->ats_table &&
+			newshared->ats_firing_id == 0)
 			break;
 	}
 	if ((char *) newshared < chunk->endfree)
 	{
 		*newshared = *evtshared;
-		/* now we must make a suitably-long-lived copy of the bitmap */
-		newshared->ats_modifiedcols = afterTriggerCopyBitmap(evtshared->ats_modifiedcols);
 		newshared->ats_firing_id = 0;	/* just to be sure */
 		chunk->endfree = (char *) newshared;
 	}
@@ -4324,12 +4296,8 @@ AfterTriggerExecute(EState *estate,
 	bool		should_free_new = false;
 
 	/*
-	 * Locate trigger in trigdesc.  It might not be present, and in fact the
-	 * trigdesc could be NULL, if the trigger was dropped since the event was
-	 * queued.  In that case, silently do nothing.
+	 * Locate trigger in trigdesc.
 	 */
-	if (trigdesc == NULL)
-		return;
 	for (tgindx = 0; tgindx < trigdesc->numtriggers; tgindx++)
 	{
 		if (trigdesc->triggers[tgindx].tgoid == tgoid)
@@ -4339,7 +4307,7 @@ AfterTriggerExecute(EState *estate,
 		}
 	}
 	if (LocTriggerData.tg_trigger == NULL)
-		return;
+		elog(ERROR, "could not find trigger %u", tgoid);
 
 	/*
 	 * If doing EXPLAIN ANALYZE, start charging time to this trigger. We want
@@ -4720,7 +4688,6 @@ afterTriggerInvokeEvents(AfterTriggerEventList *events,
 					/* Catch calls with insufficient relcache refcounting */
 					Assert(!RelationHasReferenceCountZero(rel));
 					trigdesc = rInfo->ri_TrigDesc;
-					/* caution: trigdesc could be NULL here */
 					finfo = rInfo->ri_TrigFunctions;
 					instr = rInfo->ri_TrigInstrument;
 					if (slot1 != NULL)
@@ -4736,6 +4703,9 @@ afterTriggerInvokeEvents(AfterTriggerEventList *events,
 						slot2 = MakeSingleTupleTableSlot(rel->rd_att,
 														 &TTSOpsMinimalTuple);
 					}
+					if (trigdesc == NULL)	/* should not happen */
+						elog(ERROR, "relation %u has no triggers",
+							 evtshared->ats_relid);
 				}
 
 				/*
@@ -5001,10 +4971,10 @@ MakeTransitionCaptureState(TriggerDesc *trigdesc, Oid relid, CmdType cmdType)
 
 	/* Now build the TransitionCaptureState struct, in caller's context */
 	state = (TransitionCaptureState *) palloc0(sizeof(TransitionCaptureState));
-	state->tcs_delete_old_table = need_old_del;
-	state->tcs_update_old_table = need_old_upd;
-	state->tcs_update_new_table = need_new_upd;
-	state->tcs_insert_new_table = need_new_ins;
+	state->tcs_delete_old_table = trigdesc->trig_delete_old_table;
+	state->tcs_update_old_table = trigdesc->trig_update_old_table;
+	state->tcs_update_new_table = trigdesc->trig_update_new_table;
+	state->tcs_insert_new_table = trigdesc->trig_insert_new_table;
 	state->tcs_private = table;
 
 	return state;
@@ -6466,7 +6436,7 @@ AfterTriggerSaveEvent(EState *estate, ResultRelInfo *relinfo,
 			new_shared.ats_table = transition_capture->tcs_private;
 		else
 			new_shared.ats_table = NULL;
-		new_shared.ats_modifiedcols = modifiedCols;
+		new_shared.ats_modifiedcols = afterTriggerCopyBitmap(modifiedCols);
 
 		afterTriggerAddEvent(&afterTriggers.query_stack[afterTriggers.query_depth].events,
 							 &new_event, &new_shared);

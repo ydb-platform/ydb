@@ -721,11 +721,8 @@ json_lex_string(JsonLexContext *lex)
 	} while (0)
 #define FAIL_AT_CHAR_END(code) \
 	do { \
-		ptrdiff_t	remaining = end - s; \
-		int			charlen; \
-		charlen = pg_encoding_mblen_or_incomplete(lex->input_encoding, \
-												  s, remaining); \
-		lex->token_terminator = (charlen <= remaining) ? s + charlen : end; \
+		lex->token_terminator = \
+			s + pg_encoding_mblen_bounded(lex->input_encoding, s); \
 		return code; \
 	} while (0)
 

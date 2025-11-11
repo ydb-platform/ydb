@@ -200,7 +200,7 @@ public:
 class TReplayCompileActor: public TActorBootstrapped<TReplayCompileActor> {
 public:
     TReplayCompileActor(TIntrusivePtr<TModuleResolverState> moduleResolverState, const NMiniKQL::IFunctionRegistry* functionRegistry,
-        NYql::IHTTPGateway::TPtr httpGateway, bool enableOltpSink, bool antlr4ParserIsAmbiguityError)
+        NYql::IHTTPGateway::TPtr httpGateway, bool enableOltpSink)
         : ModuleResolverState(moduleResolverState)
         , KqpSettings()
         , Config(MakeIntrusive<TKikimrConfiguration>())
@@ -209,7 +209,6 @@ public:
     {
         Config->DefaultCostBasedOptimizationLevel = 2;
         Config->EnableOltpSink = enableOltpSink;
-        Config->Antlr4ParserIsAmbiguityError = antlr4ParserIsAmbiguityError;
     }
 
     void Bootstrap() {
@@ -630,7 +629,7 @@ private:
 };
 
 IActor* CreateQueryCompiler(TIntrusivePtr<TModuleResolverState> moduleResolverState,
-    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway,  bool enableOltpSink, bool antlr4ParserIsAmbiguityError)
+    const NMiniKQL::IFunctionRegistry* functionRegistry, NYql::IHTTPGateway::TPtr httpGateway,  bool enableOltpSink)
 {
-    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableOltpSink, antlr4ParserIsAmbiguityError);
+    return new TReplayCompileActor(moduleResolverState, functionRegistry, httpGateway, enableOltpSink);
 }

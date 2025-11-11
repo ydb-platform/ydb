@@ -157,13 +157,12 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks))
-        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
+        .template WatermarkMode<TCoAtom>().Build(ToString(*enableWatermarks));
 
     if (*enableWatermarks) {
         const auto hop = hopTraits.Hop;
         const auto delay = lateArrivalDelay ? (lateArrivalDelay.MicroSeconds() + hop - 1) / hop * hop : hop;
-        multiHoppingCoreBuilder.Delay<TCoInterval>()
+        multiHoppingCoreBuilder.template Delay<TCoInterval>()
             .Literal().Build(ToString(delay))
             .Build();
     } else {
@@ -182,9 +181,9 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
             .SortKeySelectorLambda(timeExtractorLambda)
             .ListHandlerLambda()
                 .Args(streamArg)
-                .Body<TCoForwardList>()
+                .template Body<TCoForwardList>()
                     .Stream(multiHoppingCoreBuilder
-                        .Input<TCoIterator>()
+                        .template Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())
@@ -209,7 +208,7 @@ TMaybeNode<TExprBase> RewriteAsHoppingWindowFullOutput(
                 .Args(streamArg)
                 .Body<TCoMap>()
                     .Input(multiHoppingCoreBuilder
-                        .Input<TCoFromFlow>()
+                        .template Input<TCoFromFlow>()
                             .Input(streamArg)
                             .Build()
                         .Done())

@@ -29,9 +29,9 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         if (CurrentStateFunc() == &TThis::StateInit) {
             return "Init";
         } else if (CurrentStateFunc() == &TThis::StateIdle) {
-            return KVWriteInProgress ? "Write" : "Idle";
+            return "Idle";
         } else {
-            return "Unknown";
+            Y_ABORT("");
         }
     };
     static constexpr std::pair<TStringBuf, const TPartitionBlobEncoder TPartition::*> encoders[2]{

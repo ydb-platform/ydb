@@ -9,8 +9,6 @@
 
 #include <jwt-cpp/jwt.h>
 
-using namespace std::chrono_literals;
-
 namespace NYdb::inline Dev {
 
 namespace {
@@ -99,7 +97,7 @@ TLoginCredentialsProvider::TLoginCredentialsProvider(std::weak_ptr<ICoreFacility
 
             return true;
         };
-        strongFacility->AddPeriodicTask(std::move(periodicTask), 1min);
+        strongFacility->AddPeriodicTask(std::move(periodicTask), TDuration::Minutes(1));
     }
 }
 
@@ -139,7 +137,7 @@ void TLoginCredentialsProvider::RequestToken() {
         request.set_user(TStringType{Params_.User});
         request.set_password(TStringType{Params_.Password});
         TRpcRequestSettings rpcSettings;
-        rpcSettings.Deadline = TDeadline::AfterDuration(60s);
+        rpcSettings.ClientTimeout = TDuration::Seconds(60);
 
         TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Auth::V1::AuthService, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>(
             strongFacility, std::move(request), std::move(responseCb), &Ydb::Auth::V1::AuthService::Stub::AsyncLogin,

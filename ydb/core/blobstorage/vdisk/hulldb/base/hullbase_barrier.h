@@ -102,9 +102,6 @@ namespace NKikimr {
             return std::make_tuple(alignedTabletId, Channel, Hard, Gen, GenCounter);
         }
     };
-
-    static_assert(sizeof(TKeyBarrier) == 20, "expect sizeof(TKeyBarrier) == 20");
-
 #pragma pack(pop)
 
     /////////////////////////////////////////////////////////////////////////
@@ -212,9 +209,6 @@ namespace NKikimr {
                 proto.SetIngress(Ingress.Raw());
         }
     };
-
-    static_assert(sizeof(TMemRecBarrier) == 12, "expect sizeof(TMemRecBarrier) == 12");
-
 #pragma pack(pop)
 
     template <>

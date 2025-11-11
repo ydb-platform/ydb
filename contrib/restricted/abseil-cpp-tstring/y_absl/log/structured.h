@@ -32,7 +32,6 @@
 
 #include <ostream>
 
-#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/log/internal/structured.h"
 #include "y_absl/strings/string_view.h"
@@ -61,11 +60,7 @@ Y_ABSL_NAMESPACE_BEGIN
 //                                 int line) {
 //     LOG(LEVEL(severity)).AtLocation(file, line) << y_absl::LogAsLiteral(str);
 //   }
-//
-// `LogAsLiteral` should only be used as a streaming operand and not, for
-// example, as a local variable initializer.
-inline log_internal::AsLiteralImpl LogAsLiteral(
-    y_absl::string_view s Y_ABSL_ATTRIBUTE_LIFETIME_BOUND) {
+inline log_internal::AsLiteralImpl LogAsLiteral(y_absl::string_view s) {
   return log_internal::AsLiteralImpl(s);
 }
 

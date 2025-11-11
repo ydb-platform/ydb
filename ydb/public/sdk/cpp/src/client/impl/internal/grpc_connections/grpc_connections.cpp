@@ -148,7 +148,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , MaxQueuedResponses_(params->GetMaxQueuedResponses())
     , DrainOnDtors_(params->GetDrinOnDtors())
     , BalancingSettings_(params->GetBalancingSettings())
-    , GRpcKeepAliveTimeout_(TDeadline::SafeDurationCast(params->GetGRpcKeepAliveTimeout()))
+    , GRpcKeepAliveTimeout_(params->GetGRpcKeepAliveTimeout())
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
     , MemoryQuota_(params->GetMemoryQuota())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
@@ -156,9 +156,9 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , MaxMessageSize_(params->GetMaxMessageSize())
     , QueuedRequests_(0)
     , TcpKeepAliveSettings_(params->GetTcpKeepAliveSettings())
-    , SocketIdleTimeout_(TDeadline::SafeDurationCast(params->GetSocketIdleTimeout()))
+    , SocketIdleTimeout_(params->GetSocketIdleTimeout())
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    , ChannelPool_(TcpKeepAliveSettings_, params->GetSocketIdleTimeout())
+    , ChannelPool_(TcpKeepAliveSettings_, SocketIdleTimeout_)
 #endif
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
@@ -166,7 +166,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , Log(params->GetLog())
 {
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    if (SocketIdleTimeout_ != TDeadline::Duration::max()) {
+    if (SocketIdleTimeout_ != TDuration::Max()) {
         auto channelPoolUpdateWrapper = [this]
             (NYdb::NIssue::TIssues&&, EStatus status) mutable
         {
@@ -177,7 +177,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
             ChannelPool_.DeleteExpiredStubsHolders();
             return true;
         };
-        AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ / 10);
+        AddPeriodicTask(channelPoolUpdateWrapper, SocketIdleTimeout_ * 0.1);
     }
 #endif
     if (params->GetExecutor()) {
@@ -204,7 +204,7 @@ TGRpcConnectionsImpl::~TGRpcConnectionsImpl() {
     ResponseQueue_->Stop();
 }
 
-void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
+void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) {
     std::shared_ptr<IQueueClientContext> context;
     if (!TryCreateContext(context)) {
         NYdb::NIssue::TIssues issues;
@@ -219,7 +219,7 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
     }
 }
 
-void TGRpcConnectionsImpl::ScheduleOneTimeTask(TSimpleCb&& fn, TDeadline::Duration timeout) {
+void TGRpcConnectionsImpl::ScheduleOneTimeTask(TSimpleCb&& fn, TDuration timeout) {
     auto cbLow = [this, fn = std::move(fn)](NYdb::NIssue::TIssues&&, EStatus status) mutable {
         if (status != EStatus::SUCCESS) {
             return false;
@@ -242,7 +242,7 @@ void TGRpcConnectionsImpl::ScheduleOneTimeTask(TSimpleCb&& fn, TDeadline::Durati
         return false;
     };
 
-    if (timeout > TDeadline::Duration::zero()) {
+    if (timeout) {
         AddPeriodicTask(std::move(cbLow), timeout);
     } else {
         cbLow(NYdb::NIssue::TIssues(), EStatus::SUCCESS);
@@ -315,8 +315,8 @@ void TGRpcConnectionsImpl::Stop(bool wait) {
     GRpcClientLow_.Stop(wait);
 }
 
-void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls) {
-    std::uint64_t timeoutMs = std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count();
+void TGRpcConnectionsImpl::SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls) {
+    ui64 timeoutMs = timeout.MilliSeconds();
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = timeoutMs >> 3;
     config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = timeoutMs;
     config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
@@ -340,7 +340,7 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         };
 
     TRpcRequestSettings rpcSettings;
-    rpcSettings.Deadline = TDeadline::AfterDuration(GET_ENDPOINTS_TIMEOUT);
+    rpcSettings.ClientTimeout = GET_ENDPOINTS_TIMEOUT;
 
     RunDeferred<Ydb::Discovery::V1::DiscoveryService, Ydb::Discovery::ListEndpointsRequest, Ydb::Discovery::ListEndpointsResponse>(
         std::move(request),

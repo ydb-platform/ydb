@@ -754,17 +754,12 @@ message TAggregatedCounters {
     repeated uint64 Values = 1;
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
-    optional TExtendedCounters ExtendedCounters = 4;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
         repeated uint64 Values = 2;
     }
     message TCompactionCounters {
-        repeated uint64 Values = 1;
-    }
-
-    message TExtendedCounters {
         repeated uint64 Values = 1;
     }
 }
@@ -1361,41 +1356,11 @@ message TMLPStorageSnapshot {
     message TMeta {
         optional uint64 FirstOffset = 1;
         optional uint64 FirstUncommittedOffset = 2;
-        optional uint64 BaseDeadlineSeconds = 3;
-        optional uint64 BaseWriteTimestampSeconds = 4;
-        optional uint64 DLQMovedMessages = 5;
+        optional uint64 BaseDeadlineMilliseconds = 3; 
     }
     optional TMeta Meta = 2;
 
     optional uint64 FormatVersion = 3;
     optional bytes Messages = 4;
-
-    repeated uint64 DLQ = 5;
-
-    optional uint64 WALIndex = 6;
-    optional bytes SlowMessages = 7;
-}
-
-message TMLPStorageWAL {
-    optional uint64 Generation = 1;
-    optional uint64 FormatVersion = 2;
-
-    optional uint64 FirstOffset = 3;
-    optional bytes ChangedMessages = 4;
-
-    optional uint64 FirstAddedOffset = 5;
-    optional bytes AddedMessages = 6;
-
-    repeated uint64 DLQ = 7;
-    optional uint64 DLQMovedMessages = 8;
-
-    optional uint64 BaseDeadlineSeconds = 9;
-    optional uint64 BaseWriteTimestampSeconds = 10;
-
-    optional uint64 WALIndex = 11;
-
-    optional uint64 SlowFirstOffset = 12;
-    repeated uint64 MovedToSlowZone = 13;
-    repeated uint64 DeletedFromSlowZone = 14;
 }
 

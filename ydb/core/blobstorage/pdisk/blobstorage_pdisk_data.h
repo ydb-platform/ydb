@@ -915,7 +915,7 @@ struct TDiskFormat {
         memcpy(this, &format, format.GetUsedSize());
     }
 
-    bool IsDiskSmall() const {
+    bool IsDiskSmall() {
         return DiskSize < SmallDiskSizeBoundary;
     }
 };

@@ -1,4 +1,5 @@
 #include "datastreams_proxy.h"
+#include "datastreams_codes.h"
 #include "put_records_actor.h"
 #include "shard_iterator.h"
 #include "next_token.h"
@@ -13,7 +14,6 @@
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>

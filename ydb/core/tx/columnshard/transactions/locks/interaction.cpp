@@ -4,30 +4,23 @@
 namespace NKikimr::NOlap::NTxInteractions {
 TIntervalPoint TIntervalPoint::From(
     const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    const i32 shift = [&]() {
-        if (container.IsAll()) {
-            return -1;
-        } else if (!container.IsInclude() || container.NumColumns() < (ui32)pkSchema->num_fields()) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }();
-    return TIntervalPoint(container, pkSchema, shift);
+    i32 shift = container.IsInclude() ? 0 : 1;
+    if (!container.GetReplaceKey()) {
+        shift = -1;
+    } else if (container.GetReplaceKey()->GetColumnsCount() < (ui32)pkSchema->num_fields()) {
+        shift = 1;
+    }
+    return TIntervalPoint(container.GetReplaceKey(), shift);
 }
 
 TIntervalPoint TIntervalPoint::To(
     const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
-    const i32 shift = [&]() {
-        if (container.IsAll() || container.NumColumns() < (ui32)pkSchema->num_fields()) {
-            return Max<i32>();
-        } else if (!container.IsInclude()) {
-            return -1;
-        } else {
-            return 0;
-        }
-    }();
-    return TIntervalPoint(container, pkSchema, shift);
+    i32 shift = container.IsInclude() ? 0 : -1;
+    if (!container.GetReplaceKey() || container.GetReplaceKey()->GetColumnsCount() < (ui32)pkSchema->num_fields()) {
+        shift = Max<i32>();
+    }
+
+    return TIntervalPoint(container.GetReplaceKey(), shift);
 }
 
 }   // namespace NKikimr::NOlap::NTxInteractions

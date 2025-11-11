@@ -118,11 +118,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                         NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
                     }
                 },
-                [&](const NJson::TJsonValue& data, const ui64 hashBase) {
+                [&](const std::string_view data, const ui64 hashBase) {
                     auto& filterBits = filtersBuilder.MutableFilter(hashBase);
                     const ui32 size = filterBits.Size();
                     for (ui64 i = 0; i < HashesCount; ++i) {
-                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data.GetStringRobust(), i);
+                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
                         filterBits.Set(hash % size);
                     }
                 });

@@ -83,12 +83,15 @@ static void InitPlan(QueryDesc *queryDesc, int eflags);
 static void CheckValidRowMarkRel(Relation rel, RowMarkType markType);
 static void ExecPostprocessPlan(EState *estate);
 static void ExecEndPlan(PlanState *planstate, EState *estate);
-static void ExecutePlan(QueryDesc *queryDesc,
+static void ExecutePlan(EState *estate, PlanState *planstate,
+						bool use_parallel_mode,
 						CmdType operation,
 						bool sendTuples,
 						uint64 numberTuples,
 						ScanDirection direction,
-						DestReceiver *dest);
+						DestReceiver *dest,
+						bool execute_once);
+static bool ExecCheckOneRelPerms(RTEPermissionInfo *perminfo);
 static bool ExecCheckPermissionsModified(Oid relOid, Oid userid,
 										 Bitmapset *modifiedCols,
 										 AclMode requiredPerms);
@@ -129,12 +132,10 @@ void
 ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	/*
-	 * In some cases (e.g. an EXECUTE statement or an execute message with the
-	 * extended query protocol) the query_id won't be reported, so do it now.
-	 *
-	 * Note that it's harmless to report the query_id multiple times, as the
-	 * call will be ignored if the top level query_id has already been
-	 * reported.
+	 * In some cases (e.g. an EXECUTE statement) a query execution will skip
+	 * parse analysis, which means that the query_id won't be reported.  Note
+	 * that it's harmless to report the query_id multiple times, as the call
+	 * will be ignored if the top level query_id has already been reported.
 	 */
 	pgstat_report_query_id(queryDesc->plannedstmt->queryId, false);
 
@@ -285,9 +286,6 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
  *		retrieved tuples, not for instance to those inserted/updated/deleted
  *		by a ModifyTable plan node.
  *
- *		execute_once is ignored, and is present only to avoid an API break
- *		in stable branches.
- *
  *		There is no return value, but output tuples (if any) are sent to
  *		the destination receiver specified in the QueryDesc; and the number
  *		of tuples processed at the top level can be found in
@@ -359,12 +357,21 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 	 * run plan
 	 */
 	if (!ScanDirectionIsNoMovement(direction))
-		ExecutePlan(queryDesc,
+	{
+		if (execute_once && queryDesc->already_executed)
+			elog(ERROR, "can't re-execute query flagged for single execution");
+		queryDesc->already_executed = true;
+
+		ExecutePlan(estate,
+					queryDesc->planstate,
+					queryDesc->plannedstmt->parallelModeNeeded,
 					operation,
 					sendTuples,
 					count,
 					direction,
-					dest);
+					dest,
+					execute_once);
+	}
 
 	/*
 	 * Update es_total_processed to keep track of the number of tuples
@@ -634,7 +641,7 @@ ExecCheckPermissions(List *rangeTable, List *rteperminfos,
  * ExecCheckOneRelPerms
  *		Check access permissions for a single relation.
  */
-bool
+static bool
 ExecCheckOneRelPerms(RTEPermissionInfo *perminfo)
 {
 	AclMode		requiredPerms;
@@ -1020,10 +1027,6 @@ CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
 	TriggerDesc *trigDesc = resultRel->trigdesc;
 	FdwRoutine *fdwroutine;
 
-	/* Expect a fully-formed ResultRelInfo from InitResultRelInfo(). */
-	Assert(resultRelInfo->ri_needLockTagTuple ==
-		   IsInplaceUpdateRelation(resultRel));
-
 	switch (resultRel->rd_rel->relkind)
 	{
 		case RELKIND_RELATION:
@@ -1232,8 +1235,6 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 	resultRelInfo->ri_NumIndices = 0;
 	resultRelInfo->ri_IndexRelationDescs = NULL;
 	resultRelInfo->ri_IndexRelationInfo = NULL;
-	resultRelInfo->ri_needLockTagTuple =
-		IsInplaceUpdateRelation(resultRelationDesc);
 	/* make a copy so as not to depend on relcache info not changing... */
 	resultRelInfo->ri_TrigDesc = CopyTriggerDesc(resultRelationDesc->trigdesc);
 	if (resultRelInfo->ri_TrigDesc)
@@ -1615,19 +1616,22 @@ ExecCloseRangeTableRelations(EState *estate)
  *		moving in the specified direction.
  *
  *		Runs to completion if numberTuples is 0
+ *
+ * Note: the ctid attribute is a 'junk' attribute that is removed before the
+ * user can see it
  * ----------------------------------------------------------------
  */
 static void
-ExecutePlan(QueryDesc *queryDesc,
+ExecutePlan(EState *estate,
+			PlanState *planstate,
+			bool use_parallel_mode,
 			CmdType operation,
 			bool sendTuples,
 			uint64 numberTuples,
 			ScanDirection direction,
-			DestReceiver *dest)
+			DestReceiver *dest,
+			bool execute_once)
 {
-	EState	   *estate = queryDesc->estate;
-	PlanState  *planstate = queryDesc->planstate;
-	bool		use_parallel_mode;
 	TupleTableSlot *slot;
 	uint64		current_tuple_count;
 
@@ -1642,17 +1646,11 @@ ExecutePlan(QueryDesc *queryDesc,
 	estate->es_direction = direction;
 
 	/*
-	 * Set up parallel mode if appropriate.
-	 *
-	 * Parallel mode only supports complete execution of a plan.  If we've
-	 * already partially executed it, or if the caller asks us to exit early,
-	 * we must force the plan to run without parallelism.
+	 * If the plan might potentially be executed multiple times, we must force
+	 * it to run without parallelism, because we might exit early.
 	 */
-	if (queryDesc->already_executed || numberTuples != 0)
+	if (!execute_once)
 		use_parallel_mode = false;
-	else
-		use_parallel_mode = queryDesc->plannedstmt->parallelModeNeeded;
-	queryDesc->already_executed = true;
 
 	estate->es_use_parallel_mode = use_parallel_mode;
 	if (use_parallel_mode)
@@ -2652,14 +2650,12 @@ bool
 EvalPlanQualFetchRowMark(EPQState *epqstate, Index rti, TupleTableSlot *slot)
 {
 	ExecAuxRowMark *earm = epqstate->relsubs_rowmark[rti - 1];
-	ExecRowMark *erm;
+	ExecRowMark *erm = earm->rowmark;
 	Datum		datum;
 	bool		isNull;
 
 	Assert(earm != NULL);
 	Assert(epqstate->origslot != NULL);
-
-	erm = earm->rowmark;
 
 	if (RowMarkRequiresRowShareLock(erm->markType))
 		elog(ERROR, "EvalPlanQual doesn't support locking rowmarks");

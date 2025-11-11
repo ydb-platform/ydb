@@ -34,8 +34,7 @@ public:
    *
    * Part of the std::iterator interface.
    */
-  simdjson_inline simdjson_result<value>
-  operator*() noexcept; // MUST ONLY BE CALLED ONCE PER ITERATION.
+  simdjson_inline simdjson_result<value> operator*() noexcept; // MUST ONLY BE CALLED ONCE PER ITERATION.
   /**
    * Check if we are at the end of the JSON.
    *
@@ -59,11 +58,6 @@ public:
    */
   simdjson_inline array_iterator &operator++() noexcept;
 
-  /**
-   * Check if the array is at the end.
-   */
-  simdjson_warn_unused simdjson_inline bool at_end() const noexcept;
-
 private:
   value_iterator iter{};
 
@@ -82,6 +76,7 @@ namespace simdjson {
 
 template<>
 struct simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array_iterator> : public SIMDJSON_IMPLEMENTATION::implementation_simdjson_result_base<SIMDJSON_IMPLEMENTATION::ondemand::array_iterator> {
+public:
   simdjson_inline simdjson_result(SIMDJSON_IMPLEMENTATION::ondemand::array_iterator &&value) noexcept; ///< @private
   simdjson_inline simdjson_result(error_code error) noexcept; ///< @private
   simdjson_inline simdjson_result() noexcept = default;
@@ -94,8 +89,6 @@ struct simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array_iterator> : publ
   simdjson_inline bool operator==(const simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array_iterator> &) const noexcept;
   simdjson_inline bool operator!=(const simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array_iterator> &) const noexcept;
   simdjson_inline simdjson_result<SIMDJSON_IMPLEMENTATION::ondemand::array_iterator> &operator++() noexcept;
-
-  simdjson_warn_unused simdjson_inline bool at_end() const noexcept;
 };
 
 } // namespace simdjson

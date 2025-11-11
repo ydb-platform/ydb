@@ -162,7 +162,7 @@ private:
             DependsOn(flow, VarNode);
             std::for_each(Args.cbegin(), Args.cend(), std::bind(&TFlowVisitAllWrapper::Own, flow, std::placeholders::_1));
         }
-        std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependent, VarNode, std::placeholders::_1));
+        std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependence, VarNode, std::placeholders::_1));
     }
 
     IComputationNode* const VarNode;
@@ -302,7 +302,7 @@ private:
             DependsOn(flow, VarNode);
             std::for_each(Args.cbegin(), Args.cend(), std::bind(&TWideVisitAllWrapper::Own, flow, std::placeholders::_1));
         }
-        std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependent, VarNode, std::placeholders::_1));
+        std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependence, VarNode, std::placeholders::_1));
     }
 
     IComputationNode* const VarNode;

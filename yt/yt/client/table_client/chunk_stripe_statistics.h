@@ -33,8 +33,6 @@ TChunkStripeStatisticsVector AggregateStatistics(
 
 void Serialize(const TChunkStripeStatistics& statistics, NYson::IYsonConsumer* consumer);
 
-void FormatValue(TStringBuilderBase* builder, const TChunkStripeStatistics& statistics, TStringBuf spec);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient

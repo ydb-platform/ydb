@@ -1291,66 +1291,6 @@ Y_UNIT_TEST(TestWritePQ) {
     TestWritePQImpl(false);
 }
 
-Y_UNIT_TEST(Read_From_Different_Zones_What_Was_Written_With_Gaps)
-{
-    // The test creates messages in different zones. There are gaps in the offsets between the zones.
-    // We check that the client can read from any offset from any zone.
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        activeZone = false;
-        TFinalizer finalizer(tc);
-        tc.EnableDetailedPQLog = true;
-        tc.Prepare(dispatchName, setup, activeZone);
-        tc.Runtime->SetScheduledLimit(100);
-
-        // Important client, lifetimeseconds=0 - never delete
-        PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{"user", true}}, tc);
-
-        TVector<std::pair<ui64, TString>> data;
-
-        data.emplace_back(1, TString(1'000, 'x'));
-
-        // CompactZone.Body
-        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 100);
-        ++data[0].first;
-        data[0].second = TString(7'000'000, 'x');
-        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 101);
-
-        CmdRunCompaction(0, tc);
-
-        // CompactZone.Head
-        ++data[0].first;
-        data[0].second = TString(1'000, 'x');
-        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 200);
-        ++data[0].first;
-        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 201);
-
-        CmdRunCompaction(0, tc);
-
-        // FastWriteZone.Body
-        ++data[0].first;
-        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 300);
-        ++data[0].first;
-        CmdWrite(0, "sourceid", data, tc, false, {}, true, "", -1, 301);
-
-        PQGetPartInfo(100, 302, tc);
-
-        CmdRead(0, 102, Max<i32>(), Max<i32>(), 4, false, tc, {200, 201, 300, 301});
-        CmdRead(0, 202, Max<i32>(), Max<i32>(), 2, false, tc, {300, 301});
-
-        // The client has committed an offset between the zones
-        CmdSetOffset(0, "user", 103, false, tc);
-        PQTabletRestart(tc);
-
-        CmdSetOffset(0, "user", 203, false, tc);
-        PQTabletRestart(tc);
-
-        CmdRead(0, 102, Max<i32>(), Max<i32>(), 4, false, tc, {200, 201, 300, 301});
-        CmdRead(0, 202, Max<i32>(), Max<i32>(), 2, false, tc, {300, 301});
-    });
-}
 
 Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
     TTestContext tc;

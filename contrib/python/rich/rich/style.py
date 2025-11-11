@@ -1,7 +1,6 @@
 import sys
 from functools import lru_cache
-from operator import attrgetter
-from pickle import dumps, loads
+from marshal import dumps, loads
 from random import randint
 from typing import Any, Dict, Iterable, List, Optional, Type, Union, cast
 
@@ -9,10 +8,6 @@ from . import errors
 from .color import Color, ColorParseError, ColorSystem, blend_rgb
 from .repr import Result, rich_repr
 from .terminal_theme import DEFAULT_TERMINAL_THEME, TerminalTheme
-
-_hash_getter = attrgetter(
-    "_color", "_bgcolor", "_attributes", "_set_attributes", "_link", "_meta"
-)
 
 # Style instances and style definitions are often interchangeable
 StyleType = Union[str, "Style"]
@@ -437,7 +432,16 @@ class Style:
     def __hash__(self) -> int:
         if self._hash is not None:
             return self._hash
-        self._hash = hash(_hash_getter(self))
+        self._hash = hash(
+            (
+                self._color,
+                self._bgcolor,
+                self._attributes,
+                self._set_attributes,
+                self._link,
+                self._meta,
+            )
+        )
         return self._hash
 
     @property

@@ -115,14 +115,9 @@ namespace NKikimr::NStorage {
         TGroupRecord& group = it->second;
         group.MaxKnownGeneration = Max(group.MaxKnownGeneration, generation);
         if (newGroup) {
-            if (newGroup->HasErasureSpecies()) {
-                const auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(newGroup->GetErasureSpecies());
-                Y_DEBUG_ABORT_UNLESS(!group.GType || group.GType->GetErasure() == erasure);
-                group.GType.emplace(erasure);
-            } else {
-                Y_ABORT_UNLESS(newGroup->RingsSize() == 0); // ensure no VDisks in group
-                group.GType.emplace(TBlobStorageGroupType::ErasureNone);
-            }
+            const auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(newGroup->GetErasureSpecies());
+            Y_DEBUG_ABORT_UNLESS(!group.GType || group.GType->GetErasure() == erasure);
+            group.GType.emplace(erasure);
         }
 
         // forget pending queries

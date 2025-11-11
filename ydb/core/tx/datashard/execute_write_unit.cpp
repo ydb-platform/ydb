@@ -599,11 +599,6 @@ public:
                 return EExecutionStatus::Continue;
             }
 
-            // INSERT with unique constrain violation are also counted as read for stats.
-            const auto& counters = userDb.GetCounters();
-            KqpUpdateDataShardStatCounters(DataShard, counters);
-            KqpFillTxStats(DataShard, counters, *writeOp->GetWriteResult()->Record.MutableTxStats());
-
             if (auto status = ensureAbortOutReadSets()) {
                 return *status;
             }

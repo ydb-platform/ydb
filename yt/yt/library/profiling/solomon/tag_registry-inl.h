@@ -1,4 +1,4 @@
-#ifndef TAG_REGISTRY_INL_H_
+#ifndef TAG_REGISTRY_INL_H
 #error "Direct inclusion of this file is not allowed, include tag_registry.h"
 // For the sake of sane code completion.
 #include "tag_registry.h"

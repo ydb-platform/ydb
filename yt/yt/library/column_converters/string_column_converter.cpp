@@ -262,6 +262,7 @@ private:
         auto type = EUnversionedStringSegmentType(std::distance(costs.begin(), minElement));
 
         switch (type) {
+
             case EUnversionedStringSegmentType::DirectDense:
                 return GetDirectColumn(GetDirectDenseNullBitmap());
 

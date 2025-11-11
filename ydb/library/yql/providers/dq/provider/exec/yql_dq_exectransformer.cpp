@@ -768,12 +768,6 @@ private:
             return filesRes;
         }
         FlushCounter("FreezeUsedFiles");
-
-        auto& qContext = State->TypeCtx->QContext;
-        if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full && !files.empty()) {
-            YQL_CLOG(DEBUG, ProviderDq) << "DQ full capture has not been taken: file dump is unsupported";
-            State->IsFullCaptureReady = false;
-        }
         // copy-paste }
 
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
@@ -1353,12 +1347,6 @@ private:
             return filesRes;
         }
         FlushCounter("FreezeUsedFiles");
-
-        auto& qContext = State->TypeCtx->QContext;
-        if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full && !files.empty()) {
-            YQL_CLOG(DEBUG, ProviderDq) << "DQ full capture has not been taken: file dump is unsupported";
-            State->IsFullCaptureReady = false;
-        }
         // copy-paste }
 
         THashMap<TString, TString> secureParams;
@@ -1912,12 +1900,6 @@ private:
                 continue;
             }
             FlushCounter("FreezeUsedFiles");
-
-            auto& qContext = State->TypeCtx->QContext;
-            if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full && !files.empty()) {
-                YQL_CLOG(DEBUG, ProviderDq) << "DQ full capture has not been taken: file dump is unsupported";
-                State->IsFullCaptureReady = false;
-            }
             // copy-paste }
 
             auto settings = std::make_shared<TDqSettings>(*commonSettings);

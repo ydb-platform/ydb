@@ -10,8 +10,6 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
-import copy as python_copy
-
 from botocore.exceptions import ClientError
 
 from boto3 import utils
@@ -434,11 +432,7 @@ def copy(
     if config is None:
         config = TransferConfig()
 
-    # copy is not supported in the CRT
-    new_config = python_copy.copy(config)
-    new_config.preferred_transfer_client = "classic"
-
-    with create_transfer_manager(self, new_config) as manager:
+    with create_transfer_manager(self, config) as manager:
         future = manager.copy(
             copy_source=CopySource,
             bucket=Bucket,

@@ -1,50 +1,38 @@
 {%- if prepareProtosTask %}
-val prepareMainProtos = tasks.register<Sync>("prepareMainProtos") {
-{%-     if target.proto_files|length -%}
-{%-         if target.proto_namespace %}
-    from("$arcadia_root/{{ target.proto_namespace }}") {
-{%-             for proto in target.proto_files %}
-        include("{{ proto|replace(target.proto_namespace + "/", "") }}")
-{%-             endfor -%}
-{%-         else %}
+
+val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+{%-     if target.proto_files|length %}
     from("$arcadia_root") {
 {#- list of all current project proto files -#}
-{%-             for proto in target.proto_files %}
+{%-         for proto in target.proto_files %}
         include("{{ proto }}")
-{%-             endfor -%}
-{%-         endif %}
+{%-         endfor %}
     }
 {%      endif -%}
-{%-     if target.runs|length or target.custom_runs|length -%}
-{%-         set varprefix = MAIN_VARPREFIX %}
+{%-     if target.runs|length or target.custom_runs|length %}
     from("$baseBuildDir") {
 {%-         for run in target.runs -%}
 {%-             for out in run.out %}
-        include({{ PatchGeneratedProto(out, true, run['_object_index']) }})
+        include({{ PatchGeneratedProto(out, true) }})
 {%-             endfor -%}
 {%-             for out_dir in run.out_dir %}
-        include({{ PatchGeneratedProto(out_dir, true, run['_object_index']) }} + "/**/*.proto")
+        include({{ PatchGeneratedProto(out_dir, true) }} + "/**/*.proto")
 {%-             endfor -%}
 {%-         endfor -%}
 {%-         for custom_run in target.custom_runs -%}
 {%-             for out in custom_run.outputs %}
-        include({{ PatchGeneratedProto(out, true, custom_run['_object_index']) }})
+        include({{ PatchGeneratedProto(out, true) }})
 {%-             endfor -%}
 {%-         endfor %}
     }
 {%      endif -%}
     into(mainProtosDir)
-
-    val codegenPathRegexp = "build/{{ CODEGENS_DIRNAME }}/{{ MAIN_VARPREFIX }}\\.\\d+/".toRegex()
-    filesMatching("**/build/{{ CODEGENS_DIRNAME }}/{{ MAIN_VARPREFIX }}.*/**") {
-        path = path.replace(codegenPathRegexp, "")
-    }
 }
 {%- endif -%}
 
 {%- if extractLibrariesProtosTask %}
 
-val prepareMainIncludeProtos = tasks.register<Sync>("prepareMainIncludeProtos") {
+val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
     from("$arcadia_root") {
 {%-     for library in libraries -%}
 {%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
@@ -65,6 +53,23 @@ val prepareMainIncludeProtos = tasks.register<Sync>("prepareMainIncludeProtos") 
     }
 {%-     endfor -%}
 {%- endif %}
-    into(mainIncludeProtosDir)
+    into(mainExtractedIncludeProtosDir)
 }
 {%- endif %}
+
+afterEvaluate {
+{%- if prepareProtosTask %}
+    tasks.named("extractProto").configure {
+        dependsOn(prepareMainProtos)
+    }
+{%- endif %}
+{%- if extractLibrariesProtosTask %}
+    tasks.named("extractProto").configure {
+        dependsOn(extractMainLibrariesProtos)
+    }
+{%- endif %}
+}
+
+tasks.named("compileJava").configure {
+    dependsOn("generateProto")
+}

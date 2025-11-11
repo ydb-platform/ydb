@@ -59,17 +59,6 @@ ui64 TArrowData::GetSchemaVersion() const {
     return IndexSchema->GetVersion();
 }
 
-TString TArrowData::DebugString() const {
-    std::shared_ptr<arrow::RecordBatch> result;
-    if (Operation.HasPayloadSchema()) {
-        auto payloadSchema = NArrow::DeserializeSchema(Operation.GetPayloadSchema());
-        result = NArrow::DeserializeBatch(IncomingData, payloadSchema);
-    } else {
-        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
-    }
-    return result->ToString();
-}
-
 bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto) {
     IncomingData = proto.GetData();
     if (proto.HasModificationType()) {

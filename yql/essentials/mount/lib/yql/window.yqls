@@ -894,56 +894,6 @@
 (let bottom_by_traits_factory (lambda '(list_type key_extractor payload_extractor count)
     (Apply top_bottom_by_traits_factory list_type key_extractor payload_extractor count '0)))
 
-
-
-(let reservoir_sampling_factory_raw (lambda '(list_type value_extractor count default_value finish_selector) (block '(
-    (let value_type (ListItemType list_type))
-
-    (let limit_type (DataType 'Uint64))
-    (let extra_types_tuple (TupleType value_type))
-    (let type_config '"")
-
-    (let create      (Udf 'ReservoirSampling.Create         (Void) (TupleType (TupleType value_type limit_type) (StructType) (TupleType)) type_config))
-
-    (let resource_type (TypeOf (Apply create (InstanceOf value_type) (InstanceOf limit_type))))
-
-    (let add         (Udf 'ReservoirSampling.Add            (Void) (TupleType (TupleType resource_type value_type)  (StructType) (TupleType)) type_config))
-
-    (let get_value   (Udf 'ReservoirSampling.GetResultValue  (Void) (TupleType (TupleType resource_type) (StructType) extra_types_tuple)  type_config))
-
-    (let get_list    (Udf 'ReservoirSampling.GetResultList   (Void) (TupleType (TupleType resource_type) (StructType) extra_types_tuple)  type_config))
-    
-    (let init (lambda '(value parent) (
-        NamedApply create '(value count) (AsStruct) (DependsOn parent)
-    )))
-
-    (let update (lambda '(value state parent) (
-        NamedApply add '(state value) (AsStruct) (DependsOn parent)
-    )))
-
-    (let shift (lambda '(value state) (Void)))
-
-    (let current (lambda '(state) (
-        Apply finish_selector state get_value get_list
-    )))
-
-    (return (WindowTraits value_type init update shift current default_value))
-))))
-
-(let random_sample_factory (lambda '(list_type extractor count)
-    (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
-        (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
-            (Apply reservoir_sampling_factory_raw list_type extractor count (EmptyList) (lambda '(state get_value get_list) (
-                Apply get_list state
-            )))))))))
-
-(let random_value_factory (lambda '(list_type extractor)
-    (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
-        (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
-            (Apply reservoir_sampling_factory_raw list_type extractor (Uint64 '1) (Null) (lambda '(state get_value get_list) (
-                Apply get_value state
-            )))))))))
-
 (export min_traits_factory)
 (export max_traits_factory)
 (export sum_traits_factory)
@@ -1000,6 +950,5 @@
 (export bottom_traits_factory)
 (export top_by_traits_factory)
 (export bottom_by_traits_factory)
-(export random_sample_factory)
-(export random_value_factory)
+
 )

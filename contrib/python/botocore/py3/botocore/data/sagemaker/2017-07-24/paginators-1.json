@@ -413,24 +413,6 @@
       "output_token": "NextToken",
       "limit_key": "MaxResults",
       "result_key": "ResourceCatalogs"
-    },
-    "ListClusterNodes": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "ClusterNodeSummaries"
-    },
-    "ListClusters": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "ClusterSummaries"
-    },
-    "ListInferenceComponents": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "InferenceComponents"
     }
   }
 }

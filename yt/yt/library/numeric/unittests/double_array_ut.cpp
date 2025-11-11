@@ -31,9 +31,9 @@ TEST_F(TDoubleArrayTest, TestOperatorAt)
 TEST_F(TDoubleArrayTest, TestExample)
 {
     TDoubleArray<4> vec1 = {1, 2, 3, 4};
-    EXPECT_EQ(vec1[3], 4.0);
+    EXPECT_TRUE(vec1[3] == 4);
     EXPECT_TRUE(TDoubleArray<4>::All(vec1, [] (double x) { return x > 0; }));
-    EXPECT_EQ(MinComponent(vec1), 1.0);
+    EXPECT_TRUE(MinComponent(vec1) == 1);
 
     TDoubleArray<4> vec2 = {4, 3, 2, 1};
     EXPECT_TRUE(vec1 + vec2 == TDoubleArray<4>::FromDouble(5));

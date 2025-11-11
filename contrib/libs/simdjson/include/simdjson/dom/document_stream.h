@@ -74,7 +74,7 @@ public:
   /**
    * Construct an uninitialized document_stream.
    *
-   *  ```cpp
+   *  ```c++
    *  document_stream docs;
    *  error = parser.parse_many(json).get(docs);
    *  ```

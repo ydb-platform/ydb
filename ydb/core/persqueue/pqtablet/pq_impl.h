@@ -97,7 +97,6 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-    void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -262,8 +261,7 @@ private:
         TEvPQ::TEvMLPReadRequest::TPtr,
         TEvPQ::TEvMLPCommitRequest::TPtr,
         TEvPQ::TEvMLPUnlockRequest::TPtr,
-        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr,
-        TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
 

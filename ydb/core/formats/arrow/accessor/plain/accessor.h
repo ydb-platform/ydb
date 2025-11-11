@@ -112,10 +112,6 @@ public:
         }
     };
 
-    static TPlainBuilder<arrow::BinaryType> MakeBuilderBinary(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
-        return TPlainBuilder<arrow::BinaryType>(reserveItems, reserveData);
-    }
-
     static TPlainBuilder<arrow::StringType> MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveSize = 0) {
         return TPlainBuilder<arrow::StringType>(reserveItems, reserveSize);
     }

@@ -65,7 +65,7 @@
         {"shape":"ServiceUnavailableException"},
         {"shape":"ResourceExistsException"}
       ],
-      "documentation":"<p>Creates the connector, which captures the parameters for a connection for the AS2 or SFTP protocol. For AS2, the connector is required for sending files to an externally hosted AS2 server. For SFTP, the connector is required when sending files to an SFTP server or receiving files from an SFTP server. For more details about connectors, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/configure-as2-connector.html\">Configure AS2 connectors</a> and <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/configure-sftp-connector.html\">Create SFTP connectors</a>.</p> <note> <p>You must specify exactly one configuration object: either for AS2 (<code>As2Config</code>) or SFTP (<code>SftpConfig</code>).</p> </note>"
+      "documentation":"<p>Creates the connector, which captures the parameters for a connection for the AS2 or SFTP protocol. For AS2, the connector is required for sending files to an externally hosted AS2 server. For SFTP, the connector is required when sending files to an SFTP server or receiving files from an SFTP server. For more details about connectors, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/create-b2b-server.html#configure-as2-connector\">Create AS2 connectors</a> and <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/configure-sftp-connector.html\">Create SFTP connectors</a>.</p> <note> <p>You must specify exactly one configuration object: either for AS2 (<code>As2Config</code>) or SFTP (<code>SftpConfig</code>).</p> </note>"
     },
     "CreateProfile":{
       "name":"CreateProfile",
@@ -418,7 +418,7 @@
         {"shape":"InternalServiceError"},
         {"shape":"ServiceUnavailableException"}
       ],
-      "documentation":"<p>Describes the security policy that is attached to your server or SFTP connector. The response contains a description of the security policy's properties. For more information about security policies, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies.html\">Working with security policies for servers</a> or <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies-connectors.html\">Working with security policies for SFTP connectors</a>.</p>"
+      "documentation":"<p>Describes the security policy that is attached to your file transfer protocol-enabled server. The response contains a description of the security policy's properties. For more information about security policies, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies.html\">Working with security policies</a>.</p>"
     },
     "DescribeServer":{
       "name":"DescribeServer",
@@ -653,7 +653,7 @@
         {"shape":"ServiceUnavailableException"},
         {"shape":"InvalidNextTokenException"}
       ],
-      "documentation":"<p>Lists the security policies that are attached to your servers and SFTP connectors. For more information about security policies, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies.html\">Working with security policies for servers</a> or <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies-connectors.html\">Working with security policies for SFTP connectors</a>.</p>"
+      "documentation":"<p>Lists the security policies that are attached to your file transfer protocol-enabled servers.</p>"
     },
     "ListServers":{
       "name":"ListServers",
@@ -738,23 +738,6 @@
       ],
       "documentation":"<p>Sends a callback for asynchronous custom steps.</p> <p> The <code>ExecutionId</code>, <code>WorkflowId</code>, and <code>Token</code> are passed to the target resource during execution of a custom step of a workflow. You must include those with their callback as well as providing a status. </p>"
     },
-    "StartDirectoryListing":{
-      "name":"StartDirectoryListing",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"StartDirectoryListingRequest"},
-      "output":{"shape":"StartDirectoryListingResponse"},
-      "errors":[
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InvalidRequestException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServiceError"},
-        {"shape":"ServiceUnavailableException"}
-      ],
-      "documentation":"<p>Retrieves a list of the contents of a directory from a remote SFTP server. You specify the connector ID, the output path, and the remote directory path. You can also specify the optional <code>MaxItems</code> value to control the maximum number of items that are listed from the remote directory. This API returns a list of all files and directories in the remote directory (up to the maximum value), but does not return files or folders in sub-directories. That is, it only returns a list of files and directories one-level deep.</p> <p>After you receive the listing file, you can provide the files that you want to transfer to the <code>RetrieveFilePaths</code> parameter of the <code>StartFileTransfer</code> API call.</p> <p>The naming convention for the output file is <code> <i>connector-ID</i>-<i>listing-ID</i>.json</code>. The output file contains the following information:</p> <ul> <li> <p> <code>filePath</code>: the complete path of a remote file, relative to the directory of the listing request for your SFTP connector on the remote server.</p> </li> <li> <p> <code>modifiedTimestamp</code>: the last time the file was modified, in UTC time format. This field is optional. If the remote file attributes don't contain a timestamp, it is omitted from the file listing.</p> </li> <li> <p> <code>size</code>: the size of the file, in bytes. This field is optional. If the remote file attributes don't contain a file size, it is omitted from the file listing.</p> </li> <li> <p> <code>path</code>: the complete path of a remote directory, relative to the directory of the listing request for your SFTP connector on the remote server.</p> </li> <li> <p> <code>truncated</code>: a flag indicating whether the list output contains all of the items contained in the remote directory or not. If your <code>Truncated</code> output value is true, you can increase the value provided in the optional <code>max-items</code> input attribute to be able to list more items (up to the maximum allowed list size of 10,000 items).</p> </li> </ul>"
-    },
     "StartFileTransfer":{
       "name":"StartFileTransfer",
       "http":{
@@ -770,7 +753,7 @@
         {"shape":"InternalServiceError"},
         {"shape":"ServiceUnavailableException"}
       ],
-      "documentation":"<p>Begins a file transfer between local Amazon Web Services storage and a remote AS2 or SFTP server.</p> <ul> <li> <p>For an AS2 connector, you specify the <code>ConnectorId</code> and one or more <code>SendFilePaths</code> to identify the files you want to transfer.</p> </li> <li> <p>For an SFTP connector, the file transfer can be either outbound or inbound. In both cases, you specify the <code>ConnectorId</code>. Depending on the direction of the transfer, you also specify the following items:</p> <ul> <li> <p>If you are transferring file from a partner's SFTP server to Amazon Web Services storage, you specify one or more <code>RetrieveFilePaths</code> to identify the files you want to transfer, and a <code>LocalDirectoryPath</code> to specify the destination folder.</p> </li> <li> <p>If you are transferring file to a partner's SFTP server from Amazon Web Services storage, you specify one or more <code>SendFilePaths</code> to identify the files you want to transfer, and a <code>RemoteDirectoryPath</code> to specify the destination folder.</p> </li> </ul> </li> </ul>"
+      "documentation":"<p>Begins a file transfer between local Amazon Web Services storage and a remote AS2 or SFTP server.</p> <ul> <li> <p>For an AS2 connector, you specify the <code>ConnectorId</code> and one or more <code>SendFilePaths</code> to identify the files you want to transfer.</p> </li> <li> <p>For an SFTP connector, the file transfer can be either outbound or inbound. In both cases, you specify the <code>ConnectorId</code>. Depending on the direction of the transfer, you also specify the following items:</p> <ul> <li> <p>If you are transferring file from a partner's SFTP server to Amazon Web Services storage, you specify one or more <code>RetreiveFilePaths</code> to identify the files you want to transfer, and a <code>LocalDirectoryPath</code> to specify the destination folder.</p> </li> <li> <p>If you are transferring file to a partner's SFTP server from Amazon Web Services storage, you specify one or more <code>SendFilePaths</code> to identify the files you want to transfer, and a <code>RemoteDirectoryPath</code> to specify the destination folder.</p> </li> </ul> </li> </ul>"
     },
     "StartServer":{
       "name":"StartServer",
@@ -1006,7 +989,7 @@
         {"shape":"InternalServiceError"},
         {"shape":"ServiceUnavailableException"}
       ],
-      "documentation":"<p>Assigns new properties to a user. Parameters you pass modify any or all of the following: the home directory, role, and policy for the <code>UserName</code> and <code>ServerId</code> you specify.</p> <p>The response returns the <code>ServerId</code> and the <code>UserName</code> for the updated user.</p> <p>In the console, you can select <i>Restricted</i> when you create or update a user. This ensures that the user can't access anything outside of their home directory. The programmatic way to configure this behavior is to update the user. Set their <code>HomeDirectoryType</code> to <code>LOGICAL</code>, and specify <code>HomeDirectoryMappings</code> with <code>Entry</code> as root (<code>/</code>) and <code>Target</code> as their home directory.</p> <p>For example, if the user's home directory is <code>/test/admin-user</code>, the following command updates the user so that their configuration in the console shows the <i>Restricted</i> flag as selected.</p> <p> <code> aws transfer update-user --server-id &lt;server-id&gt; --user-name admin-user --home-directory-type LOGICAL --home-directory-mappings \"[{\\\"Entry\\\":\\\"/\\\", \\\"Target\\\":\\\"/test/admin-user\\\"}]\"</code> </p>"
+      "documentation":"<p>Assigns new properties to a user. Parameters you pass modify any or all of the following: the home directory, role, and policy for the <code>UserName</code> and <code>ServerId</code> you specify.</p> <p>The response returns the <code>ServerId</code> and the <code>UserName</code> for the updated user.</p>"
     }
   },
   "shapes":{
@@ -1040,7 +1023,7 @@
       "type":"string",
       "max":1600,
       "min":20,
-      "pattern":"arn:\\S+"
+      "pattern":"arn:.*"
     },
     "As2ConnectorConfig":{
       "type":"structure",
@@ -1063,7 +1046,7 @@
         },
         "EncryptionAlgorithm":{
           "shape":"EncryptionAlg",
-          "documentation":"<p>The algorithm that is used to encrypt the file.</p> <p>Note the following:</p> <ul> <li> <p>Do not use the <code>DES_EDE3_CBC</code> algorithm unless you must support a legacy client that requires it, as it is a weak encryption algorithm.</p> </li> <li> <p>You can only specify <code>NONE</code> if the URL for your connector uses HTTPS. Using HTTPS ensures that no traffic is sent in clear text.</p> </li> </ul>"
+          "documentation":"<p>The algorithm that is used to encrypt the file.</p> <note> <p>You can only specify <code>NONE</code> if the URL for your connector uses HTTPS. This ensures that no traffic is sent in clear text.</p> </note>"
         },
         "SigningAlgorithm":{
           "shape":"SigningAlg",
@@ -1166,8 +1149,7 @@
       "type":"string",
       "enum":[
         "SIGNING",
-        "ENCRYPTION",
-        "TLS"
+        "ENCRYPTION"
       ]
     },
     "CompressionEnum":{
@@ -1191,12 +1173,6 @@
       "max":19,
       "min":19,
       "pattern":"c-([0-9a-f]{17})"
-    },
-    "ConnectorSecurityPolicyName":{
-      "type":"string",
-      "max":100,
-      "min":0,
-      "pattern":"TransferSFTPConnectorSecurityPolicy-[A-Za-z0-9-]+"
     },
     "CopyStepDetails":{
       "type":"structure",
@@ -1360,10 +1336,6 @@
         "SftpConfig":{
           "shape":"SftpConnectorConfig",
           "documentation":"<p>A structure that contains the parameters for an SFTP connector object.</p>"
-        },
-        "SecurityPolicyName":{
-          "shape":"ConnectorSecurityPolicyName",
-          "documentation":"<p>Specifies the name of the security policy for the connector.</p>"
         }
       }
     },
@@ -1465,7 +1437,7 @@
         },
         "SecurityPolicyName":{
           "shape":"SecurityPolicyName",
-          "documentation":"<p>Specifies the name of the security policy for the server.</p>"
+          "documentation":"<p>Specifies the name of the security policy that is attached to the server.</p>"
         },
         "Tags":{
           "shape":"Tags",
@@ -1478,10 +1450,6 @@
         "StructuredLogDestinations":{
           "shape":"StructuredLogDestinations",
           "documentation":"<p>Specifies the log groups to which your server logs are sent.</p> <p>To specify a log group, you must provide the ARN for an existing log group. In this case, the format of the log group is as follows:</p> <p> <code>arn:aws:logs:region-name:amazon-account-id:log-group:log-group-name:*</code> </p> <p>For example, <code>arn:aws:logs:us-east-1:111122223333:log-group:mytestgroup:*</code> </p> <p>If you have previously specified a log group for a server, you can clear it, and in effect turn off structured logging, by providing an empty value for this parameter in an <code>update-server</code> call. For example:</p> <p> <code>update-server --server-id s-1234567890abcdef0 --structured-log-destinations</code> </p>"
-        },
-        "S3StorageOptions":{
-          "shape":"S3StorageOptions",
-          "documentation":"<p>Specifies whether or not performance for your Amazon S3 directories is optimized. This is disabled by default.</p> <p>By default, home directory mappings have a <code>TYPE</code> of <code>DIRECTORY</code>. If you enable this option, you would then need to explicitly set the <code>HomeDirectoryMapEntry</code> <code>Type</code> to <code>FILE</code> if you want a mapping to have a file target.</p>"
         }
       }
     },
@@ -2008,7 +1976,7 @@
       "members":{
         "SecurityPolicyName":{
           "shape":"SecurityPolicyName",
-          "documentation":"<p>Specify the text name of the security policy for which you want the details.</p>"
+          "documentation":"<p>Specifies the name of the security policy that is attached to the server.</p>"
         }
       }
     },
@@ -2272,14 +2240,6 @@
         "SftpConfig":{
           "shape":"SftpConnectorConfig",
           "documentation":"<p>A structure that contains the parameters for an SFTP connector object.</p>"
-        },
-        "ServiceManagedEgressIpAddresses":{
-          "shape":"ServiceManagedEgressIpAddresses",
-          "documentation":"<p>The list of egress IP addresses of this connector. These IP addresses are assigned automatically when you create the connector.</p>"
-        },
-        "SecurityPolicyName":{
-          "shape":"ConnectorSecurityPolicyName",
-          "documentation":"<p>The text name of the security policy for the specified connector.</p>"
         }
       },
       "documentation":"<p>Describes the parameters for the connector, as identified by the <code>ConnectorId</code>.</p>"
@@ -2391,42 +2351,30 @@
       "members":{
         "Fips":{
           "shape":"Fips",
-          "documentation":"<p>Specifies whether this policy enables Federal Information Processing Standards (FIPS). This parameter applies to both server and connector security policies.</p>"
+          "documentation":"<p>Specifies whether this policy enables Federal Information Processing Standards (FIPS).</p>"
         },
         "SecurityPolicyName":{
           "shape":"SecurityPolicyName",
-          "documentation":"<p>The text name of the specified security policy.</p>"
+          "documentation":"<p>Specifies the name of the security policy that is attached to the server.</p>"
         },
         "SshCiphers":{
           "shape":"SecurityPolicyOptions",
-          "documentation":"<p>Lists the enabled Secure Shell (SSH) cipher encryption algorithms in the security policy that is attached to the server or connector. This parameter applies to both server and connector security policies.</p>"
+          "documentation":"<p>Specifies the enabled Secure Shell (SSH) cipher encryption algorithms in the security policy that is attached to the server.</p>"
         },
         "SshKexs":{
           "shape":"SecurityPolicyOptions",
-          "documentation":"<p>Lists the enabled SSH key exchange (KEX) encryption algorithms in the security policy that is attached to the server or connector. This parameter applies to both server and connector security policies.</p>"
+          "documentation":"<p>Specifies the enabled SSH key exchange (KEX) encryption algorithms in the security policy that is attached to the server.</p>"
         },
         "SshMacs":{
           "shape":"SecurityPolicyOptions",
-          "documentation":"<p>Lists the enabled SSH message authentication code (MAC) encryption algorithms in the security policy that is attached to the server or connector. This parameter applies to both server and connector security policies.</p>"
+          "documentation":"<p>Specifies the enabled SSH message authentication code (MAC) encryption algorithms in the security policy that is attached to the server.</p>"
         },
         "TlsCiphers":{
           "shape":"SecurityPolicyOptions",
-          "documentation":"<p>Lists the enabled Transport Layer Security (TLS) cipher encryption algorithms in the security policy that is attached to the server.</p> <note> <p>This parameter only applies to security policies for servers.</p> </note>"
-        },
-        "SshHostKeyAlgorithms":{
-          "shape":"SecurityPolicyOptions",
-          "documentation":"<p>Lists the host key algorithms for the security policy.</p> <note> <p>This parameter only applies to security policies for connectors.</p> </note>"
-        },
-        "Type":{
-          "shape":"SecurityPolicyResourceType",
-          "documentation":"<p>The resource type to which the security policy applies, either server or connector.</p>"
-        },
-        "Protocols":{
-          "shape":"SecurityPolicyProtocols",
-          "documentation":"<p>Lists the file transfer protocols that the security policy applies to.</p>"
+          "documentation":"<p>Specifies the enabled Transport Layer Security (TLS) cipher encryption algorithms in the security policy that is attached to the server.</p>"
         }
       },
-      "documentation":"<p>Describes the properties of a security policy that you specify. For more information about security policies, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies.html\">Working with security policies for servers</a> or <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies-connectors.html\">Working with security policies for SFTP connectors</a>.</p>"
+      "documentation":"<p>Describes the properties of a security policy that was specified. For more information about security policies, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/security-policies.html\">Working with security policies</a>.</p>"
     },
     "DescribedServer":{
       "type":"structure",
@@ -2486,7 +2434,7 @@
         },
         "SecurityPolicyName":{
           "shape":"SecurityPolicyName",
-          "documentation":"<p>Specifies the name of the security policy for the server.</p>"
+          "documentation":"<p>Specifies the name of the security policy that is attached to the server.</p>"
         },
         "ServerId":{
           "shape":"ServerId",
@@ -2511,14 +2459,6 @@
         "StructuredLogDestinations":{
           "shape":"StructuredLogDestinations",
           "documentation":"<p>Specifies the log groups to which your server logs are sent.</p> <p>To specify a log group, you must provide the ARN for an existing log group. In this case, the format of the log group is as follows:</p> <p> <code>arn:aws:logs:region-name:amazon-account-id:log-group:log-group-name:*</code> </p> <p>For example, <code>arn:aws:logs:us-east-1:111122223333:log-group:mytestgroup:*</code> </p> <p>If you have previously specified a log group for a server, you can clear it, and in effect turn off structured logging, by providing an empty value for this parameter in an <code>update-server</code> call. For example:</p> <p> <code>update-server --server-id s-1234567890abcdef0 --structured-log-destinations</code> </p>"
-        },
-        "S3StorageOptions":{
-          "shape":"S3StorageOptions",
-          "documentation":"<p>Specifies whether or not performance for your Amazon S3 directories is optimized. This is disabled by default.</p> <p>By default, home directory mappings have a <code>TYPE</code> of <code>DIRECTORY</code>. If you enable this option, you would then need to explicitly set the <code>HomeDirectoryMapEntry</code> <code>Type</code> to <code>FILE</code> if you want a mapping to have a file target.</p>"
-        },
-        "As2ServiceManagedEgressIpAddresses":{
-          "shape":"ServiceManagedEgressIpAddresses",
-          "documentation":"<p>The list of egress IP addresses of this server. These IP addresses are only relevant for servers that use the AS2 protocol. They are used for sending asynchronous MDNs.</p> <p>These IP addresses are assigned automatically when you create an AS2 server. Additionally, if you update an existing server and add the AS2 protocol, static IP addresses are assigned as well.</p>"
         }
       },
       "documentation":"<p>Describes the properties of a file transfer protocol-enabled server that was specified.</p>"
@@ -2613,14 +2553,6 @@
       "min":12,
       "pattern":"d-[0-9a-f]{10}"
     },
-    "DirectoryListingOptimization":{
-      "type":"string",
-      "documentation":"<p>Indicates whether optimization to directory listing on S3 servers is used. Disabled by default for compatibility.</p>",
-      "enum":[
-        "ENABLED",
-        "DISABLED"
-      ]
-    },
     "Domain":{
       "type":"string",
       "enum":[
@@ -2660,7 +2592,6 @@
         "AES128_CBC",
         "AES192_CBC",
         "AES256_CBC",
-        "DES_EDE3_CBC",
         "NONE"
       ]
     },
@@ -2673,7 +2604,7 @@
       "members":{
         "AddressAllocationIds":{
           "shape":"AddressAllocationIds",
-          "documentation":"<p>A list of address allocation IDs that are required to attach an Elastic IP address to your server's endpoint.</p> <p>An address allocation ID corresponds to the allocation ID of an Elastic IP address. This value can be retrieved from the <code>allocationId</code> field from the Amazon EC2 <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Address.html\">Address</a> data type. One way to retrieve this value is by calling the EC2 <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_DescribeAddresses.html\">DescribeAddresses</a> API.</p> <p>This parameter is optional. Set this parameter if you want to make your VPC endpoint public-facing. For details, see <a href=\"https://docs.aws.amazon.com/transfer/latest/userguide/create-server-in-vpc.html#create-internet-facing-endpoint\">Create an internet-facing endpoint for your server</a>.</p> <note> <p>This property can only be set as follows:</p> <ul> <li> <p> <code>EndpointType</code> must be set to <code>VPC</code> </p> </li> <li> <p>The Transfer Family server must be offline.</p> </li> <li> <p>You cannot set this parameter for Transfer Family servers that use the FTP protocol.</p> </li> <li> <p>The server must already have <code>SubnetIds</code> populated (<code>SubnetIds</code> and <code>AddressAllocationIds</code> cannot be updated simultaneously).</p> </li> <li> <p> <code>AddressAllocationIds</code> can't contain duplicates, and must be equal in length to <code>SubnetIds</code>. For example, if you have three subnet IDs, you must also specify three address allocation IDs.</p> </li> <li> <p>Call the <code>UpdateServer</code> API to set or change this parameter.</p> </li> </ul> </note>"
+          "documentation":"<p>A list of address allocation IDs that are required to attach an Elastic IP address to your server's endpoint.</p> <note> <p>This property can only be set when <code>EndpointType</code> is set to <code>VPC</code> and it is only valid in the <code>UpdateServer</code> API.</p> </note>"
         },
         "SubnetIds":{
           "shape":"SubnetIds",
@@ -2833,7 +2764,7 @@
       "type":"string",
       "max":1024,
       "min":0,
-      "pattern":"(|/.*)"
+      "pattern":"$|/.*"
     },
     "HomeDirectoryMapEntry":{
       "type":"structure",
@@ -2848,11 +2779,7 @@
         },
         "Target":{
           "shape":"MapTarget",
-          "documentation":"<p>Represents the map target that is used in a <code>HomeDirectoryMapEntry</code>.</p>"
-        },
-        "Type":{
-          "shape":"MapType",
-          "documentation":"<p>Specifies the type of mapping. Set the type to <code>FILE</code> if you want the mapping to point to a file, or <code>DIRECTORY</code> for the directory to point to a directory.</p> <note> <p>By default, home directory mappings have a <code>Type</code> of <code>DIRECTORY</code> when you create a Transfer Family server. You would need to explicitly set <code>Type</code> to <code>FILE</code> if you want a mapping to have a file target.</p> </note>"
+          "documentation":"<p>Represents the map target that is used in a <code>HomeDirectorymapEntry</code>.</p>"
         }
       },
       "documentation":"<p>Represents an object that contains entries and targets for <code>HomeDirectoryMappings</code>.</p> <p>The following is an <code>Entry</code> and <code>Target</code> pair example for <code>chroot</code>.</p> <p> <code>[ { \"Entry\": \"/\", \"Target\": \"/bucket_name/home/mydirectory\" } ]</code> </p>"
@@ -2860,7 +2787,7 @@
     "HomeDirectoryMappings":{
       "type":"list",
       "member":{"shape":"HomeDirectoryMapEntry"},
-      "max":50000,
+      "max":50,
       "min":1
     },
     "HomeDirectoryType":{
@@ -2903,7 +2830,7 @@
         },
         "DirectoryId":{
           "shape":"DirectoryId",
-          "documentation":"<p>The identifier of the Directory Service directory that you want to use as your identity provider.</p>"
+          "documentation":"<p>The identifier of the Directory Service directory that you want to stop sharing.</p>"
         },
         "Function":{
           "shape":"Function",
@@ -3810,12 +3737,6 @@
       "type":"list",
       "member":{"shape":"ListedWorkflow"}
     },
-    "ListingId":{
-      "type":"string",
-      "max":512,
-      "min":1,
-      "pattern":"[0-9a-zA-Z./-]+"
-    },
     "LogGroupName":{
       "type":"string",
       "max":512,
@@ -3847,19 +3768,6 @@
       "max":1024,
       "min":0,
       "pattern":"/.*"
-    },
-    "MapType":{
-      "type":"string",
-      "enum":[
-        "FILE",
-        "DIRECTORY"
-      ]
-    },
-    "MaxItems":{
-      "type":"integer",
-      "box":true,
-      "max":10000,
-      "min":1
     },
     "MaxResults":{
       "type":"integer",
@@ -3901,7 +3809,7 @@
       "type":"string",
       "max":2048,
       "min":0,
-      "pattern":"(|arn:.*role/\\S+)"
+      "pattern":"$|arn:.*role/.*"
     },
     "OnPartialUploadWorkflowDetails":{
       "type":"list",
@@ -3914,12 +3822,6 @@
       "member":{"shape":"WorkflowDetail"},
       "max":1,
       "min":0
-    },
-    "OutputFileName":{
-      "type":"string",
-      "max":537,
-      "min":26,
-      "pattern":"c-([0-9a-f]{17})-[0-9a-zA-Z./-]+.json"
     },
     "OverwriteExisting":{
       "type":"string",
@@ -4073,7 +3975,7 @@
       "type":"string",
       "max":2048,
       "min":20,
-      "pattern":"arn:.*role/\\S+"
+      "pattern":"arn:.*role/.*"
     },
     "S3Bucket":{
       "type":"string",
@@ -4128,16 +4030,6 @@
       "max":1024,
       "min":0,
       "pattern":"[\\P{M}\\p{M}]*"
-    },
-    "S3StorageOptions":{
-      "type":"structure",
-      "members":{
-        "DirectoryListingOptimization":{
-          "shape":"DirectoryListingOptimization",
-          "documentation":"<p>Specifies whether or not performance for your Amazon S3 directories is optimized. This is disabled by default.</p> <p>By default, home directory mappings have a <code>TYPE</code> of <code>DIRECTORY</code>. If you enable this option, you would then need to explicitly set the <code>HomeDirectoryMapEntry</code> <code>Type</code> to <code>FILE</code> if you want a mapping to have a file target.</p>"
-        }
-      },
-      "documentation":"<p>The Amazon S3 storage options that are configured for your server.</p>"
     },
     "S3Tag":{
       "type":"structure",
@@ -4206,7 +4098,7 @@
       "type":"string",
       "max":100,
       "min":0,
-      "pattern":"Transfer[A-Za-z0-9]*SecurityPolicy-[A-Za-z0-9-]+"
+      "pattern":"TransferSecurityPolicy-.+"
     },
     "SecurityPolicyNames":{
       "type":"list",
@@ -4220,26 +4112,6 @@
     "SecurityPolicyOptions":{
       "type":"list",
       "member":{"shape":"SecurityPolicyOption"}
-    },
-    "SecurityPolicyProtocol":{
-      "type":"string",
-      "enum":[
-        "SFTP",
-        "FTPS"
-      ]
-    },
-    "SecurityPolicyProtocols":{
-      "type":"list",
-      "member":{"shape":"SecurityPolicyProtocol"},
-      "max":5,
-      "min":1
-    },
-    "SecurityPolicyResourceType":{
-      "type":"string",
-      "enum":[
-        "SERVER",
-        "CONNECTOR"
-      ]
     },
     "SendWorkflowStepStateRequest":{
       "type":"structure",
@@ -4280,14 +4152,6 @@
       "pattern":"s-([0-9a-f]{17})"
     },
     "ServiceErrorMessage":{"type":"string"},
-    "ServiceManagedEgressIpAddress":{
-      "type":"string",
-      "pattern":"\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
-    },
-    "ServiceManagedEgressIpAddresses":{
-      "type":"list",
-      "member":{"shape":"ServiceManagedEgressIpAddress"}
-    },
     "ServiceMetadata":{
       "type":"structure",
       "required":["UserDetails"],
@@ -4339,10 +4203,10 @@
         },
         "TrustedHostKeys":{
           "shape":"SftpConnectorTrustedHostKeyList",
-          "documentation":"<p>The public portion of the host key, or keys, that are used to identify the external server to which you are connecting. You can use the <code>ssh-keyscan</code> command against the SFTP server to retrieve the necessary key.</p> <p>The three standard SSH public key format elements are <code>&lt;key type&gt;</code>, <code>&lt;body base64&gt;</code>, and an optional <code>&lt;comment&gt;</code>, with spaces between each element. Specify only the <code>&lt;key type&gt;</code> and <code>&lt;body base64&gt;</code>: do not enter the <code>&lt;comment&gt;</code> portion of the key.</p> <p>For the trusted host key, Transfer Family accepts RSA and ECDSA keys.</p> <ul> <li> <p>For RSA keys, the <code>&lt;key type&gt;</code> string is <code>ssh-rsa</code>.</p> </li> <li> <p>For ECDSA keys, the <code>&lt;key type&gt;</code> string is either <code>ecdsa-sha2-nistp256</code>, <code>ecdsa-sha2-nistp384</code>, or <code>ecdsa-sha2-nistp521</code>, depending on the size of the key you generated.</p> </li> </ul> <p>Run this command to retrieve the SFTP server host key, where your SFTP server name is <code>ftp.host.com</code>.</p> <p> <code>ssh-keyscan ftp.host.com</code> </p> <p>This prints the public host key to standard output.</p> <p> <code>ftp.host.com ssh-rsa AAAAB3Nza...&lt;long-string-for-public-key</code> </p> <p>Copy and paste this string into the <code>TrustedHostKeys</code> field for the <code>create-connector</code> command or into the <b>Trusted host keys</b> field in the console.</p>"
+          "documentation":"<p>The public portion of the host key, or keys, that are used to identify the external server to which you are connecting. You can use the <code>ssh-keyscan</code> command against the SFTP server to retrieve the necessary key.</p> <p>The three standard SSH public key format elements are <code>&lt;key type&gt;</code>, <code>&lt;body base64&gt;</code>, and an optional <code>&lt;comment&gt;</code>, with spaces between each element. Specify only the <code>&lt;key type&gt;</code> and <code>&lt;body base64&gt;</code>: do not enter the <code>&lt;comment&gt;</code> portion of the key.</p> <p>For the trusted host key, Transfer Family accepts RSA and ECDSA keys.</p> <ul> <li> <p>For RSA keys, the <code>&lt;key type&gt;</code> string is <code>ssh-rsa</code>.</p> </li> <li> <p>For ECDSA keys, the <code>&lt;key type&gt;</code> string is either <code>ecdsa-sha2-nistp256</code>, <code>ecdsa-sha2-nistp384</code>, or <code>ecdsa-sha2-nistp521</code>, depending on the size of the key you generated.</p> </li> </ul>"
         }
       },
-      "documentation":"<p>Contains the details for an SFTP connector object. The connector object is used for transferring files to and from a partner's SFTP server.</p> <note> <p>Because the <code>SftpConnectorConfig</code> data type is used for both creating and updating SFTP connectors, its parameters, <code>TrustedHostKeys</code> and <code>UserSecretId</code> are marked as not required. This is a bit misleading, as they are not required when you are updating an existing SFTP connector, but <i>are required</i> when you are creating a new SFTP connector.</p> </note>"
+      "documentation":"<p>Contains the details for an SFTP connector object. The connector object is used for transferring files to and from a partner's SFTP server.</p>"
     },
     "SftpConnectorTrustedHostKey":{
       "type":"string",
@@ -4420,49 +4284,6 @@
       "member":{"shape":"SshPublicKey"},
       "max":5,
       "min":0
-    },
-    "StartDirectoryListingRequest":{
-      "type":"structure",
-      "required":[
-        "ConnectorId",
-        "RemoteDirectoryPath",
-        "OutputDirectoryPath"
-      ],
-      "members":{
-        "ConnectorId":{
-          "shape":"ConnectorId",
-          "documentation":"<p>The unique identifier for the connector.</p>"
-        },
-        "RemoteDirectoryPath":{
-          "shape":"FilePath",
-          "documentation":"<p>Specifies the directory on the remote SFTP server for which you want to list its contents.</p>"
-        },
-        "MaxItems":{
-          "shape":"MaxItems",
-          "documentation":"<p>An optional parameter where you can specify the maximum number of file/directory names to retrieve. The default value is 1,000.</p>"
-        },
-        "OutputDirectoryPath":{
-          "shape":"FilePath",
-          "documentation":"<p>Specifies the path (bucket and prefix) in Amazon S3 storage to store the results of the directory listing.</p>"
-        }
-      }
-    },
-    "StartDirectoryListingResponse":{
-      "type":"structure",
-      "required":[
-        "ListingId",
-        "OutputFileName"
-      ],
-      "members":{
-        "ListingId":{
-          "shape":"ListingId",
-          "documentation":"<p>Returns a unique identifier for the directory listing call.</p>"
-        },
-        "OutputFileName":{
-          "shape":"OutputFileName",
-          "documentation":"<p>Returns the file name where the results are stored. This is a combination of the connector ID and the listing ID: <code>&lt;connector-id&gt;-&lt;listing-id&gt;.json</code>.</p>"
-        }
-      }
     },
     "StartFileTransferRequest":{
       "type":"structure",
@@ -4910,10 +4731,6 @@
         "SftpConfig":{
           "shape":"SftpConnectorConfig",
           "documentation":"<p>A structure that contains the parameters for an SFTP connector object.</p>"
-        },
-        "SecurityPolicyName":{
-          "shape":"ConnectorSecurityPolicyName",
-          "documentation":"<p>Specifies the name of the security policy for the connector.</p>"
         }
       }
     },
@@ -5036,7 +4853,7 @@
         },
         "SecurityPolicyName":{
           "shape":"SecurityPolicyName",
-          "documentation":"<p>Specifies the name of the security policy for the server.</p>"
+          "documentation":"<p>Specifies the name of the security policy that is attached to the server.</p>"
         },
         "ServerId":{
           "shape":"ServerId",
@@ -5049,10 +4866,6 @@
         "StructuredLogDestinations":{
           "shape":"StructuredLogDestinations",
           "documentation":"<p>Specifies the log groups to which your server logs are sent.</p> <p>To specify a log group, you must provide the ARN for an existing log group. In this case, the format of the log group is as follows:</p> <p> <code>arn:aws:logs:region-name:amazon-account-id:log-group:log-group-name:*</code> </p> <p>For example, <code>arn:aws:logs:us-east-1:111122223333:log-group:mytestgroup:*</code> </p> <p>If you have previously specified a log group for a server, you can clear it, and in effect turn off structured logging, by providing an empty value for this parameter in an <code>update-server</code> call. For example:</p> <p> <code>update-server --server-id s-1234567890abcdef0 --structured-log-destinations</code> </p>"
-        },
-        "S3StorageOptions":{
-          "shape":"S3StorageOptions",
-          "documentation":"<p>Specifies whether or not performance for your Amazon S3 directories is optimized. This is disabled by default.</p> <p>By default, home directory mappings have a <code>TYPE</code> of <code>DIRECTORY</code>. If you enable this option, you would then need to explicitly set the <code>HomeDirectoryMapEntry</code> <code>Type</code> to <code>FILE</code> if you want a mapping to have a file target.</p>"
         }
       }
     },

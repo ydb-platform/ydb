@@ -514,7 +514,6 @@ message TCmsConfig {
     optional uint64 InfoCollectionTimeout = 6 [default = 15000000];
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
-    optional bool Enable = 9 [default = true];
 }
 
 message TPDiskID {

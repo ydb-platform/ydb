@@ -31,7 +31,7 @@
   ))) (lambda '($31 $32) (block '(
     (let $33 (Size (Member $31 '"Data")))
     (return (AsStruct '('Count0 (Inc (Member $32 'Count0))) '('Max0 (AggrMax $33 (Member $32 'Max0))) '('Min0 (AggrMin $33 (Member $32 'Min0))) '('Sum0 (AggrAdd (SafeCast $33 $12) (Member $32 'Sum0)))))
-  ))) $25 $25 (lambda '($35 $36) (AsStruct '('Count0 (AggrAdd (Member $35 'Count0) (Member $36 'Count0))) '('Max0 (AggrMax (Member $35 'Max0) (Member $36 'Max0))) '('Min0 (AggrMin (Member $35 'Min0) (Member $36 'Min0))) '('Sum0 (AggrAdd (Member $35 'Sum0) (Member $36 'Sum0))))) (lambda '($37 $38 $39) (AsStruct '('Count0 (Member $38 'Count0)) '('Max0 (Member $38 'Max0)) '('Min0 (Member $38 'Min0)) '('Sum0 (Member $38 'Sum0)) '('_yql_time $39) '('"crc" $37))) '0 '_yql_time))
+  ))) $25 $25 (lambda '($35 $36) (AsStruct '('Count0 (AggrAdd (Member $35 'Count0) (Member $36 'Count0))) '('Max0 (AggrMax (Member $35 'Max0) (Member $36 'Max0))) '('Min0 (AggrMin (Member $35 'Min0) (Member $36 'Min0))) '('Sum0 (AggrAdd (Member $35 'Sum0) (Member $36 'Sum0))))) (lambda '($37 $38 $39) (AsStruct '('Count0 (Member $38 'Count0)) '('Max0 (Member $38 'Max0)) '('Min0 (Member $38 'Min0)) '('Sum0 (Member $38 'Sum0)) '('_yql_time $39) '('"crc" $37))) '0))
   (return (FlatMap $26 (lambda '($40) (Just (AsStruct '('"count" (Member $40 'Count0)) '('"crc8" (SafeCast (Member $40 '"crc") $5)) '('"max_length" (Member $40 'Max0)) '('"min_length" (Member $40 'Min0)) '('"sum" (Member $40 'Sum0)) '('"ts" (Unwrap (Member $40 '_yql_time))))))))
 ))) '('('"_logical_id" '0)) '((DqSink '0 $13 $16))))) (DataSink '"pq" '"pq")) $13))
 )

@@ -1,5 +1,11 @@
 # Добавление, удаление и переименование индекса
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
+
 ## Добавление индекса {#add-index}
 
 `ADD INDEX` — добавляет индекс с указанным именем и типом для заданного набора колонок в {% if backend_name == "YDB" and oss == true %}строковых таблицах.{% else %}таблицах.{% endif %} Грамматика:
@@ -28,8 +34,6 @@ ALTER TABLE `<table_name>`
 Также добавить вторичный индекс можно с помощью команды [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI.
 
 {% endif %}
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ### Примеры
 

@@ -208,7 +208,6 @@ private:
     NTable::TRowState GetRowState(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TStackVec<NTable::TTag>& columns);
 
     void IncreaseUpdateCounters(const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops);
-    void IncreaseSelectCounters(const TArrayRef<const TRawTypeValue> key);
 
     TArrayRef<const NIceDb::TUpdateOp> RemoveDefaultColumnsIfNeeded(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const ui32 defaultFilledColumnCount);
 

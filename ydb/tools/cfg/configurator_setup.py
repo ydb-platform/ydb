@@ -22,7 +22,6 @@ def parse_optional_arguments(args):
         kwargs['walle_url'] = args.walle_url
 
     kwargs['enable_cores'] = args.enable_cores
-    kwargs['enable_modules'] = getattr(args, 'enable_modules', False)
 
     for cmd_arg in ('ic_port', 'grpc_port', 'mbus_port', 'mon_port', 'cfg_home', 'sqs_port', 'binaries_home'):
         if hasattr(args, cmd_arg) and getattr(args, cmd_arg) is not None:
@@ -60,9 +59,6 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
         '--tenant', type=str, help='Tenant to serve (possible options: name of domain or no for pure storage nodes)'
     )
     parser_cfg.add_argument('--enable-cores', action='store_true', help='Enables coredumps')
-    parser_cfg.add_argument(
-        '--enable-modules', action='store_true', help='Enable module field in node location configuration (default: false)'
-    )
     parser_cfg.add_argument(
         '--dynamic-node', action='store_true', help='Indicates that configuration should be generated for dynamic node'
     )

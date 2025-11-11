@@ -121,14 +121,6 @@ public:
 
     void InitializeAttributesFromSchema(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
-
-        const auto& domainDescription = schemeData.GetPathDescription().GetDomainDescription();
-        const auto domainKey = TPathId::FromDomainKey(domainDescription.GetDomainKey());
-        const auto resourceDomainKey = TPathId::FromDomainKey(domainDescription.GetResourcesDomainKey());
-        if (resourceDomainKey != domainKey) {
-            ResourceDomainKey = resourceDomainKey;
-        }
-
         if (!GrpcRequestBaseCtx_->TryCustomAttributeProcess(schemeData, this)) {
             ProcessCommonAttributes(schemeData, rootAttributes);
         }
@@ -256,90 +248,6 @@ public:
             AuditLogConn(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
         }
 
-        if (ResourceDomainKey) {
-            ResolveResourceDatabase();
-        } else {
-            ProcessRlconfig(ctx);
-        }
-    }
-
-    void SetTokenAndDie() {
-        if (GrpcRequestBaseCtx_->IsClientLost()) {
-            LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                "Client was disconnected before processing request (check actor)");
-            const NYql::TIssues issues;
-            ReplyUnavailableAndDie(issues);
-        } else {
-            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_OK);
-            GrpcRequestBaseCtx_->SetInternalToken(TBase::GetParsedToken());
-            Continue();
-        }
-    }
-
-    STATEFN(DbAccessStateFunc) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(TEvents::TEvPoisonPill, HandlePoison);
-        }
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        auto* navigate = ev->Get()->Request.Get();
-
-        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
-        const auto& entry = navigate->ResultSet.front();
-
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-            "Handle " << ev->Get()->ToString() << ": entry# " << entry.ToString());
-
-        switch (entry.Status) {
-        case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-            break;
-        default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
-                "Unexpected status" << ": entry# " << entry.ToString());
-            return ReplyUnauthenticatedAndDie();
-        }
-
-        ResourceDatabaseName = CanonizePath(entry.Path);
-        ProcessRlconfig(ctx);
-    }
-
-    void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
-        GrpcRequestBaseCtx_->FinishSpan();
-        PassAway();
-    }
-
-    ui64 GetChannelBufferSize() const override {
-        return FacilityProvider_->GetChannelBufferSize();
-    }
-
-    TActorId RegisterActor(IActor* actor) const override {
-        // CheckActor will die after creation rpc_ actor
-        // so we can use same mailbox
-        return this->RegisterWithSameMailbox(actor);
-    }
-
-    void PassAway() override {
-        Span_.EndOk();
-        TBase::PassAway();
-    }
-
-private:
-    void ResolveResourceDatabase() {
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
-
-        auto& entry = navigate->ResultSet.emplace_back();
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-        entry.TableId = *ResourceDomainKey;
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        entry.RedirectRequired = false;
-
-        TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate));
-    }
-
-    void ProcessRlconfig(const TActorContext& ctx) {
         // Simple rps limitation
         static NRpcService::TRlConfig rpsRlConfig(
             "serverless_rt_coordination_node_path",
@@ -426,13 +334,53 @@ private:
         }
     }
 
+    void SetTokenAndDie() {
+        if (GrpcRequestBaseCtx_->IsClientLost()) {
+            LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+                "Client was disconnected before processing request (check actor)");
+            const NYql::TIssues issues;
+            ReplyUnavailableAndDie(issues);
+        } else {
+            GrpcRequestBaseCtx_->UpdateAuthState(NYdbGrpc::TAuthState::AS_OK);
+            GrpcRequestBaseCtx_->SetInternalToken(TBase::GetParsedToken());
+            Continue();
+        }
+    }
+
+    STATEFN(DbAccessStateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvPoisonPill, HandlePoison);
+        }
+    }
+
+    void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
+        GrpcRequestBaseCtx_->FinishSpan();
+        PassAway();
+    }
+
+    ui64 GetChannelBufferSize() const override {
+        return FacilityProvider_->GetChannelBufferSize();
+    }
+
+    TActorId RegisterActor(IActor* actor) const override {
+        // CheckActor will die after creation rpc_ actor
+        // so we can use same mailbox
+        return this->RegisterWithSameMailbox(actor);
+    }
+
+    void PassAway() override {
+        Span_.EndOk();
+        TBase::PassAway();
+    }
+
+private:
     static NYql::TIssues GetRlIssues(const Ydb::RateLimiter::AcquireResourceResponse& resp) {
         NYql::TIssues opIssues;
         NYql::IssuesFromMessage(resp.operation().issues(), opIssues);
         return opIssues;
     }
 
-    void ProcessOnRequest(const TString& rlDatabase, Ydb::RateLimiter::AcquireResourceRequest&& req, const TActorContext& ctx) {
+    void ProcessOnRequest(Ydb::RateLimiter::AcquireResourceRequest&& req, const TActorContext& ctx) {
         auto time = TInstant::Now();
         auto cb = [this, time](Ydb::RateLimiter::AcquireResourceResponse resp) {
             TDuration delay = TInstant::Now() - time;
@@ -468,14 +416,14 @@ private:
 
         NKikimr::NRpcService::RateLimiterAcquireUseSameMailbox(
             std::move(req),
-            rlDatabase,
+            CheckedDatabaseName_,
             TBase::GetSerializedToken(),
             std::move(cb),
             ctx);
     }
 
-    TRespHook CreateRlRespHook(const TString& rlDatabase, Ydb::RateLimiter::AcquireResourceRequest&& req) {
-        const TString databasename = rlDatabase;
+    TRespHook CreateRlRespHook(Ydb::RateLimiter::AcquireResourceRequest&& req) {
+        const auto& databasename = CheckedDatabaseName_;
         auto token = TBase::GetSerializedToken();
         auto counters = Counters_;
         return [req{std::move(req)}, databasename, token, counters](TRespHookCtx::TPtr ctx) mutable {
@@ -507,8 +455,7 @@ private:
 
     void ProcessRateLimit(const THashMap<TString, TString>& attributes, const TActorContext& ctx) {
         // Match rate limit config and database attributes
-        const auto& rlDatabase = ResourceDomainKey ? ResourceDatabaseName : CheckedDatabaseName_;
-        auto rlPath = NRpcService::MakeRlPath(rlDatabase, *RlConfig, attributes);
+        auto rlPath = NRpcService::Match(*RlConfig, attributes);
         if (!rlPath) {
             return SetTokenAndDie();
         } else {
@@ -524,13 +471,13 @@ private:
                     hasOnReqAction = true;
                     break;
                 case NRpcService::Actions::OnResp:
-                    GrpcRequestBaseCtx_->SetRespHook(CreateRlRespHook(rlDatabase, std::move(action.second)));
+                    GrpcRequestBaseCtx_->SetRespHook(CreateRlRespHook(std::move(action.second)));
                     break;
                 }
             }
 
             if (hasOnReqAction) {
-                return ProcessOnRequest(rlDatabase, std::move(req), ctx);
+                return ProcessOnRequest(std::move(req), ctx);
             } else {
                 return SetTokenAndDie();
             }
@@ -606,7 +553,7 @@ private:
     }
 
     void ReplyUnauthenticatedAndDie() {
-        GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown resource database");
+        GrpcRequestBaseCtx_->ReplyUnauthenticated("Unknown database");
         GrpcRequestBaseCtx_->FinishSpan();
         PassAway();
     }
@@ -746,8 +693,6 @@ private:
     IGRpcProxyCounters::TPtr Counters_;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
     TString CheckedDatabaseName_;
-    TMaybe<TPathId> ResourceDomainKey;
-    TString ResourceDatabaseName;
     IRequestProxyCtx* GrpcRequestBaseCtx_;
     NRpcService::TRlConfig* RlConfig = nullptr;
     bool SkipCheckConnectRights_ = false;

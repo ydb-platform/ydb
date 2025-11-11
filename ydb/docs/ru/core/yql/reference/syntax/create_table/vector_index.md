@@ -1,5 +1,11 @@
 # Векторный индекс
 
+{% if backend_name == "YDB" and oss == true %}
+
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
+
 {% if backend_name == 'YDB' %}[Векторный индекс](../../../../concepts/glossary.md#vector-index){% else %}векторный индекс{% endif %} в {% if backend_name == 'YDB' %}[строковых](../../../../concepts/datamodel/table.md#row-oriented-tables){% else %}строковых{% endif %} таблицах создаётся с помощью того же синтаксиса, что и [вторичные индексы](secondary_index.md), при указании `vector_kmeans_tree` в качестве типа индекса. Подмножество доступного для векторных индексов синтаксиса:
 
 ```yql
@@ -31,8 +37,6 @@ CREATE TABLE `<table_name>` (
 {% include [limitations](../../../../_includes/vector-index-update-limitations.md) %}
 
 {% endnote %}
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Пример
 

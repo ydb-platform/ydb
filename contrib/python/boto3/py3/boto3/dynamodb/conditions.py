@@ -23,6 +23,7 @@ ATTR_NAME_REGEX = re.compile(r'[^.\[\]]+(?![^\[]*\])')
 
 
 class ConditionBase:
+
     expression_format = ''
     expression_operator = ''
     has_grouped_values = False

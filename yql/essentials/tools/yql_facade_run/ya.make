@@ -48,7 +48,6 @@ PEERDIR(
     yql/essentials/sql
     yql/essentials/public/langver
     yql/essentials/core/langver
-    yql/essentials/core/layers
 
     library/cpp/resource
     library/cpp/getopt

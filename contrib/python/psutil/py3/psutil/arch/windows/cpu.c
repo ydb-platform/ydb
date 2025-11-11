@@ -8,7 +8,7 @@
 #include <windows.h>
 #include <PowrProf.h>
 
-#include "../../arch/all/init.h"
+#include "../../_psutil_common.h"
 
 
 /*

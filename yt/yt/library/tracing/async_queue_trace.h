@@ -26,7 +26,7 @@ namespace NYT::NTracing {
 class TAsyncQueueTrace
 {
 public:
-    explicit TAsyncQueueTrace(bool lazy = true);
+    TAsyncQueueTrace(bool lazy = true);
 
     //! Join notifies queue that context is blocked by background processing up to queueIndex.
     //

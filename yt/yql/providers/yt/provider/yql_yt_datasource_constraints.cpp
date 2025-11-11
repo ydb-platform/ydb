@@ -22,7 +22,6 @@ public:
         : TVisitorTransformerBase(true)
         , State_(state)
     {
-        AddHandler({TStringBuf("Result"), TStringBuf("Pull")}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtTable::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleTable));
         AddHandler({TYtPath::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandlePath));
         AddHandler({TYtSection::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleSection));

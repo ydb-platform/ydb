@@ -14,15 +14,10 @@
 
 #include "y_absl/log/internal/check_op.h"
 
-#include <cstring>
-#include <ostream>
-#include <util/generic/string.h>
-#include <utility>
+#include <string.h>
 
-#include "y_absl/base/config.h"
-#include "y_absl/base/nullability.h"
-#include "y_absl/debugging/leak_check.h"
-#include "y_absl/strings/str_cat.h"
+#include <ostream>
+
 #include "y_absl/strings/string_view.h"
 
 #ifdef _MSC_VER
@@ -31,13 +26,18 @@
 #include <strings.h>  // for strcasecmp, but msvc does not have this header
 #endif
 
+#include <sstream>
+#include <util/generic/string.h>
+
+#include "y_absl/base/config.h"
+#include "y_absl/strings/str_cat.h"
+
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 namespace log_internal {
 
 #define Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING(x) \
-  template y_absl::Nonnull<const char*> MakeCheckOpString(     \
-      x, x, y_absl::Nonnull<const char*>)
+  template TString* MakeCheckOpString(x, x, const char*)
 Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING(bool);
 Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING(int64_t);
 Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING(uint64_t);
@@ -53,8 +53,7 @@ Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING(const unsigned char*);
 Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING(const void*);
 #undef Y_ABSL_LOGGING_INTERNAL_DEFINE_MAKE_CHECK_OP_STRING
 
-CheckOpMessageBuilder::CheckOpMessageBuilder(
-    y_absl::Nonnull<const char*> exprtext) {
+CheckOpMessageBuilder::CheckOpMessageBuilder(const char* exprtext) {
   stream_ << exprtext << " (";
 }
 
@@ -63,10 +62,9 @@ std::ostream& CheckOpMessageBuilder::ForVar2() {
   return stream_;
 }
 
-y_absl::Nonnull<const char*> CheckOpMessageBuilder::NewString() {
+TString* CheckOpMessageBuilder::NewString() {
   stream_ << ")";
-  // There's no need to free this string since the process is crashing.
-  return y_absl::IgnoreLeak(new TString(std::move(stream_).str()))->c_str();
+  return new TString(stream_.str());
 }
 
 void MakeCheckOpValueString(std::ostream& os, const char v) {
@@ -102,19 +100,16 @@ void MakeCheckOpValueString(std::ostream& os, const void* p) {
 }
 
 // Helper functions for string comparisons.
-#define DEFINE_CHECK_STROP_IMPL(name, func, expected)                          \
-  y_absl::Nullable<const char*> Check##func##expected##Impl(                     \
-      y_absl::Nullable<const char*> s1, y_absl::Nullable<const char*> s2,          \
-      y_absl::Nonnull<const char*> exprtext) {                                   \
-    bool equal = s1 == s2 || (s1 && s2 && !func(s1, s2));                      \
-    if (equal == expected) {                                                   \
-      return nullptr;                                                          \
-    } else {                                                                   \
-      /* There's no need to free this string since the process is crashing. */ \
-      return y_absl::IgnoreLeak(new TString(y_absl::StrCat(exprtext, " (", s1, \
-                                                           " vs. ", s2, ")"))) \
-          ->c_str();                                                           \
-    }                                                                          \
+#define DEFINE_CHECK_STROP_IMPL(name, func, expected)                      \
+  TString* Check##func##expected##Impl(const char* s1, const char* s2, \
+                                           const char* exprtext) {         \
+    bool equal = s1 == s2 || (s1 && s2 && !func(s1, s2));                  \
+    if (equal == expected) {                                               \
+      return nullptr;                                                      \
+    } else {                                                               \
+      return new TString(                                              \
+          y_absl::StrCat(exprtext, " (", s1, " vs. ", s2, ")"));             \
+    }                                                                      \
   }
 DEFINE_CHECK_STROP_IMPL(CHECK_STREQ, strcmp, true)
 DEFINE_CHECK_STROP_IMPL(CHECK_STRNE, strcmp, false)

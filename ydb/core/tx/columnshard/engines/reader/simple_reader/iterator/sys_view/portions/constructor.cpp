@@ -33,8 +33,7 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
             portions.emplace_back(p);
             if (portions.size() == 10) {
                 constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(i.first), TabletId, std::move(portions));
-                if (!pkFilter->IsUsed(
-                        constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+                if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
                     constructors.pop_back();
                 }
                 portions.clear();
@@ -42,8 +41,7 @@ TConstructor::TConstructor(const NOlap::IPathIdTranslator& pathIdTranslator, con
         }
         if (portions.size()) {
             constructors.emplace_back(pathIdTranslator.GetUnifiedByInternalVerified(i.first), TabletId, std::move(portions));
-            if (!pkFilter->IsUsed(
-                    constructors.back().GetStart().BuildSortablePosition(), constructors.back().GetFinish().BuildSortablePosition())) {
+            if (!pkFilter->IsUsed(constructors.back().GetStart(), constructors.back().GetFinish())) {
                 constructors.pop_back();
             }
             portions.clear();

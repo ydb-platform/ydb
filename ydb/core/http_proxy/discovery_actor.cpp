@@ -98,7 +98,7 @@ namespace NKikimr::NHttpProxy {
 
     void TDiscoveryActor::MakeGRpcRequest(const TActorContext& ctx) {
         NYdbGrpc::TCallMeta callMeta;
-        callMeta.Timeout = std::chrono::seconds(30);
+        callMeta.Timeout = TDuration::Seconds(30);
         callMeta.Aux.emplace_back("x-ydb-auth-ticket", CredentialsProvider->GetAuthInfo());
         callMeta.Aux.emplace_back("x-ydb-database", Settings.Database);
 

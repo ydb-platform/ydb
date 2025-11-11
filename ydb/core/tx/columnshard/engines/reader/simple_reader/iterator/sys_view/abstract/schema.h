@@ -52,7 +52,7 @@ protected:
     }
 
 public:
-    using TFactory = NObjectFactory::TObjectFactory<ISchemaAdapter, std::tuple<TString, TString>>;
+    using TFactory = NObjectFactory::TObjectFactory<ISchemaAdapter, TString>;
     virtual ~ISchemaAdapter() = default;
     virtual ui64 GetPresetId() const = 0;
     virtual TIndexInfo GetIndexInfo(

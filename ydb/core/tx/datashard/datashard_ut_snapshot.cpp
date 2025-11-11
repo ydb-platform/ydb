@@ -2279,7 +2279,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             rows->emplace_back(serializedKey, serializedValues);
 
             auto upsertSender = runtime.AllocateEdgeActor();
-            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root", "/Root/table-1", types, rows);
+            auto actor = NTxProxy::CreateUploadRowsInternal(upsertSender, "/Root/table-1", types, rows);
             runtime.Register(actor);
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(upsertSender);

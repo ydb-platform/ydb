@@ -4,7 +4,6 @@
 #include "counters.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/mon/mon.h>
@@ -197,23 +196,22 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, HandleClassifierUpdateWhileIniting);
             hFunc(NClusterTracker::TEvClusterTracker::TEvClustersUpdate, HandleClustersUpdateWhileIniting);
-            fFunc(NGRpcService::TRpcServices::EvDiscoverPQClusters, HandleDiscoverPQClustersRequestWhileIniting);
+            hFunc(NGRpcService::TEvDiscoverPQClustersRequest, HandleDiscoverPQClustersRequestWhileIniting);
             hFunc(NMon::TEvHttpInfo, HandleHttpRequest);
             hFunc(TEvents::TEvWakeup, UpdateTimedCounters);
         }
     }
 
-    void RespondServiceUnavailable(NGRpcService::TEvDiscoverPQClustersRequest* ev) {
+    void RespondServiceUnavailable(NGRpcService::TEvDiscoverPQClustersRequest::TPtr& ev) {
         Counters->DroppedRequestsCount->Inc();
 
-        ev->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
     }
 
-    void HandleDiscoverPQClustersRequestWhileIniting(TAutoPtr<NActors::IEventHandle>& ev) {
-        ev->DropRewrite();
+    void HandleDiscoverPQClustersRequestWhileIniting(NGRpcService::TEvDiscoverPQClustersRequest::TPtr& ev) {
         Counters->TotalRequestsCount->Inc();
 
-        RespondServiceUnavailable(ev->Get<NGRpcService::TEvDiscoverPQClustersRequest>());
+        RespondServiceUnavailable(ev);
     }
 
     void HandleClassifierUpdateWhileWorking(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev) {
@@ -224,16 +222,15 @@ private:
         UpdateClustersList(ev);
     }
 
-    void HandleDiscoverPQClustersRequestWhileWorking(TAutoPtr<NActors::IEventHandle>& ev) {
-        ev->DropRewrite();
+    void HandleDiscoverPQClustersRequestWhileWorking(NGRpcService::TEvDiscoverPQClustersRequest::TPtr& ev) {
         Counters->TotalRequestsCount->Inc();
 
         if (!IsHealthy()) {
-            RespondServiceUnavailable(ev->Get<NGRpcService::TEvDiscoverPQClustersRequest>());
+            RespondServiceUnavailable(ev);
             return;
         }
 
-        IActor* actor = NWorker::CreateClusterDiscoveryWorker(THolder(ev->Release<NGRpcService::TEvDiscoverPQClustersRequest>().Release()), DatacenterClassifier, CloudNetworksClassifier, ClustersList, Counters);
+        IActor* actor = NWorker::CreateClusterDiscoveryWorker(ev, DatacenterClassifier, CloudNetworksClassifier, ClustersList, Counters);
         Register(actor, TMailboxType::HTSwap, AppData(Ctx())->UserPoolId);
     }
 
@@ -241,7 +238,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, HandleClassifierUpdateWhileWorking);
             hFunc(NClusterTracker::TEvClusterTracker::TEvClustersUpdate, HandleClustersUpdateWhileWorking);
-            fFunc(NGRpcService::TRpcServices::EvDiscoverPQClusters, HandleDiscoverPQClustersRequestWhileWorking);
+            hFunc(NGRpcService::TEvDiscoverPQClustersRequest, HandleDiscoverPQClustersRequestWhileWorking);
             hFunc(NMon::TEvHttpInfo, HandleHttpRequest);
             hFunc(TEvents::TEvWakeup, UpdateTimedCounters);
         }

@@ -7,9 +7,9 @@
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/common/metering.h>
-#include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/common/sourceid_info.h>
 #include <ydb/core/persqueue/public/write_id.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -210,8 +210,6 @@ struct TEvPQ {
         EvMLPUnlockResponse,
         EvMLPChangeMessageDeadlineRequest,
         EvMLPChangeMessageDeadlineResponse,
-        EvGetMLPConsumerStateRequest,
-        EvGetMLPConsumerStateResponse,
         EvEnd
     };
 
@@ -1540,39 +1538,6 @@ struct TEvPQ {
         TEvMLPChangeMessageDeadlineResponse() = default;
     };
 
-    //
-    // Request to the PQ-tablet. Only for testing purposes.
-    //
-    struct TEvGetMLPConsumerStateRequest : TEventLocal<TEvGetMLPConsumerStateRequest, EvGetMLPConsumerStateRequest> {
-        TEvGetMLPConsumerStateRequest(const TString& topic, const TString& consumer, ui32 partitionId)
-            : Topic(topic)
-            , Consumer(consumer)
-            , PartitionId(partitionId) {
-        }
-
-        ui32 GetPartitionId() const {
-            return PartitionId;
-        }
-
-        const TString Topic;
-        const TString Consumer;
-        const ui32 PartitionId;
-    };
-
-    //
-    // Response from the MLP consumer. Only for testing purposes.
-    //
-    struct TEvGetMLPConsumerStateResponse : TEventLocal<TEvGetMLPConsumerStateResponse, EvGetMLPConsumerStateResponse> {
-        struct TMessage {
-            ui64 Offset;
-            ui32 Status;
-            ui32 ProcessingCount;
-            TInstant ProcessingDeadline;
-            TInstant WriteTimestamp;
-        };
-
-        std::vector<TMessage> Messages;
-    };
 };
 
 } //NKikimr

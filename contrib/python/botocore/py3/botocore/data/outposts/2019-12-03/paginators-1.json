@@ -35,18 +35,6 @@
       "output_token": "NextToken",
       "limit_key": "MaxResults",
       "result_key": "Sites"
-    },
-    "GetOutpostSupportedInstanceTypes": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "InstanceTypes"
-    },
-    "ListCapacityTasks": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "CapacityTasks"
     }
   }
 }

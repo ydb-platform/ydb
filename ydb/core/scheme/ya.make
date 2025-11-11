@@ -17,7 +17,6 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
     ydb/public/api/protos
-    ydb/core/protos
     ydb/core/scheme/protos
     ydb/core/scheme_types
     ydb/library/aclib

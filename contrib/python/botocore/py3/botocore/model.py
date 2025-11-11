@@ -531,7 +531,7 @@ class OperationModel:
 
         In many situations this is the same value as the
         ``name``, value, but in some services, the operation name
-        exposed to the user is different from the operation name
+        exposed to the user is different from the operaiton name
         we send across the wire (e.g cloudfront).
 
         Any serialization code should use ``wire_name``.

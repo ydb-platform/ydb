@@ -1,6 +1,5 @@
 #pragma once
 
-#include "statistics.h"
 #include "utils.h"
 
 #include <util/string/builder.h>
@@ -8,7 +7,7 @@
 
 class TThreadJob {
 public:
-    TThreadJob(const TCommonOptions& opts, const std::string& operationType);
+    TThreadJob(const TCommonOptions& opts);
     virtual ~TThreadJob() = default;
 
     virtual void Start(TInstant deadline);
@@ -32,9 +31,10 @@ protected:
     TStat Stats;
     bool StopOnError;
     TDuration MaxDelay;
+    bool UseFollowers;
 };
 
-class TJobContainer {
+class TJobContainer : public TThrRefBase {
 public:
     void Add(TThreadJob* job);
     void Start(TInstant deadline = TInstant());

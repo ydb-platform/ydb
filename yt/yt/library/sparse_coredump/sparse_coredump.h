@@ -44,14 +44,14 @@ class TStreamSparseCoreDumpWriter
     : public ISparseCoreDumpConsumer
 {
 public:
-    explicit TStreamSparseCoreDumpWriter(NConcurrency::IAsyncOutputStreamPtr outputStream, TDuration writeTimeout = TDuration::Max());
+    TStreamSparseCoreDumpWriter(NConcurrency::IAsyncOutputStreamPtr outputStream, TDuration writeTimeout = TDuration::Max());
 
     void OnRegularBlock(TSharedRef block) override;
 
     void OnZeroBlock(i64 length) override;
 
-    static const TSharedRef ZeroBlockHeader;
-    static const TSharedRef RegularBlockHeader;
+    const static TSharedRef ZeroBlockHeader;
+    const static TSharedRef RegularBlockHeader;
 
     NConcurrency::IAsyncZeroCopyOutputStreamPtr OutputStream_;
     const TDuration WriteTimeout_;

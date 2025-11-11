@@ -111,7 +111,7 @@ def search_function(name: str) -> Optional[codecs.CodecInfo]:
     return codecs.CodecInfo(
         name=name,
         encode=Codec().encode,
-        decode=Codec().decode,  # type: ignore
+        decode=Codec().decode,
         incrementalencoder=IncrementalEncoder,
         incrementaldecoder=IncrementalDecoder,
         streamwriter=StreamWriter,

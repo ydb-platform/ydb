@@ -50,6 +50,12 @@ public:
 
 TPeepHolePipelineConfigurator PEEPHOLE_CONFIG_INSTANCE;
 
+void FlushYtDebugLogOnSignal() {
+    if (!NMalloc::IsAllocatorCorrupted) {
+        NYql::FlushYtDebugLog();
+    }
+}
+
 } // unnamed
 
 namespace NYql {
@@ -231,11 +237,18 @@ int TYtRunTool::DoMain(int argc, const char *argv[]) {
     // Init MR/YT for proper work of embedded agent
     NYT::Initialize(argc, argv);
 
+    NYql::NBacktrace::AddAfterFatalCallback([](int){ FlushYtDebugLogOnSignal(); });
+    NYql::SetYtLoggerGlobalBackend(LOG_DEF_PRIORITY);
+
     if (NYT::TConfig::Get()->Prefix.empty()) {
         NYT::TConfig::Get()->Prefix = "//";
     }
 
-    return TFacadeRunner::DoMain(argc, argv);
+    int res = TFacadeRunner::DoMain(argc, argv);
+    if (0 == res) {
+        NYql::DropYtDebugLog();
+    }
+    return res;
 }
 
 TProgram::TStatus TYtRunTool::DoRunProgram(TProgramPtr program) {

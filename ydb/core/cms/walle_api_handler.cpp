@@ -277,12 +277,6 @@ private:
             return false;
         }
 
-        if (status.GetCode() == TStatus::ERROR_TEMP) {
-            auto err = Sprintf("HTTP/1.1 503 Service Unavailable\r\n\r\n%s", status.GetReason().data());
-            ReplyWithError(err, ctx);
-            return false;
-        }
-
         auto err = Sprintf("HTTP/1.1 500 Internal Server Error\r\n\r\n%s", status.GetReason().data());
         ReplyWithError(err, ctx);
         return false;

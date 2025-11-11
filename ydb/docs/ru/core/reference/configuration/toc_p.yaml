@@ -18,13 +18,13 @@ items:
 - name: healthcheck_config
   href: healthcheck_config.md
 - name: hive_config
-  href: hive_config.md
+  href: hive.md
 - name: host_configs
   href: host_configs.md
 - name: hosts
   href: hosts.md
 - name: kafka_proxy_config
-  href: kafka_proxy_config.md
+  href: kafka.md
 - name: log_config
   href: log_config.md
 - name: memory_controller_config

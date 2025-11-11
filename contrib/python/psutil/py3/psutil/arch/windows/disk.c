@@ -9,7 +9,7 @@
 #include <tchar.h>
 #include <winioctl.h>
 
-#include "../../arch/all/init.h"
+#include "../../_psutil_common.h"
 
 
 #ifndef _ARRAYSIZE

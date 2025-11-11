@@ -25,7 +25,6 @@ TSolomonClientResponse<T>::TSolomonClientResponse(T&& result, ui64 downloadedByt
 
 template class TSolomonClientResponse<TGetLabelsResult>;
 template class TSolomonClientResponse<TListMetricsResult>;
-template class TSolomonClientResponse<TListMetricsLabelsResult>;
 template class TSolomonClientResponse<TGetPointsCountResult>;
 template class TSolomonClientResponse<TGetDataResult>;
 

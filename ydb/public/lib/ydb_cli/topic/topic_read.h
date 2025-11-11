@@ -91,12 +91,6 @@ namespace NYdb::NConsoleClient {
             PartitionWithData = 2,
         };
 
-        struct TPartitionSessionInfo {
-            NTopic::TPartitionSession::TPtr PartitionSession;
-            EReadingStatus ReadingStatus;
-            std::optional<ui64> LastReadOffset;
-        };
-
         bool HasSession(ui64 sessionId) const;
         std::optional<uint64_t> GetNextReadOffset(ui64 partitionId) const;
 
@@ -115,7 +109,7 @@ namespace NYdb::NConsoleClient {
 
         friend class TTopicReaderTests;
 
-        THashMap<ui64, TPartitionSessionInfo> ActivePartitionSessions_;
+        THashMap<ui64, std::pair<NTopic::TPartitionSession::TPtr, EReadingStatus>> ActivePartitionSessions_;
         TTopicReaderSettings::TPartitionReadOffsetMap PartitionReadOffset_;
     };
 } // namespace NYdb::NConsoleClient

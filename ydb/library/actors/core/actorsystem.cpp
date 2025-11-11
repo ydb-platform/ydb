@@ -19,8 +19,6 @@
 #include <util/generic/hash.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
-#include <ydb/library/actors/util/rc_buf.h>
 
 namespace NActors {
 
@@ -72,38 +70,6 @@ namespace NActors {
         }
     };
 
-    TRdmaAllocatorWithFallback::TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept
-        : RdmaMemPool(memPool)
-    {}
-
-    TRcBuf TRdmaAllocatorWithFallback::AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
-        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<false>(size, headRoom, tailRoom);
-        if (!buf) {
-            return GetDefaultRcBufAllocator()->AllocRcBuf(size, headRoom, tailRoom);
-        }
-        return buf.value();
-    }
-
-    TRcBuf TRdmaAllocatorWithFallback::AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept {
-        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<true>(size, 0, tailRoom);
-        if (!buf) {
-            return GetDefaultRcBufAllocator()->AllocPageAlignedRcBuf(size, tailRoom);
-        }
-        return buf.value();
-    }
-
-    template<bool pageAligned>
-    std::optional<TRcBuf> TRdmaAllocatorWithFallback::TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
-        std::optional<TRcBuf> buf = RdmaMemPool->AllocRcBuf(size + headRoom + tailRoom,
-            pageAligned ? NInterconnect::NRdma::IMemPool::PAGE_ALIGNED : NInterconnect::NRdma::IMemPool::EMPTY);
-        if (!buf) {
-            return {};
-        }
-        buf->TrimFront(size + tailRoom);
-        buf->TrimBack(size);
-        return buf;
-    }
-
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
@@ -114,7 +80,6 @@ namespace NActors {
         , CurrentTimestamp(0)
         , CurrentMonotonic(0)
         , CurrentIDCounter(RandomNumber<ui64>())
-        , RcBufAllocator(setup->RcBufAllocator ? setup->RcBufAllocator.get() : GetDefaultRcBufAllocator())
         , SystemSetup(setup.Release())
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)

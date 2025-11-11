@@ -3,7 +3,7 @@ import os
 import struct
 import sys
 from threading import Lock
-from typing import Callable, Optional, Union, Any
+from typing import Callable, Optional, Union
 
 from ._exceptions import WebSocketPayloadException, WebSocketProtocolException
 from ._utils import validate_utf8
@@ -12,7 +12,7 @@ from ._utils import validate_utf8
 _abnf.py
 websocket - WebSocket client library for Python
 
-Copyright 2025 engn33r
+Copyright 2024 engn33r
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -151,7 +151,7 @@ class ABNF:
         rsv3: int = 0,
         opcode: int = OPCODE_TEXT,
         mask_value: int = 1,
-        data: Optional[Union[str, bytes]] = "",
+        data: Union[str, bytes, None] = "",
     ) -> None:
         """
         Constructor for ABNF. Please check RFC for arguments.
@@ -185,24 +185,15 @@ class ABNF:
             raise WebSocketProtocolException("Invalid ping frame.")
 
         if self.opcode == ABNF.OPCODE_CLOSE:
-            data_length = len(self.data)
-            if not data_length:
+            l = len(self.data)
+            if not l:
                 return
-            if data_length == 1 or data_length >= 126:
+            if l == 1 or l >= 126:
                 raise WebSocketProtocolException("Invalid close frame.")
-            if (
-                data_length > 2
-                and not skip_utf8_validation
-                and not validate_utf8(self.data[2:])
-            ):
+            if l > 2 and not skip_utf8_validation and not validate_utf8(self.data[2:]):
                 raise WebSocketProtocolException("Invalid close frame.")
 
-            data_bytes = (
-                self.data[:2]
-                if isinstance(self.data, bytes)
-                else self.data[:2].encode("utf-8")
-            )
-            code = struct.unpack("!H", data_bytes)[0]
+            code = 256 * int(self.data[0]) + int(self.data[1])
             if not self._is_valid_close_status(code):
                 raise WebSocketProtocolException("Invalid close opcode %r", code)
 
@@ -211,8 +202,7 @@ class ABNF:
         return code in VALID_CLOSE_STATUS or (3000 <= code < 5000)
 
     def __str__(self) -> str:
-        data_repr = self.data if isinstance(self.data, str) else repr(self.data)
-        return f"fin={self.fin} opcode={self.opcode} data={data_repr}"
+        return f"fin={self.fin} opcode={self.opcode} data={self.data}"
 
     @staticmethod
     def create_frame(data: Union[bytes, str], opcode: int, fin: int = 1) -> "ABNF":
@@ -320,9 +310,9 @@ class frame_buffer:
     def clear(self) -> None:
         self.header: Optional[tuple] = None
         self.length: Optional[int] = None
-        self.mask_value: Optional[Union[bytes, str]] = None
+        self.mask_value: Union[bytes, str, None] = None
 
-    def needs_header(self) -> bool:
+    def has_received_header(self) -> bool:
         return self.header is None
 
     def recv_header(self) -> None:
@@ -345,12 +335,10 @@ class frame_buffer:
         header_val: int = self.header[frame_buffer._HEADER_MASK_INDEX]
         return header_val
 
-    def needs_length(self) -> bool:
+    def has_received_length(self) -> bool:
         return self.length is None
 
     def recv_length(self) -> None:
-        if self.header is None:
-            raise WebSocketProtocolException("Header not received")
         bits = self.header[frame_buffer._HEADER_LENGTH_INDEX]
         length_bits = bits & 0x7F
         if length_bits == 0x7E:
@@ -362,7 +350,7 @@ class frame_buffer:
         else:
             self.length = length_bits
 
-    def needs_mask(self) -> bool:
+    def has_received_mask(self) -> bool:
         return self.mask_value is None
 
     def recv_mask(self) -> None:
@@ -371,29 +359,23 @@ class frame_buffer:
     def recv_frame(self) -> ABNF:
         with self.lock:
             # Header
-            if self.needs_header():
+            if self.has_received_header():
                 self.recv_header()
-            if self.header is None:
-                raise WebSocketProtocolException("Header not received")
             (fin, rsv1, rsv2, rsv3, opcode, has_mask, _) = self.header
 
             # Frame length
-            if self.needs_length():
+            if self.has_received_length():
                 self.recv_length()
             length = self.length
 
             # Mask
-            if self.needs_mask():
+            if self.has_received_mask():
                 self.recv_mask()
             mask_value = self.mask_value
 
             # Payload
-            if length is None:
-                raise WebSocketProtocolException("Length not received")
             payload = self.recv_strict(length)
             if has_mask:
-                if mask_value is None:
-                    raise WebSocketProtocolException("Mask not received")
                 payload = ABNF.mask(mask_value, payload)
 
             # Reset for next frame
@@ -405,9 +387,7 @@ class frame_buffer:
         return frame
 
     def recv_strict(self, bufsize: int) -> bytes:
-        if not isinstance(bufsize, int):
-            raise ValueError("bufsize must be an integer")
-        shortage = bufsize - sum(len(buf) for buf in self.recv_buffer)
+        shortage = bufsize - sum(map(len, self.recv_buffer))
         while shortage > 0:
             # Limit buffer size that we pass to socket.recv() to avoid
             # fragmenting the heap -- the number of bytes recv() actually
@@ -416,12 +396,8 @@ class frame_buffer:
             # buffers allocated and then shrunk, which results in
             # fragmentation.
             bytes_ = self.recv(min(16384, shortage))
-            if isinstance(bytes_, bytes):
-                self.recv_buffer.append(bytes_)
-                shortage -= len(bytes_)
-            else:
-                # Handle case where recv returns int or other type
-                break
+            self.recv_buffer.append(bytes_)
+            shortage -= len(bytes_)
 
         unified = b"".join(self.recv_buffer)
 
@@ -437,7 +413,7 @@ class continuous_frame:
     def __init__(self, fire_cont_frame: bool, skip_utf8_validation: bool) -> None:
         self.fire_cont_frame = fire_cont_frame
         self.skip_utf8_validation = skip_utf8_validation
-        self.cont_data: Optional[list[Any]] = None
+        self.cont_data: Optional[list] = None
         self.recving_frames: Optional[int] = None
 
     def validate(self, frame: ABNF) -> None:
@@ -465,18 +441,13 @@ class continuous_frame:
 
     def extract(self, frame: ABNF) -> tuple:
         data = self.cont_data
-        if data is None:
-            raise WebSocketProtocolException("No continuation data available")
         self.cont_data = None
         frame.data = data[1]
         if (
             not self.fire_cont_frame
-            and data is not None
             and data[0] == ABNF.OPCODE_TEXT
             and not self.skip_utf8_validation
             and not validate_utf8(frame.data)
         ):
             raise WebSocketPayloadException(f"cannot decode: {repr(frame.data)}")
-        if data is None:
-            raise WebSocketProtocolException("No continuation data available")
         return data[0], frame

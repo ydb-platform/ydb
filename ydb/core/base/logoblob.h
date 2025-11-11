@@ -56,7 +56,7 @@ namespace NKikimr {
         }
 
         explicit TLogoBlobID(const ui64 raw[3]) {
-            memcpy(Raw.X, reinterpret_cast<const char*>(raw), 3 * sizeof(ui64));
+            memcpy(Raw.X, raw, 3 * sizeof(ui64));
         }
 
         static TLogoBlobID PrevFull(const TLogoBlobID& id, ui32 size) {

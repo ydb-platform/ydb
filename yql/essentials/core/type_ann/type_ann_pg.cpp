@@ -1305,8 +1305,8 @@ IGraphTransformer::TStatus PgWindowWrapper(const TExprNode::TPtr& input, TExprNo
     }
 
     for (const auto& x : input->Child(3)->Children()) {
-        if (!x->IsCallable({"YqlSort", "PgSort"})) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected YqlSort or PgSort"));
+        if (!x->IsCallable("PgSort")) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected PgSort"));
             return IGraphTransformer::TStatus::Error;
         }
     }
@@ -1718,7 +1718,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
         if (node->IsCallable("PgSubLink")) {
             return false;
-        } else if (node->IsCallable({"YqlStar", "PgStar"})) {
+        } else if (node->IsCallable("PgStar")) {
             if (!hasStar) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Star is not allowed here"));
                 isError = true;
@@ -2182,7 +2182,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
     };
 
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
-        if (node->IsCallable({"YqlStar", "PgStar"})) {
+        if (node->IsCallable("PgStar")) {
             TVector<std::pair<TString, TString>> aliased;
             TExprNode::TListType orderAtoms;
             TColumnOrder localOrder;
@@ -3451,8 +3451,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
     YQL_ENSURE(input->IsCallable({"YqlSetItem", "PgSetItem"}));
     const bool isYql = input->IsCallable("YqlSetItem");
     const TStringBuf sqlResultItem = isYql ? "YqlResultItem" : "PgResultItem";
-    const TStringBuf sqlWhere = isYql ? "YqlWhere" : "PgWhere";
-    const bool isColumnOrderForced = !isYql || ctx.Types.OrderedColumns;
+    const bool isOrderedColumns = !isYql || ctx.Types.OrderedColumns;
 
     auto& options = input->Head();
     if (!EnsureTuple(options, ctx.Expr)) {
@@ -3651,12 +3650,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     TColumnOrder o;
                                     bool isExpr = false;
                                     THashSet<TString> alreadyPresent;
-                                    if (lambda.Tail().IsCallable({"YqlStar", "PgStar"})) {
+                                    if (lambda.Tail().IsCallable("PgStar")) {
                                         for (auto& [e, n]: repeatedColumnsInUsing) {
                                             // coalesce of two inputs in first order
                                             o.AddColumn(n);
                                         }
-
                                         for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
                                             for (const auto& x : joinInputs) {
                                                 if (priority != x.Priority) {
@@ -3668,7 +3666,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                                 }
 
                                                 YQL_ENSURE(x.Order);
-                                                for (const auto& [col, _] : *x.Order) {
+                                                for (const auto& [col, gen_col] : *x.Order) {
                                                     if (!col.StartsWith("_yql_")) {
                                                         auto lcase = to_lower(col);
                                                         if (alreadyPresent.contains(lcase)) {
@@ -4085,7 +4083,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            if (isColumnOrderForced && !columnOrder) {
+                            if (isOrderedColumns && !columnOrder) {
                                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
                                     "No column order at source"));
                                 return IGraphTransformer::TStatus::Error;
@@ -4094,7 +4092,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             TVector<const TItemExprType*> newStructItems;
 
                             TMaybe<TColumnOrder> newOrder;
-                            if (columnOrder) {
+                            if (isOrderedColumns) {
                                 newOrder.ConstructInPlace();
                             }
 
@@ -4138,9 +4136,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     }
 
                     const auto& data = option->Tail();
-                    if (!data.IsCallable({"YqlWhere", "PgWhere"})) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
-                                                 TStringBuilder() << "Expected " << sqlWhere));
+                    if (!data.IsCallable("PgWhere")) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()), "Expected PgWhere"));
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -4207,7 +4204,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             }
 
                             if (hasChanges) {
-                                auto newWhere = ctx.Expr.NewCallable(data.Pos(), sqlWhere, std::move(newChildren));
+                                auto newWhere = ctx.Expr.NewCallable(data.Pos(), "PgWhere", std::move(newChildren));
                                 auto newSettings = ReplaceSetting(options, {}, TString(optionName), newWhere, ctx.Expr);
                                 output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
                                 return IGraphTransformer::TStatus::Repeat;
@@ -4226,7 +4223,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
-                        else if (!isYql) {
+                        else {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(data.Pos()), TStringBuilder() <<
                                 "Expected pg type, but got: " << data.GetTypeAnn()->GetKind()));
                             return IGraphTransformer::TStatus::Error;
@@ -4363,9 +4360,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     }
                                 } else {
                                     const auto& quals = child->Tail();
-                                    if (!quals.IsCallable({"YqlWhere", "PgWhere"})) {
-                                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(quals.Pos()),
-                                                                 TStringBuilder() << "Expected " << sqlWhere));
+                                    if (!quals.IsCallable("PgWhere")) {
+                                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(quals.Pos()), "Expected PgWhere"));
                                         return IGraphTransformer::TStatus::Error;
                                     }
 
@@ -4464,7 +4460,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                         auto newChildren = quals.ChildrenList();
                                         newChildren[0] = typeNode;
                                         newChildren[1] = newLambda;
-                                        auto newWhere = ctx.Expr.NewCallable(quals.Pos(), sqlWhere, std::move(newChildren));
+                                        auto newWhere = ctx.Expr.NewCallable(quals.Pos(), "PgWhere", std::move(newChildren));
                                         newGroupItems.push_back(ctx.Expr.ChangeChild(*child, 1, std::move(newWhere)));
                                     } else if (needRewriteUsing) {
                                         newGroupItems.push_back(data.Child(joinGroupNo)->ChildPtr(i));
@@ -5139,7 +5135,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     const TStringBuf sqlSelect = isYql ? "YqlSelect" : "PgSelect";
     const TStringBuf sqlSetItem = isYql ? "YqlSetItem" : "PgSetItem";
     const TStringBuf sqlIterate = isYql ? "YqlIterate" : "PgIterate";
-    YQL_ENSURE(ctx.Types.DeriveColumnOrder);
+    const bool isOrderedColumns = !isYql || ctx.Types.OrderedColumns;
 
     TExprNode* setItems = nullptr;
     TExprNode* setOps = nullptr;
@@ -5254,8 +5250,8 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                 }
 
                 for (const auto& x : data.Children()) {
-                    if (!x->IsCallable({"YqlSort", "PgSort"})) {
-                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected YqlSort or PgSort"));
+                    if (!x->IsCallable("PgSort")) {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected PgSort"));
                     }
                 }
 
@@ -5390,7 +5386,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
     const TStructExprType* resultStructType = nullptr;
 
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Error;
-    if (isYql && (1 != setItems->ChildrenSize())) {
+    if (isYql && !isOrderedColumns) {
         status = InferUnionType(input->Pos(), setItems->ChildrenList(), resultStructType, ctx, /* areHashesChecked = */ false);
     } else if (isYql || (1 == setItems->ChildrenSize() && HasSetting(*setItems->Child(0)->Child(0), "unknowns_allowed"))) {
         status = InferPositionalUnionType(input->Pos(), setItems->ChildrenList(), resultColumnOrder, resultStructType, ctx);

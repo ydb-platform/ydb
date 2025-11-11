@@ -74,9 +74,8 @@ const TStringBuf YqlIOSpecRegistry = "registry";
 
 const TStringBuf SecurityTagsName = "security_tags";
 
-// Reserved members for table path/view in MrPartitionList first arg
+// Reserved member for table name in MrPartitionList arg
 const TStringBuf MrPartitionListTableMember = "TablePath";
-const TStringBuf MrPartitionListViewMember = "TableView";
 
 extern const TVector<TStringBuf> YAMR_FIELDS;
 

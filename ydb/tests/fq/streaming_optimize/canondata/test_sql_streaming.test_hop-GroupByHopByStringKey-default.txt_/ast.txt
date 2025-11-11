@@ -75,7 +75,7 @@
     (let $72 (CallableType '() '((OptionalType (DataType 'Timestamp))) $71))
     (let $73 (Udf '"DateTime2.FromMilliseconds" (Void) (VoidType) '"" $72 (VoidType) '"" '('('"blocks") $16)))
     (return (Apply $73 (Convert $70 $23)))
-  ))))) (Interval '5000) $65 $65 'true (lambda '($74) (AsStruct '('Sum0 (Member $74 '"v")))) (lambda '($75 $76) (AsStruct '('Sum0 (AggrAdd (Member $75 '"v") (Member $76 'Sum0))))) $66 $66 (lambda '($78 $79) (AsStruct '('Sum0 (AggrAdd (Member $78 'Sum0) (Member $79 'Sum0))))) (lambda '($80 $81 $82) (AsStruct '('Sum0 (Member $81 'Sum0)) '('"_yql_time" $82) '('"k" $80))) '0 '"_yql_time"))
+  ))))) (Interval '5000) $65 $65 'true (lambda '($74) (AsStruct '('Sum0 (Member $74 '"v")))) (lambda '($75 $76) (AsStruct '('Sum0 (AggrAdd (Member $75 '"v") (Member $76 'Sum0))))) $66 $66 (lambda '($78 $79) (AsStruct '('Sum0 (AggrAdd (Member $78 'Sum0) (Member $79 'Sum0))))) (lambda '($80 $81 $82) (AsStruct '('Sum0 (Member $81 'Sum0)) '('"_yql_time" $82) '('"k" $80))) '0))
   (return (FlatMap (ExtractMembers $67 '('Sum0 '"k")) (lambda '($83) (block '(
     (let $84 (Udf '"Yson2.SerializeText" (Void) (VoidType) '"" $20 (VoidType) '"" $17))
     (let $85 (StructType '('"k" $21) '('"sum" $25)))

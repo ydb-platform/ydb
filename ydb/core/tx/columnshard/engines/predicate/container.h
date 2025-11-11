@@ -21,17 +21,33 @@ struct TIndexInfo;
 
 class TPredicateContainer {
 private:
-    std::optional<NOlap::TPredicate> Object;
+    std::shared_ptr<NOlap::TPredicate> Object;
+    NArrow::ECompareType CompareType;
+    mutable std::optional<std::vector<TString>> ColumnNames;
+    std::shared_ptr<NArrow::TSimpleRow> ReplaceKey;
 
-    TPredicateContainer(std::optional<NOlap::TPredicate> object)
+    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<NArrow::TSimpleRow>& replaceKey)
         : Object(object)
-    {
+        , CompareType(Object->GetCompareType())
+        , ReplaceKey(replaceKey) {
     }
 
-    TPredicateContainer() {
+    TPredicateContainer(const NArrow::ECompareType compareType)
+        : CompareType(compareType) {
     }
 
     static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
+
+    static std::shared_ptr<NArrow::TSimpleRow> ExtractKey(const NOlap::TPredicate& predicate, const std::shared_ptr<arrow::Schema>& key) {
+        AFL_VERIFY(predicate.Batch);
+        const auto& batchFields = predicate.Batch->schema()->fields();
+        const auto& keyFields = key->fields();
+        AFL_VERIFY(batchFields.size() <= keyFields.size());
+        for (size_t i = 0; i < batchFields.size(); ++i) {
+            Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
+        }
+        return std::make_shared<NArrow::TSimpleRow>(predicate.Batch, 0);
+    }
 
 public:
     bool IsSchemaEqualTo(const std::shared_ptr<arrow::Schema>& schema) const {
@@ -42,65 +58,72 @@ public:
     }
 
     bool IsEqualPointTo(const TPredicateContainer& item) const {
-        if (IsAll() != item.IsAll()) {
+        if (!Object != !item.Object) {
             return false;
         }
         if (!Object) {
-            return true;
+            return IsForwardInterval() == item.IsForwardInterval();
         }
-        return Object->IsEqualPointTo(*item.Object);
+        return Object->IsEqualTo(*item.Object);
     }
 
     NArrow::ECompareType GetCompareType() const {
-        AFL_VERIFY(Object);
-        return Object->GetCompareType();
+        return CompareType;
     }
 
-    std::partial_ordering ComparePartial(const NArrow::NMerger::TSortableBatchPosition& pk) const {
-        AFL_VERIFY(Object);
-        return Object->Batch.ComparePartial(pk);
+    const std::shared_ptr<NArrow::TSimpleRow>& GetReplaceKey() const {
+        return ReplaceKey;
     }
 
-    void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
-        AFL_VERIFY(Object);
-        Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
-    }
-
-    bool IsAll() const {
+    bool IsEmpty() const {
         return !Object;
+    }
+
+    template <class TArrayColumn>
+    std::optional<typename TArrayColumn::value_type> Get(
+        const ui32 colIndex, const ui32 rowIndex, const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
+        if (!Object) {
+            return defaultValue;
+        } else {
+            return Object->Get<TArrayColumn>(colIndex, rowIndex, defaultValue);
+        }
     }
 
     TString DebugString() const;
 
     int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const;
 
-    std::vector<std::string> GetColumnNames() const;
-    ui32 NumColumns() const {
-        return Object ? Object->NumColumns() : 0;
-    }
+    const std::vector<TString>& GetColumnNames() const;
 
     bool IsForwardInterval() const;
-    bool IsBackwardInterval() const;
 
     bool IsInclude() const;
 
     bool CrossRanges(const TPredicateContainer& ext) const;
 
     static TPredicateContainer BuildNullPredicateFrom() {
-        return TPredicateContainer();
+        return TPredicateContainer(NArrow::ECompareType::GREATER_OR_EQUAL);
     }
 
-    static TConclusion<TPredicateContainer> BuildPredicateFrom(std::optional<TPredicate> object);
-    static TConclusion<TPredicateContainer> BuildPredicateTo(std::optional<TPredicate> object);
+    static TConclusion<TPredicateContainer> BuildPredicateFrom(
+        std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     static TPredicateContainer BuildNullPredicateTo() {
-        return TPredicateContainer();
+        return TPredicateContainer(NArrow::ECompareType::LESS_OR_EQUAL);
     }
 
-    std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> FindFirstIncluded(
-        NArrow::NMerger::TRWSortableBatchPosition& begin) const;
-    std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> FindFirstExcluded(
-        NArrow::NMerger::TRWSortableBatchPosition& begin) const;
+    static TConclusion<TPredicateContainer> BuildPredicateTo(
+        std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
+
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
+
+    size_t GetMemorySize() const {
+        size_t res = sizeof(TPredicateContainer);
+        res += Object ? sizeof(NOlap::TPredicate) : 0;
+        res += ReplaceKey ? ReplaceKey->GetMemorySize() : 0;
+        // Column names are cached, may be changed
+        return res;
+    }
 };
 
 }   // namespace NKikimr::NOlap

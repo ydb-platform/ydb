@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/library/protobuf_printer/security_printer.h>
-
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/arena.h>
 #include <google/protobuf/message.h>
@@ -584,7 +582,7 @@ private:
     std::atomic<bool> ClientLost_ = false;
 };
 
-template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TIn>, typename TOutProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TOut>>
+template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>
 class TGRpcRequest: public TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter> {
     using TBase = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
 public:

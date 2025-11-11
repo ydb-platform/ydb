@@ -205,7 +205,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                                 .Columns<TCoVoid>().Build()
                                 .Ranges<TCoVoid>().Build()
                                 .Stat<TCoVoid>().Build()
-                                .QLFilter<TCoVoid>().Build()
                             .Build()
                         .Build()
                         .Settings()
@@ -487,7 +486,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
-                        .QLFilter<TCoVoid>().Build()
                         .Done()
                     );
             }

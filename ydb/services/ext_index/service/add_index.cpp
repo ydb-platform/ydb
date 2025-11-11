@@ -90,7 +90,7 @@ void TIndexUpsertActor::Bootstrap() {
         i.first = "pk_" + i.first;
     }
     types->insert(types->begin(), std::make_pair("index_hash", NMetadata::NInternal::TYDBType::Primitive(Ydb::Type::UINT64)));
-    auto actor = NTxProxy::CreateUploadRowsInternal(SelfId(), DatabaseName, IndexTablePath, types, writer.GetRows());
+    auto actor = NTxProxy::CreateUploadRowsInternal(SelfId(), IndexTablePath, types, writer.GetRows());
     Become(&TIndexUpsertActor::StateMain);
     Register(actor);
 }

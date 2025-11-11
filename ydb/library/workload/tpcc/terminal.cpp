@@ -4,7 +4,7 @@
 #include "util.h"
 #include "constants.h"
 
-#include <library/cpp/threading/future/core/coroutine_traits.h>
+#include <util/generic/scope.h>
 
 #include <array>
 
@@ -89,20 +89,21 @@ TTerminal::TTerminal(size_t terminalID,
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Stats(stats)
+    , Task(Run())
 {
 }
 
 void TTerminal::Start() {
     if (!Started) {
-        TaskFuture = Run();
+        TaskQueue.TaskReadyThreadSafe(Task.Handle, Context.TerminalID);
         Started = true;
     }
 }
 
-NThreading::TFuture<void> TTerminal::Run() {
+TTerminalTask TTerminal::Run() {
     auto& Log = Context.Log; // to make LOG_* macros working
 
-    co_await TTaskReady(TaskQueue, Context.TerminalID);
+    Y_DEFER { Stopped = true; };
 
     LOG_D("Terminal " << Context.TerminalID << " has started");
 
@@ -217,7 +218,7 @@ bool TTerminal::IsDone() const {
         return true;
     }
 
-    return TaskFuture.HasValue() || TaskFuture.HasException();
+    return Stopped;
 }
 
 } // namespace NYdb::NTPCC

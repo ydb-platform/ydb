@@ -54,7 +54,7 @@ public:
         };
 
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = std::chrono::seconds(1);
+        meta.Timeout = TDuration::Seconds(1);
         Service->DoRequest<Yql::DqsProto::IsReadyRequest, Yql::DqsProto::IsReadyResponse>(
             request, callback, &Yql::DqsProto::DqService::Stub::AsyncIsReady, meta);
 

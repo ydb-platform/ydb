@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 """Fundamental matchers of objects and values, and composite matchers."""
 
 from hamcrest.core.core.allof import all_of
@@ -15,20 +16,3 @@ from hamcrest.core.core.raises import calling, raises
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
-
-__all__ = [
-    "all_of",
-    "any_of",
-    "anything",
-    "calling",
-    "described_as",
-    "equal_to",
-    "instance_of",
-    "is_",
-    "is_not",
-    "none",
-    "not_",
-    "not_none",
-    "raises",
-    "same_instance",
-]

@@ -6,7 +6,6 @@
 #include "chaos_client.h"
 #include "cypress_client.h"
 #include "distributed_table_client.h"
-#include "distributed_file_client.h"
 #include "etc_client.h"
 #include "file_client.h"
 #include "flow_client.h"
@@ -43,7 +42,6 @@ struct IClientBase
     , public IQueueClientBase
     , public IEtcClientBase
     , public IDistributedTableClientBase
-    , public IDistributedFileClientBase
 {
     virtual IConnectionPtr GetConnection() = 0;
 };
@@ -80,7 +78,6 @@ struct IClient
     , public NBundleControllerClient::IBundleControllerClient
     , public IFlowClient
     , public IDistributedTableClient
-    , public IDistributedFileClient
     , public IShuffleClient
 {
     //! Terminates all channels.

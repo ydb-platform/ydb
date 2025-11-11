@@ -18,7 +18,7 @@ TSequentialThreadId GetSequentialThreadId();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NThreading
 
 #define THREAD_ID_INL_H_
 #include "thread_id-inl.h"

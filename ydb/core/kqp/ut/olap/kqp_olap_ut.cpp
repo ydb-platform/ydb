@@ -1101,7 +1101,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2001);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -1860,29 +1860,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             TString output = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(output, results[i]);
-        }
-
-        std::vector<TString> notPushedQueries = {
-            R"(
-                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
-
-                SELECT jsonDoc, JSON_VALUE(jsonDoc, "$.\"a.b.c\"")
-                FROM `/Root/foo`
-                where b == 1;
-            )"
-        };
-
-        for (ui32 i = 0; i < notPushedQueries.size(); ++i) {
-            const auto query = notPushedQueries[i];
-            auto result =
-                session2
-                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-            auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("KqpOlapProjections") == std::string::npos, TStringBuilder() << "Projections pushed down. Query: " << query);
-            UNIT_ASSERT_C(ast.find("KqpOlapProjection") == std::string::npos, TStringBuilder() << "Projection pushed down. Query: " << query);
         }
     }
 
@@ -4810,6 +4787,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(result.GetResultSet(0).RowsCount() == 1, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(RandomJsonCharacters) {
+        auto settings = TKikimrSettings();
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                CREATE TABLE `/Root/olapTable` (
+                    id Uint32 NOT NULL,
+                    json_payload JsonDocument,
+                    PRIMARY KEY (id)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT = 1
+                );
+
+                ALTER OBJECT `/Root/olapTable`
+                (TYPE TABLE)
+                SET (ACTION=ALTER_COLUMN, NAME=json_payload,
+                `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
+                `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`false`, `COLUMNS_LIMIT`=`1024`,
+                `SPARSED_DETECTOR_KFF`=`20`, `MEM_LIMIT_CHUNK`=`52428800`, `OTHERS_ALLOWED_FRACTION`=`0`,
+                `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+                )", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        // TODO: fix other symbols
+        {
+            auto result = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                UPSERT INTO `/Root/olapTable` (id, json_payload)
+                VALUES (1, JsonDocument(@@{"":   null}@@));
+                       -- (2, JsonDocument(@@{"'":  null}@@)),
+                       -- (3, JsonDocument(@@{"\"": null}@@)),
+                       -- (4, JsonDocument(@@{".":  null}@@));
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+        }
+
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT id, json_payload FROM  `/Root/olapTable`;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(result, R"([[1u;["{\"\":\"NULL\"}"]]])");
+
         }
     }
 }

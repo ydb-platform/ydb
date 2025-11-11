@@ -10,12 +10,12 @@
 (let interval (Interval '1000000))
 (let map (lambda '(item) (AsStruct)))
 (let reduce (lambda '(lhs rhs) (AsStruct)))
-(let hopping (MultiHoppingCore (Iterator input) keySelector sortKeySelector interval interval interval
-    'true map reduce map map reduce
-    (lambda '(key state time) (AsStruct
-        '('_yql_time time)
-        '('"data" (Nth key '"0"))
-        '('group0 (Nth key '"1")))) '0 'group0))
+(let hopping (MultiHoppingCore (Iterator input) keySelector sortKeySelector interval interval interval 
+    'true map reduce map map reduce 
+    (lambda '(key state time) (AsStruct 
+        '('_yql_time time) 
+        '('"data" (Nth key '"0")) 
+        '('group0 (Nth key '"1")))) '0))
 (let data (FormatType (TypeOf hopping))) # no typical comp node
 (let res (DataSink 'result))
 (let world (Write! world res (Key) data '('('type))))

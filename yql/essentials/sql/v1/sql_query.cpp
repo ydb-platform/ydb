@@ -3525,8 +3525,6 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
             return Nothing();
         }
 
-        ctx.DeriveColumnOrder = true;
-
         return TNodePtr();
     }),
 

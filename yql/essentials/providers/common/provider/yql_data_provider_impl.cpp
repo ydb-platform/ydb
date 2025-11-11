@@ -361,10 +361,6 @@ NLayers::ILayersIntegrationPtr TDataProviderBase::GetLayersIntegration() const {
     return nullptr;
 }
 
-bool TDataProviderBase::IsFullCaptureReady() {
-    return true;
-}
-
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto root = node;
     auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {

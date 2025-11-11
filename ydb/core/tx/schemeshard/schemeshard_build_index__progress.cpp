@@ -48,7 +48,6 @@ class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
 
 protected:
     TString LogPrefix;
-    const TString DatabaseName;
     const TString TargetTable;
     const bool IsPostingLevel;
 
@@ -72,8 +71,7 @@ protected:
     NDataShard::TUploadStatus UploadStatus;
 
 public:
-    TUploadSampleK(const TString& databaseName,
-                   const TString& targetTable,
+    TUploadSampleK(TString targetTable,
                    bool isPostingLevel,
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
@@ -83,8 +81,7 @@ public:
                    NTableIndex::NKMeans::TClusterId child,
                    const TString& emptyVector,
                    ui32 emptyLevels)
-        : DatabaseName(databaseName)
-        , TargetTable(targetTable)
+        : TargetTable(std::move(targetTable))
         , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
@@ -229,7 +226,6 @@ private:
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
             SelfId(),
-            DatabaseName,
             TargetTable,
             Types,
             UploadRows,
@@ -716,7 +712,6 @@ private:
             *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
         }
 
-        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
@@ -795,7 +790,6 @@ private:
             ev->Record.SetChild(childBegin);
         }
 
-        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NKMeans::LevelTable);
         ev->Record.SetLevelName(path.PathString());
@@ -834,7 +828,6 @@ private:
         // about 2 * TableSize see comment in PrefixIndexDone
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
-        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NKMeans::LevelTable);
         ev->Record.SetLevelName(path.PathString());
@@ -886,7 +879,6 @@ private:
             };
         }
 
-        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetTargetName(buildInfo.TargetName);
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
@@ -930,8 +922,7 @@ private:
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
-            !buildInfo.KMeans.NeedsAnotherLevel(),
+        auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), BuildId,
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child,
             buildInfo.KMeans.IsEmpty ? buildInfo.Clusters->GetEmptyRow() : "",
@@ -955,7 +946,6 @@ private:
             const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
             FillBuildInfoColumns(buildInfo, NTableIndex::ExtractInfo(implTableInfo));
         }
-        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetIndexName(buildInfo.TargetName);
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings();
@@ -1883,7 +1873,7 @@ public:
         }
         Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
 
-        TTableInfo::TPtr table = Self->Tables.at(path->PathId);
+        TTableInfo::TPtr table = Self->Tables.at(path->PathId);        
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         // In case of unique index validation the real range will arrive after index validation for each shard:
@@ -2685,23 +2675,6 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
-        {
-            Y_ENSURE(txId == buildInfo.ApplyTxId);
-
-            if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
-                record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
-                // Otherwise we won't cancel the index build correctly
-                buildInfo.ApplyTxId = {};
-                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
-                buildInfo.ApplyTxDone = false;
-            } else {
-                buildInfo.ApplyTxStatus = record.GetStatus();
-            }
-            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
-
-            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
-            break;
-        }
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {

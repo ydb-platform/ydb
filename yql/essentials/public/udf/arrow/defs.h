@@ -26,12 +26,8 @@
 
 #define ARROW_RESULT(op) ARROW_RESULT_S(op, "Bad status")
 
-#define ARROW_CHECK_DATUM_TYPES_BASE(expected, got, check)                \
-    do {                                                                  \
-        check((expected) == (got), "Bad datum type: %s expected, %s got", \
-              (expected).ToString().c_str(), (got).ToString().c_str());   \
+#define ARROW_DEBUG_CHECK_DATUM_TYPES(expected, got)                                     \
+    do {                                                                                 \
+        Y_DEBUG_ABORT_UNLESS((expected) == (got), "Bad datum type: %s expected, %s got", \
+                             (expected).ToString().c_str(), (got).ToString().c_str());   \
     } while (false)
-
-#define ARROW_DEBUG_CHECK_DATUM_TYPES(expected, got) ARROW_CHECK_DATUM_TYPES_BASE(expected, got, Y_DEBUG_ABORT_UNLESS)
-
-#define ARROW_CHECK_DATUM_TYPES(expected, got) ARROW_CHECK_DATUM_TYPES_BASE(expected, got, Y_ABORT_UNLESS)

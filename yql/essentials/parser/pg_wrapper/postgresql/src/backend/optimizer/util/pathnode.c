@@ -1621,7 +1621,7 @@ create_memoize_path(PlannerInfo *root, RelOptInfo *rel, Path *subpath,
 	pathnode->param_exprs = param_exprs;
 	pathnode->singlerow = singlerow;
 	pathnode->binary_mode = binary_mode;
-	pathnode->calls = clamp_row_est(calls);
+	pathnode->calls = calls;
 
 	/*
 	 * For now we set est_entries to 0.  cost_memoize_rescan() does all the

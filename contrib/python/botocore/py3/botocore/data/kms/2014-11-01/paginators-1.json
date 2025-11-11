@@ -48,13 +48,6 @@
       "more_results": "Truncated",
       "output_token": "NextMarker",
       "result_key": "Grants"
-    },
-    "ListKeyRotations": {
-      "input_token": "Marker",
-      "limit_key": "Limit",
-      "more_results": "Truncated",
-      "output_token": "NextMarker",
-      "result_key": "Rotations"
     }
   }
 }

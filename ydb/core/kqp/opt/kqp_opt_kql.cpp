@@ -473,7 +473,7 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
     const bool isSink, const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     if (isSink) {
-        auto indexes = BuildAffectedIndexTables(tableData, write.Pos(), ctx, nullptr,
+        auto indexes = BuildSecondaryIndexVector(tableData, write.Pos(), ctx, nullptr,
             [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
                 return BuildTableMeta(meta, pos, ctx);
             });
@@ -695,24 +695,19 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
 
-    auto indexes = BuildAffectedIndexTables(tableData, update.Pos(), ctx, nullptr,
+    auto indexes = BuildSecondaryIndexVector(tableData, update.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });
 
-    // Rewrite UPDATE to UPDATE ON for complex indexes
     auto idxNeedsKqpEffect = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
-        switch (x.second->Type) {
-            case TIndexDescription::EType::GlobalSync:
-            case TIndexDescription::EType::GlobalAsync:
-                return false;
-            case TIndexDescription::EType::GlobalSyncUnique:
-            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-            case TIndexDescription::EType::GlobalFulltext:
-                return true;
-        }
+        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique ||
+            x.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree;
     };
+
     const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
+
+    // For unique or vector index rewrite UPDATE to UPDATE ON
     if (needsKqpEffect) {
         return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))

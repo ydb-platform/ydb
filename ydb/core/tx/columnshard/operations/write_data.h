@@ -27,8 +27,6 @@ public:
         return *OriginalDataSize;
     }
 
-    TString DebugString() const;
-
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
     NOlap::ISnapshotSchema::TPtr BatchSchema;

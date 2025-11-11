@@ -1,26 +1,25 @@
-from typing import Any, Optional
-
 from hamcrest.core.base_matcher import BaseMatcher
-from hamcrest.core.description import Description
-from hamcrest.core.matcher import Matcher
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
 
-class IsAnything(BaseMatcher[Any]):
-    def __init__(self, description: Optional[str]) -> None:
-        self.description: str = description or "ANYTHING"
+class IsAnything(BaseMatcher):
 
-    def _matches(self, item: Any) -> bool:
+    def __init__(self, description):
+        self.description = description
+        if not description:
+            self.description = 'ANYTHING'
+
+    def _matches(self, item):
         return True
 
-    def describe_to(self, description: Description) -> None:
+    def describe_to(self, description):
         description.append_text(self.description)
 
 
-def anything(description: Optional[str] = None) -> Matcher[Any]:
+def anything(description=None):
     """Matches anything.
 
     :param description: Optional string used to describe this matcher.

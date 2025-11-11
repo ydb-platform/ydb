@@ -117,11 +117,6 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
             return errorCallback(TStringBuilder() << "Static setting " << name.Quote() << " cannot be reset to default", true);
         }
 
-        if (QContext_.CanRead() && QContext_.CaptureMode() == EQPlayerCaptureMode::Full && stage != EStage::CONFIG && handler->IgnoreInFullReplay()) {
-            YQL_CLOG(INFO, ProviderCommon) << "Ignoring setting " << name.Quote() << " in full replay mode";
-            return true;
-        }
-
         bool validateOnly = true;
         switch (stage) {
             case EStage::RUNTIME:

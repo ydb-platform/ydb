@@ -238,5 +238,5 @@ message TFeatureFlags {
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
     optional bool EnableOlapRejectProbability = 213 [default = false];
     optional bool EnablePDiskLogForSmallDisks = 214 [default = false];
-    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = true];
+    optional bool DisableMissingDefaultColumnsInBulkUpsert = 215 [default = false];
 }

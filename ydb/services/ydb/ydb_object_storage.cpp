@@ -3,39 +3,28 @@
 #include <ydb/core/grpc_services/service_object_storage.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcYdbObjectStorageService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Ydb::ObjectStorage;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef SETUP_STORAGE_METHOD
-#error SETUP_STORAGE_METHOD macro already defined
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
 #endif
+#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
+    MakeIntrusive<TGRpcRequest<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT, TGRpcYdbObjectStorageService>>(this, &Service_, CQ_, \
+        [this](NYdbGrpc::IRequestContextBase *ctx) { \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
+            ActorSystem_->Send(GRpcRequestProxyId_, \
+                new NGRpcService::TGrpcRequestNoOperationCall<Ydb::ObjectStorage::IN, Ydb::ObjectStorage::OUT> \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr, AUDIT_MODE})); \
+        }, &Ydb::ObjectStorage::V1::ObjectStorageService::AsyncService::Request ## NAME, \
+        #NAME, logger, getCounterBlock("object-storage-list", #NAME))->Run();
 
-#define SETUP_STORAGE_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_RUNTIME_EVENT_METHOD(                                         \
-        methodName,                                                     \
-        inputType,                                                      \
-        outputType,                                                     \
-        methodCallback,                                                 \
-        rlMode,                                                         \
-        requestType,                                                    \
-        YDB_API_DEFAULT_COUNTER_BLOCK(object-storage-list, methodName), \
-        auditMode,                                                      \
-        COMMON,                                                         \
-        TGrpcRequestNoOperationCall,                                    \
-        GRpcRequestProxyId_,                                            \
-        CQ_,                                                            \
-        nullptr,                                                        \
-        nullptr)
-
-    SETUP_STORAGE_METHOD(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying());
-
-#undef SETUP_STORAGE_METHOD
+    ADD_REQUEST(List, ListingRequest, ListingResponse, DoObjectStorageListingRequest, TAuditMode::NonModifying());
+#undef ADD_REQUEST
 }
 
 } // namespace NGRpcService

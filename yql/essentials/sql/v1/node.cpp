@@ -1654,7 +1654,6 @@ TNodePtr TColumnNode::DoClone() const {
     copy->Reliable_ = Reliable_;
     copy->UseSource_ = UseSource_;
     copy->UseSourceAsColumn_ = UseSourceAsColumn_;
-    copy->IsYqlRef_ = IsYqlRef_;
     return copy;
 }
 

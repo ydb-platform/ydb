@@ -159,10 +159,6 @@ void ApplyPartitioning(TTxId txId,
 }
 
 std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, const NKikimrSchemeOp::TPartitionConfig& changes) {
-    if (changes.HasChannelProfileId()) {
-        return std::nullopt;
-    }
-
     // Refuse to infer the default pool kind if any column family in the requested changes has a legacy Storage parameter
     for (const auto& changesFamily : changes.GetColumnFamilies()) {
         if (changesFamily.HasStorage()) {

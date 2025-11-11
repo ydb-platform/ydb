@@ -17,7 +17,7 @@ public:
     TAllocationTagsReclaimer()
     {
         std::thread thread([this] {
-            TThread::SetCurrentThreadName("AllocTagsReclm");
+            TThread::SetCurrentThreadName("AllocTagsReclaim");
             while (true) {
                 DoReclaim();
                 Sleep(ReclaimPeriod);

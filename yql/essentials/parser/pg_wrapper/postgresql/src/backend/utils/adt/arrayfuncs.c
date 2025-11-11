@@ -2917,14 +2917,7 @@ array_set_slice(Datum arraydatum,
 						 errdetail("When assigning to a slice of an empty array value,"
 								   " slice boundaries must be fully specified.")));
 
-			/* compute "upperIndx[i] - lowerIndx[i] + 1", detecting overflow */
-			if (pg_sub_s32_overflow(upperIndx[i], lowerIndx[i], &dim[i]) ||
-				pg_add_s32_overflow(dim[i], 1, &dim[i]))
-				ereport(ERROR,
-						(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
-						 errmsg("array size exceeds the maximum allowed (%d)",
-								(int) MaxArraySize)));
-
+			dim[i] = 1 + upperIndx[i] - lowerIndx[i];
 			lb[i] = lowerIndx[i];
 		}
 
@@ -5794,14 +5787,9 @@ ArrayBuildStateAny *
 initArrayResultAny(Oid input_type, MemoryContext rcontext, bool subcontext)
 {
 	ArrayBuildStateAny *astate;
+	Oid			element_type = get_element_type(input_type);
 
-	/*
-	 * int2vector and oidvector will satisfy both get_element_type and
-	 * get_array_type.  We prefer to treat them as scalars, to be consistent
-	 * with get_promoted_array_type.  Hence, check get_array_type not
-	 * get_element_type.
-	 */
-	if (!OidIsValid(get_array_type(input_type)))
+	if (OidIsValid(element_type))
 	{
 		/* Array case */
 		ArrayBuildStateArr *arraystate;
@@ -5817,6 +5805,9 @@ initArrayResultAny(Oid input_type, MemoryContext rcontext, bool subcontext)
 	{
 		/* Scalar case */
 		ArrayBuildState *scalarstate;
+
+		/* Let's just check that we have a type that can be put into arrays */
+		Assert(OidIsValid(get_array_type(input_type)));
 
 		scalarstate = initArrayResult(input_type, rcontext, subcontext);
 		astate = (ArrayBuildStateAny *)

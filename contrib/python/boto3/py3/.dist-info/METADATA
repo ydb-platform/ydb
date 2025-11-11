@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: boto3
-Version: 1.34.89
+Version: 1.29.6
 Summary: The AWS SDK for Python
 Home-page: https://github.com/boto/boto3
 Author: Amazon Web Services
@@ -15,17 +15,18 @@ Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
+Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
-Requires-Python: >= 3.8
+Requires-Python: >= 3.7
 License-File: LICENSE
 License-File: NOTICE
-Requires-Dist: botocore (<1.35.0,>=1.34.89)
+Requires-Dist: botocore (<1.33.0,>=1.32.6)
 Requires-Dist: jmespath (<2.0.0,>=0.7.1)
-Requires-Dist: s3transfer (<0.11.0,>=0.10.0)
+Requires-Dist: s3transfer (<0.8.0,>=0.7.0)
 Provides-Extra: crt
 Requires-Dist: botocore[crt] (<2.0a0,>=1.21.0) ; extra == 'crt'
 
@@ -48,7 +49,7 @@ Boto (pronounced boh-toh) was named after the fresh water dolphin native to the 
 Notices
 -------
 
-On 2023-12-13, support for Python 3.7 ended for Boto3. This follows the
+On 2023-12-13, support for Python 3.7 will end for Boto3. This follows the
 Python Software Foundation `end of support <https://peps.python.org/pep-0537/#lifespan>`__
 for the runtime which occurred on 2023-06-27.
 For more information, see this `blog post <https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/>`__.

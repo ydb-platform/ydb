@@ -20,7 +20,7 @@ struct TRequestSettings {
     FLUENT_SETTING(std::string, TraceId);
     FLUENT_SETTING(std::string, RequestType);
     FLUENT_SETTING(THeader, Header);
-    FLUENT_SETTING_DEFAULT(TDuration, ClientTimeout, TDuration::Max());
+    FLUENT_SETTING(TDuration, ClientTimeout);
     FLUENT_SETTING(std::string, TraceParent);
 
     TRequestSettings() = default;

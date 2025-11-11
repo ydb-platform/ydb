@@ -818,12 +818,12 @@ AlterRole(ParseState *pstate, AlterRoleStmt *stmt)
 							   "BYPASSRLS", "BYPASSRLS")));
 	}
 
-	/* To add or drop members, you need ADMIN OPTION. */
+	/* To add members to a role, you need ADMIN OPTION. */
 	if (drolemembers && !is_admin_of_role(currentUserId, roleid))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied to alter role"),
-				 errdetail("Only roles with the %s option on role \"%s\" may add or drop members.",
+				 errdetail("Only roles with the %s option on role \"%s\" may add members.",
 						   "ADMIN", rolename)));
 
 	/* Convert validuntil to internal form */
@@ -2554,8 +2554,6 @@ check_createrole_self_grant(char **newval, void **extra, GucSource source)
 	list_free(elemlist);
 
 	result = (unsigned *) guc_malloc(LOG, sizeof(unsigned));
-	if (!result)
-		return false;
 	*result = options;
 	*extra = result;
 

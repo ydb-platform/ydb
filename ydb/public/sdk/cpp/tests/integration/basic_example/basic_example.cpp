@@ -35,7 +35,6 @@ TRunArgs GetRunArgs() {
 
 //! Creates sample tables with CrateTable API.
 void CreateTables(TTableClient client, const std::string& path) {
-    std::cout << "CreateTables step" << std::endl;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path](TSession session) {
         auto seriesDesc = TTableBuilder()
             .AddNullableColumn("series_id", NYdb::EPrimitiveType::Uint64)
@@ -460,7 +459,6 @@ static NYdb::TStatus ScanQuerySelect(TTableClient client, const std::string& pat
 ///////////////////////////////////////////////////////////////////////////////
 
 NYdb::TResultSet SelectSimple(TTableClient client, const std::string& path) {
-    std::cout << "SelectSimple step" << std::endl;
     std::optional<NYdb::TResultSet> resultSet;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path, &resultSet](TSession session) {
         return SelectSimpleTransaction(session, path, resultSet);
@@ -470,14 +468,12 @@ NYdb::TResultSet SelectSimple(TTableClient client, const std::string& path) {
 }
 
 void UpsertSimple(TTableClient client, const std::string& path) {
-    std::cout << "UpsertSimple step" << std::endl;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path](TSession session) {
         return UpsertSimpleTransaction(session, path);
     }));
 }
 
 NYdb::TResultSet SelectWithParams(TTableClient client, const std::string& path) {
-    std::cout << "SelectWithParams step" << std::endl;
     std::optional<NYdb::TResultSet> resultSet;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path, &resultSet](TSession session) {
         return SelectWithParamsTransaction(session, path, 2, 3, resultSet);
@@ -487,7 +483,6 @@ NYdb::TResultSet SelectWithParams(TTableClient client, const std::string& path) 
 }
 
 NYdb::TResultSet PreparedSelect(TTableClient client, const std::string& path, ui32 seriesId, ui32 seasonId, ui32 episodeId) {
-    std::cout << "PreparedSelect step" << std::endl;
     std::optional<NYdb::TResultSet> resultSet;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path, seriesId, seasonId, episodeId, &resultSet](TSession session) {
         return PreparedSelectTransaction(session, path, seriesId, seasonId, episodeId, resultSet);
@@ -497,7 +492,6 @@ NYdb::TResultSet PreparedSelect(TTableClient client, const std::string& path, ui
 }
 
 NYdb::TResultSet MultiStep(TTableClient client, const std::string& path) {
-    std::cout << "MultiStep step" << std::endl;
     std::optional<NYdb::TResultSet> resultSet;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path, &resultSet](TSession session) {
         return MultiStepTransaction(session, path, 2, 5, resultSet);
@@ -507,14 +501,12 @@ NYdb::TResultSet MultiStep(TTableClient client, const std::string& path) {
 }
 
 void ExplicitTcl(TTableClient client, const std::string& path) {
-    std::cout << "ExplicitTcl step" << std::endl;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path](TSession session) {
         return ExplicitTclTransaction(session, path, TInstant());
     }));
 }
 
 std::vector<NYdb::TResultSet> ScanQuerySelect(TTableClient client, const std::string& path) {
-    std::cout << "ScanQuerySelect step" << std::endl;
     std::vector<NYdb::TResultSet> resultSets;
     NYdb::NStatusHelpers::ThrowOnError(client.RetryOperationSync([path, &resultSets](TTableClient& client) {
         return ScanQuerySelect(client, path, resultSets);

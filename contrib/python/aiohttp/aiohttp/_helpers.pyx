@@ -1,6 +1,3 @@
-
-cdef _sentinel = object()
-
 cdef class reify:
     """Use as a class method decorator.  It operates almost exactly like
     the Python `@property` decorator, but it puts the result of the
@@ -22,14 +19,17 @@ cdef class reify:
         return self.wrapped.__doc__
 
     def __get__(self, inst, owner):
-        if inst is None:
-            return self
-        cdef dict cache = inst._cache
-        val = cache.get(self.name, _sentinel)
-        if val is _sentinel:
-            val = self.wrapped(inst)
-            cache[self.name] = val
-        return val
+        try:
+            try:
+                return inst._cache[self.name]
+            except KeyError:
+                val = self.wrapped(inst)
+                inst._cache[self.name] = val
+                return val
+        except AttributeError:
+            if inst is None:
+                return self
+            raise
 
     def __set__(self, inst, value):
         raise AttributeError("reified property is read-only")

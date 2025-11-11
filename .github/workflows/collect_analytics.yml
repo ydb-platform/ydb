@@ -77,7 +77,7 @@ jobs:
       run: |
         for BUILD_TYPE in $BUILD_TYPES; do
           echo "Processing test history for build type: $BUILD_TYPE"
-          python3 .github/scripts/analytics/flaky_tests_history.py --branch ${{ matrix.branch }} --build_type $BUILD_TYPE
+          python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch ${{ matrix.branch }} --build_type $BUILD_TYPE
         done
     - name: Collect all test monitor for all build types
       run: |

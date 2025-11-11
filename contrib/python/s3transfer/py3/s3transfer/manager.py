@@ -35,7 +35,6 @@ from s3transfer.utils import (
     OSUtils,
     SlidingWindowSemaphore,
     TaskSemaphore,
-    add_s3express_defaults,
     get_callbacks,
     signal_not_transferring,
     signal_transferring,
@@ -149,8 +148,8 @@ class TransferConfig:
         for attr, attr_val in self.__dict__.items():
             if attr_val is not None and attr_val <= 0:
                 raise ValueError(
-                    f'Provided parameter {attr} of value {attr_val} must '
-                    'be greater than 0.'
+                    'Provided parameter %s of value %s must be greater than '
+                    '0.' % (attr, attr_val)
                 )
 
 
@@ -321,7 +320,6 @@ class TransferManager:
             subscribers = []
         self._validate_all_known_args(extra_args, self.ALLOWED_UPLOAD_ARGS)
         self._validate_if_bucket_supported(bucket)
-        self._add_operation_defaults(bucket, extra_args)
         call_args = CallArgs(
             fileobj=fileobj,
             bucket=bucket,
@@ -492,20 +490,17 @@ class TransferManager:
                 match = pattern.match(bucket)
                 if match:
                     raise ValueError(
-                        f'TransferManager methods do not support {resource} '
-                        'resource. Use direct client calls instead.'
+                        'TransferManager methods do not support %s '
+                        'resource. Use direct client calls instead.' % resource
                     )
 
     def _validate_all_known_args(self, actual, allowed):
         for kwarg in actual:
             if kwarg not in allowed:
                 raise ValueError(
-                    "Invalid extra_args key '{}', "
-                    "must be one of: {}".format(kwarg, ', '.join(allowed))
+                    "Invalid extra_args key '%s', "
+                    "must be one of: %s" % (kwarg, ', '.join(allowed))
                 )
-
-    def _add_operation_defaults(self, bucket, extra_args):
-        add_s3express_defaults(bucket, extra_args)
 
     def _submit_transfer(
         self, call_args, submission_task_cls, extra_main_kwargs=None

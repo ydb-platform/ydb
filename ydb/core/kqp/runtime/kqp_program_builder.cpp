@@ -356,7 +356,7 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
 
 TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
 {
-    // Validate text argument - should be a String or Utf8 or optional String or Utf8
+    // Validate text argument - should be a string or optional string
     const auto& textType = text.GetStaticType();
     const TDataType* textDataType = nullptr;
     
@@ -370,18 +370,17 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
         textDataType = static_cast<const TDataType*>(textType);
     }
     
-    MKQL_ENSURE(textDataType->GetSchemeType() == NScheme::NTypeIds::String
-        || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected String or Utf8 for text column.");
-
-    // Return type: List<String or Utf8>
-    auto stringType = TDataType::Create(textDataType->GetSchemeType(), Env);
-    auto listType = TListType::Create(stringType, Env);
+    MKQL_ENSURE(textDataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for text.");
 
     // Validate settings argument - should be a string (serialized proto)
     const auto& settingsType = settings.GetStaticType();
     MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
     const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
-    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
+    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for settings.");
+
+    // Return type: List<String>
+    auto stringType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
+    auto listType = TListType::Create(stringType, Env);
 
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(text);

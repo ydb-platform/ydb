@@ -13,40 +13,6 @@
     "uid":"verifiedpermissions-2021-12-01"
   },
   "operations":{
-    "BatchIsAuthorized":{
-      "name":"BatchIsAuthorized",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"BatchIsAuthorizedInput"},
-      "output":{"shape":"BatchIsAuthorizedOutput"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
-      "documentation":"<p>Makes a series of decisions about multiple authorization requests for one principal or resource. Each request contains the equivalent content of an <code>IsAuthorized</code> request: principal, action, resource, and context. Either the <code>principal</code> or the <code>resource</code> parameter must be identical across all requests. For example, Verified Permissions won't evaluate a pair of requests where <code>bob</code> views <code>photo1</code> and <code>alice</code> views <code>photo2</code>. Authorization of <code>bob</code> to view <code>photo1</code> and <code>photo2</code>, or <code>bob</code> and <code>alice</code> to view <code>photo1</code>, are valid batches. </p> <p>The request is evaluated against all policies in the specified policy store that match the entities that you declare. The result of the decisions is a series of <code>Allow</code> or <code>Deny</code> responses, along with the IDs of the policies that produced each decision.</p> <p>The <code>entities</code> of a <code>BatchIsAuthorized</code> API request can contain up to 100 principals and up to 100 resources. The <code>requests</code> of a <code>BatchIsAuthorized</code> API request can contain up to 30 requests.</p> <note> <p>The <code>BatchIsAuthorized</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>verifiedpermissions:IsAuthorized</code> in their IAM policies.</p> </note>"
-    },
-    "BatchIsAuthorizedWithToken":{
-      "name":"BatchIsAuthorizedWithToken",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"BatchIsAuthorizedWithTokenInput"},
-      "output":{"shape":"BatchIsAuthorizedWithTokenOutput"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"ThrottlingException"},
-        {"shape":"InternalServerException"}
-      ],
-      "documentation":"<p>Makes a series of decisions about multiple authorization requests for one token. The principal in this request comes from an external identity source in the form of an identity or access token, formatted as a <a href=\"https://wikipedia.org/wiki/JSON_Web_Token\">JSON web token (JWT)</a>. The information in the parameters can also define additional context that Verified Permissions can include in the evaluations.</p> <p>The request is evaluated against all policies in the specified policy store that match the entities that you provide in the entities declaration and in the token. The result of the decisions is a series of <code>Allow</code> or <code>Deny</code> responses, along with the IDs of the policies that produced each decision.</p> <p>The <code>entities</code> of a <code>BatchIsAuthorizedWithToken</code> API request can contain up to 100 resources and up to 99 user groups. The <code>requests</code> of a <code>BatchIsAuthorizedWithToken</code> API request can contain up to 30 requests.</p> <note> <p>The <code>BatchIsAuthorizedWithToken</code> operation doesn't have its own IAM permission. To authorize this operation for Amazon Web Services principals, include the permission <code>verifiedpermissions:IsAuthorizedWithToken</code> in their IAM policies.</p> </note>"
-    },
     "CreateIdentitySource":{
       "name":"CreateIdentitySource",
       "http":{
@@ -64,7 +30,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates a reference to an Amazon Cognito user pool as an external identity provider (IdP). </p> <p>After you create an identity source, you can use the identities provided by the IdP as proxies for the principal in authorization queries that use the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operation. These identities take the form of tokens that contain claims about the user, such as IDs, attributes and group memberships. Amazon Cognito provides both identity tokens and access tokens, and Verified Permissions can use either or both. Any combination of identity and access tokens results in the same Cedar principal. Verified Permissions automatically translates the information about the identities into the standard Cedar attributes that can be evaluated by your policies. Because the Amazon Cognito identity and access tokens can contain different information, the tokens you choose to use determine which principal attributes are available to access when evaluating Cedar policies.</p> <important> <p>If you delete a Amazon Cognito user pool or user, tokens from that deleted pool or that deleted user continue to be usable until they expire.</p> </important> <note> <p>To reference a user from this identity source in your Cedar policies, use the following syntax.</p> <p> <i>IdentityType::\"&lt;CognitoUserPoolIdentifier&gt;|&lt;CognitoClientId&gt;</i> </p> <p>Where <code>IdentityType</code> is the string that you provide to the <code>PrincipalEntityType</code> parameter for this operation. The <code>CognitoUserPoolId</code> and <code>CognitoClientId</code> are defined by the Amazon Cognito user pool.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Creates a reference to an Amazon Cognito user pool as an external identity provider (IdP). </p> <p>After you create an identity source, you can use the identities provided by the IdP as proxies for the principal in authorization queries that use the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operation. These identities take the form of tokens that contain claims about the user, such as IDs, attributes and group memberships. Amazon Cognito provides both identity tokens and access tokens, and Verified Permissions can use either or both. Any combination of identity and access tokens results in the same Cedar principal. Verified Permissions automatically translates the information about the identities into the standard Cedar attributes that can be evaluated by your policies. Because the Amazon Cognito identity and access tokens can contain different information, the tokens you choose to use determine which principal attributes are available to access when evaluating Cedar policies.</p> <important> <p>If you delete a Amazon Cognito user pool or user, tokens from that deleted pool or that deleted user continue to be usable until they expire.</p> </important> <note> <p>To reference a user from this identity source in your Cedar policies, use the following syntax.</p> <p> <i>IdentityType::\"&lt;CognitoUserPoolIdentifier&gt;|&lt;CognitoClientId&gt;</i> </p> <p>Where <code>IdentityType</code> is the string that you provide to the <code>PrincipalEntityType</code> parameter for this operation. The <code>CognitoUserPoolId</code> and <code>CognitoClientId</code> are defined by the Amazon Cognito user pool.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "CreatePolicy":{
@@ -84,7 +50,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates a Cedar policy and saves it in the specified policy store. You can create either a static policy or a policy linked to a policy template.</p> <ul> <li> <p>To create a static policy, provide the Cedar policy text in the <code>StaticPolicy</code> section of the <code>PolicyDefinition</code>.</p> </li> <li> <p>To create a policy that is dynamically linked to a policy template, specify the policy template ID and the principal and resource to associate with this policy in the <code>templateLinked</code> section of the <code>PolicyDefinition</code>. If the policy template is ever updated, any policies linked to the policy template automatically use the updated template.</p> </li> </ul> <note> <p>Creating a policy causes it to be validated against the schema in the policy store. If the policy doesn't pass validation, the operation fails and the policy isn't stored.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Creates a Cedar policy and saves it in the specified policy store. You can create either a static policy or a policy linked to a policy template.</p> <ul> <li> <p>To create a static policy, provide the Cedar policy text in the <code>StaticPolicy</code> section of the <code>PolicyDefinition</code>.</p> </li> <li> <p>To create a policy that is dynamically linked to a policy template, specify the policy template ID and the principal and resource to associate with this policy in the <code>templateLinked</code> section of the <code>PolicyDefinition</code>. If the policy template is ever updated, any policies linked to the policy template automatically use the updated template.</p> </li> </ul> <note> <p>Creating a policy causes it to be validated against the schema in the policy store. If the policy doesn't pass validation, the operation fails and the policy isn't stored.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "CreatePolicyStore":{
@@ -103,7 +69,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates a policy store. A policy store is a container for policy resources.</p> <note> <p>Although <a href=\"https://docs.cedarpolicy.com/schema/schema.html#namespace\">Cedar supports multiple namespaces</a>, Verified Permissions currently supports only one namespace per policy store.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Creates a policy store. A policy store is a container for policy resources.</p> <note> <p>Although <a href=\"https://docs.cedarpolicy.com/schema/schema.html#namespace\">Cedar supports multiple namespaces</a>, Verified Permissions currently supports only one namespace per policy store.</p> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "CreatePolicyTemplate":{
@@ -123,7 +89,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates a policy template. A template can use placeholders for the principal and resource. A template must be instantiated into a policy by associating it with specific principals and resources to use for the placeholders. That instantiated policy can then be considered in authorization decisions. The instantiated policy works identically to any other policy, except that it is dynamically linked to the template. If the template changes, then any policies that are linked to that template are immediately updated as well.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Creates a policy template. A template can use placeholders for the principal and resource. A template must be instantiated into a policy by associating it with specific principals and resources to use for the placeholders. That instantiated policy can then be considered in authorization decisions. The instantiated policy works identically to any other policy, except that it is dynamically linked to the template. If the template changes, then any policies that are linked to that template are immediately updated as well.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "DeleteIdentitySource":{
@@ -317,7 +283,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Makes an authorization decision about a service request described in the parameters. The principal in this request comes from an external identity source in the form of an identity token formatted as a <a href=\"https://wikipedia.org/wiki/JSON_Web_Token\">JSON web token (JWT)</a>. The information in the parameters can also define additional context that Verified Permissions can include in the evaluation. The request is evaluated against all matching policies in the specified policy store. The result of the decision is either <code>Allow</code> or <code>Deny</code>, along with a list of the policies that resulted in the decision.</p> <p>At this time, Verified Permissions accepts tokens from only Amazon Cognito.</p> <p>Verified Permissions validates each token that is specified in a request by checking its expiration date and its signature.</p> <important> <p>If you delete a Amazon Cognito user pool or user, tokens from that deleted pool or that deleted user continue to be usable until they expire.</p> </important>"
+      "documentation":"<p>Makes an authorization decision about a service request described in the parameters. The principal in this request comes from an external identity source in the form of an identity token formatted as a <a href=\"https://wikipedia.org/wiki/JSON_Web_Token\">JSON web token (JWT)</a>. The information in the parameters can also define additional context that Verified Permissions can include in the evaluation. The request is evaluated against all matching policies in the specified policy store. The result of the decision is either <code>Allow</code> or <code>Deny</code>, along with a list of the policies that resulted in the decision.</p> <important> <p>If you specify the <code>identityToken</code> parameter, then this operation derives the principal from that token. You must not also include that principal in the <code>entities</code> parameter or the operation fails and reports a conflict between the two entity sources.</p> <p>If you provide only an <code>accessToken</code>, then you can include the entity as part of the <code>entities</code> parameter to provide additional attributes.</p> </important> <p>At this time, Verified Permissions accepts tokens from only Amazon Cognito.</p> <p>Verified Permissions validates each token that is specified in a request by checking its expiration date and its signature.</p> <important> <p>If you delete a Amazon Cognito user pool or user, tokens from that deleted pool or that deleted user continue to be usable until they expire.</p> </important>"
     },
     "ListIdentitySources":{
       "name":"ListIdentitySources",
@@ -403,7 +369,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Creates or updates the policy schema in the specified policy store. The schema is used to validate any Cedar policies and policy templates submitted to the policy store. Any changes to the schema validate only policies and templates submitted after the schema change. Existing policies and templates are not re-evaluated against the changed schema. If you later update a policy, then it is evaluated against the new schema at that time.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Creates or updates the policy schema in the specified policy store. The schema is used to validate any Cedar policies and policy templates submitted to the policy store. Any changes to the schema validate only policies and templates submitted after the schema change. Existing policies and templates are not re-evaluated against the changed schema. If you later update a policy, then it is evaluated against the new schema at that time.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "UpdateIdentitySource":{
@@ -422,7 +388,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Updates the specified identity source to use a new identity provider (IdP) source, or to change the mapping of identities from the IdP to a different principal entity type.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Updates the specified identity source to use a new identity provider (IdP) source, or to change the mapping of identities from the IdP to a different principal entity type.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "UpdatePolicy":{
@@ -442,7 +408,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Modifies a Cedar static policy in the specified policy store. You can change only certain elements of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyInput.html#amazonverifiedpermissions-UpdatePolicy-request-UpdatePolicyDefinition\">UpdatePolicyDefinition</a> parameter. You can directly update only static policies. To change a template-linked policy, you must update the template instead, using <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyTemplate.html\">UpdatePolicyTemplate</a>.</p> <note> <ul> <li> <p>If policy validation is enabled in the policy store, then updating a static policy causes Verified Permissions to validate the policy against the schema in the policy store. If the updated static policy doesn't pass validation, the operation fails and the update isn't stored.</p> </li> <li> <p>When you edit a static policy, you can change only certain elements of a static policy:</p> <ul> <li> <p>The action referenced by the policy. </p> </li> <li> <p>A condition clause, such as when and unless. </p> </li> </ul> <p>You can't change these elements of a static policy: </p> <ul> <li> <p>Changing a policy from a static policy to a template-linked policy. </p> </li> <li> <p>Changing the effect of a static policy from permit or forbid. </p> </li> <li> <p>The principal referenced by a static policy. </p> </li> <li> <p>The resource referenced by a static policy. </p> </li> </ul> </li> <li> <p>To update a template-linked policy, you must update the template instead. </p> </li> </ul> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Modifies a Cedar static policy in the specified policy store. You can change only certain elements of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyInput.html#amazonverifiedpermissions-UpdatePolicy-request-UpdatePolicyDefinition\">UpdatePolicyDefinition</a> parameter. You can directly update only static policies. To change a template-linked policy, you must update the template instead, using <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyTemplate.html\">UpdatePolicyTemplate</a>.</p> <note> <ul> <li> <p>If policy validation is enabled in the policy store, then updating a static policy causes Verified Permissions to validate the policy against the schema in the policy store. If the updated static policy doesn't pass validation, the operation fails and the update isn't stored.</p> </li> <li> <p>When you edit a static policy, You can change only certain elements of a static policy:</p> <ul> <li> <p>The action referenced by the policy. </p> </li> <li> <p>A condition clause, such as when and unless. </p> </li> </ul> <p>You can't change these elements of a static policy: </p> <ul> <li> <p>Changing a policy from a static policy to a template-linked policy. </p> </li> <li> <p>Changing the effect of a static policy from permit or forbid. </p> </li> <li> <p>The principal referenced by a static policy. </p> </li> <li> <p>The resource referenced by a static policy. </p> </li> </ul> </li> <li> <p>To update a template-linked policy, you must update the template instead. </p> </li> </ul> </note> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "UpdatePolicyStore":{
@@ -461,7 +427,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Modifies the validation setting for a policy store.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Modifies the validation setting for a policy store.</p> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     },
     "UpdatePolicyTemplate":{
@@ -480,7 +446,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
       ],
-      "documentation":"<p>Updates the specified policy template. You can update only the description and the some elements of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyTemplate.html#amazonverifiedpermissions-UpdatePolicyTemplate-request-policyBody\">policyBody</a>. </p> <important> <p>Changes you make to the policy template content are immediately (within the constraints of eventual consistency) reflected in authorization decisions that involve all template-linked policies instantiated from this template.</p> </important> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
+      "documentation":"<p>Updates the specified policy template. You can update only the description and the some elements of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyTemplate.html#amazonverifiedpermissions-UpdatePolicyTemplate-request-policyBody\">policyBody</a>. </p> <important> <p>Changes you make to the policy template content are immediately (within the constraints of eventual consistency) reflected in authorization decisions that involve all template-linked policies instantiated from this template.</p> </important> <note> <p>Verified Permissions is <i> <a href=\"https://wikipedia.org/wiki/Eventual_consistency\">eventually consistent</a> </i>. It can take a few seconds for a new or changed element to be propagate through the service and be visible in the results of other Verified Permissions operations.</p> </note>",
       "idempotent":true
     }
   },
@@ -517,7 +483,7 @@
           "documentation":"<p>The ID of an action.</p>"
         }
       },
-      "documentation":"<p>Contains information about an action for a request for which an authorization decision is made.</p> <p>This data type is used as a request parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>{ \"actionId\": \"&lt;action name&gt;\", \"actionType\": \"Action\" }</code> </p>"
+      "documentation":"<p>Contains information about an action for a request for which an authorization decision is made.</p> <p>This data type is used as an request parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a> and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>{ \"actionId\": \"&lt;action name&gt;\", \"actionType\": \"Action\" }</code> </p>"
     },
     "ActionType":{
       "type":"string",
@@ -554,196 +520,8 @@
           "documentation":"<p>An attribute value of <a href=\"https://docs.cedarpolicy.com/policies/syntax-datatypes.html#record\">Record</a> type.</p> <p>Example: <code>{\"record\": { \"keyName\": {} } }</code> </p>"
         }
       },
-      "documentation":"<p>The value of an attribute.</p> <p>Contains information about the runtime context for a request for which an authorization decision is made. </p> <p>This data type is used as a member of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ContextDefinition.html\">ContextDefinition</a> structure which is uses as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p>",
+      "documentation":"<p>The value of an attribute.</p> <p>Contains information about the runtime context for a request for which an authorization decision is made. </p> <p>This data type is used as a member of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ContextDefinition.html\">ContextDefinition</a> structure which is uses as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a> and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p>",
       "union":true
-    },
-    "BatchIsAuthorizedInput":{
-      "type":"structure",
-      "required":[
-        "policyStoreId",
-        "requests"
-      ],
-      "members":{
-        "policyStoreId":{
-          "shape":"PolicyStoreId",
-          "documentation":"<p>Specifies the ID of the policy store. Policies in this policy store will be used to make the authorization decisions for the input.</p>"
-        },
-        "entities":{
-          "shape":"EntitiesDefinition",
-          "documentation":"<p>Specifies the list of resources and principals and their associated attributes that Verified Permissions can examine when evaluating the policies. </p> <note> <p>You can include only principal and resource entities in this parameter; you can't include actions. You must specify actions in the schema.</p> </note>"
-        },
-        "requests":{
-          "shape":"BatchIsAuthorizedInputList",
-          "documentation":"<p>An array of up to 30 requests that you want Verified Permissions to evaluate.</p>"
-        }
-      }
-    },
-    "BatchIsAuthorizedInputItem":{
-      "type":"structure",
-      "members":{
-        "principal":{
-          "shape":"EntityIdentifier",
-          "documentation":"<p>Specifies the principal for which the authorization decision is to be made.</p>"
-        },
-        "action":{
-          "shape":"ActionIdentifier",
-          "documentation":"<p>Specifies the requested action to be authorized. For example, <code>PhotoFlash::ReadPhoto</code>.</p>"
-        },
-        "resource":{
-          "shape":"EntityIdentifier",
-          "documentation":"<p>Specifies the resource that you want an authorization decision for. For example, <code>PhotoFlash::Photo</code>.</p>"
-        },
-        "context":{
-          "shape":"ContextDefinition",
-          "documentation":"<p>Specifies additional context that can be used to make more granular authorization decisions.</p>"
-        }
-      },
-      "documentation":"<p>An authorization request that you include in a <code>BatchIsAuthorized</code> API request.</p>"
-    },
-    "BatchIsAuthorizedInputList":{
-      "type":"list",
-      "member":{"shape":"BatchIsAuthorizedInputItem"},
-      "min":1
-    },
-    "BatchIsAuthorizedOutput":{
-      "type":"structure",
-      "required":["results"],
-      "members":{
-        "results":{
-          "shape":"BatchIsAuthorizedOutputList",
-          "documentation":"<p>A series of <code>Allow</code> or <code>Deny</code> decisions for each request, and the policies that produced them.</p>"
-        }
-      }
-    },
-    "BatchIsAuthorizedOutputItem":{
-      "type":"structure",
-      "required":[
-        "request",
-        "decision",
-        "determiningPolicies",
-        "errors"
-      ],
-      "members":{
-        "request":{
-          "shape":"BatchIsAuthorizedInputItem",
-          "documentation":"<p>The authorization request that initiated the decision.</p>"
-        },
-        "decision":{
-          "shape":"Decision",
-          "documentation":"<p>An authorization decision that indicates if the authorization request should be allowed or denied.</p>"
-        },
-        "determiningPolicies":{
-          "shape":"DeterminingPolicyList",
-          "documentation":"<p>The list of determining policies used to make the authorization decision. For example, if there are two matching policies, where one is a forbid and the other is a permit, then the forbid policy will be the determining policy. In the case of multiple matching permit policies then there would be multiple determining policies. In the case that no policies match, and hence the response is DENY, there would be no determining policies.</p>"
-        },
-        "errors":{
-          "shape":"EvaluationErrorList",
-          "documentation":"<p>Errors that occurred while making an authorization decision. For example, a policy might reference an entity or attribute that doesn't exist in the request.</p>"
-        }
-      },
-      "documentation":"<p>The decision, based on policy evaluation, from an individual authorization request in a <code>BatchIsAuthorized</code> API request.</p>"
-    },
-    "BatchIsAuthorizedOutputList":{
-      "type":"list",
-      "member":{"shape":"BatchIsAuthorizedOutputItem"}
-    },
-    "BatchIsAuthorizedWithTokenInput":{
-      "type":"structure",
-      "required":[
-        "policyStoreId",
-        "requests"
-      ],
-      "members":{
-        "policyStoreId":{
-          "shape":"PolicyStoreId",
-          "documentation":"<p>Specifies the ID of the policy store. Policies in this policy store will be used to make an authorization decision for the input.</p>"
-        },
-        "identityToken":{
-          "shape":"Token",
-          "documentation":"<p>Specifies an identity (ID) token for the principal that you want to authorize in each request. This token is provided to you by the identity provider (IdP) associated with the specified identity source. You must specify either an <code>accessToken</code>, an <code>identityToken</code>, or both.</p> <p>Must be an ID token. Verified Permissions returns an error if the <code>token_use</code> claim in the submitted token isn't <code>id</code>.</p>"
-        },
-        "accessToken":{
-          "shape":"Token",
-          "documentation":"<p>Specifies an access token for the principal that you want to authorize in each request. This token is provided to you by the identity provider (IdP) associated with the specified identity source. You must specify either an <code>accessToken</code>, an <code>identityToken</code>, or both.</p> <p>Must be an access token. Verified Permissions returns an error if the <code>token_use</code> claim in the submitted token isn't <code>access</code>.</p>"
-        },
-        "entities":{
-          "shape":"EntitiesDefinition",
-          "documentation":"<p>Specifies the list of resources and their associated attributes that Verified Permissions can examine when evaluating the policies. </p> <important> <p>You can't include principals in this parameter, only resource and action entities. This parameter can't include any entities of a type that matches the user or group entity types that you defined in your identity source.</p> <ul> <li> <p>The <code>BatchIsAuthorizedWithToken</code> operation takes principal attributes from <b> <i>only</i> </b> the <code>identityToken</code> or <code>accessToken</code> passed to the operation.</p> </li> <li> <p>For action entities, you can include only their <code>Identifier</code> and <code>EntityType</code>. </p> </li> </ul> </important>"
-        },
-        "requests":{
-          "shape":"BatchIsAuthorizedWithTokenInputList",
-          "documentation":"<p>An array of up to 30 requests that you want Verified Permissions to evaluate.</p>"
-        }
-      }
-    },
-    "BatchIsAuthorizedWithTokenInputItem":{
-      "type":"structure",
-      "members":{
-        "action":{
-          "shape":"ActionIdentifier",
-          "documentation":"<p>Specifies the requested action to be authorized. For example, <code>PhotoFlash::ReadPhoto</code>.</p>"
-        },
-        "resource":{
-          "shape":"EntityIdentifier",
-          "documentation":"<p>Specifies the resource that you want an authorization decision for. For example, <code>PhotoFlash::Photo</code>.</p>"
-        },
-        "context":{
-          "shape":"ContextDefinition",
-          "documentation":"<p>Specifies additional context that can be used to make more granular authorization decisions.</p>"
-        }
-      },
-      "documentation":"<p>An authorization request that you include in a <code>BatchIsAuthorizedWithToken</code> API request.</p>"
-    },
-    "BatchIsAuthorizedWithTokenInputList":{
-      "type":"list",
-      "member":{"shape":"BatchIsAuthorizedWithTokenInputItem"},
-      "min":1
-    },
-    "BatchIsAuthorizedWithTokenOutput":{
-      "type":"structure",
-      "required":["results"],
-      "members":{
-        "principal":{
-          "shape":"EntityIdentifier",
-          "documentation":"<p>The identifier of the principal in the ID or access token.</p>"
-        },
-        "results":{
-          "shape":"BatchIsAuthorizedWithTokenOutputList",
-          "documentation":"<p>A series of <code>Allow</code> or <code>Deny</code> decisions for each request, and the policies that produced them.</p>"
-        }
-      }
-    },
-    "BatchIsAuthorizedWithTokenOutputItem":{
-      "type":"structure",
-      "required":[
-        "request",
-        "decision",
-        "determiningPolicies",
-        "errors"
-      ],
-      "members":{
-        "request":{
-          "shape":"BatchIsAuthorizedWithTokenInputItem",
-          "documentation":"<p>The authorization request that initiated the decision.</p>"
-        },
-        "decision":{
-          "shape":"Decision",
-          "documentation":"<p>An authorization decision that indicates if the authorization request should be allowed or denied.</p>"
-        },
-        "determiningPolicies":{
-          "shape":"DeterminingPolicyList",
-          "documentation":"<p>The list of determining policies used to make the authorization decision. For example, if there are two matching policies, where one is a forbid and the other is a permit, then the forbid policy will be the determining policy. In the case of multiple matching permit policies then there would be multiple determining policies. In the case that no policies match, and hence the response is DENY, there would be no determining policies.</p>"
-        },
-        "errors":{
-          "shape":"EvaluationErrorList",
-          "documentation":"<p>Errors that occurred while making an authorization decision. For example, a policy might reference an entity or attribute that doesn't exist in the request.</p>"
-        }
-      },
-      "documentation":"<p>The decision, based on policy evaluation, from an individual authorization request in a <code>BatchIsAuthorizedWithToken</code> API request.</p>"
-    },
-    "BatchIsAuthorizedWithTokenOutputList":{
-      "type":"list",
-      "member":{"shape":"BatchIsAuthorizedWithTokenOutputItem"}
     },
     "Boolean":{
       "type":"boolean",
@@ -767,37 +545,6 @@
       "max":1000,
       "min":0
     },
-    "CognitoGroupConfiguration":{
-      "type":"structure",
-      "required":["groupEntityType"],
-      "members":{
-        "groupEntityType":{
-          "shape":"GroupEntityType",
-          "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
-        }
-      },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p> <p>This data type is part of a <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfiguration.html\">CognitoUserPoolConfiguration</a> structure and is a request parameter in <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p>"
-    },
-    "CognitoGroupConfigurationDetail":{
-      "type":"structure",
-      "members":{
-        "groupEntityType":{
-          "shape":"GroupEntityType",
-          "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
-        }
-      },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p> <p>This data type is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfigurationItem.html\">CognitoUserPoolConfigurationDetail</a> structure and is a response parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p>"
-    },
-    "CognitoGroupConfigurationItem":{
-      "type":"structure",
-      "members":{
-        "groupEntityType":{
-          "shape":"GroupEntityType",
-          "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
-        }
-      },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p> <p>This data type is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CognitoUserPoolConfigurationDetail.html\">CognitoUserPoolConfigurationItem</a> structure and is a response parameter to <a href=\"http://forums.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p>"
-    },
     "CognitoUserPoolConfiguration":{
       "type":"structure",
       "required":["userPoolArn"],
@@ -809,99 +556,19 @@
         "clientIds":{
           "shape":"ClientIds",
           "documentation":"<p>The unique application client IDs that are associated with the specified Amazon Cognito user pool.</p> <p>Example: <code>\"ClientIds\": [\"&amp;ExampleCogClientId;\"]</code> </p>"
-        },
-        "groupConfiguration":{
-          "shape":"CognitoGroupConfiguration",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
         }
       },
-      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_Configuration.html\">Configuration</a> structure that is used as a parameter to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
-    },
-    "CognitoUserPoolConfigurationDetail":{
-      "type":"structure",
-      "required":[
-        "userPoolArn",
-        "clientIds",
-        "issuer"
-      ],
-      "members":{
-        "userPoolArn":{
-          "shape":"UserPoolArn",
-          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of the Amazon Cognito user pool that contains the identities to be authorized.</p> <p>Example: <code>\"userPoolArn\": \"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\"</code> </p>"
-        },
-        "clientIds":{
-          "shape":"ClientIds",
-          "documentation":"<p>The unique application client IDs that are associated with the specified Amazon Cognito user pool.</p> <p>Example: <code>\"clientIds\": [\"&amp;ExampleCogClientId;\"]</code> </p>"
-        },
-        "issuer":{
-          "shape":"Issuer",
-          "documentation":"<p>The OpenID Connect (OIDC) <code>issuer</code> ID of the Amazon Cognito user pool that contains the identities to be authorized.</p> <p>Example: <code>\"issuer\": \"https://cognito-idp.us-east-1.amazonaws.com/us-east-1_1a2b3c4d5\"</code> </p>"
-        },
-        "groupConfiguration":{
-          "shape":"CognitoGroupConfigurationDetail",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
-        }
-      },
-      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationDetail.html\">ConfigurationDetail</a> structure that is part of the response to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
-    },
-    "CognitoUserPoolConfigurationItem":{
-      "type":"structure",
-      "required":[
-        "userPoolArn",
-        "clientIds",
-        "issuer"
-      ],
-      "members":{
-        "userPoolArn":{
-          "shape":"UserPoolArn",
-          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of the Amazon Cognito user pool that contains the identities to be authorized.</p> <p>Example: <code>\"userPoolArn\": \"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\"</code> </p>"
-        },
-        "clientIds":{
-          "shape":"ClientIds",
-          "documentation":"<p>The unique application client IDs that are associated with the specified Amazon Cognito user pool.</p> <p>Example: <code>\"clientIds\": [\"&amp;ExampleCogClientId;\"]</code> </p>"
-        },
-        "issuer":{
-          "shape":"Issuer",
-          "documentation":"<p>The OpenID Connect (OIDC) <code>issuer</code> ID of the Amazon Cognito user pool that contains the identities to be authorized.</p> <p>Example: <code>\"issuer\": \"https://cognito-idp.us-east-1.amazonaws.com/us-east-1_1a2b3c4d5\"</code> </p>"
-        },
-        "groupConfiguration":{
-          "shape":"CognitoGroupConfigurationItem",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
-        }
-      },
-      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationItem.html\">ConfigurationItem</a> structure that is part of the response to <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
+      "documentation":"<p>The configuration for an identity source that represents a connection to an Amazon Cognito user pool used as an identity provider for Verified Permissions.</p> <p>This data type is used as a field that is part of an <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_Configuration.html\">Configuration</a> structure that is used as a parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_Configuration.html\">Configuration</a>.</p> <p>Example:<code>\"CognitoUserPoolConfiguration\":{\"UserPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"ClientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}</code> </p>"
     },
     "Configuration":{
       "type":"structure",
       "members":{
         "cognitoUserPoolConfiguration":{
           "shape":"CognitoUserPoolConfiguration",
-          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
+          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"]}}</code> </p>"
         }
       },
       "documentation":"<p>Contains configuration information used when creating a new identity source.</p> <note> <p>At this time, the only valid member of this structure is a Amazon Cognito user pool configuration.</p> <p>You must specify a <code>userPoolArn</code>, and optionally, a <code>ClientId</code>.</p> </note> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a> operation.</p>",
-      "union":true
-    },
-    "ConfigurationDetail":{
-      "type":"structure",
-      "members":{
-        "cognitoUserPoolConfiguration":{
-          "shape":"CognitoUserPoolConfigurationDetail",
-          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
-        }
-      },
-      "documentation":"<p>Contains configuration information about an identity source.</p> <p>This data type is a response parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a> operation.</p>",
-      "union":true
-    },
-    "ConfigurationItem":{
-      "type":"structure",
-      "members":{
-        "cognitoUserPoolConfiguration":{
-          "shape":"CognitoUserPoolConfigurationItem",
-          "documentation":"<p>Contains configuration details of a Amazon Cognito user pool that Verified Permissions can use as a source of authenticated identities as entities. It specifies the <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of a Amazon Cognito user pool and one or more application client IDs.</p> <p>Example: <code>\"configuration\":{\"cognitoUserPoolConfiguration\":{\"userPoolArn\":\"arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_1a2b3c4d5\",\"clientIds\": [\"a1b2c3d4e5f6g7h8i9j0kalbmc\"],\"groupConfiguration\": {\"groupEntityType\": \"MyCorp::Group\"}}}</code> </p>"
-        }
-      },
-      "documentation":"<p>Contains configuration information about an identity source.</p> <p>This data type is a response parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a> operation.</p>",
       "union":true
     },
     "ConflictException":{
@@ -925,10 +592,10 @@
       "members":{
         "contextMap":{
           "shape":"ContextMap",
-          "documentation":"<p>An list of attributes that are needed to successfully evaluate an authorization request. Each attribute in this array must include a map of a data type and its value.</p> <p>Example: <code>\"contextMap\":{\"&lt;KeyName1&gt;\":{\"boolean\":true},\"&lt;KeyName2&gt;\":{\"long\":1234}}</code> </p>"
+          "documentation":"<p>An list of attributes that are needed to successfully evaluate an authorization request. Each attribute in this array must include a map of a data type and its value.</p> <p>Example: <code>\"Context\":{\"&lt;KeyName1&gt;\":{\"boolean\":true},\"&lt;KeyName2&gt;\":{\"long\":1234}}</code> </p>"
         }
       },
-      "documentation":"<p>Contains additional details about the context of the request. Verified Permissions evaluates this information in an authorization request as part of the <code>when</code> and <code>unless</code> clauses in a policy.</p> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>\"context\":{\"contextMap\":{\"&lt;KeyName1&gt;\":{\"boolean\":true},\"&lt;KeyName2&gt;\":{\"long\":1234}}}</code> </p>",
+      "documentation":"<p>Contains additional details about the context of the request. Verified Permissions evaluates this information in an authorization request as part of the <code>when</code> and <code>unless</code> clauses in a policy.</p> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a> and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>\"context\":{\"Context\":{\"&lt;KeyName1&gt;\":{\"boolean\":true},\"&lt;KeyName2&gt;\":{\"long\":1234}}}</code> </p>",
       "union":true
     },
     "ContextMap":{
@@ -945,7 +612,7 @@
       "members":{
         "clientToken":{
           "shape":"IdempotencyToken",
-          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>ConflictException</code> error.</p> <p>Verified Permissions recognizes a <code>ClientToken</code> for eight hours. After eight hours, the next request with the same parameters performs the operation again regardless of the value of <code>ClientToken</code>.</p>",
+          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>IdempotentParameterMismatch</code> error.</p>",
           "idempotencyToken":true
         },
         "policyStoreId":{
@@ -998,7 +665,7 @@
       "members":{
         "clientToken":{
           "shape":"IdempotencyToken",
-          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>ConflictException</code> error.</p> <p>Verified Permissions recognizes a <code>ClientToken</code> for eight hours. After eight hours, the next request with the same parameters performs the operation again regardless of the value of <code>ClientToken</code>.</p>",
+          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>IdempotentParameterMismatch</code> error.</p>",
           "idempotencyToken":true
         },
         "policyStoreId":{
@@ -1057,16 +724,12 @@
       "members":{
         "clientToken":{
           "shape":"IdempotencyToken",
-          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>ConflictException</code> error.</p> <p>Verified Permissions recognizes a <code>ClientToken</code> for eight hours. After eight hours, the next request with the same parameters performs the operation again regardless of the value of <code>ClientToken</code>.</p>",
+          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>IdempotentParameterMismatch</code> error.</p>",
           "idempotencyToken":true
         },
         "validationSettings":{
           "shape":"ValidationSettings",
           "documentation":"<p>Specifies the validation setting for this policy store.</p> <p>Currently, the only valid and required value is <code>Mode</code>.</p> <important> <p>We recommend that you turn on <code>STRICT</code> mode only after you define a schema. If a schema doesn't exist, then <code>STRICT</code> mode causes any policy to fail validation, and Verified Permissions rejects the policy. You can turn off validation by using the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyStore\">UpdatePolicyStore</a>. Then, when you have a schema defined, use <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_UpdatePolicyStore\">UpdatePolicyStore</a> again to turn validation back on.</p> </important>"
-        },
-        "description":{
-          "shape":"PolicyStoreDescription",
-          "documentation":"<p>Descriptive text that you can provide to help with identification of the current policy store.</p>"
         }
       }
     },
@@ -1106,7 +769,7 @@
       "members":{
         "clientToken":{
           "shape":"IdempotencyToken",
-          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>ConflictException</code> error.</p> <p>Verified Permissions recognizes a <code>ClientToken</code> for eight hours. After eight hours, the next request with the same parameters performs the operation again regardless of the value of <code>ClientToken</code>.</p>",
+          "documentation":"<p>Specifies a unique, case-sensitive ID that you provide to ensure the idempotency of the request. This lets you safely retry the request without accidentally performing the same operation a second time. Passing the same value to a later call to an operation requires that you also pass the same value for all other parameters. We recommend that you use a <a href=\"https://wikipedia.org/wiki/Universally_unique_identifier\">UUID type of value.</a>.</p> <p>If you don't provide this value, then Amazon Web Services generates a random one for you.</p> <p>If you retry the operation with the same <code>ClientToken</code>, but with different parameters, the retry fails with an <code>IdempotentParameterMismatch</code> error.</p>",
           "idempotencyToken":true
         },
         "policyStoreId":{
@@ -1247,7 +910,7 @@
           "documentation":"<p>The Id of a policy that determined to an authorization decision.</p> <p>Example: <code>\"policyId\":\"SPEXAMPLEabcdefg111111\"</code> </p>"
         }
       },
-      "documentation":"<p>Contains information about one of the policies that determined an authorization decision.</p> <p>This data type is used as an element in a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>\"determiningPolicies\":[{\"policyId\":\"SPEXAMPLEabcdefg111111\"}]</code> </p>"
+      "documentation":"<p>Contains information about one of the policies that determined an authorization decision.</p> <p>This data type is used as an element in a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a> and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p> <p>Example: <code>\"determiningPolicies\":[{\"policyId\":\"SPEXAMPLEabcdefg111111\"}]</code> </p>"
     },
     "DeterminingPolicyList":{
       "type":"list",
@@ -1354,7 +1017,7 @@
           "documentation":"<p>The error description.</p>"
         }
       },
-      "documentation":"<p>Contains a description of an evaluation error.</p> <p>This data type is a response parameter of the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a>, <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_BatchIsAuthorized.html\">BatchIsAuthorized</a>, and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p>",
+      "documentation":"<p>Contains a description of an evaluation error.</p> <p>This data type is used as a request parameter in the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorized.html\">IsAuthorized</a> and <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_IsAuthorizedWithToken.html\">IsAuthorizedWithToken</a> operations.</p>",
       "sensitive":true
     },
     "EvaluationErrorList":{
@@ -1382,6 +1045,7 @@
       "type":"structure",
       "required":[
         "createdDate",
+        "details",
         "identitySourceId",
         "lastUpdatedDate",
         "policyStoreId",
@@ -1394,9 +1058,7 @@
         },
         "details":{
           "shape":"IdentitySourceDetails",
-          "documentation":"<p>A structure that describes the configuration of the identity source.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration"
+          "documentation":"<p>A structure that describes the configuration of the identity source.</p>"
         },
         "identitySourceId":{
           "shape":"IdentitySourceId",
@@ -1413,10 +1075,6 @@
         "principalEntityType":{
           "shape":"PrincipalEntityType",
           "documentation":"<p>The data type of principals generated for identities authenticated by this identity source.</p>"
-        },
-        "configuration":{
-          "shape":"ConfigurationDetail",
-          "documentation":"<p>Contains configuration information about an identity source.</p>"
         }
       }
     },
@@ -1521,10 +1179,6 @@
         "lastUpdatedDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time that the policy store was last updated.</p>"
-        },
-        "description":{
-          "shape":"PolicyStoreDescription",
-          "documentation":"<p>Descriptive text that you can provide to help with identification of the current policy store.</p>"
         }
       }
     },
@@ -1615,19 +1269,8 @@
         "lastUpdatedDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time that the schema was most recently updated.</p>"
-        },
-        "namespaces":{
-          "shape":"NamespaceList",
-          "documentation":"<p>The namespaces of the entities referenced by this schema.</p>"
         }
       }
-    },
-    "GroupEntityType":{
-      "type":"string",
-      "max":200,
-      "min":1,
-      "pattern":"([_a-zA-Z][_a-zA-Z0-9]*::)*[_a-zA-Z][_a-zA-Z0-9]*",
-      "sensitive":true
     },
     "IdempotencyToken":{
       "type":"string",
@@ -1640,32 +1283,22 @@
       "members":{
         "clientIds":{
           "shape":"ClientIds",
-          "documentation":"<p>The application client IDs associated with the specified Amazon Cognito user pool that are enabled for this identity source.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration.clientIds"
+          "documentation":"<p>The application client IDs associated with the specified Amazon Cognito user pool that are enabled for this identity source.</p>"
         },
         "userPoolArn":{
           "shape":"UserPoolArn",
-          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of the Amazon Cognito user pool whose identities are accessible to this Verified Permissions policy store.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration.userPoolArn"
+          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html\">Amazon Resource Name (ARN)</a> of the Amazon Cognito user pool whose identities are accessible to this Verified Permissions policy store.</p>"
         },
         "discoveryUrl":{
           "shape":"DiscoveryUrl",
-          "documentation":"<p>The well-known URL that points to this user pool's OIDC discovery endpoint. This is a URL string in the following format. This URL replaces the placeholders for both the Amazon Web Services Region and the user pool identifier with those appropriate for this user pool.</p> <p> <code>https://cognito-idp.<i>&lt;region&gt;</i>.amazonaws.com/<i>&lt;user-pool-id&gt;</i>/.well-known/openid-configuration</code> </p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration.issuer"
+          "documentation":"<p>The well-known URL that points to this user pool's OIDC discovery endpoint. This is a URL string in the following format. This URL replaces the placeholders for both the Amazon Web Services Region and the user pool identifier with those appropriate for this user pool.</p> <p> <code>https://cognito-idp.<i>&lt;region&gt;</i>.amazonaws.com/<i>&lt;user-pool-id&gt;</i>/.well-known/openid-configuration</code> </p>"
         },
         "openIdIssuer":{
           "shape":"OpenIdIssuer",
-          "documentation":"<p>A string that identifies the type of OIDC service represented by this identity source. </p> <p>At this time, the only valid value is <code>cognito</code>.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration"
+          "documentation":"<p>A string that identifies the type of OIDC service represented by this identity source. </p> <p>At this time, the only valid value is <code>cognito</code>.</p>"
         }
       },
-      "documentation":"<p>A structure that contains configuration of the identity source.</p> <p>This data type was a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_GetIdentitySource.html\">GetIdentitySource</a> operation. Replaced by <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationDetail.html\">ConfigurationDetail</a>.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This shape has been replaced by ConfigurationDetail"
+      "documentation":"<p>A structure that contains configuration of the identity source.</p> <p>This data type is used as a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a> operation.</p>"
     },
     "IdentitySourceFilter":{
       "type":"structure",
@@ -1675,7 +1308,7 @@
           "documentation":"<p>The Cedar entity type of the principals returned by the identity provider (IdP) associated with this identity source.</p>"
         }
       },
-      "documentation":"<p>A structure that defines characteristics of an identity source that you can use to filter.</p> <p>This data type is a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentityStores.html\">ListIdentityStores</a> operation.</p>"
+      "documentation":"<p>A structure that defines characteristics of an identity source that you can use to filter.</p> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentityStores.html\">ListIdentityStores</a> operation.</p>"
     },
     "IdentitySourceFilters":{
       "type":"list",
@@ -1693,6 +1326,7 @@
       "type":"structure",
       "required":[
         "createdDate",
+        "details",
         "identitySourceId",
         "lastUpdatedDate",
         "policyStoreId",
@@ -1705,9 +1339,7 @@
         },
         "details":{
           "shape":"IdentitySourceItemDetails",
-          "documentation":"<p>A structure that contains the details of the associated identity provider (IdP).</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration"
+          "documentation":"<p>A structure that contains the details of the associated identity provider (IdP).</p>"
         },
         "identitySourceId":{
           "shape":"IdentitySourceId",
@@ -1724,45 +1356,31 @@
         "principalEntityType":{
           "shape":"PrincipalEntityType",
           "documentation":"<p>The Cedar entity type of the principals returned from the IdP associated with this identity source.</p>"
-        },
-        "configuration":{
-          "shape":"ConfigurationItem",
-          "documentation":"<p>Contains configuration information about an identity source.</p>"
         }
       },
-      "documentation":"<p>A structure that defines an identity source.</p> <p>This data type is a response parameter to the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a> operation.</p>"
+      "documentation":"<p>A structure that defines an identity source.</p> <p>This data type is used as a request parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentityStores.html\">ListIdentityStores</a> operation.</p>"
     },
     "IdentitySourceItemDetails":{
       "type":"structure",
       "members":{
         "clientIds":{
           "shape":"ClientIds",
-          "documentation":"<p>The application client IDs associated with the specified Amazon Cognito user pool that are enabled for this identity source.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration.clientIds"
+          "documentation":"<p>The application client IDs associated with the specified Amazon Cognito user pool that are enabled for this identity source.</p>"
         },
         "userPoolArn":{
           "shape":"UserPoolArn",
-          "documentation":"<p>The Amazon Cognito user pool whose identities are accessible to this Verified Permissions policy store.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration.userPoolArn"
+          "documentation":"<p>The Amazon Cognito user pool whose identities are accessible to this Verified Permissions policy store.</p>"
         },
         "discoveryUrl":{
           "shape":"DiscoveryUrl",
-          "documentation":"<p>The well-known URL that points to this user pool's OIDC discovery endpoint. This is a URL string in the following format. This URL replaces the placeholders for both the Amazon Web Services Region and the user pool identifier with those appropriate for this user pool.</p> <p> <code>https://cognito-idp.<i>&lt;region&gt;</i>.amazonaws.com/<i>&lt;user-pool-id&gt;</i>/.well-known/openid-configuration</code> </p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration.cognitoUserPoolConfiguration.issuer"
+          "documentation":"<p>The well-known URL that points to this user pool's OIDC discovery endpoint. This is a URL string in the following format. This URL replaces the placeholders for both the Amazon Web Services Region and the user pool identifier with those appropriate for this user pool.</p> <p> <code>https://cognito-idp.<i>&lt;region&gt;</i>.amazonaws.com/<i>&lt;user-pool-id&gt;</i>/.well-known/openid-configuration</code> </p>"
         },
         "openIdIssuer":{
           "shape":"OpenIdIssuer",
-          "documentation":"<p>A string that identifies the type of OIDC service represented by this identity source. </p> <p>At this time, the only valid value is <code>cognito</code>.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This attribute has been replaced by configuration"
+          "documentation":"<p>A string that identifies the type of OIDC service represented by this identity source. </p> <p>At this time, the only valid value is <code>cognito</code>.</p>"
         }
       },
-      "documentation":"<p>A structure that contains configuration of the identity source.</p> <p>This data type was a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListIdentitySources.html\">ListIdentitySources</a> operation. Replaced by <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ConfigurationItem.html\">ConfigurationItem</a>.</p>",
-      "deprecated":true,
-      "deprecatedMessage":"This shape has been replaced by ConfigurationItem"
+      "documentation":"<p>A structure that contains configuration of the identity source.</p> <p>This data type is used as a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_CreateIdentitySource.html\">CreateIdentitySource</a> operation.</p>"
     },
     "IdentitySources":{
       "type":"list",
@@ -1841,11 +1459,11 @@
         },
         "identityToken":{
           "shape":"Token",
-          "documentation":"<p>Specifies an identity token for the principal to be authorized. This token is provided to you by the identity provider (IdP) associated with the specified identity source. You must specify either an <code>accessToken</code>, an <code>identityToken</code>, or both.</p> <p>Must be an ID token. Verified Permissions returns an error if the <code>token_use</code> claim in the submitted token isn't <code>id</code>.</p>"
+          "documentation":"<p>Specifies an identity token for the principal to be authorized. This token is provided to you by the identity provider (IdP) associated with the specified identity source. You must specify either an <code>AccessToken</code> or an <code>IdentityToken</code>, or both.</p>"
         },
         "accessToken":{
           "shape":"Token",
-          "documentation":"<p>Specifies an access token for the principal to be authorized. This token is provided to you by the identity provider (IdP) associated with the specified identity source. You must specify either an <code>accessToken</code>, an <code>identityToken</code>, or both.</p> <p>Must be an access token. Verified Permissions returns an error if the <code>token_use</code> claim in the submitted token isn't <code>access</code>.</p>"
+          "documentation":"<p>Specifies an access token for the principal to be authorized. This token is provided to you by the identity provider (IdP) associated with the specified identity source. You must specify either an <code>AccessToken</code>, or an <code>IdentityToken</code>, or both.</p>"
         },
         "action":{
           "shape":"ActionIdentifier",
@@ -1861,7 +1479,7 @@
         },
         "entities":{
           "shape":"EntitiesDefinition",
-          "documentation":"<p>Specifies the list of resources and their associated attributes that Verified Permissions can examine when evaluating the policies. </p> <important> <p>You can't include principals in this parameter, only resource and action entities. This parameter can't include any entities of a type that matches the user or group entity types that you defined in your identity source.</p> <ul> <li> <p>The <code>IsAuthorizedWithToken</code> operation takes principal attributes from <b> <i>only</i> </b> the <code>identityToken</code> or <code>accessToken</code> passed to the operation.</p> </li> <li> <p>For action entities, you can include only their <code>Identifier</code> and <code>EntityType</code>. </p> </li> </ul> </important>"
+          "documentation":"<p>Specifies the list of resources and their associated attributes that Verified Permissions can examine when evaluating the policies. </p> <note> <p>You can include only resource and action entities in this parameter; you can't include principals.</p> <ul> <li> <p>The <code>IsAuthorizedWithToken</code> operation takes principal attributes from <b> <i>only</i> </b> the <code>identityToken</code> or <code>accessToken</code> passed to the operation.</p> </li> <li> <p>For action entities, you can include only their <code>Identifier</code> and <code>EntityType</code>. </p> </li> </ul> </note>"
         }
       }
     },
@@ -1884,18 +1502,8 @@
         "errors":{
           "shape":"EvaluationErrorList",
           "documentation":"<p>Errors that occurred while making an authorization decision. For example, a policy references an entity or entity attribute that does not exist in the slice.</p>"
-        },
-        "principal":{
-          "shape":"EntityIdentifier",
-          "documentation":"<p>The identifier of the principal in the ID or access token.</p>"
         }
       }
-    },
-    "Issuer":{
-      "type":"string",
-      "max":2048,
-      "min":1,
-      "pattern":"https://.*"
     },
     "ListIdentitySourcesInput":{
       "type":"structure",
@@ -1922,6 +1530,7 @@
     "ListIdentitySourcesMaxResults":{
       "type":"integer",
       "box":true,
+      "max":200,
       "min":1
     },
     "ListIdentitySourcesOutput":{
@@ -2041,6 +1650,7 @@
     "MaxResults":{
       "type":"integer",
       "box":true,
+      "max":50,
       "min":1
     },
     "Namespace":{
@@ -2199,12 +1809,6 @@
       "min":1,
       "sensitive":true
     },
-    "PolicyStoreDescription":{
-      "type":"string",
-      "max":150,
-      "min":0,
-      "sensitive":true
-    },
     "PolicyStoreId":{
       "type":"string",
       "max":200,
@@ -2230,14 +1834,6 @@
         "createdDate":{
           "shape":"TimestampFormat",
           "documentation":"<p>The date and time the policy was created.</p>"
-        },
-        "lastUpdatedDate":{
-          "shape":"TimestampFormat",
-          "documentation":"<p>The date and time the policy store was most recently updated.</p>"
-        },
-        "description":{
-          "shape":"PolicyStoreDescription",
-          "documentation":"<p>Descriptive text that you can provide to help with identification of the current policy store.</p>"
         }
       },
       "documentation":"<p>Contains information about a policy store.</p> <p>This data type is used as a response parameter for the <a href=\"https://docs.aws.amazon.com/verifiedpermissions/latest/apireference/API_ListPolicyStores.html\">ListPolicyStores</a> operation.</p>"
@@ -2429,7 +2025,7 @@
     },
     "SchemaJson":{
       "type":"string",
-      "max":100000,
+      "max":10000,
       "min":1,
       "sensitive":true
     },
@@ -2552,7 +2148,7 @@
           "documentation":"<p>The resource associated with this template-linked policy. Verified Permissions substitutes this resource for the <code>?resource</code> placeholder in the policy template when it evaluates an authorization request.</p>"
         }
       },
-      "documentation":"<p>Contains information about a policy that was created by instantiating a policy template. </p>"
+      "documentation":"<p>Contains information about a policy that was </p> <p/> <p>created by instantiating a policy template. </p> <p>This </p>"
     },
     "TemplateLinkedPolicyDefinitionItem":{
       "type":"structure",
@@ -2602,17 +2198,6 @@
       "pattern":"[A-Za-z0-9-_=]+.[A-Za-z0-9-_=]+.[A-Za-z0-9-_=]+",
       "sensitive":true
     },
-    "UpdateCognitoGroupConfiguration":{
-      "type":"structure",
-      "required":["groupEntityType"],
-      "members":{
-        "groupEntityType":{
-          "shape":"GroupEntityType",
-          "documentation":"<p>The name of the schema entity type that's mapped to the user pool group. Defaults to <code>AWS::CognitoGroup</code>.</p>"
-        }
-      },
-      "documentation":"<p>A list of user groups and entities from an Amazon Cognito user pool identity source.</p>"
-    },
     "UpdateCognitoUserPoolConfiguration":{
       "type":"structure",
       "required":["userPoolArn"],
@@ -2624,10 +2209,6 @@
         "clientIds":{
           "shape":"ClientIds",
           "documentation":"<p>The client ID of an app client that is configured for the specified Amazon Cognito user pool.</p>"
-        },
-        "groupConfiguration":{
-          "shape":"UpdateCognitoGroupConfiguration",
-          "documentation":"<p>The configuration of the user groups from an Amazon Cognito user pool identity source.</p>"
         }
       },
       "documentation":"<p>Contains configuration details of a Amazon Cognito user pool for use with an identity source.</p>"
@@ -2783,10 +2364,6 @@
         "validationSettings":{
           "shape":"ValidationSettings",
           "documentation":"<p>A structure that defines the validation settings that want to enable for the policy store.</p>"
-        },
-        "description":{
-          "shape":"PolicyStoreDescription",
-          "documentation":"<p>Descriptive text that you can provide to help with identification of the current policy store.</p>"
         }
       }
     },

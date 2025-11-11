@@ -718,8 +718,6 @@ namespace NSchemeShardUT_Private {
         TTestActorRuntime& runtime, const TString& path,
         Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
-    NKikimrMiniKQL::TResult ReadSystemTable(TTestActorRuntime& runtime, ui64 tabletId,
-        const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
     NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
         const TString& table, const TVector<TString>& pk, const TVector<TString>& columns, const TString& rangeFlags = "");
 

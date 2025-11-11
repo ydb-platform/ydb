@@ -22,5 +22,3 @@ size_t Split(const char* ptr, const char* delim, TVector<TString>& values) {
 size_t Split(const TString& in, const TString& delim, TVector<TString>& res) {
     return Split(in.data(), delim.data(), res);
 }
-
-alignas(wchar32) const char NStringSplitPrivate::SPLITTER_EMPTY_SENTINEL{0};

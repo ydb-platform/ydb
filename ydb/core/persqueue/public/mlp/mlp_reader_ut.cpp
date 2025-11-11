@@ -1,4 +1,4 @@
-#include <ydb/core/persqueue/public/mlp/ut/common/common.h>
+#include <ydb/core/persqueue/public/mlp/ut/common.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -154,34 +154,6 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
 
     }
-
-    Y_UNIT_TEST(TopicWithBigMessage) {
-        auto setup = CreateSetup();
-
-        auto bigMessage = NUnitTest::RandomString(1_MB);
-
-        CreateTopic(setup, "/Root/topic1", "mlp-consumer");
-        setup->Write("/Root/topic1", bigMessage, 0);
-
-        auto& runtime = setup->GetRuntime();
-        CreateReaderActor(runtime, {
-            .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1",
-            .Consumer = "mlp-consumer",
-            .WaitTime = TDuration::Seconds(3),
-            .VisibilityTimeout = TDuration::Seconds(30),
-            .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
-        });
-
-        auto response = GetReadResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, bigMessage);
-    }
-
-
 }
 
 } // namespace NKikimr::NPQ::NMLP

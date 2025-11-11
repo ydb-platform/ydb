@@ -65,9 +65,6 @@ class StreamWrapperPayload(Payload):
     async def write(self, writer: AbstractStreamWriter) -> None:
         await self._value(writer)
 
-    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
-        raise TypeError("Unable to decode.")
-
 
 @payload_type(streamer)
 class StreamPayload(StreamWrapperPayload):

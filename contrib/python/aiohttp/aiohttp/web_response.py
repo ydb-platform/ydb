@@ -41,8 +41,6 @@ from .http import SERVER_SOFTWARE, HttpVersion10, HttpVersion11
 from .payload import Payload
 from .typedefs import JSONEncoder, LooseHeaders
 
-REASON_PHRASES = {http_status.value: http_status.phrase for http_status in HTTPStatus}
-
 __all__ = ("ContentCoding", "StreamResponse", "Response", "json_response")
 
 
@@ -54,7 +52,6 @@ else:
     BaseClass = collections.abc.MutableMapping
 
 
-# TODO(py311): Convert to StrEnum for wider use
 class ContentCoding(enum.Enum):
     # The content codings that we have support for.
     #
@@ -65,8 +62,6 @@ class ContentCoding(enum.Enum):
     identity = "identity"
 
 
-CONTENT_CODINGS = {coding.value: coding for coding in ContentCoding}
-
 ############################################################
 # HTTP Response classes
 ############################################################
@@ -75,8 +70,6 @@ CONTENT_CODINGS = {coding.value: coding for coding in ContentCoding}
 class StreamResponse(BaseClass, HeadersMixin):
 
     _length_check = True
-
-    _body: Union[None, bytes, bytearray, Payload]
 
     def __init__(
         self,
@@ -104,11 +97,11 @@ class StreamResponse(BaseClass, HeadersMixin):
         else:
             self._headers = CIMultiDict()
 
-        self._set_status(status, reason)
+        self.set_status(status, reason)
 
     @property
     def prepared(self) -> bool:
-        return self._eof_sent or self._payload_writer is not None
+        return self._payload_writer is not None
 
     @property
     def task(self) -> "Optional[asyncio.Task[None]]":
@@ -138,15 +131,15 @@ class StreamResponse(BaseClass, HeadersMixin):
         status: int,
         reason: Optional[str] = None,
     ) -> None:
-        assert (
-            not self.prepared
-        ), "Cannot change the response status code after the headers have been sent"
-        self._set_status(status, reason)
-
-    def _set_status(self, status: int, reason: Optional[str]) -> None:
+        assert not self.prepared, (
+            "Cannot change the response status code after " "the headers have been sent"
+        )
         self._status = int(status)
         if reason is None:
-            reason = REASON_PHRASES.get(self._status, "")
+            try:
+                reason = HTTPStatus(self._status).phrase
+            except ValueError:
+                reason = ""
         self._reason = reason
 
     @property
@@ -182,7 +175,7 @@ class StreamResponse(BaseClass, HeadersMixin):
     ) -> None:
         """Enables response compression encoding."""
         # Backwards compatibility for when force was a bool <0.17.
-        if isinstance(force, bool):
+        if type(force) == bool:
             force = ContentCoding.deflate if force else ContentCoding.identity
             warnings.warn(
                 "Using boolean for force is deprecated #3318", DeprecationWarning
@@ -410,8 +403,8 @@ class StreamResponse(BaseClass, HeadersMixin):
             # Encoding comparisons should be case-insensitive
             # https://www.rfc-editor.org/rfc/rfc9110#section-8.4.1
             accept_encoding = request.headers.get(hdrs.ACCEPT_ENCODING, "").lower()
-            for value, coding in CONTENT_CODINGS.items():
-                if value in accept_encoding:
+            for coding in ContentCoding:
+                if coding.value in accept_encoding:
                     await self._do_start_compression(coding)
                     return
 
@@ -485,8 +478,7 @@ class StreamResponse(BaseClass, HeadersMixin):
             # https://datatracker.ietf.org/doc/html/rfc9112#section-6.1-13
             if hdrs.TRANSFER_ENCODING in headers:
                 del headers[hdrs.TRANSFER_ENCODING]
-        elif self.content_length != 0:
-            # https://www.rfc-editor.org/rfc/rfc9110#section-8.3-5
+        else:
             headers.setdefault(hdrs.CONTENT_TYPE, "application/octet-stream")
         headers.setdefault(hdrs.DATE, rfc822_formatted_time())
         headers.setdefault(hdrs.SERVER, SERVER_SOFTWARE)
@@ -507,7 +499,9 @@ class StreamResponse(BaseClass, HeadersMixin):
         assert writer is not None
         # status line
         version = request.version
-        status_line = f"HTTP/{version[0]}.{version[1]} {self._status} {self._reason}"
+        status_line = "HTTP/{}.{} {} {}".format(
+            version[0], version[1], self._status, self._reason
+        )
         await writer.write_headers(status_line, self._headers)
 
     async def write(self, data: bytes) -> None:
@@ -656,16 +650,20 @@ class Response(StreamResponse):
         return self._body
 
     @body.setter
-    def body(self, body: Any) -> None:
+    def body(self, body: bytes) -> None:
         if body is None:
-            self._body = None
+            self._body: Optional[bytes] = None
+            self._body_payload: bool = False
         elif isinstance(body, (bytes, bytearray)):
             self._body = body
+            self._body_payload = False
         else:
             try:
                 self._body = body = payload.PAYLOAD_REGISTRY.get(body)
             except payload.LookupError:
                 raise ValueError("Unsupported body type %r" % type(body))
+
+            self._body_payload = True
 
             headers = self._headers
 
@@ -675,7 +673,7 @@ class Response(StreamResponse):
 
             # copy payload headers
             if body.headers:
-                for key, value in body.headers.items():
+                for (key, value) in body.headers.items():
                     if key not in headers:
                         headers[key] = value
 
@@ -699,6 +697,7 @@ class Response(StreamResponse):
             self.charset = "utf-8"
 
         self._body = text.encode(self.charset)
+        self._body_payload = False
         self._compressed_body = None
 
     @property
@@ -712,7 +711,7 @@ class Response(StreamResponse):
         if self._compressed_body is not None:
             # Return length of the compressed body
             return len(self._compressed_body)
-        elif isinstance(self._body, Payload):
+        elif self._body_payload:
             # A payload without content length, or a compressed payload
             return None
         elif self._body is not None:
@@ -737,8 +736,9 @@ class Response(StreamResponse):
         if body is not None:
             if self._must_be_empty_body:
                 await super().write_eof()
-            elif isinstance(self._body, Payload):
-                await self._body.write(self._payload_writer)
+            elif self._body_payload:
+                payload = cast(Payload, body)
+                await payload.write(self._payload_writer)
                 await super().write_eof()
             else:
                 await super().write_eof(cast(bytes, body))
@@ -746,13 +746,14 @@ class Response(StreamResponse):
             await super().write_eof()
 
     async def _start(self, request: "BaseRequest") -> AbstractStreamWriter:
-        if hdrs.CONTENT_LENGTH in self._headers:
-            if should_remove_content_length(request.method, self.status):
+        if should_remove_content_length(request.method, self.status):
+            if hdrs.CONTENT_LENGTH in self._headers:
                 del self._headers[hdrs.CONTENT_LENGTH]
-        elif not self._chunked:
-            if isinstance(self._body, Payload):
-                if self._body.size is not None:
-                    self._headers[hdrs.CONTENT_LENGTH] = str(self._body.size)
+        elif not self._chunked and hdrs.CONTENT_LENGTH not in self._headers:
+            if self._body_payload:
+                size = cast(Payload, self._body).size
+                if size is not None:
+                    self._headers[hdrs.CONTENT_LENGTH] = str(size)
             else:
                 body_len = len(self._body) if self._body else "0"
                 # https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6-7
@@ -764,7 +765,7 @@ class Response(StreamResponse):
         return await super()._start(request)
 
     async def _do_start_compression(self, coding: ContentCoding) -> None:
-        if self._chunked or isinstance(self._body, Payload):
+        if self._body_payload or self._chunked:
             return await super()._do_start_compression(coding)
 
         if coding != ContentCoding.identity:

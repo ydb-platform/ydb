@@ -78,18 +78,10 @@ private:
 
 ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
 
-struct THandshakeData {
-    ui32 QpNum;
-    ui64 SubnetPrefix;
-    ui64 InterfaceId;
-    ui32 MtuIndex;
-};
-
 // Wrapper for ibv Queue Pair
 // https://www.rdmamojo.com/2012/12/21/ibv_create_qp/
 class TQueuePair: public NNonCopyable::TMoveOnly {
 public:
-    using TPtr = std::shared_ptr<TQueuePair>;
     struct TQpS {
         int State;
     };
@@ -104,15 +96,12 @@ public:
     int ToResetState() noexcept;
     // IBV_QPS_RTS - Ready To Send state
     // https://www.rdmamojo.com/2013/01/12/ibv_modify_qp/
-    int ToRtsState(const THandshakeData& hd) noexcept;
+    int ToRtsState(ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
     int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept;
     ui32 GetQpNum() const noexcept;
-    THandshakeData GetHandshakeData() const noexcept;
     void Output(IOutputStream&) const noexcept;
     TQpState GetState(bool forseUpdate) const noexcept;
     TRdmaCtx* GetCtx() const noexcept;
-    size_t GetDeviceIndex() const noexcept;
-    ui32 GetMinMtuIndex(ui32 mtuIndex) const noexcept;
 
 private:
     static const int UnknownQpState;
@@ -135,6 +124,5 @@ private:
 };
 
 std::unique_ptr<IIbVerbsBuilder> CreateIbVerbsBuilder(size_t hint) noexcept;
-
 
 }

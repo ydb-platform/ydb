@@ -425,7 +425,6 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 	ListCell   *lc;
 	bool		started_tx = false;
 	bool		should_exit = false;
-	Relation	rel = NULL;
 
 	Assert(!IsTransactionState());
 
@@ -493,16 +492,7 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 				 * worker to remove the origin tracking as if there is any
 				 * error while dropping we won't restart it to drop the
 				 * origin. So passing missing_ok = true.
-				 *
-				 * Lock the subscription and origin in the same order as we
-				 * are doing during DDL commands to avoid deadlocks. See
-				 * AlterSubscription_refresh.
 				 */
-				LockSharedObject(SubscriptionRelationId, MyLogicalRepWorker->subid,
-								 0, AccessShareLock);
-				if (!rel)
-					rel = table_open(SubscriptionRelRelationId, RowExclusiveLock);
-
 				ReplicationOriginNameForLogicalRep(MyLogicalRepWorker->subid,
 												   rstate->relid,
 												   originname,
@@ -512,9 +502,9 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 				/*
 				 * Update the state to READY only after the origin cleanup.
 				 */
-				UpdateSubscriptionRelStateEx(MyLogicalRepWorker->subid,
-											 rstate->relid, rstate->state,
-											 rstate->lsn, true);
+				UpdateSubscriptionRelState(MyLogicalRepWorker->subid,
+										   rstate->relid, rstate->state,
+										   rstate->lsn);
 			}
 		}
 		else
@@ -565,14 +555,7 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 						 * This is required to avoid any undetected deadlocks
 						 * due to any existing lock as deadlock detector won't
 						 * be able to detect the waits on the latch.
-						 *
-						 * Also close any tables prior to the commit.
 						 */
-						if (rel)
-						{
-							table_close(rel, NoLock);
-							rel = NULL;
-						}
 						CommitTransactionCommand();
 						pgstat_report_stat(false);
 					}
@@ -620,27 +603,18 @@ process_syncing_tables_for_apply(XLogRecPtr current_lsn)
 						TimestampDifferenceExceeds(hentry->last_start_time, now,
 												   wal_retrieve_retry_interval))
 					{
-						/*
-						 * Set the last_start_time even if we fail to start
-						 * the worker, so that we won't retry until
-						 * wal_retrieve_retry_interval has elapsed.
-						 */
+						logicalrep_worker_launch(MyLogicalRepWorker->dbid,
+												 MySubscription->oid,
+												 MySubscription->name,
+												 MyLogicalRepWorker->userid,
+												 rstate->relid,
+												 DSM_HANDLE_INVALID);
 						hentry->last_start_time = now;
-						(void) logicalrep_worker_launch(MyLogicalRepWorker->dbid,
-														MySubscription->oid,
-														MySubscription->name,
-														MyLogicalRepWorker->userid,
-														rstate->relid,
-														DSM_HANDLE_INVALID);
 					}
 				}
 			}
 		}
 	}
-
-	/* Close table if opened */
-	if (rel)
-		table_close(rel, NoLock);
 
 	if (started_tx)
 	{

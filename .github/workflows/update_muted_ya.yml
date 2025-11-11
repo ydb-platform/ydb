@@ -93,7 +93,7 @@ jobs:
           echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
     
       - name: Collect test history data
-        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
       
       - name: Update muted tests in DB
         run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }} 

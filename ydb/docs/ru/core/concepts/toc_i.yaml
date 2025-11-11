@@ -16,8 +16,6 @@ items:
     mode: link
 - name: Топология кластера
   href: topology.md
-- name: Выполнение запросов
-  href: query_execution.md
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы

@@ -33,7 +33,6 @@ struct TGRpcServersWrapper {
     TGRpcServers Servers;
     TGRpcServersFactory GrpcServersFactory;
     TMutex Mutex;
-    std::atomic<bool> IsDisabled = false;
 
     TGuard<TMutex> Guard() {
         return TGuard<TMutex>(Mutex);
@@ -59,7 +58,6 @@ protected:
     bool GracefulShutdownSupported = false;
     TDuration MinDelayBeforeShutdown;
     TDuration DrainTimeout;
-    TDuration CheckForStopInterval;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;

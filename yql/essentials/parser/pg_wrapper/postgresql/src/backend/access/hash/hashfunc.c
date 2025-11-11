@@ -300,9 +300,7 @@ hashtext(PG_FUNCTION_ARGS)
 		buf = palloc(bsize + 1);
 
 		rsize = pg_strnxfrm(buf, bsize + 1, keydata, keylen, mylocale);
-
-		/* the second call may return a smaller value than the first */
-		if (rsize > bsize)
+		if (rsize != bsize)
 			elog(ERROR, "pg_strnxfrm() returned unexpected result");
 
 		/*
@@ -356,9 +354,7 @@ hashtextextended(PG_FUNCTION_ARGS)
 		buf = palloc(bsize + 1);
 
 		rsize = pg_strnxfrm(buf, bsize + 1, keydata, keylen, mylocale);
-
-		/* the second call may return a smaller value than the first */
-		if (rsize > bsize)
+		if (rsize != bsize)
 			elog(ERROR, "pg_strnxfrm() returned unexpected result");
 
 		/*

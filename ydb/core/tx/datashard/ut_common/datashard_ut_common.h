@@ -866,7 +866,7 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
     }
 };
 
-void UploadRows(TTestActorRuntime& runtime, const TString& database, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
+void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values);
 
 struct TSendProposeToCoordinatorOptions {
     const ui64 TxId;

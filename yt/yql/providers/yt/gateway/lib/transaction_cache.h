@@ -39,7 +39,6 @@ public:
         NYT::ITransactionPtr ExternalTx;
         NYT::IClientBasePtr CacheTx;
         NYT::TTransactionId CacheTxId;
-        NYT::ITransactionPtr DumpTx;
         TDuration CacheTtl;
         THashMap<NYT::TTransactionId, NYT::ITransactionPtr> SnapshotTxs;
         THashMap<NYT::TTransactionId, NYT::ITransactionPtr> WriteTxs;
@@ -85,7 +84,7 @@ public:
         }
 
         void RemoveInternal(const TString& table);
-        void Finalize(const TString& clusterName, bool commitDumpTx = false);
+        void Finalize(const TString& clusterName);
 
         template<typename T>
         T AssumeAsDeletedAtFinalize(const T& range) {
@@ -171,11 +170,11 @@ public:
     TTransactionCache(const TString& userName);
 
     TEntry::TPtr GetEntry(const TString& server);
-    TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics, bool createDumpTx = false);
+    TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
     TEntry::TPtr TryGetEntry(const TString& server);
 
     void Commit(const TString& server);
-    void Finalize(bool commitDumpTxs = false);
+    void Finalize();
     void AbortAll();
     void DetachSnapshotTxs();
 

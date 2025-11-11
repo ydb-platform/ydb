@@ -13,9 +13,9 @@ TFederatedDbObserverImpl::TFederatedDbObserverImpl(std::shared_ptr<TGRpcConnecti
     , PromiseToInitState(NThreading::NewPromise())
     , FederationDiscoveryRetryPolicy(settings.RetryPolicy_)
 {
+    RpcSettings.ClientTimeout = settings.ConnectionTimeout_;
     RpcSettings.EndpointPolicy = TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint;
     RpcSettings.UseAuth = true;
-    ConnectionTimeout = TDeadline::SafeDurationCast(settings.ConnectionTimeout_);
 }
 
 TFederatedDbObserverImpl::~TFederatedDbObserverImpl() {
@@ -82,9 +82,6 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         }
     };
 
-    TRpcRequestSettings settings = RpcSettings;
-    settings.Deadline = TDeadline::AfterDuration(ConnectionTimeout);
-
     Connections_->RunDeferred<Ydb::FederationDiscovery::V1::FederationDiscoveryService,
                              Ydb::FederationDiscovery::ListFederationDatabasesRequest,
                              Ydb::FederationDiscovery::ListFederationDatabasesResponse>(
@@ -93,7 +90,7 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         &Ydb::FederationDiscovery::V1::FederationDiscoveryService::Stub::AsyncListFederationDatabases,
         DbDriverState_,
         {},  // no polling unready operations, so no need in delay parameter
-        settings,
+        RpcSettings,
         FederationDiscoveryDelayContext);
 }
 

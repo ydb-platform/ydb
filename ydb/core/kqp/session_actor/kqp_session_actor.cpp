@@ -789,7 +789,6 @@ public:
     void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
-            std::map<TString, TString> secureParams;
             bool isValidParams = true;
             auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
             const auto& parameters = QueryState->GetYdbParameters();
@@ -797,10 +796,6 @@ public:
             QueryState->QueryData->ParseParameters(parameters);
 
             for (const auto& tx : QueryState->PreparedQuery->GetTransactions()) {
-                for (const auto& secretName : tx->GetSecretNames()) {
-                    secureParams.emplace(secretName, "");
-                }
-
                 txs.emplace_back(tx, QueryState->QueryData);
                 try {
                     QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
@@ -815,7 +810,6 @@ public:
                 auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {});
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
-                tasksGraph.GetMeta().SecureParams = std::move(secureParams);
 
                 // Resolve tables
                 {
@@ -877,7 +871,7 @@ public:
                     tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr, nullptr);
                     // TODO: fill tasks count into result
                     // Cerr << tasksGraph.DumpToString();
-                } catch (const std::exception&) {
+                } catch (const yexception&) {
                     // TODO: send warning to user that we failed to estimate number of tasks.
                 }
             }
@@ -2194,7 +2188,7 @@ public:
         }
 
         if (ExecuterId) {
-            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
+            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues)}, IEventHandle::FlagTrackDelivery);
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
@@ -2503,10 +2497,7 @@ public:
             }
         }
 
-        LOG_W("ReplyQueryCompileError, status: " << QueryState->CompileResult->Status
-            << ", issues: " << Join(", ", QueryResponse->Record.GetResponse().GetQueryIssues())
-            << ", remove tx with tx_id: " << txId.GetHumanStr());
-
+        LOG_W("ReplyQueryCompileError, status " << QueryState->CompileResult->Status << " remove tx with tx_id: " << txId.GetHumanStr());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
             if (!ctx->BufferActorId) {
@@ -2987,8 +2978,7 @@ public:
     void ReplyQueryError(Ydb::StatusIds::StatusCode ydbStatus,
         const TString& message, std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> issues = {})
     {
-        LOG_W("Create QueryResponse for error on request, msg: " << message << ", status: " << ydbStatus
-            << (issues ? TStringBuilder() << ", issues: " << Join(", ", *issues) : TStringBuilder()));
+        LOG_W("Create QueryResponse for error on request, msg: " << message);
 
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         QueryResponse->Record.SetYdbStatus(ydbStatus);

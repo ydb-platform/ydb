@@ -58,7 +58,7 @@ void FillYTError(
     consumer->Flush();
 
     headers->Add(XYTErrorHeaderName, errorString);
-    headers->Add(XYTErrorContentTypeHeaderName, ApplicationJsonContentType);
+    headers->Add(XYTErrorContentTypeHeaderName, "application/json");
 
     FillYTErrorResponse(headers, error);
 }
@@ -163,7 +163,7 @@ private:
     const IHttpHandlerPtr Underlying_;
 };
 
-IHttpHandlerPtr CreateErrorWrappingHttpHandler(IHttpHandlerPtr underlying)
+IHttpHandlerPtr WrapYTException(IHttpHandlerPtr underlying)
 {
     return New<TErrorWrappingHttpHandler>(std::move(underlying));
 }
@@ -365,7 +365,7 @@ void SetUserAgent(const THeadersPtr& headers, const std::string& value)
 
 void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonConsumer*)> producer)
 {
-    rsp->GetHeaders()->Set(ContentTypeHeaderName, ApplicationJsonContentType);
+    rsp->GetHeaders()->Set(ContentTypeHeaderName, "application/json");
 
     TBufferOutput out;
 

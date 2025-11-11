@@ -225,9 +225,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
-        if (BufferPageAllocSize) {
-            serializedTask->SetBufferPageAllocSize(*BufferPageAllocSize);
-        }
         request.AddTasks()->Swap(serializedTask);
     }
 

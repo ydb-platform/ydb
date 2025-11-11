@@ -57,17 +57,13 @@ class Shard(object):
                 if key == "project" or key == "cluster" or key == "service":
                     continue
 
-                if value.find("|") == -1:
-                    if value == "-":
-                        if key in self.labels:
-                            return False
-                    elif value == "*":
-                        return key in self.labels
-                    else:
-                        if key not in self.labels or self.labels[key] != value:
-                            return False
+                if value == "-":
+                    if key in self.labels:
+                        return False
+                elif value == "*":
+                    return key in self.labels
                 else:
-                    if key not in self.labels or self.labels[key] not in set(value.split("|")):
+                    if key not in self.labels or self.labels[key] != value:
                         return False
 
             return True
@@ -138,42 +134,6 @@ class Shard(object):
 
         return list(result)
 
-    def get_labels(self, selectors):
-        all_label_values = dict()
-
-        label_names = self.get_label_names(selectors)
-        for key, value in selectors.items():
-            label_names.append(key)
-
-        for name in label_names:
-            all_label_values[name] = {
-                "values": set(),
-                "absent": False
-            }
-
-        matching_metrics = self.get_matching_metrics(selectors)
-        for metric in matching_metrics:
-            metric_labels = set()
-            for key, value in metric.labels.items():
-                all_label_values[key]["values"].add(value)
-                metric_labels.add(key)
-
-            for name, data in all_label_values.items():
-                if name not in metric_labels:
-                    data["absent"] = True
-
-        result = []
-        for name, data in all_label_values.items():
-            if len(data["values"]) > 1:
-                result.append({
-                    "name": name,
-                    "absent": data["absent"],
-                    "truncated": False,
-                    "values": list(data["values"])
-                })
-
-        return (result, len(matching_metrics))
-
     def get_metrics(self, selectors):
         result = []
 
@@ -185,10 +145,7 @@ class Shard(object):
             labels["service"] = self._service
             result.append({"labels": labels, "type": metric.kind})
 
-        if len(matching_metrics) > 1000:
-            return (None, "Too many lines for one listing request, should be under 2k, have: {}".format(len(matching_metrics)))
-
-        return (sorted(result, key=lambda x: str(x)), None)
+        return sorted(result, key=lambda x: str(x))
 
     def get_data(self, selectors, time_from, time_to, downsampling):
         result = dict()

@@ -439,7 +439,7 @@ gettoken_query_websearch(TSQueryParserState state, int8 *operator,
 				}
 				else if (ISOPERATOR(state->buf))
 				{
-					/* ignore, else gettoken_tsvector() will raise an error */
+					/* or else gettoken_tsvector() will raise an error */
 					state->buf++;
 					state->state = WAITOPERAND;
 					continue;
@@ -476,9 +476,15 @@ gettoken_query_websearch(TSQueryParserState state, int8 *operator,
 				break;
 
 			case WAITOPERATOR:
-				if (*state->buf == '\0')
+				if (t_iseq(state->buf, '"'))
 				{
-					return PT_END;
+					/*
+					 * put implicit AND after an operand and handle this quote
+					 * in WAITOPERAND
+					 */
+					state->state = WAITOPERAND;
+					*operator = OP_AND;
+					return PT_OPR;
 				}
 				else if (parse_or_operator(state))
 				{
@@ -486,17 +492,15 @@ gettoken_query_websearch(TSQueryParserState state, int8 *operator,
 					*operator = OP_OR;
 					return PT_OPR;
 				}
-				else if (ISOPERATOR(state->buf))
+				else if (*state->buf == '\0')
 				{
-					/* ignore other operators in this state too */
-					state->buf++;
-					continue;
+					return PT_END;
 				}
 				else if (!t_isspace(state->buf))
 				{
-					/* insert implicit AND between operands */
-					state->state = WAITOPERAND;
+					/* put implicit AND after an operand */
 					*operator = OP_AND;
+					state->state = WAITOPERAND;
 					return PT_OPR;
 				}
 				break;
@@ -1176,11 +1180,10 @@ tsqueryout(PG_FUNCTION_ARGS)
  *
  * uint8	type, QI_VAL
  * uint8	weight
- * uint8	prefix
  *			operand text in client encoding, null-terminated
+ * uint8	prefix
  *
  * For each operator:
- *
  * uint8	type, QI_OPR
  * uint8	operator, one of OP_AND, OP_PHRASE OP_OR, OP_NOT.
  * uint16	distance (only for OP_PHRASE)

@@ -48,7 +48,7 @@ public:
         std::shared_ptr<arrow::UInt32Array> KeyIndex;
 
         IChunkedArray::TReader ValuesReader;
-        std::shared_ptr<arrow::BinaryArray> Values;
+        std::shared_ptr<arrow::StringArray> Values;
 
     public:
         TIterator(const std::shared_ptr<TGeneralContainer>& records)
@@ -67,7 +67,7 @@ public:
 
                 auto valuesChunk = ValuesReader.GetReadChunk(0);
                 AFL_VERIFY(valuesChunk.GetArray()->length() == RecordsCount);
-                Values = std::static_pointer_cast<arrow::BinaryArray>(valuesChunk.GetArray());
+                Values = std::static_pointer_cast<arrow::StringArray>(valuesChunk.GetArray());
             }
 
             CurrentIndex = 0;
@@ -108,14 +108,11 @@ public:
             return KeyIndex->Value(CurrentIndex);
         }
 
-        std::string_view GetRawValue() const {
+        std::string_view GetValue() const {
             AFL_VERIFY(IsValid());
             auto view = Values->GetView(CurrentIndex);
-            auto res = std::string_view(view.data(), view.size());
-            return res;
+            return std::string_view(view.data(), view.size());
         }
-
-        NJson::TJsonValue GetValue() const;
 
         bool HasValue() const {
             AFL_VERIFY(IsValid());
@@ -142,7 +139,7 @@ public:
 
     static std::shared_ptr<arrow::Schema> GetSchema() {
         static arrow::FieldVector fields = { std::make_shared<arrow::Field>("record_idx", arrow::uint32()),
-            std::make_shared<arrow::Field>("key", arrow::uint32()), std::make_shared<arrow::Field>("value", arrow::binary()) };
+            std::make_shared<arrow::Field>("key", arrow::uint32()), std::make_shared<arrow::Field>("value", arrow::utf8()) };
         static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
         return result;
     }
@@ -154,7 +151,7 @@ public:
         AFL_VERIFY(Records->num_columns() == 3)("count", Records->num_columns());
         AFL_VERIFY(Records->GetColumnVerified(0)->GetDataType()->id() == arrow::uint32()->id());
         AFL_VERIFY(Records->GetColumnVerified(1)->GetDataType()->id() == arrow::uint32()->id());
-        AFL_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::binary()->id());
+        AFL_VERIFY(Records->GetColumnVerified(2)->GetDataType()->id() == arrow::utf8()->id());
     }
 
     const std::shared_ptr<IChunkedArray>& GetValuesArray() const {
@@ -187,7 +184,7 @@ public:
         arrow::UInt32Builder* RecordIndex;
         arrow::UInt32Builder* KeyIndex;
         std::vector<ui32> RTKeyIndexes;
-        arrow::BinaryBuilder* Values;
+        arrow::StringBuilder* Values;
         std::optional<ui32> LastRecordIndex;
         std::optional<ui32> LastKeyIndex;
         ui32 RecordsCount = 0;

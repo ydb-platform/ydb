@@ -238,9 +238,9 @@ namespace NKikimr {
                     // calculate offset of item inside response
                     const ui32 offset = item.Offset - msg->Offset;
 
-                    // if item is not readable at this point, we return CORRUPTED, so the blob can be restored through scrubbing mechanism
+                    // if item is not readable at this point, we return ERROR
                     if (!data.IsReadable(offset, item.Size)) {
-                        item.Status = NKikimrProto::CORRUPTED;
+                        item.Status = NKikimrProto::ERROR;
                     } else {
                         item.Content = data.Substr(offset, item.Size);
                     }

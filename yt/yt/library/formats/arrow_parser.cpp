@@ -1725,7 +1725,7 @@ private:
     template <class TUnderlyingType>
     void WriteDecimalBinary(TStringBuf arrowValue, int precision)
     {
-        constexpr auto maxByteCount = sizeof(TUnderlyingType);
+        const auto maxByteCount = sizeof(TUnderlyingType);
         char buffer[maxByteCount];
         auto decimalBinary = SerializeDecimalBinary<TUnderlyingType>(arrowValue, precision, buffer, maxByteCount);
         Writer_->WriteBinaryString(decimalBinary);
@@ -2045,7 +2045,7 @@ class TArrowParser
     : public IParser
 {
 public:
-    explicit TArrowParser(IValueConsumer* valueConsumer)
+    TArrowParser(IValueConsumer* valueConsumer)
         : Listener_(std::make_shared<TListener>(valueConsumer))
         , Decoder_(std::make_shared<arrow20::ipc::StreamDecoder>(Listener_))
     { }

@@ -806,21 +806,20 @@ ExecMergeJoin(PlanState *pstate)
 					}
 
 					/*
-					 * If we only need to consider the first matching inner
-					 * tuple, then advance to next outer tuple after we've
-					 * processed this one.
-					 */
-					if (node->js.single_match)
-						node->mj_JoinState = EXEC_MJ_NEXTOUTER;
-
-					/*
 					 * In a right-antijoin, we never return a matched tuple.
-					 * If it's not an inner_unique join, we need to stay on
-					 * the current outer tuple to continue scanning the inner
-					 * side for matches.
+					 * And we need to stay on the current outer tuple to
+					 * continue scanning the inner side for matches.
 					 */
 					if (node->js.jointype == JOIN_RIGHT_ANTI)
 						break;
+
+					/*
+					 * If we only need to join to the first matching inner
+					 * tuple, then consider returning this one, but after that
+					 * continue with next outer tuple.
+					 */
+					if (node->js.single_match)
+						node->mj_JoinState = EXEC_MJ_NEXTOUTER;
 
 					qualResult = (otherqual == NULL ||
 								  ExecQual(otherqual, econtext));

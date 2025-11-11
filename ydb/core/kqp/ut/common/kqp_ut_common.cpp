@@ -176,12 +176,9 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     if (settings.EnableStorageProxy) {
         NFq::TCheckpointCoordinatorSettings::DefaultCheckpointingPeriod = settings.CheckpointPeriod;
 
-        auto* streamingQueries = appConfig.MutableQueryServiceConfig()->MutableStreamingQueries();
-        if (!settings.UseLocalCheckpointsInStreamingQueries) {
-            auto& checkpoints = *streamingQueries->MutableExternalStorage()->MutableDatabaseConnection();
-            checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
-            checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
-        }
+        auto& checkpoints = *appConfig.MutableQueryServiceConfig()->MutableStreamingQueries()->MutableExternalStorage()->MutableDatabaseConnection();
+        checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
     }
     if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
         appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);

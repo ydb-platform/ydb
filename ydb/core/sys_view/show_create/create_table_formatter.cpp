@@ -630,67 +630,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     }
 
     if (fulltextIndexSettings) {
-        Stream << " WITH (";
-
-        Y_ENSURE(fulltextIndexSettings->has_layout());
-        Stream << "layout=";
-        switch (fulltextIndexSettings->layout()) {
-            case Ydb::Table::FulltextIndexSettings_Layout_FLAT:
-                Stream << "flat";
-                break;
-            default:
-                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Layout");
-        }
-
-        Y_ENSURE(fulltextIndexSettings->columns().size() == 1);
-        auto analyzers = fulltextIndexSettings->columns().at(0).analyzers();
-        Y_ENSURE(analyzers.has_tokenizer());
-        Stream << ", tokenizer=";
-        switch (analyzers.tokenizer()) {
-            case Ydb::Table::FulltextIndexSettings_Tokenizer_WHITESPACE:
-                Stream << "whitespace";
-                break;
-            case Ydb::Table::FulltextIndexSettings_Tokenizer_STANDARD:
-                Stream << "standard";
-                break;
-            case Ydb::Table::FulltextIndexSettings_Tokenizer_KEYWORD:
-                Stream << "keyword";
-                break;
-            default:
-                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
-        }
-        if (analyzers.has_language()) {
-            Stream << ", language=" << analyzers.language();
-        }
-        if (analyzers.has_use_filter_lowercase()) {
-            Stream << ", use_filter_lowercase=" << (analyzers.use_filter_lowercase() ? "true" : "false");
-        }
-        if (analyzers.has_use_filter_stopwords()) {
-            Stream << ", use_filter_stopwords=" << (analyzers.use_filter_stopwords() ? "true" : "false");
-        }
-        if (analyzers.has_use_filter_ngram()) {
-            Stream << ", use_filter_ngram=" << (analyzers.use_filter_ngram() ? "true" : "false");
-        }
-        if (analyzers.has_use_filter_edge_ngram()) {
-            Stream << ", use_filter_edge_ngram=" << (analyzers.use_filter_edge_ngram() ? "true" : "false");
-        }
-        if (analyzers.has_filter_ngram_min_length()) {
-            Stream << ", filter_ngram_min_length=" << analyzers.filter_ngram_min_length();
-        }
-        if (analyzers.has_filter_ngram_max_length()) {
-            Stream << ", filter_ngram_max_length=" << analyzers.filter_ngram_max_length();
-        }
-        if (analyzers.has_use_filter_length()) {
-            Stream << ", use_filter_length=" << (analyzers.use_filter_length() ? "true" : "false");
-        }
-        if (analyzers.has_filter_length_min()) {
-            Stream << ", filter_length_min=" << analyzers.filter_length_min();
-        }
-        if (analyzers.has_filter_length_max()) {
-            Stream << ", filter_length_max=" << analyzers.filter_length_max();
-        }
-
-        Stream << ")";
+        Y_ENSURE("todo not implemented");
     }
 }
 

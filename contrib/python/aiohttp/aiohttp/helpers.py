@@ -14,6 +14,7 @@ import platform
 import re
 import sys
 import time
+import warnings
 import weakref
 from collections import namedtuple
 from contextlib import suppress
@@ -34,6 +35,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Pattern,
     Protocol,
     Tuple,
     Type,
@@ -50,7 +52,7 @@ from multidict import MultiDict, MultiDictProxy, MultiMapping
 from yarl import URL
 
 from . import hdrs
-from .log import client_logger
+from .log import client_logger, internal_logger
 
 if sys.version_info >= (3, 11):
     import asyncio as async_timeout
@@ -163,9 +165,9 @@ class BasicAuth(namedtuple("BasicAuth", ["login", "password", "encoding"])):
         """Create BasicAuth from url."""
         if not isinstance(url, URL):
             raise TypeError("url should be yarl.URL instance")
-        if url.user is None and url.password is None:
+        if url.user is None:
             return None
-        return cls(url.user or "", url.password or "", encoding=encoding)
+        return cls(url.user, url.password or "", encoding=encoding)
 
     def encode(self) -> str:
         """Encode credentials."""
@@ -283,6 +285,38 @@ def proxies_from_env() -> Dict[str, ProxyInfo]:
                     auth = None
         ret[proto] = ProxyInfo(proxy, auth)
     return ret
+
+
+def current_task(
+    loop: Optional[asyncio.AbstractEventLoop] = None,
+) -> "Optional[asyncio.Task[Any]]":
+    return asyncio.current_task(loop=loop)
+
+
+def get_running_loop(
+    loop: Optional[asyncio.AbstractEventLoop] = None,
+) -> asyncio.AbstractEventLoop:
+    if loop is None:
+        loop = asyncio.get_event_loop()
+    if not loop.is_running():
+        warnings.warn(
+            "The object should be created within an async function",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        if loop.get_debug():
+            internal_logger.warning(
+                "The object should be created within an async function", stack_info=True
+            )
+    return loop
+
+
+def isasyncgenfunction(obj: Any) -> bool:
+    func = getattr(inspect, "isasyncgenfunction", None)
+    if func is not None:
+        return func(obj)  # type: ignore[no-any-return]
+    else:
+        return False
 
 
 def get_env_proxy_for_url(url: URL) -> Tuple[URL, Optional[BasicAuth]]:
@@ -470,51 +504,44 @@ try:
 except ImportError:
     pass
 
+_ipv4_pattern = (
+    r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
+    r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+)
+_ipv6_pattern = (
+    r"^(?:(?:(?:[A-F0-9]{1,4}:){6}|(?=(?:[A-F0-9]{0,4}:){0,6}"
+    r"(?:[0-9]{1,3}\.){3}[0-9]{1,3}$)(([0-9A-F]{1,4}:){0,5}|:)"
+    r"((:[0-9A-F]{1,4}){1,5}:|:)|::(?:[A-F0-9]{1,4}:){5})"
+    r"(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}"
+    r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|(?:[A-F0-9]{1,4}:){7}"
+    r"[A-F0-9]{1,4}|(?=(?:[A-F0-9]{0,4}:){0,7}[A-F0-9]{0,4}$)"
+    r"(([0-9A-F]{1,4}:){1,7}|:)((:[0-9A-F]{1,4}){1,7}|:)|(?:[A-F0-9]{1,4}:){7}"
+    r":|:(:[A-F0-9]{1,4}){7})$"
+)
+_ipv4_regex = re.compile(_ipv4_pattern)
+_ipv6_regex = re.compile(_ipv6_pattern, flags=re.IGNORECASE)
+_ipv4_regexb = re.compile(_ipv4_pattern.encode("ascii"))
+_ipv6_regexb = re.compile(_ipv6_pattern.encode("ascii"), flags=re.IGNORECASE)
 
-def is_ipv4_address(host: Optional[Union[str, bytes]]) -> bool:
-    """Check if host looks like an IPv4 address.
 
-    This function does not validate that the format is correct, only that
-    the host is a str or bytes, and its all numeric.
-
-    This check is only meant as a heuristic to ensure that
-    a host is not a domain name.
-    """
-    if not host:
+def _is_ip_address(
+    regex: Pattern[str], regexb: Pattern[bytes], host: Optional[Union[str, bytes]]
+) -> bool:
+    if host is None:
         return False
-    # For a host to be an ipv4 address, it must be all numeric.
     if isinstance(host, str):
-        return host.replace(".", "").isdigit()
-    if isinstance(host, (bytes, bytearray, memoryview)):
-        return host.decode("ascii").replace(".", "").isdigit()
-    raise TypeError(f"{host} [{type(host)}] is not a str or bytes")
+        return bool(regex.match(host))
+    elif isinstance(host, (bytes, bytearray, memoryview)):
+        return bool(regexb.match(host))
+    else:
+        raise TypeError(f"{host} [{type(host)}] is not a str or bytes")
 
 
-def is_ipv6_address(host: Optional[Union[str, bytes]]) -> bool:
-    """Check if host looks like an IPv6 address.
-
-    This function does not validate that the format is correct, only that
-    the host contains a colon and that it is a str or bytes.
-
-    This check is only meant as a heuristic to ensure that
-    a host is not a domain name.
-    """
-    if not host:
-        return False
-    # The host must contain a colon to be an IPv6 address.
-    if isinstance(host, str):
-        return ":" in host
-    if isinstance(host, (bytes, bytearray, memoryview)):
-        return b":" in host
-    raise TypeError(f"{host} [{type(host)}] is not a str or bytes")
+is_ipv4_address = functools.partial(_is_ip_address, _ipv4_regex, _ipv4_regexb)
+is_ipv6_address = functools.partial(_is_ip_address, _ipv6_regex, _ipv6_regexb)
 
 
 def is_ip_address(host: Optional[Union[str, bytes, bytearray, memoryview]]) -> bool:
-    """Check if host looks like an IP Address.
-
-    This check is only meant as a heuristic to ensure that
-    a host is not a domain name.
-    """
     return is_ipv4_address(host) or is_ipv6_address(host)
 
 
@@ -592,23 +619,12 @@ def call_later(
     loop: asyncio.AbstractEventLoop,
     timeout_ceil_threshold: float = 5,
 ) -> Optional[asyncio.TimerHandle]:
-    if timeout is None or timeout <= 0:
-        return None
-    now = loop.time()
-    when = calculate_timeout_when(now, timeout, timeout_ceil_threshold)
-    return loop.call_at(when, cb)
-
-
-def calculate_timeout_when(
-    loop_time: float,
-    timeout: float,
-    timeout_ceiling_threshold: float,
-) -> float:
-    """Calculate when to execute a timeout."""
-    when = loop_time + timeout
-    if timeout > timeout_ceiling_threshold:
-        return ceil(when)
-    return when
+    if timeout is not None and timeout > 0:
+        when = loop.time() + timeout
+        if timeout > timeout_ceil_threshold:
+            when = ceil(when)
+        return loop.call_at(when, cb)
+    return None
 
 
 class TimeoutHandle:
@@ -635,7 +651,7 @@ class TimeoutHandle:
     def close(self) -> None:
         self._callbacks.clear()
 
-    def start(self) -> Optional[asyncio.TimerHandle]:
+    def start(self) -> Optional[asyncio.Handle]:
         timeout = self._timeout
         if timeout is not None and timeout > 0:
             when = self._loop.time() + timeout
@@ -693,7 +709,7 @@ class TimerContext(BaseTimerContext):
             raise asyncio.TimeoutError from None
 
     def __enter__(self) -> BaseTimerContext:
-        task = asyncio.current_task(loop=self._loop)
+        task = current_task(loop=self._loop)
 
         if task is None:
             raise RuntimeError(
@@ -733,7 +749,7 @@ def ceil_timeout(
     if delay is None or delay <= 0:
         return async_timeout.timeout(None)
 
-    loop = asyncio.get_running_loop()
+    loop = get_running_loop()
     now = loop.time()
     when = now + delay
     if delay > ceil_threshold:
@@ -768,8 +784,7 @@ class HeadersMixin:
         raw = self._headers.get(hdrs.CONTENT_TYPE)
         if self._stored_content_type != raw:
             self._parse_content_type(raw)
-        assert self._content_type is not None
-        return self._content_type
+        return self._content_type  # type: ignore[return-value]
 
     @property
     def charset(self) -> Optional[str]:
@@ -777,8 +792,7 @@ class HeadersMixin:
         raw = self._headers.get(hdrs.CONTENT_TYPE)
         if self._stored_content_type != raw:
             self._parse_content_type(raw)
-        assert self._content_dict is not None
-        return self._content_dict.get("charset")
+        return self._content_dict.get("charset")  # type: ignore[union-attr]
 
     @property
     def content_length(self) -> Optional[int]:
@@ -804,7 +818,8 @@ class ErrorableProtocol(Protocol):
         self,
         exc: BaseException,
         exc_cause: BaseException = ...,
-    ) -> None: ...  # pragma: no cover
+    ) -> None:
+        ...  # pragma: no cover
 
 
 def set_exception(
@@ -890,10 +905,12 @@ class ChainMapProxy(Mapping[Union[str, AppKey[Any]], Any]):
         )
 
     @overload  # type: ignore[override]
-    def __getitem__(self, key: AppKey[_T]) -> _T: ...
+    def __getitem__(self, key: AppKey[_T]) -> _T:
+        ...
 
     @overload
-    def __getitem__(self, key: str) -> Any: ...
+    def __getitem__(self, key: str) -> Any:
+        ...
 
     def __getitem__(self, key: Union[str, AppKey[_T]]) -> Any:
         for mapping in self._maps:
@@ -904,13 +921,16 @@ class ChainMapProxy(Mapping[Union[str, AppKey[Any]], Any]):
         raise KeyError(key)
 
     @overload  # type: ignore[override]
-    def get(self, key: AppKey[_T], default: _S) -> Union[_T, _S]: ...
+    def get(self, key: AppKey[_T], default: _S) -> Union[_T, _S]:
+        ...
 
     @overload
-    def get(self, key: AppKey[_T], default: None = ...) -> Optional[_T]: ...
+    def get(self, key: AppKey[_T], default: None = ...) -> Optional[_T]:
+        ...
 
     @overload
-    def get(self, key: str, default: Any = ...) -> Any: ...
+    def get(self, key: str, default: Any = ...) -> Any:
+        ...
 
     def get(self, key: Union[str, AppKey[_T]], default: Any = None) -> Any:
         try:
@@ -973,7 +993,6 @@ def parse_http_date(date_str: Optional[str]) -> Optional[datetime.datetime]:
     return None
 
 
-@functools.lru_cache
 def must_be_empty_body(method: str, code: int) -> bool:
     """Check if a request must return an empty body."""
     return (

@@ -87,7 +87,7 @@ struct TThroughputThrottlerConfig
 
     static TThroughputThrottlerConfigPtr Create(std::optional<double> limit);
 
-    bool operator==(const TThroughputThrottlerConfig& other);
+    bool operator==(const TThroughputThrottlerConfig& other) const = default;
 
     REGISTER_YSON_STRUCT(TThroughputThrottlerConfig);
 

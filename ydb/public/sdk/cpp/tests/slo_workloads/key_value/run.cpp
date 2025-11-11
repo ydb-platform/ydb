@@ -7,7 +7,7 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 TWriteJob::TWriteJob(const TCommonOptions& opts, std::uint32_t maxId)
-    : TThreadJob(opts, "write")
+    : TThreadJob(opts)
     , Executor(opts, Stats, TExecutor::ModeNonBlocking)
     , Generator(opts, maxId)
 {}
@@ -77,13 +77,15 @@ UPSERT INTO `%s` SELECT * FROM AS_TABLE($items);
 void TWriteJob::OnFinish() {
     Executor.Finish();
     Executor.Wait();
+    Stats.Flush();
 }
 
 // Implementation of TReadJob
 TReadJob::TReadJob(const TCommonOptions& opts, std::uint32_t maxId)
-    : TThreadJob(opts, "read")
-    , Executor(std::make_unique<TExecutor>(opts, Stats))
+    : TThreadJob(opts)
+    , Executor(opts.RetryMode ? new TExecutorWithRetry(opts, Stats) : new TExecutor(opts, Stats))
     , ObjectIdRange(static_cast<std::uint32_t>(maxId * 1.25)) // 20% of requests with no result
+    , SaveResult(opts.SaveResult)
 {}
 
 void TReadJob::ShowProgress(TStringBuilder& report) {
@@ -151,5 +153,9 @@ void TReadJob::OnFinish() {
     std::uint32_t infly = Executor->Wait(WaitTimeout);
     if (infly) {
         Cerr << "Warning: thread A finished while having " << infly << " infly requests." << Endl;
+    }
+    Stats.Flush();
+    if (SaveResult) {
+        Stats.SaveResult();
     }
 }

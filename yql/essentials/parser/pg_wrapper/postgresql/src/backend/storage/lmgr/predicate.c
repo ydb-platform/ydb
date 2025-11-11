@@ -854,17 +854,12 @@ SerialAdd(TransactionId xid, SerCommitSeqNo minConflictCommitSeqNo)
 	LWLockAcquire(SerialSLRULock, LW_EXCLUSIVE);
 
 	/*
-	 * If 'xid' is older than the global xmin (== tailXid), there's no need to
-	 * store it, after all. This can happen if the oldest transaction holding
-	 * back the global xmin just finished, making 'xid' uninteresting, but
-	 * ClearOldPredicateLocks() has not yet run.
+	 * If no serializable transactions are active, there shouldn't be anything
+	 * to push out to the SLRU.  Hitting this assert would mean there's
+	 * something wrong with the earlier cleanup logic.
 	 */
 	tailXid = serialControl->tailXid;
-	if (!TransactionIdIsValid(tailXid) || TransactionIdPrecedes(xid, tailXid))
-	{
-		LWLockRelease(SerialSLRULock);
-		return;
-	}
+	Assert(TransactionIdIsValid(tailXid));
 
 	/*
 	 * If the SLRU is currently unused, zero out the whole active region from

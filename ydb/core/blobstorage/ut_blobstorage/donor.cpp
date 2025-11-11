@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 char *end = p + len;
                 TReallyFastRng32 rng(RandomNumber<ui64>());
                 while (p + sizeof(ui32) <= end) {
-                    WriteUnaligned<ui32>(p, rng());
+                    *reinterpret_cast<ui32*>(p) = rng();
                     p += sizeof(ui32);
                 }
                 for (; p != end; ++p) {

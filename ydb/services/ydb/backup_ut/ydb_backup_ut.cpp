@@ -1,6 +1,5 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
@@ -288,46 +287,26 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
             if (indexDesc.GetIndexColumns().back() != "Value") {
                 continue;
             }
-            switch (indexType) { // check settings
-                case EIndexType::GlobalSync:
-                case EIndexType::GlobalAsync:
-                case EIndexType::GlobalUnique:
-                    UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
-                    break;
-                case EIndexType::GlobalVectorKMeansTree: {
-                    Ydb::Table::KMeansTreeSettings settings;
-                    std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
-                    Ydb::Table::KMeansTreeSettings expected;
-                    expected.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
-                    expected.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
-                    expected.mutable_settings()->set_vector_dimension(768);
-                    expected.set_levels(2);
-                    expected.set_clusters(80);
-                    if (!google::protobuf::util::MessageDifferencer::Equals(settings, expected)) {
-                        continue;
-                    }
-                    break;
-                }
-                case EIndexType::GlobalFulltext: {
-                    Ydb::Table::FulltextIndexSettings settings;
-                    std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
-                    Ydb::Table::FulltextIndexSettings expected;
-                    expected.set_layout(Ydb::Table::FulltextIndexSettings::FLAT);
-                    auto column = expected.add_columns();
-                    column->set_column("Value");
-                    column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
-                    column->mutable_analyzers()->set_use_filter_lowercase(true);
-                    column->mutable_analyzers()->set_use_filter_length(true);
-                    column->mutable_analyzers()->set_filter_length_max(42);
-                    if (!google::protobuf::util::MessageDifferencer::Equals(settings, expected)) {
-                        continue;
-                    }
-                    break;
-                }
-                case EIndexType::Unknown: {
-                    UNIT_ASSERT(false);
-                }
-            }            
+            if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
+                return true;
+            }
+            auto* settings = std::get_if<TKMeansTreeSettings>(&indexDesc.GetIndexSettings());
+            UNIT_ASSERT(settings);
+            if (settings->Settings.Metric != NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct) {
+                continue;
+            }
+            if (settings->Settings.VectorType != NYdb::NTable::TVectorIndexSettings::EVectorType::Float) {
+                continue;
+            }
+            if (settings->Settings.VectorDimension != 768) {
+                continue;
+            }
+            if (settings->Levels != 2) {
+                continue;
+            }
+            if (settings->Clusters != 80) {
+                continue;
+            }
             return true;
         }
         return false;
@@ -702,8 +681,6 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalUnique;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
-            return NYdb::NTable::EIndexType::GlobalFulltext;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -715,59 +692,39 @@ void TestRestoreTableWithIndex(
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     TString query;
-    switch (indexType) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            query = Sprintf(R"(
-                CREATE TABLE `%s` (
-                    Key Uint32,
-                    Group Uint32,
-                    Value Uint32,
-                    PRIMARY KEY (Key),
-                    INDEX %s %s ON (Value)
-                );
-            )", table, index, ConvertIndexTypeToSQL(indexType));
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            if (prefix) {
-                query = Sprintf(R"(CREATE TABLE `%s` (
-                    Key Uint32,
-                    Group Uint32,
-                    Value String,
-                    PRIMARY KEY (Key),
-                    INDEX %s GLOBAL USING vector_kmeans_tree
-                        ON (Group, Value)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
-                );)", table, index);
-            } else {
-                query = Sprintf(R"(CREATE TABLE `%s` (
-                    Key Uint32,
-                    Group Uint32,
-                    Value String,
-                    PRIMARY KEY (Key),
-                    INDEX %s GLOBAL USING vector_kmeans_tree
-                        ON (Value)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
-                );)", table, index);
-            }
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+        if (prefix) {
             query = Sprintf(R"(CREATE TABLE `%s` (
                 Key Uint32,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
-                INDEX %s GLOBAL USING fulltext
-                    ON (Value)
-                    WITH (layout=flat, tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Group, Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
             );)", table, index);
-            break;
-        default:
-            UNIT_FAIL("No creation this index type");
-            break;
-    };
-
+        } else {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        }
+    } else {
+        query = Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value Uint32,
+                PRIMARY KEY (Key),
+                INDEX %s %s ON (Value)
+            );
+        )", table, index, ConvertIndexTypeToSQL(indexType));
+    }
     ExecuteDataDefinitionQuery(session, query);
 
     backup();
@@ -2372,7 +2329,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
-        appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2817,8 +2773,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
                 return TestTableWithIndexBackupRestore(Value);
+            case EIndexTypeGlobalFulltext:
+                // TODO: will be added later
+                break;
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -3313,7 +3271,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
-                    appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
@@ -3846,8 +3803,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalFulltext:
                 TestTableWithIndexBackupRestore(Value);
+                break;
+            case EIndexTypeGlobalFulltext:
+                // TODO: will be added later
                 break;
             case EIndexTypeInvalid:
                 break; // not applicable

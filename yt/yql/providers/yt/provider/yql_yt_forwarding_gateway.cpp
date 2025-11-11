@@ -57,7 +57,7 @@ TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Run(const TExprNode::T
     return Slave_->Run(node, ctx, std::move(options));
 }
 
-TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) {
+TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const {
     return Slave_->Prepare(node, ctx, std::move(options));
 }
 
@@ -149,8 +149,5 @@ NThreading::TFuture<IYtGateway::TLayersSnapshotResult> TYtForwardingGatewayBase:
     return Slave_->SnapshotLayers(std::move(options));
 }
 
-NThreading::TFuture<IYtGateway::TDumpResult> TYtForwardingGatewayBase::Dump(TDumpOptions&& options) {
-    return Slave_->Dump(std::move(options));
-}
 
 } // namspace NYql

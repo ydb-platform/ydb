@@ -16,6 +16,7 @@ from ._common import memoize
 from ._common import sdiskusage
 from ._common import usage_percent
 
+
 if MACOS:
     from . import _psutil_osx
 

@@ -11,11 +11,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/persqueue/public/mlp/ut/common
+    library/cpp/testing/unittest
+    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/query
+
+
 )
 
 END()
-
-RECURSE(
-    common
-)

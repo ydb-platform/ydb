@@ -24,7 +24,7 @@
 
 typedef struct
 {
-	WordEntry	entry;			/* must be first, see compareentry */
+	WordEntry	entry;			/* must be first! */
 	WordEntryPos *pos;
 	int			poslen;			/* number of elements in pos */
 } WordEntryIN;
@@ -80,19 +80,16 @@ uniquePos(WordEntryPos *a, int l)
 	return res + 1 - a;
 }
 
-/*
- * Compare two WordEntry structs for qsort_arg.  This can also be used on
- * WordEntryIN structs, since those have WordEntry as their first field.
- */
+/* Compare two WordEntryIN values for qsort */
 static int
 compareentry(const void *va, const void *vb, void *arg)
 {
-	const WordEntry *a = (const WordEntry *) va;
-	const WordEntry *b = (const WordEntry *) vb;
+	const WordEntryIN *a = (const WordEntryIN *) va;
+	const WordEntryIN *b = (const WordEntryIN *) vb;
 	char	   *BufferStr = (char *) arg;
 
-	return tsCompareString(&BufferStr[a->pos], a->len,
-						   &BufferStr[b->pos], b->len,
+	return tsCompareString(&BufferStr[a->entry.pos], a->entry.len,
+						   &BufferStr[b->entry.pos], b->entry.len,
 						   false);
 }
 
@@ -169,6 +166,12 @@ uniqueentry(WordEntryIN *a, int l, char *buf, int *outbuflen)
 
 	*outbuflen = buflen;
 	return res + 1 - a;
+}
+
+static int
+WordEntryCMP(WordEntry *a, WordEntry *b, char *buf)
+{
+	return compareentry(a, b, buf);
 }
 
 
@@ -509,7 +512,7 @@ tsvectorrecv(PG_FUNCTION_ARGS)
 
 		datalen += lex_len;
 
-		if (i > 0 && compareentry(&vec->entries[i],
+		if (i > 0 && WordEntryCMP(&vec->entries[i],
 								  &vec->entries[i - 1],
 								  STRPTR(vec)) <= 0)
 			needSort = true;

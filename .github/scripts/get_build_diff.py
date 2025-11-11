@@ -7,7 +7,6 @@ import get_main_build_size
 import humanize
 import os
 import subprocess
-import sys
 
 
 # Форматирование числа
@@ -40,7 +39,7 @@ def main():
         )
         git_commit_time_unix = int(git_commit_time.timestamp())
     else:
-        print(f"Error: Cant get commit {current_pr_commit_sha} timestamp", file=sys.stderr)
+        print(f"Error: Cant get commit {current_pr_commit_sha} timestamp")
         return 1
 
     current_sizes_result = get_current_build_size.get_build_size()
@@ -102,8 +101,7 @@ def main():
         print(f"{color};;;{comment}")
     else:
         print(
-            f"Error: Cant get build data: {branch}_sizes_result = {main_sizes_result}, current_sizes_result = {current_sizes_result}",
-            file=sys.stderr
+            f"Error: Cant get build data: {branch}_sizes_result = {main_sizes_result}, current_sizes_result = {current_sizes_result}"
         )
 
 

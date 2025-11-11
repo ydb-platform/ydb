@@ -1,5 +1,11 @@
 # VIEW (INDEX)
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [olap_warning_note](../../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
+
 Чтобы сделать запрос `SELECT` по вторичному индексу строковой таблицы, используйте конструкцию:
 
 ```yql
@@ -7,8 +13,6 @@ SELECT *
     FROM TableName VIEW IndexName
     WHERE …
 ```
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Примеры
 

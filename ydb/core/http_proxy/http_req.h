@@ -2,7 +2,7 @@
 
 #include "events.h"
 
-#include <ydb/services/datastreams/codes/datastreams_codes.h>
+#include <ydb/services/datastreams/datastreams_codes.h>
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 
@@ -128,10 +128,15 @@ public:
 private:
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2DataStreamsProcessor;
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
-    THashMap<TString, THolder<IHttpRequestProcessor>> Name2SqsTopicProcessor;
 };
 
-} // namespace NKikimr::NHttpProxy
+NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);
+NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);
+NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature);
+
+
+} // namespace NKinesis::NHttpProxy
+
 
 template <>
 void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p);

@@ -369,7 +369,6 @@ struct TErasureType {
     ui64 BlockSplitPartUsedSize(ui64 dataSize, ui32 partIdx) const;
     ui32 BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const;
     ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
-    static bool IsCrcModeValid(ui32 crcModeRaw);
 
     static const std::array<TString, ErasureSpeciesCount> ErasureName;
 protected:

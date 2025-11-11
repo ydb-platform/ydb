@@ -22,10 +22,10 @@
 
 #include "arrow/filesystem/filesystem.h"  // IWYU pragma: export
 #ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
+#  include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
 #endif
 #ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
+#  include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
 #endif
 #error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
 #include "arrow/filesystem/localfs.h"  // IWYU pragma: export

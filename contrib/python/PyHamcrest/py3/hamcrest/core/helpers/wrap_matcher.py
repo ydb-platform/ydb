@@ -1,4 +1,4 @@
-from typing import Type, TypeVar, Union
+import six
 
 from hamcrest.core.base_matcher import Matcher
 from hamcrest.core.core.isequal import equal_to
@@ -7,10 +7,9 @@ __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
-T = TypeVar("T")
+import types
 
-
-def wrap_matcher(x: Union[Matcher[T], T]) -> Matcher[T]:
+def wrap_matcher(x):
     """Wraps argument in a matcher, if necessary.
 
     :returns: the argument as-is if it is already a matcher, otherwise wrapped
@@ -22,9 +21,11 @@ def wrap_matcher(x: Union[Matcher[T], T]) -> Matcher[T]:
     else:
         return equal_to(x)
 
-
-def is_matchable_type(expected_type: Type) -> bool:
+def is_matchable_type(expected_type):
     if isinstance(expected_type, type):
+        return True
+
+    if isinstance(expected_type, six.class_types):
         return True
 
     if isinstance(expected_type, tuple) and all(map(is_matchable_type, expected_type)):

@@ -154,9 +154,9 @@ template <size_t Batch, typename... Args> class TBenchmark {
     };
 
     static constexpr auto kBuildLookupSize = std::array{
-        std::pair<ui32, ui32>{1000, 20000},
-        std::pair<ui32, ui32>{4000, 20000},
-        std::pair<ui32, ui32>{10000, 20000},
+        std::pair<ui32, ui32>{10000, 200000},
+        std::pair<ui32, ui32>{40000, 200000},
+        std::pair<ui32, ui32>{100000, 200000},
     };
     static constexpr ui32 kIters = 3;
 
@@ -432,12 +432,10 @@ template <size_t Batch, typename... Args> class TBenchmark {
 
     template <typename Arg>
     void PrintArg(std::string prefix, std::string suffix) {
-        int status = -123123;
-        char* str = abi::__cxa_demangle(typeid(Arg).name(), 0, 0, &status);
+        int status;
         CTEST << prefix
-              << str
+              << abi::__cxa_demangle(typeid(Arg).name(), 0, 0, &status)
               << suffix;
-        free(str);
     }
 
     ui64 Measure(auto f) {

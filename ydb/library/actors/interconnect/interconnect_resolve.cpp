@@ -1,4 +1,5 @@
 #include "interconnect.h"
+#include "interconnect_address.h"
 #include "events_local.h"
 
 #include <ydb/library/actors/interconnect/logging/logging.h>

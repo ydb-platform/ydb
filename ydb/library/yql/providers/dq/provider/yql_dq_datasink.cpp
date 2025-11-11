@@ -223,10 +223,6 @@ public:
         }
     }
 
-    bool IsFullCaptureReady() override {
-        return State->IsFullCaptureReady;
-    }
-
     const TDqState::TPtr State;
 
     TLazyInitHolder<IGraphTransformer> LogOptTransformer;

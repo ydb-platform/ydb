@@ -449,6 +449,9 @@ namespace NYql::NDq {
 
         auto tokenProvider = CreateGenericCredentialsProvider(
             secureParams.Value(source.GetTokenName(), ""),
+            source.GetToken(),
+            source.GetServiceAccountId(),
+            source.GetServiceAccountIdSignature(),
             credentialsFactory);
 
         const auto actor = new TGenericReadActor(

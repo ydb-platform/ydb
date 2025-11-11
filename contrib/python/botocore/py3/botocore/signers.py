@@ -176,16 +176,6 @@ class RequestSigner:
                 kwargs['region_name'] = signing_context['region']
             if signing_context.get('signing_name'):
                 kwargs['signing_name'] = signing_context['signing_name']
-            if signing_context.get('request_credentials'):
-                kwargs['request_credentials'] = signing_context[
-                    'request_credentials'
-                ]
-            if signing_context.get('identity_cache') is not None:
-                self._resolve_identity_cache(
-                    kwargs,
-                    signing_context['identity_cache'],
-                    signing_context['cache_key'],
-                )
             try:
                 auth = self.get_auth_instance(**kwargs)
             except UnknownSignatureVersionError as e:
@@ -197,10 +187,6 @@ class RequestSigner:
                     raise e
 
             auth.add_auth(request)
-
-    def _resolve_identity_cache(self, kwargs, cache, cache_key):
-        kwargs['identity_cache'] = cache
-        kwargs['cache_key'] = cache_key
 
     def _choose_signer(self, operation_name, signing_type, context):
         """
@@ -253,12 +239,7 @@ class RequestSigner:
         return signature_version
 
     def get_auth_instance(
-        self,
-        signing_name,
-        region_name,
-        signature_version=None,
-        request_credentials=None,
-        **kwargs,
+        self, signing_name, region_name, signature_version=None, **kwargs
     ):
         """
         Get an auth instance which can be used to sign a request
@@ -294,20 +275,13 @@ class RequestSigner:
             auth = cls(frozen_token)
             return auth
 
-        credentials = request_credentials or self._credentials
-        if getattr(cls, "REQUIRES_IDENTITY_CACHE", None) is True:
-            cache = kwargs["identity_cache"]
-            key = kwargs["cache_key"]
-            credentials = cache.get_credentials(key)
-            del kwargs["cache_key"]
-
         # If there's no credentials provided (i.e credentials is None),
         # then we'll pass a value of "None" over to the auth classes,
         # which already handle the cases where no credentials have
         # been provided.
         frozen_credentials = None
-        if credentials is not None:
-            frozen_credentials = credentials.get_frozen_credentials()
+        if self._credentials is not None:
+            frozen_credentials = self._credentials.get_frozen_credentials()
         kwargs['credentials'] = frozen_credentials
         if cls.REQUIRES_REGION:
             if self._region_name is None:
@@ -688,11 +662,7 @@ def generate_presigned_url(
         context=context,
     )
     bucket_is_arn = ArnParser.is_arn(params.get('Bucket', ''))
-    (
-        endpoint_url,
-        additional_headers,
-        properties,
-    ) = self._resolve_endpoint_ruleset(
+    endpoint_url, additional_headers = self._resolve_endpoint_ruleset(
         operation_model,
         params,
         context,
@@ -819,11 +789,7 @@ def generate_presigned_post(
         context=context,
     )
     bucket_is_arn = ArnParser.is_arn(params.get('Bucket', ''))
-    (
-        endpoint_url,
-        additional_headers,
-        properties,
-    ) = self._resolve_endpoint_ruleset(
+    endpoint_url, additional_headers = self._resolve_endpoint_ruleset(
         operation_model,
         params,
         context,
@@ -871,7 +837,5 @@ def _should_use_global_endpoint(client):
             s3_config.get('us_east_1_regional_endpoint') == 'regional'
             and client.meta.config.region_name == 'us-east-1'
         ):
-            return False
-        if s3_config.get('addressing_style') == 'virtual':
             return False
     return True

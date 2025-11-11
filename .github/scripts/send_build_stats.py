@@ -3,15 +3,18 @@
 import configparser
 import datetime
 import os
-import subprocess
-import sys
+import ydb
 import uuid
+import subprocess
 
-# Add path to analytics scripts
-dir_path = os.path.dirname(__file__)
-sys.path.insert(0, f"{dir_path}/analytics")
+dir = os.path.dirname(__file__)
+config = configparser.ConfigParser()
+config_file_path = f"{dir}/../config/ydb_qa_db.ini"
+config.read(config_file_path)
 
-from ydb_wrapper import YDBWrapper
+YDBD_PATH = config["YDBD"]["YDBD_PATH"]
+DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
+DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 FROM_ENV_COLUMNS = [
     "github_head_ref",
@@ -52,22 +55,29 @@ def sanitize_str(s):
 
 
 def main():
-    try:
-        with YDBWrapper() as wrapper:
-            if not wrapper.check_credentials():
-                print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-                return 1
-            
-            config_path = f"{dir_path}/../config/variables.ini"
-            config = configparser.ConfigParser()
-            config.read(config_path)
-            ydbd_path = config.get("YDBD", "YDBD_PATH")
-            
-            if not os.path.exists(ydbd_path):
-                # can be possible due to incremental builds and ydbd itself is not affected by changes
-                print("{} not exists, skipping".format(ydbd_path))
-                return 0
+    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
+        print("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+        return 1
+    
+    # Do not set up 'real' variable from gh workflows because it interfere with ydb tests 
+    # So, set up it locally
+    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
 
+    if not os.path.exists(YDBD_PATH):
+        # can be possible due to incremental builds and ydbd itself is not affected by changes
+        print("{} not exists, skipping".format(YDBD_PATH))
+        return 0
+
+    with ydb.Driver(
+        endpoint=DATABASE_ENDPOINT,
+        database=DATABASE_PATH,
+        credentials=ydb.credentials_from_env_variables()
+    ) as driver:
+        driver.wait(timeout=10, fail_fast=True)
+        session = ydb.retry_operation_sync(
+            lambda: driver.table_client.session().create()
+        )
+        with session.transaction() as tx:
             text_query_builder = []
             for type_ in STRING_COLUMNS:
                 text_query_builder.append("DECLARE ${} as String;".format(type_))
@@ -76,11 +86,8 @@ def main():
             for type_ in DATETIME_COLUMNS:
                 text_query_builder.append("DECLARE ${} as Datetime;".format(type_))
 
-            # Get table path from config
-            binary_size_table = wrapper.get_table_path("binary_size")
-            
             text_query_builder.append(
-                """INSERT INTO `{}`
+                """INSERT INTO binary_size
 (
     {}
 )
@@ -89,7 +96,6 @@ VALUES
     {}                   
 );                         
 """.format(
-                    binary_size_table,
                     ", \n    ".join(ALL_COLUMNS),
                     ", \n    ".join(["$" + column for column in ALL_COLUMNS]),
                 )
@@ -97,12 +103,13 @@ VALUES
 
             text_query = "\n".join(text_query_builder)
 
-            # Get binary sizes
+            prepared_query = session.prepare(text_query)
+
             binary_size_bytes = subprocess.check_output(
-                ["bash", "-c", "cat {} | wc -c".format(ydbd_path)]
+                ["bash", "-c", "cat {} | wc -c".format(YDBD_PATH)]
             )
             binary_size_stripped_bytes = subprocess.check_output(
-                ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(ydbd_path)]
+                ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)]
             )
 
             build_preset = os.environ.get("build_preset", None)
@@ -128,7 +135,7 @@ VALUES
             parameters = {
                 "$id": sanitize_str(str(uuid.uuid4())),
                 "$build_preset": sanitize_str(build_preset),
-                "$binary_path": sanitize_str(ydbd_path),
+                "$binary_path": sanitize_str(YDBD_PATH),
                 "$size_stripped_bytes": int(binary_size_stripped_bytes.decode("utf-8")),
                 "$size_bytes": int(binary_size_bytes.decode("utf-8")),
                 "$git_commit_time": git_commit_time_unix,
@@ -139,7 +146,7 @@ VALUES
                 value = os.environ.get(column.upper(), None)
                 parameters["$" + column] = sanitize_str(value)
             
-            # workaround for https://github.com/ydb-platform/ydb/issues/5294
+            #workaround for https://github.com/ydb-platform/ydb/issues/5294
             parameters["$github_sha"] = sanitize_str(github_sha)
             
             print("Executing query:\n{}".format(text_query))
@@ -147,14 +154,7 @@ VALUES
             for k, v in parameters.items():
                 print("{}: {}".format(k, v))
 
-            wrapper.execute_dml(text_query, parameters)
-            print("Successfully sent build stats to YDB")
-            
-    except Exception as e:
-        print(f"Warning: Failed to send build stats to YDB: {e}")
-        return 0  # Не фейлим CI, если не удалось отправить статистику
-    
-    return 0
+            tx.execute(prepared_query, parameters, commit_tx=True)
 
 
 if __name__ == "__main__":

@@ -86,7 +86,7 @@ public:
 
         const TRequestType& request = ev->Get()->Request;
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = Config.Timeout ? NYdb::TDeadline::SafeDurationCast(Config.Timeout) : NYdb::TDeadline::Duration::max();
+        meta.Timeout = Config.Timeout;
         if (auto token = ev->Get()->Token) {
             if (!AsciiHasPrefixIgnoreCase(token, "Bearer "sv)) {
                 token = "Bearer " + token;

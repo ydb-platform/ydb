@@ -1,6 +1,5 @@
 #include "utils.h"
 
-#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/link_manager.h>
@@ -14,6 +13,12 @@ namespace NRdmaTest {
 
 using namespace NActors;
 using namespace NInterconnect::NRdma;
+
+const char* RdmaTestEnvSwitchName = "TEST_ICRDMA";
+
+bool IsRdmaTestDisabled() {
+    return GetEnv(RdmaTestEnvSwitchName).empty();
+}
 
 ICq::TPtr GetCqHandle(NActors::TTestActorRuntimeBase* actorSystem, TRdmaCtx* ctx, TActorId cqActorId) {
     const TActorId edge = actorSystem->AllocateEdgeActor(0);
@@ -42,7 +47,7 @@ std::tuple<THolder<NActors::TTestActorRuntimeBase>, TRdmaCtx*> PrepareTestRuntim
     TString ip = env ?: defIp;
 
     NInterconnect::TAddress address(ip, 7777);
-    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(address);
+    auto ctx = NInterconnect::NRdma::NLinkMgr::GetCtx(GetV6CompatAddr(address));
     RDMA_UT_EXPECT_TRUE(ctx);
     Cerr << "Using verbs context: " << *ctx << ", on addr: " << ip << Endl;
 
@@ -76,22 +81,12 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo) {
     {
         int err = rdma->Qp2->Init(rdma->Ctx, rdma->CqPtr.get(), 16);
         RDMA_UT_EXPECT_TRUE(err == 0);
-        err = rdma->Qp2->ToRtsState(NInterconnect::NRdma::THandshakeData{
-            .QpNum = qp1num,
-            .SubnetPrefix = rdma->Ctx->GetGid().global.subnet_prefix,
-            .InterfaceId = rdma->Ctx->GetGid().global.interface_id,
-            .MtuIndex = rdma->Ctx->GetPortAttr().active_mtu
-        });
+        err = rdma->Qp2->ToRtsState(qp1num, rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
         RDMA_UT_EXPECT_TRUE(err == 0);
     }
 
     {
-        int err = rdma->Qp1->ToRtsState(NInterconnect::NRdma::THandshakeData{
-            .QpNum = rdma->Qp2->GetQpNum(),
-            .SubnetPrefix = rdma->Ctx->GetGid().global.subnet_prefix,
-            .InterfaceId = rdma->Ctx->GetGid().global.interface_id,
-            .MtuIndex = rdma->Ctx->GetPortAttr().active_mtu
-        });
+        int err = rdma->Qp1->ToRtsState(rdma->Qp2->GetQpNum(), rdma->Ctx->GetGid(), rdma->Ctx->GetPortAttr().active_mtu);
         RDMA_UT_EXPECT_TRUE(err == 0);
     }
 

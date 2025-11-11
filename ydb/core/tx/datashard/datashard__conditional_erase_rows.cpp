@@ -218,12 +218,8 @@ class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, publ
     }
 
 public:
-    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo,
-        const TString& databaseName, const TTableId& tableId, ui64 txId,
-        THolder<IEraseRowsCondition> condition, const TLimits& limits
-    )
+    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, THolder<IEraseRowsCondition> condition, const TLimits& limits)
         : IActorCallback(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
-        , DatabaseName(databaseName)
         , TableId(tableId)
         , DataShard{ds->SelfId(), ds->TabletID()}
         , ReplyTo(replyTo)
@@ -366,7 +362,6 @@ protected:
     }
 
 protected:
-    const TString DatabaseName;
     const TTableId TableId;
 
 private:
@@ -391,10 +386,9 @@ private:
 class TIndexedCondEraseScan: public TCondEraseScan {
 public:
     explicit TIndexedCondEraseScan(
-            TDataShard* ds, const TActorId& replyTo,
-            const TString& databaseName, const TTableId& tableId, ui64 txId,
+            TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
             THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
-        : TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits)
+        : TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits)
         , Indexes(std::move(indexes))
     {
     }
@@ -431,7 +425,7 @@ protected:
 
     TActorId CreateEraser() override {
         Y_ENSURE(!Eraser);
-        Eraser = this->Register(CreateDistributedEraser(this->SelfId(), DatabaseName, TableId, Indexes));
+        Eraser = this->Register(CreateDistributedEraser(this->SelfId(), TableId, Indexes));
         return Eraser;
     }
 
@@ -451,16 +445,16 @@ private:
 }; // TIndexedCondEraseScan
 
 IScan* CreateCondEraseScan(
-        TDataShard* ds, const TActorId& replyTo, const TString& databaseName, const TTableId& tableId, ui64 txId,
+        TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
         THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
 {
     Y_ENSURE(ds);
     Y_ENSURE(condition.Get());
 
     if (!indexes) {
-        return new TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits);
+        return new TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits);
     } else {
-        return new TIndexedCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits, std::move(indexes));
+        return new TIndexedCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits, std::move(indexes));
     }
 }
 
@@ -521,7 +515,7 @@ static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EU
     case NScheme::NTypeIds::Uint64:
     case NScheme::NTypeIds::DyNumber:
         return CheckUnit(false, unit, error);
-
+    
     case NScheme::NTypeIds::Pg:
         switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
             case DATEOID:
@@ -599,7 +593,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                     if (CheckUnit(column->second.Type, record.GetExpiration().GetColumnUnit(), error)) {
                         localTxId = NextTieBreakerIndex++;
                         const auto tableId = TTableId(PathOwnerId, localPathId, record.GetSchemaVersion());
-                        scan.Reset(CreateCondEraseScan(this, ev->Sender, record.GetDatabaseName(), tableId, localTxId,
+                        scan.Reset(CreateCondEraseScan(this, ev->Sender, tableId, localTxId,
                             THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
                     } else {
                         badRequest(error);

@@ -273,8 +273,8 @@ AddSubscriptionRelState(Oid subid, Oid relid, char state,
  * Update the state of a subscription table.
  */
 void
-UpdateSubscriptionRelStateEx(Oid subid, Oid relid, char state,
-							 XLogRecPtr sublsn, bool already_locked)
+UpdateSubscriptionRelState(Oid subid, Oid relid, char state,
+						   XLogRecPtr sublsn)
 {
 	Relation	rel;
 	HeapTuple	tup;
@@ -282,24 +282,9 @@ UpdateSubscriptionRelStateEx(Oid subid, Oid relid, char state,
 	Datum		values[Natts_pg_subscription_rel];
 	bool		replaces[Natts_pg_subscription_rel];
 
-	if (already_locked)
-	{
-#ifdef USE_ASSERT_CHECKING
-		LOCKTAG		tag;
+	LockSharedObject(SubscriptionRelationId, subid, 0, AccessShareLock);
 
-		Assert(CheckRelationOidLockedByMe(SubscriptionRelRelationId,
-										  RowExclusiveLock, true));
-		SET_LOCKTAG_OBJECT(tag, InvalidOid, SubscriptionRelationId, subid, 0);
-		Assert(LockHeldByMe(&tag, AccessShareLock));
-#endif
-
-		rel = table_open(SubscriptionRelRelationId, NoLock);
-	}
-	else
-	{
-		LockSharedObject(SubscriptionRelationId, subid, 0, AccessShareLock);
-		rel = table_open(SubscriptionRelRelationId, RowExclusiveLock);
-	}
+	rel = table_open(SubscriptionRelRelationId, RowExclusiveLock);
 
 	/* Try finding existing mapping. */
 	tup = SearchSysCacheCopy2(SUBSCRIPTIONRELMAP,
@@ -331,16 +316,6 @@ UpdateSubscriptionRelStateEx(Oid subid, Oid relid, char state,
 
 	/* Cleanup. */
 	table_close(rel, NoLock);
-}
-
-/*
- * Update the state of a subscription table.
- */
-void
-UpdateSubscriptionRelState(Oid subid, Oid relid, char state,
-						   XLogRecPtr sublsn)
-{
-	UpdateSubscriptionRelStateEx(subid, relid, state, sublsn, false);
 }
 
 /*

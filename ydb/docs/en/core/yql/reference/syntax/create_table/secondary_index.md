@@ -1,5 +1,7 @@
 # INDEX
 
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+
 The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a [row-oriented](../../../../concepts/datamodel/table.md#row-oriented-tables) table:
 
 ```yql
@@ -20,8 +22,6 @@ CREATE TABLE `<table_name>` (
 where:
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
-
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Example
 

@@ -17,6 +17,9 @@ namespace NKikimr::NSchemeShard {
 
 inline constexpr auto ClusterIdTypeId = NScheme::NTypeIds::Uint64;
 
+// TODO: support utf-8 in fulltext index
+inline constexpr auto TokenTypeId = NScheme::NTypeIds::String;
+
 struct Schema : NIceDb::Schema {
     struct Paths : Table<1> {
         struct Id :                    Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };

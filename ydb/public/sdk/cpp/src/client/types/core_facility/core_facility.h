@@ -3,8 +3,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
-#include <ydb/public/sdk/cpp/src/library/time/time.h>
-
 namespace NYdb::inline Dev {
 using TPeriodicCb = std::function<bool(NYdb::NIssue::TIssues&&, EStatus)>;
 
@@ -15,7 +13,7 @@ public:
     virtual ~ICoreFacility() = default;
     // Add task to execute periodicaly
     // Task should return false to stop execution
-    virtual void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) = 0;
+    virtual void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) = 0;
 };
 
 } // namespace NYdb

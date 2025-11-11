@@ -33,8 +33,6 @@ struct TBlockLayoutConverterTestData {
     arrow::MemoryPool* const ArrowPool;
 };
 
-constexpr int TestSize = 128 * 3 * sizeof(i64);
-
 Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
     Y_UNIT_TEST(TestFixedSize) {
         TBlockLayoutConverterTestData data;
@@ -47,7 +45,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
         Y_ENSURE(blockLen > 8);
 
-        constexpr auto testSize = TestSize / sizeof(i64);
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
@@ -59,7 +57,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -92,7 +90,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
         Y_ENSURE(blockLen > 8);
 
-        constexpr auto testSize = TestSize / 4;
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / (4 * sizeof(i64));
 
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
         TVector<arrow::Datum> columns;
@@ -107,7 +105,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             Y_ENSURE(datum.is_array());
         }
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -161,7 +159,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -218,7 +216,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             Y_ENSURE(datum.is_array());
         }
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -286,7 +284,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             }
         }
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -328,7 +326,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
         Y_ENSURE(blockLen > 8);
 
-        constexpr auto testSize = TestSize / sizeof(i64);
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optionalInt64Type, *data.ArrowPool, blockLen, nullptr);
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
@@ -344,7 +342,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -406,7 +404,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -448,7 +446,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
         Y_ENSURE(blockLen > 8);
 
-        constexpr auto testSize = TestSize / (sizeof(TDtLayout) + sizeof(ui16));
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / (sizeof(TDtLayout) + sizeof(ui16));
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDatetimeType, *data.ArrowPool, blockLen, nullptr);
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
@@ -462,7 +460,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
@@ -484,6 +482,69 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
 
+    #if 0
+    Y_UNIT_TEST(TestExternalOptional) {
+        TBlockLayoutConverterTestData data;
+
+        const auto doubleOptInt64Type = data.PgmBuilder.NewOptionalType(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true));
+        TVector< NKikimr::NMiniKQL::TType*> types{doubleOptInt64Type};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(doubleOptInt64Type);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type, *data.ArrowPool, blockLen, nullptr);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        for (size_t i = 0; i < testSize; i++) {
+            if (i % 2) {
+                builder->Add(TBlockItem(i).MakeOptional());
+            } else if (i % 4) {
+                builder->Add(TBlockItem());
+            } else {
+                builder->Add(TBlockItem().MakeOptional());
+            }
+        }
+        auto datum = builder->Build(true);
+        Y_ENSURE(datum.is_array());
+        TVector<arrow::Datum> columns{datum};
+
+        IBlockLayoutConverter::TPackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        TVector<arrow::Datum> columnsAfterConversion;
+        converter->Unpack(packRes, columnsAfterConversion);
+        UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), 1, "Expected the one column after conversion");
+        Y_ENSURE(columnsAfterConversion.front().is_array());
+
+        const auto& columnBefore = columns.front().array();
+        const auto& columnAfter = columnsAfterConversion.front().array();
+        auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type);
+
+        for (size_t elemIdx = 0; elemIdx < testSize; elemIdx++) {
+            TBlockItem lhs = reader->GetItem(*columnBefore, elemIdx);
+            TBlockItem rhs = reader->GetItem(*columnAfter, elemIdx);
+
+            for (size_t i = 0; i < 2; i++) {
+                UNIT_ASSERT_VALUES_EQUAL_C(bool(lhs), bool(rhs), "Expected the same optionality after conversion");
+                if (!lhs) {
+                    break;
+                }
+
+                lhs = lhs.GetOptionalValue();
+                rhs = rhs.GetOptionalValue();
+            }
+
+            if (lhs) {
+                UNIT_ASSERT_VALUES_EQUAL_C(lhs.Get<i64>(), rhs.Get<i64>(), "Expected the same data after conversion");
+            }
+        }
+    }
+    #endif
 
     Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
@@ -496,7 +557,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
         Y_ENSURE(blockLen > 8);
 
-        constexpr auto testSize = TestSize / sizeof(i64);
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
 
         auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
@@ -508,15 +569,15 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         Y_ENSURE(datum.is_array());
         TVector<arrow::Datum> columns{datum};
 
-        TPackResult packRes;
+        IBlockLayoutConverter::TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
         static constexpr ui32 bucketsLogNum = 5;
-        auto packReses = std::array<TPackResult, 1u << bucketsLogNum>{};
+        auto packReses = std::array<IBlockLayoutConverter::TPackResult, 1u << bucketsLogNum>{};
         converter->BucketPack(columns, packReses.data(), bucketsLogNum);
         
-        const ui32 bucketedTuplesNum = std::accumulate(packReses.begin(), packReses.end(), 0, [](size_t lhs, const TPackResult& rhs) {
+        const ui32 bucketedTuplesNum = std::accumulate(packReses.begin(), packReses.end(), 0, [](size_t lhs, const IBlockLayoutConverter::TPackResult& rhs) {
             return lhs + rhs.NTuples;
         });
         UNIT_ASSERT_EQUAL(testSize, bucketedTuplesNum);

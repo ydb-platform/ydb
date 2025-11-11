@@ -312,7 +312,7 @@ namespace NKikimr::NDataStreams::V1 {
         entry.Path = NKikimr::SplitPath(this->GetTopicPath());
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = true;
-        schemeCacheRequest->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
+        schemeCacheRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
         schemeCacheRequest->ResultSet.emplace_back(entry);
         ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
     }

@@ -310,7 +310,7 @@ class Config:
         # Iterate through the args passed through to the constructor and map
         # them to appropriate keys.
         for i, arg in enumerate(args):
-            # If a kwarg was specified for the arg, then error out
+            # If it a kwarg was specified for the arg, then error out
             if option_order[i] in user_provided_options:
                 raise TypeError(
                     f"Got multiple values for keyword argument '{option_order[i]}'"

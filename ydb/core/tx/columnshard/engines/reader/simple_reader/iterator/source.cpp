@@ -410,11 +410,9 @@ TPortionDataSource::TPortionDataSource(
     , Finish(TReplaceKeyAdapter::BuildFinish(*portion, *context->GetReadMetadata())) {
     AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater)("start", Start.DebugString())("finish", Finish.DebugString());
     if (context->GetReadMetadata()->IsDescSorted()) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
-            Finish.GetValue().BuildSortablePosition(), Start.GetValue().BuildSortablePosition());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Finish.GetValue(), Start.GetValue());
     } else {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(
-            Start.GetValue().BuildSortablePosition(), Finish.GetValue().BuildSortablePosition());
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(Start.GetValue(), Finish.GetValue());
     }
     AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())("finish", Finish.DebugString());

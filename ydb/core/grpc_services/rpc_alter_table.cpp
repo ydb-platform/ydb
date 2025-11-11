@@ -31,6 +31,29 @@ using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
 
+static bool CheckAddIndexAccess(const NACLib::TUserToken& userToken, const NSchemeCache::TSchemeCacheNavigate* navigate) {
+    bool isDatabaseEntry = true;
+
+    using TEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
+
+    for (const TEntry& entry : navigate->ResultSet) {
+        if (!entry.SecurityObject) {
+            continue;
+        }
+        if (isDatabaseEntry) { // first entry is always database
+            isDatabaseEntry = false;
+            continue;
+        }
+
+        const ui32 access = NACLib::AlterSchema | NACLib::DescribeSchema;
+        if (!entry.SecurityObject->CheckAccess(access, userToken)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 using TEvAlterTableRequest = TGrpcRequestOperationCall<Ydb::Table::AlterTableRequest,
     Ydb::Table::AlterTableResponse>;
 
@@ -41,7 +64,6 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
 public:
     TAlterTableRPC(IRequestOpCtx* msg)
         : TBase(msg)
-        , DatabaseName(Request_->GetDatabaseName().GetOrElse(""))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -91,7 +113,7 @@ public:
         case EOp::Attribute:
         case EOp::AddChangefeed:
         case EOp::DropChangefeed:
-            Navigate(GetProtoRequest()->path());;
+            GetProxyServices();
             break;
 
         case EOp::DropIndex:
@@ -106,7 +128,8 @@ public:
 private:
     void AlterStateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-           hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+           HFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+           HFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvCreateResponse, Handle);
            HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
@@ -166,46 +189,61 @@ private:
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
 
-    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev, const TActorContext& ctx) {
         TXLOG_D("Handle TEvTxUserProxy::TEvAllocateTxIdResult");
 
         const auto* msg = ev->Get();
         TxId = msg->TxId;
         LogPrefix = TStringBuilder() << "[AlterTableAddIndex " << SelfId() << " TxId# " << TxId << "] ";
 
-        Navigate(GetProtoRequest()->path());
+        Navigate(msg->Services.SchemeCache, ctx);
     }
 
-    void Navigate(const TString& path) {
-        auto paths = NKikimr::SplitPath(path);
+    void GetProxyServices() {
+        using namespace NTxProxy;
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest);
+    }
+
+    void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev, const TActorContext& ctx) {
+        Navigate(ev->Get()->Services.SchemeCache, ctx);
+    }
+
+    void Navigate(const TActorId& schemeCache, const TActorContext& ctx) {
+        DatabaseName = Request_->GetDatabaseName()
+            .GetOrElse(DatabaseFromDomain(AppData()));
+
+        const auto& path = GetProtoRequest()->path();
+
+        const auto paths = NKikimr::SplitPath(path);
         if (paths.empty()) {
-            auto& ctx = TlsActivationContext->AsActorContext();
             TString error = TStringBuilder() << "Failed to split table path " << path;
             Request_->RaiseIssue(NYql::TIssue(error));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);
         }
 
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = DatabaseName;
+        auto ev = CreateNavigateForPath(DatabaseName);
+        {
+            auto& entry = static_cast<TEvTxProxySchemeCache::TEvNavigateKeySet*>(ev)->Request->ResultSet.emplace_back();
+            entry.Path = paths;
+        }
 
-        auto& entry = navigate->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        entry.Path = std::move(paths);
-
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate));
+        Send(schemeCache, ev);
     }
 
-    void Navigate(const TTableId& pathId) {
-        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        navigate->DatabaseName = DatabaseName;
+    void Navigate(const TTableId& pathId, const TActorContext& /*ctx*/) {
+        DatabaseName = Request_->GetDatabaseName()
+            .GetOrElse(DatabaseFromDomain(AppData()));
 
-        auto& entry = navigate->ResultSet.emplace_back();
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-        entry.TableId = pathId;
-        entry.ShowPrivatePath = true;
+        auto ev = CreateNavigateForPath(DatabaseName);
+        {
+            auto& entry = static_cast<TEvTxProxySchemeCache::TEvNavigateKeySet*>(ev)->Request->ResultSet.emplace_back();
+            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+            entry.TableId = pathId;
+            entry.ShowPrivatePath = true;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
+        }
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate));
+        Send(MakeSchemeCacheID(), ev);
     }
 
     static bool IsChangefeedOperation(EOp type) {
@@ -240,8 +278,8 @@ private:
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
 
-        Y_ABORT_UNLESS(resp->ResultSet.size() == 1);
-        const auto& entry = resp->ResultSet.front();
+        Y_ABORT_UNLESS(!resp->ResultSet.empty());
+        const auto& entry = resp->ResultSet.back();
 
         switch (entry.Kind) {
         case NSchemeCache::TSchemeCacheNavigate::KindTable:
@@ -263,7 +301,7 @@ private:
 
         switch (OpType) {
         case EOp::AddIndex:
-            return AlterTableAddIndexOp(entry, ctx);
+            return AlterTableAddIndexOp(resp, ctx);
         case EOp::Attribute:
             ResolvedPathId = resp->ResultSet.back().TableId.PathId;
             return AlterTable(ctx);
@@ -279,7 +317,7 @@ private:
                 const auto& child = list->Children.at(0);
                 AlterTable(ctx, CanonizePath(ChildPath(NKikimr::SplitPath(GetProtoRequest()->path()), child.Name)));
             } else {
-                Navigate(entry.TableId);
+                Navigate(entry.TableId, ctx);
             }
             break;
         default:
@@ -288,32 +326,13 @@ private:
         }
     }
 
-    bool CheckAddIndexAccess(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
-        if (!UserToken || !entry.SecurityObject) {
-            return true;
+    void AlterTableAddIndexOp(const NSchemeCache::TSchemeCacheNavigate* resp, const TActorContext& ctx) {
+        if (UserToken && !CheckAddIndexAccess(*UserToken, resp)) {
+            TXLOG_W("Access check failed");
+            return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
         }
 
-        const ui32 access = NACLib::AlterSchema | NACLib::DescribeSchema;
-        if (entry.SecurityObject->CheckAccess(access, *UserToken)) {
-            return true;
-        }
-
-        TXLOG_W("Access check failed");
-        Reply(Ydb::StatusIds::UNAUTHORIZED,
-            TStringBuilder() << "Access denied"
-                << " for# " << UserToken->GetUserSID()
-                << ", path# " << CanonizePath(entry.Path)
-                << ", access# " << NACLib::AccessRightsToString(access),
-            NKikimrIssues::TIssuesIds::ACCESS_DENIED, ctx);
-        return false;
-    }
-
-    void AlterTableAddIndexOp(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TActorContext& ctx) {
-        if (!CheckAddIndexAccess(entry, ctx)) {
-            return;
-        }
-
-        const auto& domainInfo = entry.DomainInfo;
+        auto domainInfo = resp->ResultSet.front().DomainInfo;
         if (!domainInfo) {
             TXLOG_E("Got empty domain info");
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
@@ -397,7 +416,7 @@ private:
         Die(ctx);
     }
 
-    void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) {
+    void AlterTable(const TActorContext &ctx, const TMaybe<TString>& overridePath = {}) { 
         const auto req = GetProtoRequest();
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         auto modifyScheme = proposeRequest->Record.MutableTransaction()->MutableModifyScheme();
@@ -414,7 +433,7 @@ private:
     }
 
     ui64 TxId = 0;
-    const TString DatabaseName;
+    TString DatabaseName;
     TString LogPrefix;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPathId ResolvedPathId;

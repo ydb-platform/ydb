@@ -115,7 +115,7 @@ private:
 public:
     static constexpr char ActorName[] = "SQL_QUERY";
 
-    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false, bool isStreamingMode = false);
+    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false);
 
     void Bootstrap();
 
@@ -157,8 +157,6 @@ protected:
 
     TString LogPrefix() const;
 
-    STFUNC(StateFunc);
-
 private:
     // Methods for implementing in derived classes.
     virtual void OnRunQuery() = 0;
@@ -182,6 +180,8 @@ private:
             actorSystem->Send(selfId, new TEvent(std::move(result)));
         };
     }
+
+    STFUNC(StateFunc);
 
     void RunCreateSession() const;
     void Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev);
@@ -208,7 +208,6 @@ protected:
     TString Database;
     TString SessionId;
     bool IsSystemUser = false;
-    bool IsStreamingMode = false;
     TString TxId;
     bool DeleteSession = false;
     bool RunningQuery = false;

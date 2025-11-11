@@ -47,8 +47,6 @@ typedef int LOCKMODE;
 
 #define MaxLockMode				8	/* highest standard lock mode */
 
-/* See README.tuplock section "Locking to write inplace-updated tables" */
-#define InplaceUpdateTupleLock ExclusiveLock
 
 /* WAL representation of an AccessExclusiveLock on a table */
 typedef struct xl_standby_lock

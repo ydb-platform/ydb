@@ -1,8 +1,5 @@
-from typing import Any
-
-from hamcrest.core.helpers.wrap_matcher import wrap_matcher
-from hamcrest.core.matcher import Matcher
 from hamcrest.core.string_description import tostring
+from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 
 __author__ = "Chris Rose"
 __copyright__ = "Copyright 2011 hamcrest.org"
@@ -11,20 +8,21 @@ __unittest = True
 
 
 class EqualityWrapper(object):
-    def __init__(self, matcher: Matcher) -> None:
+
+    def __init__(self, matcher):
         self.matcher = matcher
 
-    def __eq__(self, obj: Any) -> bool:
-        return self.matcher.matches(obj)
+    def __eq__(self, object):
+        return self.matcher.matches(object)
 
-    def __str__(self) -> str:
+    def __str__(self):
         return repr(self)
 
-    def __repr__(self) -> str:
+    def __repr__(self):
         return tostring(self.matcher)
 
 
-def match_equality(matcher: Matcher) -> EqualityWrapper:
+def match_equality(matcher):
     """Wraps a matcher to define equality in terms of satisfying the matcher.
 
     ``match_equality`` allows Hamcrest matchers to be used in libraries that

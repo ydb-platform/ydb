@@ -9,7 +9,6 @@
 #include <ydb/library/actors/core/scheduler_queue.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/core/base/appdata.h>
@@ -290,10 +289,6 @@ public:
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[setup->ExecutorsCount]);
         IExecutorPool *pool = CreateTestExecutorPool(nodeId);
         setup->Executors[0].Reset(pool);
-#if !defined(_msan_enabled_)
-        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
-        setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
-#endif
 
         // we create this actor for correct service lookup through ActorSystem
         setup->LocalServices.emplace_back(LoggerSettings_->LoggerActorId, TActorSetupCmd(

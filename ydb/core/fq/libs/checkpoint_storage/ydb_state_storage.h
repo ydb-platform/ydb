@@ -4,6 +4,7 @@
 #include "storage_settings.h"
 
 #include <ydb/core/fq/libs/ydb/ydb.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 namespace NFq {
 
@@ -11,6 +12,6 @@ namespace NFq {
 
 TStateStoragePtr NewYdbStateStorage(
     const TCheckpointStorageSettings& config,
-    const IYdbConnection::TPtr& ydbConnection);
+    const TYdbConnectionPtr& ydbConnection);
 
 } // namespace NFq

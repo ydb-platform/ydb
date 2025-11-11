@@ -236,10 +236,6 @@ namespace {
             PingTimeHistogram->Collect(value);
         }
 
-        void UpdateIcQueueTimeHistogram(ui64 value) override {
-            InterconnectQueueTimeHistogram->Collect(value);
-        }
-
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -321,8 +317,6 @@ namespace {
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
-                InterconnectQueueTimeHistogram = AdaptiveCounters->GetHistogram(
-                    "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
             }
 
             if (updateGlobal) {
@@ -385,7 +379,6 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
         NMonitoring::THistogramPtr PingTimeHistogram;
-        NMonitoring::THistogramPtr InterconnectQueueTimeHistogram;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
@@ -587,10 +580,6 @@ namespace {
             PingTimeHistogram_->Record(value);
         }
 
-        void UpdateIcQueueTimeHistogram(ui64 value) override {
-            InterconnectQueueTimeHistogram_->Record(value);
-        }
-
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -683,8 +672,6 @@ namespace {
                 InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
-                InterconnectQueueTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
-                        NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
             }
 
             if (updateGlobal) {
@@ -769,7 +756,6 @@ namespace {
         NMonitoring::IIntGauge* ClockSkewMicrosec_;
 
         NMonitoring::IHistogram* PingTimeHistogram_;
-        NMonitoring::IHistogram* InterconnectQueueTimeHistogram_;
 
         THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;

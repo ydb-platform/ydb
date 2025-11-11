@@ -18,7 +18,6 @@ def generate_selfsigned_cert(hostname):
     )
 
     name = x509.Name([
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "YDB"),
         x509.NameAttribute(NameOID.COMMON_NAME, hostname)
     ])
     alt_names = x509.SubjectAlternativeName([

@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 
+
 try:
     import pwd
 except ImportError:
@@ -84,6 +85,7 @@ from ._common import ZombieProcess
 from ._common import debug
 from ._common import memoize_when_activated
 from ._common import wrap_numbers as _wrap_numbers
+
 
 if LINUX:
     # This is public API and it will be retrieved from _pslinux.py
@@ -192,18 +194,20 @@ __all__.extend(_psplatform.__extra__all__)
 # Linux, FreeBSD
 if hasattr(_psplatform.Process, "rlimit"):
     # Populate global namespace with RLIM* constants.
+    from . import _psutil_posix
+
     _globals = globals()
     _name = None
-    for _name in dir(_psplatform.cext):
+    for _name in dir(_psutil_posix):
         if _name.startswith('RLIM') and _name.isupper():
-            _globals[_name] = getattr(_psplatform.cext, _name)
+            _globals[_name] = getattr(_psutil_posix, _name)
             __all__.append(_name)
     del _globals, _name
 
 AF_LINK = _psplatform.AF_LINK
 
 __author__ = "Giampaolo Rodola'"
-__version__ = "7.1.2"
+__version__ = "7.0.0"
 version_info = tuple(int(num) for num in __version__.split('.'))
 
 _timer = getattr(time, 'monotonic', time.time)
@@ -373,11 +377,7 @@ class Process:
         won't reuse the same PID after such a short period of time
         (0.01 secs). Technically this is inherently racy, but
         practically it should be good enough.
-
-        NOTE: unreliable on FreeBSD and OpenBSD as ctime is subject to
-        system clock updates.
         """
-
         if WINDOWS:
             # Use create_time() fast method in order to speedup
             # `process_iter()`. This means we'll get AccessDenied for
@@ -386,11 +386,6 @@ class Process:
             # https://github.com/giampaolo/psutil/issues/2366#issuecomment-2381646555
             self._create_time = self._proc.create_time(fast_only=True)
             return (self.pid, self._create_time)
-        elif LINUX or NETBSD or OSX:
-            # Use 'monotonic' process starttime since boot to form unique
-            # process identity, since it is stable over changes to system
-            # time.
-            return (self.pid, self._proc.create_time(monotonic=True))
         else:
             return (self.pid, self.create_time())
 
@@ -431,12 +426,12 @@ class Process:
         # on PID and creation time.
         if not isinstance(other, Process):
             return NotImplemented
-        if OPENBSD or NETBSD or SUNOS:  # pragma: no cover
-            # Zombie processes on Open/NetBSD/illumos/Solaris have a
-            # creation time of 0.0.  This covers the case when a process
-            # started normally (so it has a ctime), then it turned into a
-            # zombie. It's important to do this because is_running()
-            # depends on __eq__.
+        if OPENBSD or NETBSD:  # pragma: no cover
+            # Zombie processes on Open/NetBSD have a creation time of
+            # 0.0. This covers the case when a process started normally
+            # (so it has a ctime), then it turned into a zombie. It's
+            # important to do this because is_running() depends on
+            # __eq__.
             pid1, ident1 = self._ident
             pid2, ident2 = other._ident
             if pid1 == pid2:
@@ -598,13 +593,10 @@ class Process:
             return None
         ppid = self.ppid()
         if ppid is not None:
-            # Get a fresh (non-cached) ctime in case the system clock
-            # was updated. TODO: use a monotonic ctime on platforms
-            # where it's supported.
-            proc_ctime = Process(self.pid).create_time()
+            ctime = self.create_time()
             try:
                 parent = Process(ppid)
-                if parent.create_time() <= proc_ctime:
+                if parent.create_time() <= ctime:
                     return parent
                 # ...else ppid has been reused by another process
             except NoSuchProcess:
@@ -773,11 +765,8 @@ class Process:
 
     def create_time(self):
         """The process creation time as a floating point number
-        expressed in seconds since the epoch (seconds since January 1,
-        1970, at midnight UTC). The return value, which is cached after
-        first call, is based on the system clock, which means it may be
-        affected by changes such as manual adjustments or time
-        synchronization (e.g. NTP).
+        expressed in seconds since the epoch.
+        The return value is cached after first call.
         """
         if self._create_time is None:
             self._create_time = self._proc.create_time()
@@ -975,10 +964,6 @@ class Process:
         """
         self._raise_if_pid_reused()
         ppid_map = _ppid_map()
-        # Get a fresh (non-cached) ctime in case the system clock was
-        # updated. TODO: use a monotonic ctime on platforms where it's
-        # supported.
-        proc_ctime = Process(self.pid).create_time()
         ret = []
         if not recursive:
             for pid, ppid in ppid_map.items():
@@ -987,7 +972,7 @@ class Process:
                         child = Process(pid)
                         # if child happens to be older than its parent
                         # (self) it means child's PID has been reused
-                        if proc_ctime <= child.create_time():
+                        if self.create_time() <= child.create_time():
                             ret.append(child)
                     except (NoSuchProcess, ZombieProcess):
                         pass
@@ -1013,7 +998,7 @@ class Process:
                         child = Process(child_pid)
                         # if child happens to be older than its parent
                         # (self) it means child's PID has been reused
-                        intime = proc_ctime <= child.create_time()
+                        intime = self.create_time() <= child.create_time()
                         if intime:
                             ret.append(child)
                             stack.append(child_pid)
@@ -1499,7 +1484,7 @@ def process_iter(attrs=None, ad_value=None):
 
     Every new Process instance is only created once and then cached
     into an internal table which is updated every time this is used.
-    Cache can optionally be cleared via `process_iter.cache_clear()`.
+    Cache can optionally be cleared via `process_iter.clear_cache()`.
 
     The sorting order in which processes are yielded is based on
     their PIDs.
@@ -2367,12 +2352,9 @@ if hasattr(_psplatform, "sensors_battery"):
 
 
 def boot_time():
-    """Return the system boot time expressed in seconds since the epoch
-    (seconds since January 1, 1970, at midnight UTC). The returned
-    value is based on the system clock, which means it may be affected
-    by changes such as manual adjustments or time synchronization (e.g.
-    NTP).
-    """
+    """Return the system boot time expressed in seconds since the epoch."""
+    # Note: we are not caching this because it is subject to
+    # system clock updates.
     return _psplatform.boot_time()
 
 

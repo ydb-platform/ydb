@@ -6,7 +6,6 @@ FORK_SUBTESTS()
 
 PEERDIR(
     contrib/restricted/nlohmann_json
-    library/cpp/string_utils/url
     ydb/library/actors/http
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
@@ -24,7 +23,6 @@ PEERDIR(
 SRCS(
     ../kinesis_ut.cpp
     ../ymq_ut.cpp
-    ../sqs_topic_ut.cpp
     inside_ydb_ut.cpp
 )
 

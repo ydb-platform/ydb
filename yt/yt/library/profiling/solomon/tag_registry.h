@@ -83,6 +83,6 @@ private:
 
 } // namespace NYT::NProfiling
 
-#define TAG_REGISTRY_INL_H_
+#define TAG_REGISTRY_INL_H
 #include "tag_registry-inl.h"
-#undef TAG_REGISTRY_INL_H_
+#undef TAG_REGISTRY_INL_H

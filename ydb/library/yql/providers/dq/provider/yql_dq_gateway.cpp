@@ -617,7 +617,7 @@ public:
         request.SetUsername(username);
 
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = OpenSessionTimeout ? NYdb::TDeadline::SafeDurationCast(OpenSessionTimeout) : NYdb::TDeadline::Duration::max();
+        meta.Timeout = OpenSessionTimeout;
 
         auto self = weak_from_this();
         auto callback = [self, promise, sessionId](NYdbGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {

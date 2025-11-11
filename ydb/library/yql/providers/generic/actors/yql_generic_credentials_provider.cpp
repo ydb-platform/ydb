@@ -5,20 +5,43 @@
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDq {
+    TGenericCredentialsProvider::TGenericCredentialsProvider(const TString& staticIamToken)
+        : StaticIAMToken_(staticIamToken)
+    {
+    }
+
+    TGenericCredentialsProvider::TGenericCredentialsProvider(
+        const TString& serviceAccountId,
+        const TString& serviceAccountIdSignature,
+        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+        Y_ENSURE(!serviceAccountId.empty(), "No service account provided");
+        Y_ENSURE(!serviceAccountIdSignature.empty(), "No service account signature provided");
+        Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
+
+        auto structuredTokenJSON =
+            TStructuredTokenBuilder().SetServiceAccountIdAuth(serviceAccountId, serviceAccountIdSignature).ToJson();
+
+        Y_ENSURE(structuredTokenJSON, "empty structured token");
+
+        auto credentialsProviderFactory =
+            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredTokenJSON, false);
+        CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
+    }
+
     TGenericCredentialsProvider::TGenericCredentialsProvider(
         const TString& structuredTokenJSON,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+        Y_ENSURE(!structuredTokenJSON.empty(), "empty structured token");
         Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
 
-        if (IsStructuredTokenJson(structuredTokenJSON)) {
-            TStructuredTokenParser parser = CreateStructuredTokenParser(structuredTokenJSON);
-            if (parser.HasBasicAuth()) {
-                TString login;
-                TString password;
-                parser.GetBasicAuth(login, password);
-                BasicAuthCredentials_ = {login, password};
-                return;
-            }
+        NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJSON);
+
+        if (parser.HasBasicAuth()) {
+            TString login;
+            TString password;
+            parser.GetBasicAuth(login, password);
+            BasicAuthCredentials_ = {login, password};
+            return;
         }
 
         auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
@@ -29,7 +52,7 @@ namespace NYql::NDq {
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
-    TString TGenericCredentialsProvider::FillCredentials(TGenericDataSourceInstance& dsi) const {
+    TString TGenericCredentialsProvider::FillCredentials(NYql::TGenericDataSourceInstance& dsi) const {
         // 1. If basic auth creds have been provided, use it
         if (BasicAuthCredentials_) {
             auto basic = dsi.mutable_credentials()->mutable_basic();
@@ -39,6 +62,12 @@ namespace NYql::NDq {
         }
 
         *dsi.mutable_credentials()->mutable_token()->mutable_type() = "IAM";
+
+        // 2. If static IAM-token has been provided, use it
+        if (StaticIAMToken_) {
+            *dsi.mutable_credentials()->mutable_token()->mutable_value() = *StaticIAMToken_;
+            return {};
+        }
 
         // 3. Otherwise use credentials provider to get token from Token Accessor
         Y_ENSURE(CredentialsProvider_, "CredentialsProvider is not initialized");
@@ -51,13 +80,27 @@ namespace NYql::NDq {
             return TString(e.what());
         }
 
+        Y_ENSURE(!iamToken.empty(), "CredentialsProvider returned empty IAM token");
+
         *dsi.mutable_credentials()->mutable_token()->mutable_value() = std::move(iamToken);
         return {};
     }
 
     TGenericCredentialsProvider::TPtr
     CreateGenericCredentialsProvider(const TString& structuredTokenJSON,
+                                     /*[[deprecated]]*/ const TString& staticIamToken,
+                                     /*[[deprecated]]*/ const TString& serviceAccountId,
+                                     /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
                                      const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        return std::make_unique<TGenericCredentialsProvider>(structuredTokenJSON, credentialsFactory);
+        if (!structuredTokenJSON.empty()) {
+            return std::make_unique<TGenericCredentialsProvider>(structuredTokenJSON, credentialsFactory);
+        }
+        if (!staticIamToken.empty()) {
+            return std::make_unique<TGenericCredentialsProvider>(staticIamToken);
+        }
+        if (!serviceAccountId.empty() && !serviceAccountIdSignature.empty()) {
+            return std::make_unique<TGenericCredentialsProvider>(serviceAccountId, serviceAccountIdSignature, credentialsFactory);
+        }
+        return std::make_unique<TGenericCredentialsProvider>();
     }
 } // namespace NYql::NDq

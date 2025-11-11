@@ -1,9 +1,9 @@
 |  |downloads| |stars| |forks| |contributors| |coverage|
-|  |version| |packages| |license|
+|  |version| |py-versions| |packages| |license|
 |  |github-actions-wheels|  |github-actions-bsd| |doc| |twitter| |tidelift|
 
 .. |downloads| image:: https://img.shields.io/pypi/dm/psutil.svg
-    :target: https://clickpy.clickhouse.com/dashboard/psutil
+    :target: https://pepy.tech/project/psutil
     :alt: Downloads
 
 .. |stars| image:: https://img.shields.io/github/stars/giampaolo/psutil.svg
@@ -37,6 +37,9 @@
 .. |version| image:: https://img.shields.io/pypi/v/psutil.svg?label=pypi
     :target: https://pypi.org/project/psutil
     :alt: Latest version
+
+.. |py-versions| image:: https://img.shields.io/pypi/pyversions/psutil.svg
+    :alt: Supported Python versions
 
 .. |packages| image:: https://repology.org/badge/tiny-repos/python:psutil.svg
     :target: https://repology.org/metapackage/python:psutil/versions

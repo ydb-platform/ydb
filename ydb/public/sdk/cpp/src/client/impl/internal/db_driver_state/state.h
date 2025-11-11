@@ -39,7 +39,7 @@ public:
 
     void SignalDiscoveryCompleted();
 
-    void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
 
     void AddCb(TCb&& cb, ENotifyType type);
     void ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;

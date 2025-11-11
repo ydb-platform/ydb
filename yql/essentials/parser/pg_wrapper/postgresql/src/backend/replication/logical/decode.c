@@ -413,24 +413,20 @@ heap2_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 
 	/*
 	 * If we don't have snapshot or we are just fast-forwarding, there is no
-	 * point in decoding data changes. However, it's crucial to build the base
-	 * snapshot during fast-forward mode (as is done in
-	 * SnapBuildProcessChange()) because we require the snapshot's xmin when
-	 * determining the candidate catalog_xmin for the replication slot. See
-	 * SnapBuildProcessRunningXacts().
+	 * point in decoding changes.
 	 */
-	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT)
+	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT ||
+		ctx->fast_forward)
 		return;
 
 	switch (info)
 	{
 		case XLOG_HEAP2_MULTI_INSERT:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
-				!ctx->fast_forward)
+			if (!ctx->fast_forward &&
+				SnapBuildProcessChange(builder, xid, buf->origptr))
 				DecodeMultiInsert(ctx, buf);
 			break;
 		case XLOG_HEAP2_NEW_CID:
-			if (!ctx->fast_forward)
 			{
 				xl_heap_new_cid *xlrec;
 
@@ -477,20 +473,16 @@ heap_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 
 	/*
 	 * If we don't have snapshot or we are just fast-forwarding, there is no
-	 * point in decoding data changes. However, it's crucial to build the base
-	 * snapshot during fast-forward mode (as is done in
-	 * SnapBuildProcessChange()) because we require the snapshot's xmin when
-	 * determining the candidate catalog_xmin for the replication slot. See
-	 * SnapBuildProcessRunningXacts().
+	 * point in decoding data changes.
 	 */
-	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT)
+	if (SnapBuildCurrentState(builder) < SNAPBUILD_FULL_SNAPSHOT ||
+		ctx->fast_forward)
 		return;
 
 	switch (info)
 	{
 		case XLOG_HEAP_INSERT:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
-				!ctx->fast_forward)
+			if (SnapBuildProcessChange(builder, xid, buf->origptr))
 				DecodeInsert(ctx, buf);
 			break;
 
@@ -501,20 +493,17 @@ heap_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 			 */
 		case XLOG_HEAP_HOT_UPDATE:
 		case XLOG_HEAP_UPDATE:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
-				!ctx->fast_forward)
+			if (SnapBuildProcessChange(builder, xid, buf->origptr))
 				DecodeUpdate(ctx, buf);
 			break;
 
 		case XLOG_HEAP_DELETE:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
-				!ctx->fast_forward)
+			if (SnapBuildProcessChange(builder, xid, buf->origptr))
 				DecodeDelete(ctx, buf);
 			break;
 
 		case XLOG_HEAP_TRUNCATE:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
-				!ctx->fast_forward)
+			if (SnapBuildProcessChange(builder, xid, buf->origptr))
 				DecodeTruncate(ctx, buf);
 			break;
 
@@ -542,8 +531,7 @@ heap_decode(LogicalDecodingContext *ctx, XLogRecordBuffer *buf)
 			break;
 
 		case XLOG_HEAP_CONFIRM:
-			if (SnapBuildProcessChange(builder, xid, buf->origptr) &&
-				!ctx->fast_forward)
+			if (SnapBuildProcessChange(builder, xid, buf->origptr))
 				DecodeSpecConfirm(ctx, buf);
 			break;
 

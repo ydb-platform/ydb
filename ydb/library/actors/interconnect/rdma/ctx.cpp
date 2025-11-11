@@ -1,4 +1,4 @@
-#include "ctx_impl.h"
+#include "ctx.h"
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
@@ -13,40 +13,17 @@ TDeviceCtx::TDeviceCtx(ibv_context* ctx, ibv_pd* pd)
 {}
 
 TRdmaCtx::TRdmaCtx(
-    std::shared_ptr<TDeviceCtx> deviceCtx, const ibv_device_attr& devAttr, const char* deviceName,
-    ui32 portNum, const ibv_port_attr& portAttr, int gidIndex, const ibv_gid& gid
+    std::shared_ptr<TDeviceCtx> deviceCtx, ibv_device_attr devAttr, const char* deviceName,
+    ui32 portNum, ibv_port_attr portAttr, int gidIndex, ibv_gid gid
 )
     : DeviceCtx(std::move(deviceCtx))
-    , Impl(new TImpl(devAttr, deviceName, portNum, portAttr, gidIndex, gid))
+    , DevAttr(devAttr)
+    , DeviceName(deviceName)
+    , PortNum(portNum)
+    , PortAttr(portAttr)
+    , GidIndex(gidIndex)
+    , Gid(gid)
 {}
-
-const ibv_device_attr& TRdmaCtx::GetDevAttr() const noexcept {
-    return Impl->DevAttr;
-}
-
-const char* TRdmaCtx::GetDeviceName() const noexcept {
-    return Impl->DeviceName;
-}
-
-ui32 TRdmaCtx::GetPortNum() const noexcept {
-    return Impl->PortNum;
-}
-
-const ibv_port_attr& TRdmaCtx::GetPortAttr() const noexcept {
-    return Impl->PortAttr;
-}
-
-int TRdmaCtx::GetGidIndex() const noexcept {
-    return Impl->GidIndex;
-}
-
-const ibv_gid& TRdmaCtx::GetGid() const noexcept {
-    return Impl->Gid;
-}
-
-size_t TRdmaCtx::GetDeviceIndex() const noexcept {
-    return Impl->DeviceIndex;
-}
 
 TDeviceCtx::~TDeviceCtx() {
     ibv_dealloc_pd(ProtDomain);

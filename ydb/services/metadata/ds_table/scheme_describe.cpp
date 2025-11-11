@@ -33,7 +33,7 @@ void TSchemeDescriptionActorImpl::Bootstrap() {
     Become(&TSchemeDescriptionActor::StateMain);
 
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    request->DatabaseName = AppData()->TenantName;
+    request->DatabaseName = NKikimr::CanonizePath(AppData()->TenantName);
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
     InitEntry(entry);

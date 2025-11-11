@@ -307,7 +307,9 @@ class DownloadSubmissionTask(SubmissionTask):
             if download_manager_cls.is_compatible(fileobj, osutil):
                 return download_manager_cls
         raise RuntimeError(
-            f'Output {fileobj} of type: {type(fileobj)} is not supported.'
+            'Output {} of type: {} is not supported.'.format(
+                fileobj, type(fileobj)
+            )
         )
 
     def _submit(

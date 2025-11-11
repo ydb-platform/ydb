@@ -14,7 +14,7 @@ void TDataUpserter::OnDescriptionSuccess(NMetadata::NProvider::TTableInfo&& resu
         } else {
             ALS_DEBUG(NKikimrServices::EXT_INDEX) << "add data";
             AtomicCounter.Inc();
-            TActivationContext::ActorSystem()->Register(new TIndexUpsertActor(Data, i, pkFields, DatabaseName, i.GetIndexTablePath(), SelfContainer));
+            TActivationContext::ActorSystem()->Register(new TIndexUpsertActor(Data, i, pkFields, i.GetIndexTablePath(), SelfContainer));
         }
     }
     OnIndexUpserted();

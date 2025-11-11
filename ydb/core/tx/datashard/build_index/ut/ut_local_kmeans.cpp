@@ -18,7 +18,6 @@ using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
-static const TString kDatabaseName = "/Root";
 static const TString kMainTable = "/Root/table-main";
 static const TString kLevelTable = "/Root/table-level";
 static const TString kPostingTable = "/Root/table-posting";
@@ -70,7 +69,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
 
         rec.SetEmbeddingColumn("embedding");
 
-        rec.SetDatabaseName(kDatabaseName);
         rec.SetLevelName(kLevelTable);
         rec.SetOutputName(kPostingTable);
 
@@ -128,7 +126,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
 
-                rec.SetDatabaseName(kDatabaseName);
                 rec.SetLevelName(kLevelTable);
                 rec.SetOutputName(kPostingTable);
 

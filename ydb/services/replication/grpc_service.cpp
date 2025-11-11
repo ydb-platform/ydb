@@ -5,25 +5,34 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/service_replication.h>
-#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
 void TGRpcReplicationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using namespace Ydb::Replication;
-    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    Y_UNUSED(logger);
 
-#ifdef SETUP_REPLICATION_METHOD
-#error SETUP_REPLICATION_METHOD macro already defined
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    using namespace Ydb;
+
+#ifdef ADD_REQUEST
+#error ADD_REQUEST macro already defined
 #endif
 
-#define SETUP_REPLICATION_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, replication, auditMode)
+#define ADD_REQUEST(NAME, REQUEST, RESPONSE, CB) \
+    MakeIntrusive<TGRpcRequest<Replication::REQUEST, Replication::RESPONSE, TGRpcReplicationService>> \
+        (this, &Service_, CQ_,                                                                        \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                              \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                      \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                               \
+                    new TGrpcRequestOperationCall<Replication::REQUEST, Replication::RESPONSE>        \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));   \
+            }, &Replication::V1::ReplicationService::AsyncService::Request ## NAME,                   \
+            #NAME, logger, getCounterBlock("replication", #NAME))->Run();
 
-    SETUP_REPLICATION_METHOD(DescribeReplication, DoDescribeReplication, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
-    SETUP_REPLICATION_METHOD(DescribeTransfer, DoDescribeTransfer, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    ADD_REQUEST(DescribeReplication, DescribeReplicationRequest, DescribeReplicationResponse, DoDescribeReplication);
+    ADD_REQUEST(DescribeTransfer, DescribeTransferRequest, DescribeTransferResponse, DoDescribeTransfer);
 
-#undef SETUP_REPLICATION_METHOD
+#undef ADD_REQUEST
 }
 
 }

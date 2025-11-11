@@ -1,5 +1,6 @@
 #include "interconnect.h"
 #include "interconnect_impl.h"
+#include "interconnect_address.h"
 #include "events_local.h"
 
 #include <ydb/library/actors/core/hfunc.h>

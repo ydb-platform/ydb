@@ -715,10 +715,10 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         CompareYson(Expected, res.ResultSetYson);
     }
 
-    void CreateTestTable(auto session, bool isColumn, TString suff="") {
+    void CreateTestTable(auto session, bool isColumn) {
         UNIT_ASSERT(session.ExecuteQuery(std::format(R"(
             --!syntax_v1
-            CREATE TABLE `/Root/TestTable{}` (
+            CREATE TABLE `/Root/TestTable` (
                 Group Uint32 not null,
                 Name String not null,
                 Amount Uint64,
@@ -729,15 +729,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             );
 
-        )", suff.c_str(), isColumn ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
+        )", isColumn ? "COLUMN" : "ROW"), NYdb::NQuery::TTxControl::NoTx()).GetValueSync().IsSuccess());
 
-        auto result = session.ExecuteQuery(std::format(R"(
-            REPLACE INTO `/Root/TestTable{}` (Group, Name, Amount, Comment) VALUES
+        auto result = session.ExecuteQuery(R"(
+            REPLACE INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES
                     (1u, "Anna", 3500ul, "None"),
                     (1u, "Paul", 300ul, "None"),
-                    (2u, "Tony", 7200ul, "None"),
-                    (100000u, "Anna", 3500ul, "None");
-        )", suff.c_str()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                    (2u, "Tony", 7200ul, "None");
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
@@ -827,8 +826,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
         Cerr << stats.DebugString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 3); // Limit???
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 108);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2); // Limit???
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 72);
     }
 
     Y_UNIT_TEST(OlapWriteRow) {
@@ -1096,32 +1095,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-
-    struct TTotalStats {
-        size_t Writes = 0;
-        size_t Reads = 0;
-        size_t Deletes = 0;
-    };
-
-    TTotalStats FromProto(const Ydb::TableStats::QueryStats& proto) {
-        TTotalStats stats;
-        for (int phase = 0; phase < proto.query_phases_size(); ++phase) {
-            for (int access = 0; access < proto.query_phases(phase).table_access_size(); ++access) {
-                stats.Writes += proto.query_phases(phase).table_access(access).updates().rows();
-                stats.Reads += proto.query_phases(phase).table_access(access).reads().rows();
-                stats.Deletes += proto.query_phases(phase).table_access(access).deletes().rows();
-            }
-        }
-        return stats;
-    }
-
-    void Check(const TTotalStats& lhs, const TTotalStats& rhs) {
-        UNIT_ASSERT_VALUES_EQUAL(lhs.Writes, rhs.Writes);
-        UNIT_ASSERT_VALUES_EQUAL(lhs.Reads, rhs.Reads);
-        UNIT_ASSERT_VALUES_EQUAL(lhs.Deletes, rhs.Deletes);
-    }
-    
-
     Y_UNIT_TEST_TWIN(OltpWriteRow, isSink) {
         TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
         auto db = kikimr.GetQueryClient();
@@ -1153,14 +1126,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 1,
-                    .Reads = 0,
-                    .Deletes = 0,
-                });
         }
 
         {
@@ -1186,14 +1151,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 1,
-                    .Reads = 0,
-                    .Deletes = 0,
-                });
         }
 
         {
@@ -1210,18 +1167,14 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
-            size_t phase = isSink ? 0 : 1;
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 8);
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
+            if (isSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+                size_t phase = stats.query_phases_size() - 1;
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 0);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
+            }
         }
 
         {
@@ -1248,14 +1201,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 1,
-                    .Reads = 0,
-                    .Deletes = 0,
-                });
         }
 
         {
@@ -1280,14 +1225,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 0);
                 }
             }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 0,
-                    .Deletes = 0,
-                });
         }
 
         {
@@ -1307,16 +1244,17 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(isSink ? phase : 1).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(isSink ? phase : 1).table_access(0).reads().bytes(), 8);
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 1,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
+            if (!isSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
+            } else {
+                for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                    for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                    }
+                }
+            }
         }
 
         {
@@ -1343,14 +1281,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 0,
-                    .Deletes = 1,
-                });
         }
 
         {
@@ -1377,371 +1307,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
                 }
             }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 0,
-                    .Deletes = 1,
-                });
-        }
-    }
-
-    Y_UNIT_TEST_TWIN(OltpWriteRowInsertFails, isSink) {
-        TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        CreateTestTable(session, false);
-        CreateTestTable(session, false, "2");
-
-        {
-            // Three inserts
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
-                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).updates().bytes(), 20);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(5).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(5).table_access(0).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 1,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT + UPSERT
-            auto query = Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (10u, "Anna", 3500u, "None");
-                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (100u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().bytes(), 20);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access(0).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 1,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT to different tales
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT to different tales
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(1).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT&UPSERT to different tales
-            auto query = Q_(R"(
-                UPSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment) VALUES (1000u, "Anna", 3500u, "None");
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES (1u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = 0,
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT many
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
-                    (1000u, "Anna", 3500u, "None"),
-                    (1u, "Anna", 3500u, "None"),
-                    (1001u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = isSink ? 1 : 0, // EvWrite writes before next read
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT many
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
-                    (1000u, "Anna", 3500u, "None"),
-                    (100000u, "Anna", 3500u, "None"),
-                    (1001u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 20);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = isSink ? 1 : 0, // EvWrite writes before next read
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT many
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
-                    (1000u, "Anna", 3500u, "None"),
-                    (1001u, "Anna", 3500u, "None"),
-                    (100000u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 40);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = isSink ? 2 : 0, // EvWrite writes before next read
-                    .Reads = 1,
-                    .Deletes = 0,
-                });
-        }
-
-        {
-            // INSERT duplicates
-            auto query = Q_(R"(
-                INSERT INTO `/Root/TestTable2` (Group, Name, Amount, Comment) VALUES
-                    (999997u, "Anna", 3500u, "None"),
-                    (999998u, "Anna", 3500u, "None"),
-                    (999999u, "Anna", 3500u, "None"),
-                    (999998u, "Anna", 3500u, "None");
-            )");
-
-            auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
-
-            auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-
-            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-
-            Cerr << stats.DebugString() << Endl;
-            if (isSink) {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
-
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 3);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 60);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 8);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 0);
-            }
-
-            Check(
-                FromProto(stats),
-                TTotalStats{
-                    .Writes = isSink ? 3 : 0, // EvWrite writes before next read
-                    .Reads = isSink ? 1 : 0,
-                    .Deletes = 0,
-                });
         }
     }
 

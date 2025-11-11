@@ -7,4 +7,3 @@ exclude:
   - tests/*
 keep:
   - tests/SQS-119.py
-ignore_wheel: true

@@ -207,7 +207,6 @@ selector_config:
         TKikimrScopeId scopeId;
         TString tenantName;
         TBasicKikimrServicesMask servicesMask;
-        bool tinyMode;
         TString clusterName;
         NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
@@ -217,7 +216,6 @@ selector_config:
             scopeId,
             tenantName,
             servicesMask,
-            tinyMode,
             clusterName,
             configsDispatcherInitInfo);
 
@@ -248,7 +246,7 @@ selector_config:
         UNIT_ASSERT(appConfig.HasActorSystemConfig());
         const auto& actorConfig = appConfig.GetActorSystemConfig();
         UNIT_ASSERT_VALUES_EQUAL(actorConfig.GetCpuCount(), 10);
-
+        
     }
 
     Y_UNIT_TEST(TestStaticNodeSelectorInheritance) {

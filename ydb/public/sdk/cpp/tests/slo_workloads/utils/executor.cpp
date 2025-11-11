@@ -274,17 +274,13 @@ bool TExecutor::Execute(const NYdb::NTable::TTableClient::TOperationFunc& func) 
             }
         }
 
-        auto stat = Stats.StartRequest();
+        TStatUnit stat = Stats.CreateStatUnit();
 
-        auto future = InsistentClient.ExecuteWithRetry([func, stat](NYdb::NTable::TSession session) {
-            auto result = func(session);
-            return result;
-        });
-
+        auto future = InsistentClient.ExecuteWithRetry(func);
         future.Subscribe([this, stat, SemaphoreWrapper](const TAsyncFinalStatus& future) mutable {
             Y_ABORT_UNLESS(future.HasValue());
             TFinalStatus resultStatus = future.GetValue();
-            Stats.FinishRequest(stat, resultStatus);
+            Stats.Report(stat, resultStatus);
             if (resultStatus) {
                 CheckForError(*resultStatus);
             }
@@ -355,6 +351,7 @@ bool TExecutor::IsStopped() {
 }
 
 void TExecutor::Finish() {
+    // Stats.UpdateSessionStats(InsistentClient.GetSessionStats());
     with_lock(Lock) {
         if (!AllJobsLaunched) {
             AllJobsLaunched = true;
@@ -364,6 +361,9 @@ void TExecutor::Finish() {
 }
 
 void TExecutor::UpdateStats() {
+    if (Infly > MaxSecInfly) {
+        MaxSecInfly = Infly;
+    }
     std::uint64_t activeSessions = InsistentClient.GetActiveSessions();
     if (activeSessions > MaxSecSessions) {
         MaxSecSessions = activeSessions;
@@ -382,10 +382,10 @@ void TExecutor::UpdateStats() {
 }
 
 void TExecutor::ReportStats() {
-    Stats.ReportStats(MaxSecSessions, MaxSecReadPromises, MaxSecExecutorPromises);
     TInstant now = TInstant::Now();
     if (now.Seconds() > LastReportSec) {
-        Stats.ReportStats(MaxSecSessions, MaxSecReadPromises, MaxSecExecutorPromises);
+        Stats.ReportStats(MaxSecInfly, MaxSecSessions, MaxSecReadPromises, MaxSecExecutorPromises);
+        MaxSecInfly = 0;
         MaxSecSessions = 0;
         MaxSecReadPromises = 0;
         MaxSecExecutorPromises = 0;
@@ -441,4 +441,94 @@ void TExecutor::Report(TStringBuilder& out) const {
             }
         }
     }
+}
+
+
+TExecutorWithRetry::TExecutorWithRetry(const TCommonOptions& opts, TStat& stats)
+    : TExecutor(opts, stats)
+{}
+
+bool TExecutorWithRetry::Execute(const NYdb::NTable::TTableClient::TOperationFunc& func) {
+    auto threadFunc = [this, func]() {
+        if (IsStopped()) {
+            DecrementWaiting();
+            return;
+        }
+
+        with_lock(Lock) {
+            --Waiting;
+            if (Infly < Opts.MaxInfly) {
+                ++Infly;
+                if (Infly > MaxInfly) {
+                    MaxInfly = Infly;
+                }
+                UpdateStats();
+            } else {
+                Stats.ReportMaxInfly();
+                UpdateStats();
+                return;
+            }
+        }
+
+        std::shared_ptr<TRetryContext> context = std::make_shared<TRetryContext>(Stats);
+
+        auto executeOperation = [this, func]() {
+            return InsistentClient.ExecuteWithRetry(func);
+        };
+
+        context->HandleStatusFunc = std::make_unique<std::function<void(const TAsyncFinalStatus& resultFuture)>>(
+            [this, executeOperation, context](const TAsyncFinalStatus& future) mutable {
+            Y_ABORT_UNLESS(future.HasValue());
+            TFinalStatus resultStatus = future.GetValue();
+            if (resultStatus) {
+                // Reply received
+                CheckForError(*resultStatus);
+                if (resultStatus->IsSuccess()) {
+                    //Ok received
+                    Stats.Report(context->LifeTimeStat, resultStatus->GetStatus()); 
+                    DecrementInfly();
+                    context->HandleStatusFunc.reset();
+                    return;
+                }
+            }
+            if (IsStopped() || TInstant::Now() - context->LifeTimeStat.Start > GlobalTimeout) {
+                // Application stopped working or global timeout reached. Ok reply hasn't received yet
+                Stats.Report(context->LifeTimeStat, TInnerStatus::StatusNotFinished);
+                DecrementInfly();
+                context->HandleStatusFunc.reset();
+                return;
+            }
+            Stats.Report(context->PerRequestStat, resultStatus);
+            context->PerRequestStat = Stats.CreateStatUnit();
+            // Retrying:
+            executeOperation().Subscribe(*context->HandleStatusFunc);
+        });
+
+        context->Retries.fetch_add(1);
+        Y_ABORT_UNLESS(context->Retries.load() < 500, "Too much retries");
+
+        executeOperation().Subscribe(*context->HandleStatusFunc);
+    };
+
+    if (IsStopped()) {
+        return false;
+    }
+
+    bool CanLaunchJob = false;
+
+    with_lock(Lock) {
+        if (!AllJobsLaunched) {
+            CanLaunchJob = true;
+            ++Waiting;
+        }
+    }
+
+    if (CanLaunchJob) {
+        if (!InputQueue->AddFunc(threadFunc)) {
+            DecrementWaiting();
+        }
+    }
+    ++InProgressCount;
+    InProgressSum += InputQueue->Size();
+    return true;
 }

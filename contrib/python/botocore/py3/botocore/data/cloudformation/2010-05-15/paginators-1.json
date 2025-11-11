@@ -27,8 +27,7 @@
         "ParentChangeSetId",
         "IncludeNestedStacks",
         "RootChangeSetId",
-        "OnStackFailure",
-        "ImportExistingResources"
+        "OnStackFailure"
       ]
     },
     "DescribeStackEvents": {
@@ -95,30 +94,6 @@
       "limit_key": "MaxResults",
       "output_token": "NextToken",
       "result_key": "TypeSummaries"
-    },
-    "ListGeneratedTemplates": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "Summaries"
-    },
-    "ListResourceScanRelatedResources": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "RelatedResources"
-    },
-    "ListResourceScanResources": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "Resources"
-    },
-    "ListResourceScans": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "ResourceScanSummaries"
     }
   }
 }

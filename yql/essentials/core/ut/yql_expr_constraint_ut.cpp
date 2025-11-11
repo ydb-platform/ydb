@@ -3465,7 +3465,7 @@ Y_UNIT_TEST(EquiJoinFlatten) {
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
 }
 
-Y_UNIT_TEST(HOP) {
+Y_UNIT_TEST(GroupByHop) {
     const TStringBuf s = R"((
 (let list (AsList
     (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
@@ -3476,51 +3476,22 @@ Y_UNIT_TEST(HOP) {
 (let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
 (let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
 (let result (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
-    (let interval (Interval '1000000))
-    (let map (lambda '(item) (AsStruct)))
-    (let reduce (lambda '(lhs rhs) (AsStruct)))
-    (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" '"_yql_time"))
-    (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
+  (let interval (Interval '1000000))
+  (let map (lambda '(item) (AsStruct)))
+  (let reduce (lambda '(lhs rhs) (AsStruct)))
+  (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0"))
+  (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
 )))))
 
 (let res (DataSink 'result))
 (let world (Write! world res (Key) result '()))
 (return (Commit! world res))
-    ))";
+        ))";
 
     TExprContext exprCtx;
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "MultiHoppingCore", "Unique((data,group0))");
-}
-
-Y_UNIT_TEST(HoppingWindow) {
-    const TStringBuf s = R"((
-(let list (AsList
-    (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
-    (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
-    (AsStruct '('"time" (String '"2024-01-01T00:00:03Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
-))
-(let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
-(let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
-(let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
-(let result (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
-    (let interval (Interval '1000000))
-    (let map (lambda '(item) (AsStruct)))
-    (let reduce (lambda '(lhs rhs) (AsStruct)))
-    (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" 'group0))
-    (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
-)))))
-
-(let res (DataSink 'result))
-(let world (Write! world res (Key) result '()))
-(return (Commit! world res))
-    ))";
-
-    TExprContext exprCtx;
-    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
-    CheckConstraint<TUniqueConstraintNode>(exprRoot, "MultiHoppingCore", "Unique((data,group0))");
+    CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
+    CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
 }
 
 Y_UNIT_TEST(StablePickleOfComplexUnique) {

@@ -90,13 +90,10 @@
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/pg_lsn.h"
-#include "utils/pgstat_internal.h"
+#include "utils/portal.h"
 #include "utils/ps_status.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
-
-/* Minimum interval used by walsender for stats flushes, in ms */
-#define WALSENDER_STATS_FLUSH_INTERVAL         1000
 
 /*
  * Maximum data payload in a WAL data message.  Must be >= XLOG_BLCKSZ.
@@ -1499,13 +1496,13 @@ WalSndUpdateProgress(LogicalDecodingContext *ctx, XLogRecPtr lsn, TransactionId 
 	 * When skipping empty transactions in synchronous replication, we send a
 	 * keepalive message to avoid delaying such transactions.
 	 *
-	 * It is okay to check sync_standbys_status without lock here as in the
-	 * worst case we will just send an extra keepalive message when it is
+	 * It is okay to check sync_standbys_defined flag without lock here as in
+	 * the worst case we will just send an extra keepalive message when it is
 	 * really not required.
 	 */
 	if (skipped_xact &&
 		SyncRepRequested() &&
-		(((volatile WalSndCtlData *) WalSndCtl)->sync_standbys_status & SYNC_STANDBY_DEFINED))
+		((volatile WalSndCtlData *) WalSndCtl)->sync_standbys_defined)
 	{
 		WalSndKeepalive(false, lsn);
 
@@ -1543,7 +1540,6 @@ WalSndWaitForWal(XLogRecPtr loc)
 {
 	int			wakeEvents;
 	static __thread XLogRecPtr RecentFlushPtr = InvalidXLogRecPtr;
-	TimestampTz last_flush = 0;
 
 	/*
 	 * Fast path to avoid acquiring the spinlock in case we already know we
@@ -1563,7 +1559,6 @@ WalSndWaitForWal(XLogRecPtr loc)
 	for (;;)
 	{
 		long		sleeptime;
-		TimestampTz now;
 
 		/* Clear any already-pending wakeups */
 		ResetLatch(MyLatch);
@@ -1653,21 +1648,12 @@ WalSndWaitForWal(XLogRecPtr loc)
 		 * new WAL to be generated.  (But if we have nothing to send, we don't
 		 * want to wake on socket-writable.)
 		 */
-		now = GetCurrentTimestamp();
-		sleeptime = WalSndComputeSleeptime(now);
+		sleeptime = WalSndComputeSleeptime(GetCurrentTimestamp());
 
 		wakeEvents = WL_SOCKET_READABLE;
 
 		if (pq_is_send_pending())
 			wakeEvents |= WL_SOCKET_WRITEABLE;
-
-		/* Report IO statistics, if needed */
-		if (TimestampDifferenceExceeds(last_flush, now,
-									   WALSENDER_STATS_FLUSH_INTERVAL))
-		{
-			pgstat_flush_io(false);
-			last_flush = now;
-		}
 
 		WalSndWait(wakeEvents, sleeptime, WAIT_EVENT_WAL_SENDER_WAIT_WAL);
 	}
@@ -2071,10 +2057,6 @@ PhysicalConfirmReceivedLocation(XLogRecPtr lsn)
 	 * be energy wasted - the worst thing lost information could cause here is
 	 * to give wrong information in a statistics view - we'll just potentially
 	 * be more conservative in removing files.
-	 *
-	 * Checkpointer makes special efforts to keep the WAL segments required by
-	 * the restart_lsn written to the disk. See CreateCheckPoint() and
-	 * CreateRestartPoint() for details.
 	 */
 }
 
@@ -2464,8 +2446,6 @@ WalSndCheckTimeOut(void)
 static void
 WalSndLoop(WalSndSendDataCallback send_data)
 {
-	TimestampTz last_flush = 0;
-
 	/*
 	 * Initialize the last reply timestamp. That enables timeout processing
 	 * from hereon.
@@ -2560,9 +2540,6 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		 * WalSndWaitForWal() handle any other blocking; idle receivers need
 		 * its additional actions.  For physical replication, also block if
 		 * caught up; its send_data does not block.
-		 *
-		 * The IO statistics are reported in WalSndWaitForWal() for the
-		 * logical WAL senders.
 		 */
 		if ((WalSndCaughtUp && send_data != XLogSendLogical &&
 			 !streamingDoneSending) ||
@@ -2570,7 +2547,6 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		{
 			long		sleeptime;
 			int			wakeEvents;
-			TimestampTz now;
 
 			if (!streamingDoneReceiving)
 				wakeEvents = WL_SOCKET_READABLE;
@@ -2581,19 +2557,10 @@ WalSndLoop(WalSndSendDataCallback send_data)
 			 * Use fresh timestamp, not last_processing, to reduce the chance
 			 * of reaching wal_sender_timeout before sending a keepalive.
 			 */
-			now = GetCurrentTimestamp();
-			sleeptime = WalSndComputeSleeptime(now);
+			sleeptime = WalSndComputeSleeptime(GetCurrentTimestamp());
 
 			if (pq_is_send_pending())
 				wakeEvents |= WL_SOCKET_WRITEABLE;
-
-			/* Report IO statistics, if needed */
-			if (TimestampDifferenceExceeds(last_flush, now,
-										   WALSENDER_STATS_FLUSH_INTERVAL))
-			{
-				pgstat_flush_io(false);
-				last_flush = now;
-			}
 
 			/* Sleep until something happens or we time out */
 			WalSndWait(wakeEvents, sleeptime, WAIT_EVENT_WAL_SENDER_MAIN);
@@ -3123,16 +3090,8 @@ XLogSendLogical(void)
 	if (flushPtr == InvalidXLogRecPtr ||
 		logical_decoding_ctx->reader->EndRecPtr >= flushPtr)
 	{
-		/*
-		 * For cascading logical WAL senders, we use the replay LSN instead of
-		 * the flush LSN, since logical decoding on a standby only processes
-		 * WAL that has been replayed.  This distinction becomes particularly
-		 * important during shutdown, as new WAL is no longer replayed and the
-		 * last replayed LSN marks the furthest point up to which decoding can
-		 * proceed.
-		 */
 		if (am_cascading_walsender)
-			flushPtr = GetXLogReplayRecPtr(NULL);
+			flushPtr = GetStandbyFlushRecPtr(NULL);
 		else
 			flushPtr = GetFlushRecPtr(NULL);
 	}

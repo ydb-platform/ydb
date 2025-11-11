@@ -5,7 +5,6 @@
 #include "datashard_locks_db.h"
 #include "probes.h"
 
-#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
@@ -20,60 +19,6 @@ LWTRACE_USING(DATASHARD_PROVIDER)
 namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
-
-struct TReadIteratorVectorTopItem {
-    TOwnedCellVec Row;
-    double Distance = 0;
-
-    TReadIteratorVectorTopItem(TArrayRef<const TCell> cells, double distance):
-        Row(TOwnedCellVec(cells)),
-        Distance(distance) {
-    }
-
-    bool operator<(const TReadIteratorVectorTopItem& rhs) const {
-        return Distance < rhs.Distance;
-    }
-};
-
-struct TReadIteratorVectorTop {
-    ui32 Column = 0;
-    ui32 Limit = 0;
-    TString Target;
-    std::unique_ptr<NKMeans::IClusters> KMeans;
-    std::vector<TReadIteratorVectorTopItem> Rows;
-    ui64 ByteSize = 0;
-
-    void AddRow(TConstArrayRef<TCell> cells) {
-        size_t bytes = EstimateSize(cells);
-        double distance = KMeans->CalcDistance(cells.at(Column).AsBuf(), Target);
-        if (Rows.size() < Limit) {
-            ByteSize += bytes;
-            Rows.emplace_back(cells, distance);
-            std::push_heap(Rows.begin(), Rows.end());
-        } else if (distance < Rows.front().Distance) {
-            ByteSize += bytes;
-            Rows.emplace_back(cells, distance);
-            std::push_heap(Rows.begin(), Rows.end());
-            std::pop_heap(Rows.begin(), Rows.end());
-            auto& item = Rows.back();
-            ByteSize -= EstimateSize(item.Row);
-            Rows.pop_back();
-        }
-    }
-
-    // Move all rows to BlockBuilder in sorted order
-    size_t ToBlockBuilder(IBlockBuilder& blockBuilder, const NScheme::TTypeInfo* columnTypes) {
-        size_t n = Rows.size();
-        for (auto it = Rows.end(); it != Rows.begin(); it--) {
-            std::pop_heap(Rows.begin(), it);
-        }
-        for (auto& item: Rows) {
-            blockBuilder.AddRow(TDbTupleRef(), TDbTupleRef(columnTypes, item.Row.data(), item.Row.size()));
-        }
-        Rows.clear();
-        return n;
-    }
-};
 
 namespace {
 
@@ -500,12 +445,8 @@ public:
 
         // note that if user requests key columns then they will be in
         // rowValues and we don't have to add rowKey columns
-        if (State.VectorTopK) {
-            State.VectorTopK->AddRow(value.Cells());
-        } else {
-            BlockBuilder.AddRow(TDbTupleRef(), value);
-            ++RowsRead;
-        }
+        BlockBuilder.AddRow(TDbTupleRef(), value);
+        ++RowsRead;
 
         return EReadStatus::Done;
     }
@@ -765,10 +706,6 @@ public:
             } else {
                 Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE, State.Request->Ranges.size());
             }
-
-            if (State.VectorTopK) {
-                RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data());
-            }
         }
 
         if (record.TxLocksSize() > 0 || record.BrokenTxLocksSize() > 0) {
@@ -1011,12 +948,8 @@ private:
 
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
-            if (State.VectorTopK) {
-                State.VectorTopK->AddRow(rowValues.Cells());
-            } else {
-                BlockBuilder.AddRow(TDbTupleRef(), rowValues);
-                ++RowsRead;
-            }
+            BlockBuilder.AddRow(TDbTupleRef(), rowValues);
+            ++RowsRead;
 
             if (ReachedTotalRowsLimit()) {
                 LastProcessedKey.clear();
@@ -1292,7 +1225,6 @@ public:
         , Format(state.Format)
         , ReadVersion(state.ReadVersion)
         , Ev(std::move(state.Ev))
-        , VectorTopK(state.VectorTopK)
         , Request(Ev->Get())
     {
         TotalRowsLimit = state.TotalRowsLimit;
@@ -1366,13 +1298,9 @@ private:
         }
 
         TArrayRef<const TCell> cells = *row;
-        if (VectorTopK) {
-            VectorTopK->AddRow(cells);
-        } else {
-            BlockBuilder->AddRow(TDbTupleRef(), TDbTupleRef(ColumnTypes.data(), cells.data(), cells.size()));
-            ++BlockRows;
-            ++TotalRows;
-        }
+        BlockBuilder->AddRow(TDbTupleRef(), TDbTupleRef(ColumnTypes.data(), cells.data(), cells.size()));
+        ++BlockRows;
+        ++TotalRows;
 
         if (TotalRows >= TotalRowsLimit) {
             return EScan::Final;
@@ -1445,12 +1373,6 @@ private:
 
         record.SetReadId(Request->Record.GetReadId());
         record.SetSeqNo(Quota.SeqNo + 1);
-
-        if (last && VectorTopK) {
-            auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data());
-            BlockRows += topRows;
-            TotalRows += topRows;
-        }
 
         if (last) {
             record.SetFinished(true);
@@ -1572,7 +1494,6 @@ private:
     const NKikimrDataEvents::EDataFormat Format;
     const TRowVersion ReadVersion;
     const TEvDataShard::TEvRead::TPtr Ev;
-    std::shared_ptr<TReadIteratorVectorTop> VectorTopK;
     TEvDataShard::TEvRead* const Request;
 
     IDriver* Driver;
@@ -2139,36 +2060,6 @@ public:
             }
 
             state.Columns.push_back(col);
-        }
-
-        if (record.HasVectorTopK()) {
-            const auto& topK = record.GetVectorTopK();
-            auto topState = std::make_shared<TReadIteratorVectorTop>();
-            TString error;
-            if (topK.GetColumn() >= record.ColumnsSize()) {
-                error = TStringBuilder() << "Too large topK column index: " << topK.GetColumn();
-            } else if (!topK.GetLimit()) {
-                error = "TopK limit is 0";
-            } else if (!topK.HasTargetVector()) {
-                error = "Target vector is not specified";
-            } else {
-                topState->KMeans = NKMeans::CreateClusters(topK.GetSettings(), 0, error);
-                if (!topState->KMeans && error == "") {
-                    error = "CreateClusters failed";
-                }
-                if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
-                    error = "Target vector has invalid format";
-                }
-            }
-            if (error != "") {
-                SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                    << error << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
-                return;
-            }
-            topState->Column = topK.GetColumn();
-            topState->Limit = topK.GetLimit();
-            topState->Target = topK.GetTargetVector();
-            state.VectorTopK = std::move(topState);
         }
 
         state.State = TReadIteratorState::EState::Executing;
@@ -3062,8 +2953,7 @@ public:
 
             ApplyLocks(ctx);
 
-            if (txc.DB.HasChanges() ||
-                Reader->NeedVolatileWaitForCommit() ||
+            if (Reader->NeedVolatileWaitForCommit() ||
                 Self->Pipeline.HasCommittingOpsBelow(state.ReadVersion) ||
                 Self->GetVolatileTxManager().HasUnstableVolatileTxsAtSnapshot(state.ReadVersion))
             {

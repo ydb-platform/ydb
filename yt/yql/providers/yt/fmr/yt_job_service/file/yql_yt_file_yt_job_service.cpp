@@ -80,7 +80,7 @@ public:
             YQL_ENSURE(NFs::MakeDirectoryRecursive(parentDir));
             filePath.Touch();
         }
-        // TODO - delete created files in DropTables() / CloseSession()
+        // TODO - delete created files in DropTrackables() / CloseSession()
     }
 };
 

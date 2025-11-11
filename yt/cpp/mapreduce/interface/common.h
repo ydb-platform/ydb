@@ -1155,9 +1155,6 @@ struct TRichYPath
     /// Specifies cluster for the YPath
     FLUENT_FIELD_OPTION(TString, Cluster);
 
-    /// Specifies input_query for the path.
-    FLUENT_FIELD_OPTION(TString, InputQuery);
-
     /// Create empty path with no attributes
     TRichYPath()
     { }

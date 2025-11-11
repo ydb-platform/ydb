@@ -200,14 +200,6 @@
             },
             "formula": "build/platform/clang/clangd/clangd20.json"
         },
-        "contexts_difference": {
-            "executable": {
-                "contexts_difference": [
-                    "contexts_difference"
-                ]
-            },
-            "formula": "build/yandex_specific/autocheck/contexts_difference/resources.json"
-        },
         "gdb": {
             "executable": {
                 "gcore": [
@@ -2220,34 +2212,6 @@
                 }
             }
         },
-        "contexts_difference": {
-            "platforms": [
-                {
-                    "default": true,
-                    "host": {
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": true,
-                    "host": {
-                        "os": "WIN"
-                    }
-                }
-            ],
-            "tools": {
-                "contexts_difference": {
-                    "bottle": "contexts_difference",
-                    "executable": "contexts_difference"
-                }
-            }
-        },
         "gdb": {
             "env": {
                 "TERMINFO": [
@@ -2781,10 +2745,6 @@
         },
         "clangd-20": {
             "description": "Run clangd language server (20 version)"
-        },
-        "contexts_difference": {
-            "description": "Run contexts_difference tool",
-            "visible": false
         },
         "gcov": {
             "description": "Run gcov"

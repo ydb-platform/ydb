@@ -4,7 +4,14 @@ PEERDIR(
     contrib/python/idna
 )
 
-ALL_PYTEST_SRCS()
+TEST_SRCS(
+    test_idna_compat.py
+    test_idna.py
+    test_intranges.py
+    test_idna_codec.py
+    test_idna_other.py
+    test_idna_uts46.py
+)
 
 NO_LINT()
 

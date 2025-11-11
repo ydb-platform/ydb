@@ -46,13 +46,13 @@ namespace NKikimr {
             return;
 
         std::sort(vec.begin(), vec.end());
-        TKey key = vec[0].GetKey();
+        TKey key = vec[0].Key;
         size_t uniqueKeys = 1;
         // count uniq tablets
         for (size_t i = 0; i < vec.size(); ++i) {
             const auto &rec = vec[i];
-            if (!(key == rec.GetKey())) {
-                key = rec.GetKey();
+            if (!(key == rec.Key)) {
+                key = rec.Key;
                 ++uniqueKeys;
             }
         }
@@ -60,16 +60,16 @@ namespace NKikimr {
         typename TFreshAppendix<TKey, TMemRec>::TVec squeezed;
         squeezed.reserve(uniqueKeys);
         // squeeze
-        key = vec[0].GetKey();
-        TMemRec memRec = vec[0].GetMemRec();
+        key = vec[0].Key;
+        TMemRec memRec = vec[0].MemRec;
         for (size_t i = 0; i < vec.size(); ++i) {
             const auto &rec = vec[i];
-            if (!(key == rec.GetKey())) {
+            if (!(key == rec.Key)) {
                 squeezed.emplace_back(key, memRec);
-                key = rec.GetKey();
-                memRec = rec.GetMemRec();
+                key = rec.Key;
+                memRec = rec.MemRec;
             } else {
-                memRec.Merge(rec.GetMemRec(), key, false, {});
+                memRec.Merge(rec.MemRec, key, false, {});
             }
         }
         squeezed.emplace_back(key, memRec);

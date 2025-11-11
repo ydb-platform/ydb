@@ -19,15 +19,14 @@ struct TJoinTestData {
     TVector<ui32> LeftKeyColmns = {0};
     TypeAndValue Right;
     TVector<ui32> RightKeyColmns = {0};
-    TDqUserRenames Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight},
-                              {1, EJoinSide::kRight}};
+    TDqRenames Renames = {{0, JoinSide::kLeft}, {1, JoinSide::kLeft}, {0, JoinSide::kRight}, {1, JoinSide::kRight}};
     TypeAndValue Result;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
-    std::erase_if(td.Renames, [&](const auto& indexAndSide) {
-        return RightSemiOrOnly(td.Kind) && indexAndSide.Side == EJoinSide::kLeft ||
-               LeftSemiOrOnly(td.Kind) && indexAndSide.Side == EJoinSide::kRight;
+    std::erase_if(td.Renames, [&](const TIndexAndSide& indexAndSide) {
+        return RightSemiOrOnly(td.Kind) && indexAndSide.Side == JoinSide::kLeft ||
+               LeftSemiOrOnly(td.Kind) && indexAndSide.Side == JoinSide::kRight;
     });
 }
 
@@ -394,8 +393,8 @@ TJoinTestData InnerJoinRenamesTestData() {
     TVector<TString> expectedValuesLeft = {"b1", "c1", "d1", "e1"};
     TVector<ui64> expectedKeysRight = {2, 3, 4, 5};
     TVector<TString> expectedValuesRight = {"b2", "c2", "d2", "e2"};
-    td.Renames = {{1, EJoinSide::kRight}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {0, EJoinSide::kLeft},
-                  {0, EJoinSide::kLeft}};
+    td.Renames = {{1, JoinSide::kRight}, {1, JoinSide::kLeft}, {0, JoinSide::kRight}, {0, JoinSide::kLeft},
+                  {0, JoinSide::kLeft}};
     td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
     td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
     td.Result = ConvertVectorsToTuples(setup, expectedValuesRight, expectedValuesLeft, expectedKeysRight,

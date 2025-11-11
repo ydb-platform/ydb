@@ -3,7 +3,6 @@
 #include "grpc_request_base.h"
 #include "logger.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 #include <library/cpp/threading/future/future.h>
 
@@ -320,21 +319,6 @@ public:
         return NeedAuth_;
     }
 
-    void ReportSdkBuildInfo() {
-        ReportSdkBuildInfo_ = true;
-    }
-
-    TString GetSdkBuildInfoIfNeeded(NYdbGrpc::IRequestContextBase* reqCtx) const {
-        TString result;
-        if (ReportSdkBuildInfo_) {
-            const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-            if (!res.empty()) {
-                result = res[0];
-            }
-        }
-        return result;
-    }
-
 private:
     TAtomic ShuttingDown_ = 0;
     TAtomic GuardCount_ = 0;
@@ -353,7 +337,6 @@ private:
     std::atomic<size_t> NextShard_{ 0 };
 
     NYdbGrpc::TGlobalLimiter* Limiter_ = nullptr;
-    bool ReportSdkBuildInfo_ = false;
 };
 
 template<typename T>

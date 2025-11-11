@@ -15,7 +15,7 @@ void TExecutor::Handle(TEvAddData::TPtr& ev) {
         if (indexes.empty()) {
             ev->Get()->GetExternalController()->OnAllIndexesUpserted();
         } else {
-            auto upserter = std::make_shared<TDataUpserter>(ev->Get()->GetDatabaseName(), std::move(indexes), ev->Get()->GetExternalController(), ev->Get()->GetData());
+            std::shared_ptr<TDataUpserter> upserter = std::make_shared<TDataUpserter>(std::move(indexes), ev->Get()->GetExternalController(), ev->Get()->GetData());
             upserter->Start(upserter);
         }
     } else {

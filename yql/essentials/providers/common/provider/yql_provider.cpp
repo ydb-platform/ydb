@@ -1034,17 +1034,12 @@ bool FillUsedFilesImpl(
         if (addSysModule) {
             auto pathWithMd5 = types.UdfResolver->GetSystemModulePath(moduleName);
             YQL_ENSURE(pathWithMd5);
-
             TUserDataBlock sysBlock;
-            if (!types.QContext.CanRead()) {
-                sysBlock.Type = EUserDataType::PATH;
-                sysBlock.Data = pathWithMd5->Path;
-            } else {
-                sysBlock.Type = EUserDataType::RAW_INLINE_DATA;
-            }
+            sysBlock.Type = EUserDataType::PATH;
+            sysBlock.Data = pathWithMd5->Path;
             sysBlock.Usage.Set(EUserDataBlockUsage::Udf);
 
-            auto alias = TFsPath(pathWithMd5->Path).GetName();
+            auto alias = TFsPath(sysBlock.Data).GetName();
             auto key = TUserDataKey::Udf(alias);
             if (const auto block = types.UserDataStorage->FindUserDataBlock(key)) {
                 files[key] = *block;
@@ -1235,7 +1230,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
         return SyncError();
     }
 
-    if (types.QContext.CanRead() && types.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
+    if (types.QContext.CanRead()) {
         return SyncOk();
     }
 

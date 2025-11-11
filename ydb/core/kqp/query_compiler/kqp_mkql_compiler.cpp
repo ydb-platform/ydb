@@ -475,12 +475,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
                     return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
                 };
-                TDqUserRenames renames{};
+                TDqRenames renames{};
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kLeft);       
+                    renames.emplace_back(index, JoinSide::kLeft);       
                 }
                 for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kRight);       
+                    renames.emplace_back(index, JoinSide::kRight);       
                 }
                 return TGraceJoinRenames::FromDq(renames);    
             }();

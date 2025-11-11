@@ -7,7 +7,6 @@ SRCS(
 
 PEERDIR(
     yql/essentials/protos
-    yql/essentials/utils/fetch/proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

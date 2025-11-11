@@ -89,12 +89,7 @@ public:
 
 protected:
     // TSupportsAttributes members
-    const IAttributeDictionary& CustomAttributes() const override
-    {
-        return Attributes();
-    }
-
-    IAttributeDictionary* MutableCustomAttributesOrNull() override
+    IAttributeDictionary* GetCustomAttributes() override
     {
         return MutableAttributes();
     }

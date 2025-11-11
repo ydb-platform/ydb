@@ -75,7 +75,7 @@ public:
 
     void SetUp(NUnitTest::TTestContext&) override;
 
-    void InitAll(bool yandexCloudMode = true, bool enableMetering = false, bool extendedQueueUrl = false);
+    void InitAll(bool yandexCloudMode = true, bool enableMetering = false);
 
     static TString FormAuthorizationStr(const TString& region);
 
@@ -218,7 +218,7 @@ private:
 
     void InitAccessServiceService();
 
-    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
+    void InitHttpServer(bool yandexCloudMode = true);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -252,11 +252,5 @@ class THttpProxyTestMockForSQS : public THttpProxyTestMock {
 class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(true, true);
-    }
-};
-
-class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
-    void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, false, true);
     }
 };

@@ -4,14 +4,10 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <google/protobuf/text_format.h>
-
 #include <util/charset/utf8.h>
-#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
-#include <util/stream/output.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 namespace NKikimr {
@@ -32,24 +28,6 @@ TValue TValue::Create(const NKikimrMiniKQL::TResult& result) {
     return TValue::Create(result.GetValue(), result.GetType());
 }
 
-static bool ValueProtobufHasEmptyPayload(const NKikimrMiniKQL::TValue& value) {
-    bool emptyPayload = true;
-    emptyPayload &= (value.value_value_case() == value.VALUE_VALUE_NOT_SET);
-    emptyPayload &= value.GetList().empty();
-    emptyPayload &= value.GetTuple().empty();
-    emptyPayload &= value.GetStruct().empty();
-    emptyPayload &= value.GetDict().empty();
-    emptyPayload &= !value.HasHi128();
-    emptyPayload &= !value.HasVariantIndex();
-    // Non-empty unknown fields are a weird case, as they are not accessible through the wrapper and can only be viewed in the debug dump.
-    // If the value is not considered empty, the wrapper will return a non-empty value, for which no accessor can return a meaningful value.
-    constexpr bool checkUnknownFields = false;
-    if (checkUnknownFields) {
-        emptyPayload = emptyPayload && value.unknown_fields().empty();
-    }
-    return emptyPayload;
-}
-
 bool TValue::HaveValue() const {
     return !IsNull();
 }
@@ -57,8 +35,7 @@ bool TValue::HaveValue() const {
 bool TValue::IsNull() const {
     if (&Value == &Null)
         return true;
-
-    return ValueProtobufHasEmptyPayload(Value);
+    return Value.ByteSize() == 0;
 }
 
 TValue TValue::operator [](const char* name) const {
@@ -130,21 +107,6 @@ TVector<TString> TValue::GetMembersNames() const {
     }
     return members;
 }
-
-TString TValue::DumpToString() const {
-    TStringBuilder dump;
-    TString res;
-    ::google::protobuf::TextFormat::PrintToString(Type, &res);
-    dump << "Type:" << Endl << res << Endl;
-    ::google::protobuf::TextFormat::PrintToString(Value, &res);
-    dump << "Value:" << Endl << res << Endl;
-    return std::move(dump);
-}
-
-void TValue::DumpValue() const {
-    Cerr << DumpToString();
-}
-
 
 TWriteValue TWriteValue::Create(NKikimrMiniKQL::TValue& value, NKikimrMiniKQL::TType& type) {
     return TWriteValue(value, type);
@@ -491,7 +453,7 @@ TString TValue::GetDataText() const {
     case NScheme::NTypeIds::Datetime64:
     case NScheme::NTypeIds::Timestamp64:
     case NScheme::NTypeIds::Interval64:
-        return ToString(Value.GetInt64());
+        return ToString(Value.GetInt64());        
     case NScheme::NTypeIds::JsonDocument:
         return "\"<JsonDocument>\"";
     case NScheme::NTypeIds::Uuid:

@@ -76,6 +76,7 @@ private:
             Consumer->OnStringScalar(fields[i]);
         }
     }
+
 };
 
 } // namespace

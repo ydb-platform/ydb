@@ -21,8 +21,11 @@
 #include <istream>
 #include <limits>
 #include <ostream>
+#include <type_traits>
 
-#include "y_absl/base/config.h"
+#include "y_absl/numeric/bits.h"
+#include "y_absl/random/internal/fastmath.h"
+#include "y_absl/random/internal/generate_real.h"
 #include "y_absl/random/internal/iostream_state_saver.h"
 #include "y_absl/random/internal/traits.h"
 #include "y_absl/random/uniform_int_distribution.h"

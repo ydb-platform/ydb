@@ -1,4 +1,3 @@
-ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_1_1_VdiskErrors
 ydb/core/blobstorage/pdisk/ut RDMA.ChunkWriteDifferentOffsetAndSize
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage CountingEvents.Collect_Mirror3of4

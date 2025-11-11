@@ -2,6 +2,8 @@
 
 #include "highlighting.h"
 
+#include <yql/essentials/utils/yql_panic.h>
+
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <library/cpp/json/json_writer.h>
@@ -139,37 +141,12 @@ NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, const TRangePattern
 
     NJson::TJsonValue json;
     if (unit.Kind == EUnitKind::StringLiteral) {
-        json.AppendValue(NJson::TJsonArray{
-            "#py",
-            NJson::TJsonMap{
-                {"token", "string.python"},
-                {"nextEmbedded", "python"},
-                {"next", "@embedded"},
-                {"goBack", 3},
-            },
-        });
-        json.AppendValue(NJson::TJsonArray{
-            "\\/\\/js",
-            NJson::TJsonMap{
-                {"token", "string.js"},
-                {"nextEmbedded", "javascript"},
-                {"next", "@embedded"},
-                {"goBack", 4},
-            },
-        });
-        json.AppendValue(NJson::TJsonArray{
-            "{",
-            NJson::TJsonMap{
-                {"token", "string.js"},
-                {"nextEmbedded", "javascript"},
-                {"next", "@embedded"},
-                {"goBack", 1},
-            },
-        });
-        if (auto embedded = EmbeddedLanguage(pattern)) {
-            json.AppendValue(NJson::TJsonArray{
-                "[^" + begin + "]",
-                *embedded});
+        for (const auto& range : unit.RangePatterns) {
+            if (auto embedded = EmbeddedLanguage(range)) {
+                YQL_ENSURE(range.BeginPlain.StartsWith("@@"));
+                TString tag = RE2::QuoteMeta(range.BeginPlain.substr(2));
+                json.AppendValue(NJson::TJsonArray{std::move(tag), *embedded});
+            }
         }
         if (escape) {
             json.AppendValue(NJson::TJsonArray{*escape, group + ".escape"});

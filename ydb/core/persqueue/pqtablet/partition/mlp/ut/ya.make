@@ -4,10 +4,11 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     mlp_storage_ut.cpp
+    mlp_consumer_ut.cpp
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
+    ydb/core/persqueue/public/mlp/ut/common
 )
 
 END()

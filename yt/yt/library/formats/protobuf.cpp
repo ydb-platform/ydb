@@ -887,7 +887,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptors(
     InitFromProtobufSchema(configWithTypes, schemas);
 }
 
-template<>
+template <>
 void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -904,7 +904,7 @@ void TProtobufFormatDescriptionBase<TProtobufWriterType>::InitEmbeddedColumn(
     }
 }
 
-template<>
+template <>
 void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,
@@ -933,7 +933,7 @@ void TProtobufFormatDescriptionBase<TProtobufParserType>::InitEmbeddedColumn(
     }
 }
 
-template<typename TType>
+template <typename TType>
 void TProtobufFormatDescriptionBase<TType>::InitColumn(
     int& fieldIndex,
     const NTableClient::TTableSchemaPtr& tableSchema,

@@ -24,6 +24,11 @@ void TPartition::HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& e
     MLPPendingEvents.emplace_back(ev);
 }
 
+void TPartition::HandleOnInit(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
+    LOG_D("HandleOnInit TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
+    MLPPendingEvents.emplace_back(ev);
+}
+
 template<typename TEventHandle>
 void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev) {
     auto it = MLPConsumers.find(consumer);
@@ -56,6 +61,11 @@ void TPartition::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
+void TPartition::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvGetMLPConsumerStateRequest " << ev->Get()->Consumer << ":" << ev->Get()->PartitionId);
+    ForwardToMLPConsumer(ev->Get()->Consumer, ev);
+}
+
 void TPartition::ProcessMLPPendingEvents() {
     LOG_D("Process MLP pending events. Count " << MLPPendingEvents.size());
 
@@ -73,6 +83,20 @@ void TPartition::ProcessMLPPendingEvents() {
 }
 
 void TPartition::InitializeMLPConsumers() {
+    auto retentionPeriod = [&](const auto& consumer) -> std::optional<TDuration> {
+        if (consumer.GetImportant()) {
+            return std::nullopt;
+        }
+        if (consumer.HasAvailabilityPeriodMs()) {
+            return TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+        } else if (Config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
+            // retention by storage is not supported yet
+            return std::nullopt;
+        } else {
+            return TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
+        }
+    };
+
     std::unordered_map<TString, NKikimrPQ::TPQTabletConfig::TConsumer> consumers;
     for (auto& consumer : Config.GetConsumers()) {
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -84,7 +108,11 @@ void TPartition::InitializeMLPConsumers() {
 
     for (auto it = MLPConsumers.begin(); it != MLPConsumers.end();) {
         auto &[name, consumerInfo] = *it;
-        if (consumers.contains(name)) {
+        if (auto cit = consumers.find(name); cit != consumers.end()) {
+            LOG_I("Updateing MLP consumer '" << name << "' config");
+            auto& config = cit->second;
+            Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(config, retentionPeriod(config)));
+
             ++it;
             continue;
         }
@@ -101,13 +129,13 @@ void TPartition::InitializeMLPConsumers() {
         }
 
         LOG_I("Creating MLP consumer '" << name << "'");
-
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
             TabletId,
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
-            consumer
+            consumer,
+            retentionPeriod(consumer)
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }

@@ -378,6 +378,7 @@ class TLocalTableWriter
 
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
+        request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(KeyDesc));
         Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
     }

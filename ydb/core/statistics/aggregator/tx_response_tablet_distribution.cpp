@@ -30,11 +30,11 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     bool ExecuteStartForceTraversal(TTransactionContext& txc) {
         ++Self->TraversalRound;
         ++Self->GlobalTraversalRound;
-        
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistGlobalTraversalRound(db);
 
-        AggregateStatisticsRequest = std::make_unique<TEvStatistics::TEvAggregateStatistics>(); 
+        AggregateStatisticsRequest = std::make_unique<TEvStatistics::TEvAggregateStatistics>();
         auto& outRecord = AggregateStatisticsRequest->Record;
         outRecord.SetRound(Self->GlobalTraversalRound);
         Self->TraversalPathId.ToProto(outRecord.MutablePathId());
@@ -51,7 +51,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
             outNode.MutableTabletIds()->CopyFrom(inNode.GetTabletIds());
         }
 
-        return true;        
+        return true;
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -79,6 +79,7 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
             SA_LOG_W("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Execute. Some tablets do not exist in Hive anymore; tablet count = " << distribution.size());
             // these tablets do not exist in Hive anymore
+            Self->NavigateDatabase = Self->TraversalDatabase;
             Self->NavigatePathId = Self->TraversalPathId;
             Action = EAction::ScheduleResolve;
             return true;

@@ -532,6 +532,26 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 set TablePathPrefix = "/Root/";
                 select sum(t1.c), t1.b from t1 group by t1.b order by t1.b;
             )",
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select max(t1.a), min(t1.a), min(t1.b) as min_b from t1;
+            )",
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select distinct t1.a, t1.b from t1 order by t1.a;
+            )",
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select distinct sum(t1.c) as sum_c, sum(t1.a) as sum_b from t1 group by t1.b order by sum_c;
+            )",
+            R"(
+                --!syntax_pg
+                set TablePathPrefix = "/Root/";
+                select distinct min(t1.a) as min_a, max(t1.a) as max_a from t1 group by t1.b order by min_a;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -544,6 +564,10 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["2";"0"]])",
             R"([["6"];["4"]])",
             R"([["4";"1"];["6";"2"]])",
+            R"([["4";"0";"1"]])",
+            R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
+            R"([["4";"4"];["6";"6"]])",
+            R"([["0";"4"];["1";"3"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

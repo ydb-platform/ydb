@@ -199,6 +199,7 @@ message ExportToFsSettings {
 
     // Base path on FS where to write all export items
     // In the case of NFS, one of the directories in the path must be mounted
+    // Must be an absolute path
     // Example: /mnt/exports
     // SchemaMapping file with the list of objects is written to this path
     string base_path = 1 [(required) = true];

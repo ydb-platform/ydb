@@ -164,7 +164,7 @@ const TLogicalTypePtr& TTaggedLogicalType::GetElement() const
 
 #undef XX
 
-template<ESimpleLogicalValueType type>
+template <ESimpleLogicalValueType type>
 constexpr ESimpleLogicalValueType GetUnderlyingDateType()
 {
     return TUnderlyingTzTypeImpl<type>::TValue;

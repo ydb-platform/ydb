@@ -13,7 +13,10 @@ bool IsStdinInteractive();
 
 bool IsStdoutInteractive();
 
+bool IsStderrInteractive();
+
 std::optional<size_t> GetTerminalWidth();
+std::optional<size_t> GetErrTerminalWidth();
 
 }
 }

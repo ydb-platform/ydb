@@ -1637,10 +1637,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeExternalTable:
                 Kind = TNavigate::KindExternalTable;
+                SchemaVersion = entryDesc.HasVersion() ? entryDesc.GetVersion().GetExternalTableVersion() : 0;
                 FillInfo(Kind, ExternalTableInfo, std::move(*pathDesc.MutableExternalTableDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeExternalDataSource:
                 Kind = TNavigate::KindExternalDataSource;
+                SchemaVersion = entryDesc.HasVersion() ? entryDesc.GetVersion().GetExternalDataSourceVersion() : 0;
                 FillInfo(Kind, ExternalDataSourceInfo, std::move(*pathDesc.MutableExternalDataSourceDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeBlockStoreVolume:

@@ -454,6 +454,9 @@ enum class ESourceType : ui32 {
     ExternalDataSource = 2
 };
 
+struct TKikimrTableMetadata;
+typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
+
 struct TExternalSource {
     ESourceType SourceType = ESourceType::Unknown;
     TString Type;
@@ -469,6 +472,7 @@ struct TExternalSource {
     TString Token;
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
+    TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
 };
 
 enum EMetaSerializationType : ui64 {
@@ -1046,8 +1050,6 @@ struct TKikimrListPathItem {
     TString Name;
     bool IsDirectory;
 };
-
-typedef TIntrusivePtr<TKikimrTableMetadata> TKikimrTableMetadataPtr;
 
 template<typename TResult>
 class IKikimrAsyncResult : public TThrRefBase {

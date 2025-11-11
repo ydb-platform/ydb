@@ -4,8 +4,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
 
+#include <chrono>
 #include <util/generic/xrange.h>
-
 #include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NConsoleClient {
@@ -38,7 +38,8 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
     .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
     config.Opts->AddLongOption('f', "filename", "File name to save the results in .tar.bz2 format\n")
-        .RequiredArgument("[out.tar.bz2]").StoreResult(&FileName);
+    .DefaultValue("out.tar.bz2")
+        .OptionalArgument("PATH").StoreResult(&FileName);
     config.AllowEmptyDatabase = true;
 }
 
@@ -60,6 +61,9 @@ struct TARFile {
             memset(this, 0, sizeof(TARFileHeader));
             strcpy(filename, name.c_str());
             strcpy(fileSize, ToOct(size).c_str());
+            auto unixTime = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            strcpy(lastModification, ToOct(unixTime).c_str());
             CalcChecksum();
         }
 
@@ -117,7 +121,6 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
         auto& block = proto.Getblocks(i);
         TARFile::ToStream(compress, block.Getname(), block.Getcontent());
     }
-    TARFile::ToStream(compress, "", "");
     return EXIT_SUCCESS;
 }
 

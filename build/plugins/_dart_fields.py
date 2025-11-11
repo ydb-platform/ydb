@@ -431,22 +431,37 @@ class EslintConfigPath:
 
 
 class ParallelTestsInSingleNode:
-    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
+    KEY = 'PARALLEL-TESTS-WITHIN-NODE-WORKERS'
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        value = unit.get('PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS')
+        return cls.get_value(unit, "PARALLEL_TESTS_WITHIN_NODE_WORKERS")
+
+    @classmethod
+    def get_value(cls, unit, key):
+        value = unit.get(key)
 
         if value:
             value = value.lower()
-            if value != 'all' and not (value.isnumeric() and int(value) > 0):
+            if value == 'all':
+                value = 'auto'
+            if value != 'auto' and not (value.isnumeric() and int(value) > 0):
                 raise DartValueError(
-                    'Incorrect value of PARALLEL_TESTS_ON_YT_WITHIN_NODE. Expected either "all" or a positive integer value, got: {}'.format(
+                    'Incorrect value of PARALLEL_TESTS_WITHIN_NODE. Expected either "auto" or a positive integer value, got: {}'.format(
                         value,
                     ),
                 )
 
         return value
+
+
+# TODO(bulatman) Temporary class for backward compatibility.
+class ParallelTestsInSingleNodeOnYt:
+    KEY = 'PARALLEL-TESTS-WITHIN-NODE-ON-YT'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return ParallelTestsInSingleNode.get_value(unit, "PARALLEL_TESTS_ON_YT_WITHIN_NODE_WORKERS")
 
 
 class ForkMode:

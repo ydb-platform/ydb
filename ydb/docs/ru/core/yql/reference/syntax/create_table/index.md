@@ -39,7 +39,7 @@
 
 ### Примечание про `column_option_list`
 
-`column_option_list` - список опций для колонки. Она может иметь два разных синтаксиса:
+`column_option_list` - список опций для колонки. Для указания этих опций существует два синтаксиса:
 
 ```
     column_option_list_first: column_option*;

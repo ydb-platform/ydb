@@ -504,6 +504,10 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 if (res.IsLastPart()) {
                     PartNo = 0;
                     ++Offset;
+		    if (LastOffset && Offset >= LastOffset) {
+                        needStop = true;
+                        break;
+                    }
                 } else {
                     ++PartNo;
                 }
@@ -638,6 +642,9 @@ TReadAnswer TReadInfo::FormAnswer(
                 ++PartNo;
             }
             if (updateUsage(writeBlob)) {
+                break;
+            }
+	    if (LastOffset && Offset >= LastOffset) {
                 break;
             }
         }

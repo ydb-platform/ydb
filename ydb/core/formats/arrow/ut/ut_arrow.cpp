@@ -117,7 +117,7 @@ struct TDataRow {
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
         std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("bool", arrow::boolean()),
+            arrow::field("bool", arrow::uint8()),
             arrow::field("i8", arrow::int8()),
             arrow::field("i16", arrow::int16()),
             arrow::field("i32", arrow::int32()),

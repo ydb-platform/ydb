@@ -608,7 +608,8 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tablePath, const TSchemeShardLocalPathId externalPathId) {
     const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
-    auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(TFsPath(tablePath).Fix().GetName());
+    auto path = TFsPath(tablePath).Fix();
+    auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(std::tuple{path.Parent().GetName(), path.GetName()});
     if (schemaAdapter) {
         return schemaAdapter->BuildMetadataAccessor(tablePath, TUnifiedOptionalPathId::BuildExternal(externalPathId, internalPathId));
     } else if (!internalPathId) {

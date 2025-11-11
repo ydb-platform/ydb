@@ -139,6 +139,14 @@ class SchemeEntryType(enum.IntEnum):
         """
         return entry == SchemeEntryType.RESOURCE_POOL
 
+    @staticmethod
+    def is_topic(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a topic and False otherwise
+        """
+        return entry == SchemeEntryType.TOPIC
+
 
 class SchemeEntry(object):
     __slots__ = (

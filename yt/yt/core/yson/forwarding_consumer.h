@@ -12,6 +12,14 @@ class TForwardingYsonConsumer
     : public virtual TYsonConsumerBase
 {
 public:
+    struct TState
+    {
+        std::vector<IYsonConsumer*> ForwardingConsumers;
+        int ForwardingDepth = 0;
+        EYsonType ForwardingType;
+        std::function<void()> OnFinished;
+    };
+
     // IYsonConsumer methods
     void OnStringScalar(TStringBuf value) override;
     void OnInt64Scalar(i64 value) override;
@@ -32,6 +40,8 @@ public:
     void OnEndAttributes() override;
 
     void OnRaw(TStringBuf yson, EYsonType type) override;
+
+    DEFINE_BYVAL_RW_PROPERTY(TState, State);
 
 protected:
     void Forward(
@@ -65,11 +75,6 @@ protected:
     virtual void OnMyRaw(TStringBuf yson, EYsonType type);
 
 private:
-    std::vector<IYsonConsumer*> ForwardingConsumers_;
-    int ForwardingDepth_ = 0;
-    EYsonType ForwardingType_;
-    std::function<void()> OnFinished_;
-
     bool CheckForwarding(int depthDelta = 0);
     void UpdateDepth(int depthDelta, bool checkFinish = true);
     void FinishForwarding();

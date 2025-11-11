@@ -408,7 +408,7 @@ static constexpr i256 Decimal256IntegerMaxValueTable[] = {
     {static_cast<ui32>(0xffffffffu), static_cast<ui32>(0xffffffffu), static_cast<ui32>(0x71950fffu), static_cast<ui32>(0x7775a5f1u), static_cast<ui32>(0xe8652979u), static_cast<ui32>(0x0764b4abu), static_cast<ui32>(0x119915b5u), static_cast<ui32>(0x161bcca7u)}, // 76
 };
 
-template<typename T>
+template <typename T>
 Y_FORCE_INLINE constexpr auto GetDecimalMaxIntegerValue(int precision)
 {
     static_assert(ValidDecimalUnderlyingInteger<T>);
@@ -476,7 +476,7 @@ static T DecimalBinaryToIntegerUnchecked(TStringBuf binaryValue)
     return FlipMSB(DecimalInetToHost(result));
 }
 
-template<typename T>
+template <typename T>
 static void DecimalIntegerToBinaryUnchecked(T decodedValue, void* buf)
 {
     auto preparedValue = DecimalHostToInet(FlipMSB(decodedValue));
@@ -503,7 +503,7 @@ static Y_FORCE_INLINE TStringBuf PlaceOnBuffer(TStringBuf value, char* buffer)
 }
 
 // TODO(ermolovd): make it FASTER (check NYT::WriteDecIntToBufferBackwards)
-template<typename T>
+template <typename T>
 static TStringBuf WriteTextDecimalUnchecked(T decodedValue, int scale, char* buffer)
 {
     if (decodedValue == TDecimalTraits<T>::MinusInf) {
@@ -573,7 +573,7 @@ void ThrowInvalidDecimal(TStringBuf value, int precision, int scale, const char*
     }
 }
 
-template<typename T>
+template <typename T>
 T DecimalTextToInteger(TStringBuf textValue, int precision, int scale)
 {
     if (textValue.empty()) {
@@ -675,7 +675,7 @@ T DecimalTextToInteger(TStringBuf textValue, int precision, int scale)
     return negative ? -signedResult : signedResult;
 }
 
-template<typename T>
+template <typename T>
 Y_FORCE_INLINE TStringBuf DecimalBinaryToTextUncheckedImpl(TStringBuf value, int scale, char* buffer)
 {
     T decoded = DecimalBinaryToIntegerUnchecked<T>(value);
@@ -710,7 +710,7 @@ TString TDecimal::BinaryToText(TStringBuf binaryDecimal, int precision, int scal
     return result;
 }
 
-template<typename T>
+template <typename T>
 TStringBuf TextToBinaryImpl(TStringBuf textDecimal, int precision, int scale, char* buffer)
 {
     T decoded = DecimalTextToInteger<T>(textDecimal, precision, scale);

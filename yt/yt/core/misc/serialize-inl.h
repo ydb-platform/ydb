@@ -1632,24 +1632,24 @@ struct TTupleSerializer;
 template <class T>
 struct TTupleSerializer<T, 0U>
 {
-    template<class C>
+    template <class C>
     static void Save(C&, const T&) {}
 
-    template<class C>
+    template <class C>
     static void Load(C&, T&) {}
 };
 
 template <class T, size_t Size>
 struct TTupleSerializer
 {
-    template<class C>
+    template <class C>
     static void Save(C& context, const T& tuple)
     {
         TTupleSerializer<T, Size - 1U>::Save(context, tuple);
         NYT::Save(context, std::get<Size - 1U>(tuple));
     }
 
-    template<class C>
+    template <class C>
     static void Load(C& context, T& tuple)
     {
         TTupleSerializer<T, Size - 1U>::Load(context, tuple);

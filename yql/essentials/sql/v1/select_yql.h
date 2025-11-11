@@ -14,6 +14,22 @@ struct TYqlSource {
     TMaybe<TYqlSourceAlias> Alias;
 };
 
+enum class EYqlJoinKind {
+    Inner,
+    Left,
+    Right,
+};
+
+struct TYqlJoinConstraint {
+    EYqlJoinKind Kind;
+    TNodePtr Condition;
+};
+
+struct TYqlJoin {
+    TVector<TYqlSource> Sources;
+    TVector<TYqlJoinConstraint> Constraints;
+};
+
 struct TPlainAsterisk {};
 
 using TProjection = std::variant<
@@ -36,7 +52,7 @@ struct TYqlValuesArgs {
 
 struct TYqlSelectArgs {
     TProjection Projection;
-    TMaybe<TYqlSource> Source;
+    TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
     TMaybe<TNodePtr> Limit;
     TMaybe<TNodePtr> Offset;

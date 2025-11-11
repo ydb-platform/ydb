@@ -40,6 +40,24 @@ TYsonStructBase::TYsonStructBase()
     TYsonStructRegistry::Get()->OnBaseCtorCalled();
 }
 
+TYsonStructBase& TYsonStructBase::operator=(const TYsonStructBase& that)
+{
+    // The type of destination should not be changed so Meta_ should not be copied.
+    LocalUnrecognized_ = that.LocalUnrecognized_;
+    InstanceUnrecognizedStrategy_ = that.InstanceUnrecognizedStrategy_;
+    CachedDynamicCastAllowed_ = that.CachedDynamicCastAllowed_;
+    return *this;
+}
+
+TYsonStructBase& TYsonStructBase::operator=(TYsonStructBase&& that)
+{
+    // The type of destination should not be changed so Meta_ should not be copied.
+    LocalUnrecognized_ = std::move(that.LocalUnrecognized_);
+    InstanceUnrecognizedStrategy_ = std::move(that.InstanceUnrecognizedStrategy_);
+    CachedDynamicCastAllowed_ = std::move(that.CachedDynamicCastAllowed_);
+    return *this;
+}
+
 IMapNodePtr TYsonStructBase::GetLocalUnrecognized() const
 {
     return LocalUnrecognized_;

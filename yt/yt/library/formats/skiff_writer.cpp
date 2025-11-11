@@ -134,7 +134,7 @@ constexpr EValueType WireTypeToValueType()
     }
 }
 
-template<EWireType wireType, bool isOptional>
+template <EWireType wireType, bool isOptional>
 void ConvertSimpleValueImpl(const TUnversionedValue& value, TCheckedInDebugSkiffWriter* writer, TWriteContext* context)
 {
     if constexpr (isOptional) {

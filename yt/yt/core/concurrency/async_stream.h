@@ -40,6 +40,11 @@ std::unique_ptr<IInputStream> CreateSyncAdapter(
     IAsyncInputStreamPtr underlyingStream,
     EWaitForStrategy strategy = EWaitForStrategy::WaitFor);
 
+//! Creates a synchronous adapter from a given asynchronous zero-copy stream.
+std::unique_ptr<IZeroCopyInput> CreateSyncAdapter(
+    IAsyncZeroCopyInputStreamPtr underlyingStream,
+    EWaitForStrategy strategy = EWaitForStrategy::WaitFor);
+
 //! Creates an asynchronous adapter from a given synchronous stream.
 /*!
  *  Caller may provide an invoker for all calls to the underlying stream.

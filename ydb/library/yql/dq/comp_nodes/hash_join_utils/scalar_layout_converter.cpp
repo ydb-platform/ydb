@@ -620,20 +620,35 @@ public:
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
+        
+        // Calculate exact number of pointers needed based on column types
+        MaxPointersNeeded_ = 0;
+        for (auto* innerExtractor : InnerExtractors_) {
+            if (innerExtractor->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
+                MaxPointersNeeded_ += 2;  // String: offset + data
+            } else {
+                MaxPointersNeeded_ += 1;  // Fixed-size: data only
+            }
+        }
+        
+        // Reserve memory once to avoid reallocations in hot path
+        ReusableColumnsData_.reserve(MaxPointersNeeded_);
+        ReusableColumnsNullBitmap_.reserve(MaxPointersNeeded_);
+        // For tempStorage we need approximately 3 buffers per column
+        // (data + bitmap + optional offset/string data)
+        ReusableTempStorage_.reserve(InnerExtractors_.size() * 3);
     }
 
     void Pack(const NYql::NUdf::TUnboxedValue* values, TPackResult& packed) override {
-        TVector<const ui8*> columnsData;
-        TVector<const ui8*> columnsNullBitmap;
-        TVector<TVector<ui8>> tempStorage;
-
-        // Reserve space to avoid reallocation which could invalidate pointers
-        columnsData.reserve(InnerExtractors_.size() * 2);
-        columnsNullBitmap.reserve(InnerExtractors_.size() * 2);
-        tempStorage.reserve(InnerExtractors_.size() * 4); // Estimate
+        // Clear reusable buffers instead of recreating them
+        // Memory is already reserved in constructor, so no reallocation will occur
+        ReusableColumnsData_.clear();
+        ReusableColumnsNullBitmap_.clear();
+        ReusableTempStorage_.clear();
 
         for (size_t i = 0; i < Extractors_.size(); ++i) {
-            Extractors_[i]->ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+            Extractors_[i]->ExtractForPack(values[i], ReusableColumnsData_, 
+                                          ReusableColumnsNullBitmap_, ReusableTempStorage_);
         }
 
         auto& packedTuples = packed.PackedTuples;
@@ -646,7 +661,7 @@ public:
         packedTuples.resize(newSize, 0);
 
         TupleLayout_->Pack(
-            columnsData.data(), columnsNullBitmap.data(),
+            ReusableColumnsData_.data(), ReusableColumnsNullBitmap_.data(),
             packedTuples.data() + currentSize, overflow, 0, 1);
     }
 
@@ -783,6 +798,12 @@ private:
     TVector<TVector<ui32>> InnerMapping_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
     const THolderFactory& HolderFactory_;
+    
+    // Reusable buffers to avoid allocations in hot path
+    TVector<const ui8*> ReusableColumnsData_;
+    TVector<const ui8*> ReusableColumnsNullBitmap_;
+    TVector<TVector<ui8>> ReusableTempStorage_;
+    size_t MaxPointersNeeded_;
 };
 
 } // anonymous namespace

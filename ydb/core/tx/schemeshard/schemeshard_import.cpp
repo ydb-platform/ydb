@@ -221,11 +221,18 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 
     switch (importInfo.Kind) {
-    case TImportInfo::EKind::S3:
-        import.MutableImportFromS3Settings()->CopyFrom(importInfo.Settings);
+    case TImportInfo::EKind::S3: {
+        Ydb::Import::ImportFromS3Settings settings = importInfo.GetS3Settings();
+        import.MutableImportFromS3Settings()->CopyFrom(settings);
         import.MutableImportFromS3Settings()->clear_access_key();
         import.MutableImportFromS3Settings()->clear_secret_key();
         break;
+    }
+    case TImportInfo::EKind::FS: {
+        Ydb::Import::ImportFromFsSettings settings = importInfo.GetFsSettings();
+        import.MutableImportFromFsSettings()->CopyFrom(settings);
+        break;
+    }
     }
 }
 
@@ -233,7 +240,7 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo& i
     db.Table<Schema::Imports>().Key(importInfo.Id).Update(
         NIceDb::TUpdate<Schema::Imports::Uid>(importInfo.Uid),
         NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo.Kind)),
-        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.Settings.SerializeAsString()),
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.Settings),
         NIceDb::TUpdate<Schema::Imports::DomainPathOwnerId>(importInfo.DomainPathId.OwnerId),
         NIceDb::TUpdate<Schema::Imports::DomainPathLocalId>(importInfo.DomainPathId.LocalPathId),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size()),

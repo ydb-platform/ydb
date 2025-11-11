@@ -3134,6 +3134,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     enum class EKind: ui8 {
         S3 = 0,
+        FS = 1,
     };
 
     struct TItem {
@@ -3197,7 +3198,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     ui64 Id;  // TxId from the original TEvCreateImportRequest
     TString Uid;
     EKind Kind;
-    Ydb::Import::ImportFromS3Settings Settings;
+    TString Settings;  // Serialized settings (S3 or FS)
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
@@ -3223,18 +3224,69 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         // Backward compatibility.
         // But there can be no paths in settings at all.
-        if (i < ui32(Settings.items_size())) {
-            return Settings.items(i).source_prefix();
+        switch (Kind) {
+        case EKind::S3: {
+            Ydb::Import::ImportFromS3Settings settings = GetS3Settings();
+            if (i < ui32(settings.items_size())) {
+                return settings.items(i).source_prefix();
+            }
+            break;
+        }
+        case EKind::FS: {
+            Ydb::Import::ImportFromFsSettings settings = GetFsSettings();
+            if (i < ui32(settings.items_size())) {
+                return settings.items(i).source_path();
+            }
+            break;
+        }
         }
 
         return {};
+    }
+
+    Ydb::Import::ImportFromS3Settings GetS3Settings() const {
+        Y_ABORT_UNLESS(Kind == EKind::S3);
+        Ydb::Import::ImportFromS3Settings settings;
+        Y_ABORT_UNLESS(settings.ParseFromString(Settings));
+        return settings;
+    }
+
+    Ydb::Import::ImportFromFsSettings GetFsSettings() const {
+        Y_ABORT_UNLESS(Kind == EKind::FS);
+        Ydb::Import::ImportFromFsSettings settings;
+        Y_ABORT_UNLESS(settings.ParseFromString(Settings));
+        return settings;
+    }
+
+    bool GetNoAcl() const {
+        switch (Kind) {
+        case EKind::S3:
+            return GetS3Settings().no_acl();
+        case EKind::FS:
+            return GetFsSettings().no_acl();
+        default:
+            Y_ABORT_UNLESS(false);
+        }
+        return false;
+    }
+
+    bool GetSkipChecksumValidation() const {
+        switch (Kind) {
+        case EKind::S3:
+            return GetS3Settings().skip_checksum_validation();
+        case EKind::FS:
+            return GetFsSettings().skip_checksum_validation();
+        default:
+            Y_ABORT_UNLESS(false);
+        }
+        return false;
     }
 
     explicit TImportInfo(
             const ui64 id,
             const TString& uid,
             const EKind kind,
-            const Ydb::Import::ImportFromS3Settings& settings,
+            const TString& settings,
             const TPathId domainPathId,
             const TString& peerName)
         : Id(id)
@@ -3245,6 +3297,28 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         , PeerName(peerName)
     {
     }
+
+    template <typename TSettingsPB>
+    explicit TImportInfo(
+            const ui64 id,
+            const TString& uid,
+            const EKind kind,
+            const TSettingsPB& settingsPb,
+            const TPathId domainPathId,
+            const TString& peerName)
+        : TImportInfo(id, uid, kind, SerializeSettings(settingsPb), domainPathId, peerName)
+    {
+    }
+
+private:
+    template <typename TSettingsPB>
+    static TString SerializeSettings(const TSettingsPB& settingsPb) {
+        TString result;
+        Y_ABORT_UNLESS(settingsPb.SerializeToString(&result));
+        return result;
+    }
+
+public:
 
     TString ToString() const;
 

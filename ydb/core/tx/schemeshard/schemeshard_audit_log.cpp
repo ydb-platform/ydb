@@ -346,6 +346,16 @@ template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromFsSettin
     };
 }
 
+TParts ImportKindSpecificParts(const TImportInfo& info) {
+    switch (info.Kind) {
+    case TImportInfo::EKind::S3:
+        return ImportKindSpecificParts(info.GetS3Settings());
+    case TImportInfo::EKind::FS:
+        return ImportKindSpecificParts(info.GetFsSettings());
+    }
+    return {};
+}
+
 }  // anonymous namespace
 
 template <class Request, class Response>
@@ -444,7 +454,7 @@ void AuditLogExportEnd(const TExportInfo& info, TSchemeShard* SS) {
     _AuditLogXxportEnd(info, "EXPORT END", ExportKindSpecificParts(proto), SS);
 }
 void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
-    _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info.Settings), SS);
+    _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info), SS);
 }
 
 }

@@ -218,6 +218,23 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             }
             break;
 
+        case NKikimrImport::TCreateImportRequest::kImportFromFsSettings:
+            {
+                const auto& settings = request.GetRequest().GetImportFromFsSettings();
+
+                importInfo = new TImportInfo(id, uid, TImportInfo::EKind::FS, settings, domainPath.Base()->PathId, request.GetPeerName());
+
+                if (request.HasUserSID()) {
+                    importInfo->UserSID = request.GetUserSID();
+                }
+
+                TString explain;
+                if (!FillItems(*importInfo, settings, explain)) {
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, explain);
+                }
+            }
+            break;
+
         default:
             Y_DEBUG_ABORT("Unknown import kind");
         }
@@ -277,23 +294,35 @@ private:
         return true;
     }
 
-    template <typename TSettings>
-    bool FillItems(TImportInfo& importInfo, const TSettings& settings, TString& explain) {
+    // Common helper to validate destination path
+    bool ValidateAndAddDestinationPath(const TString& dstPath, THashSet<TString>& dstPaths, TString& explain) {
+        if (dstPath) {
+            if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
+                explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
+                return false;
+            }
+
+            if (!ValidateImportDstPath(dstPath, Self, explain)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // S3-specific FillItems
+    bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromS3Settings& settings, TString& explain) {
         THashSet<TString> dstPaths;
 
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const TString& dstPath = settings.items(itemIdx).destination_path();
-            if (dstPath) {
-                if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
-                    explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
-                    return false;
-                }
+            
+            if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
+                return false;
+            }
 
-                if (!ValidateImportDstPath(dstPath, Self, explain)) {
-                    return false;
-                }
-            } else if (settings.source_prefix().empty()) { // Can not take path from schema mapping
+            if (!dstPath && settings.source_prefix().empty()) {
+                // Can not take path from schema mapping
                 explain = "No common source prefix and item destination path set";
                 return false;
             }
@@ -301,6 +330,37 @@ private:
             auto& item = importInfo.Items.emplace_back(dstPath);
             item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
             item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+        }
+
+        return true;
+    }
+
+    // FS-specific FillItems
+    bool FillItems(TImportInfo& importInfo, const Ydb::Import::ImportFromFsSettings& settings, TString& explain) {
+        THashSet<TString> dstPaths;
+
+        importInfo.Items.reserve(settings.items().size());
+        for (ui32 itemIdx : xrange(settings.items().size())) {
+            const TString& dstPath = settings.items(itemIdx).destination_path();
+            
+            if (!ValidateAndAddDestinationPath(dstPath, dstPaths, explain)) {
+                return false;
+            }
+
+            if (!dstPath) {
+                explain = "destination_path is required for FS import items";
+                return false;
+            }
+
+            const TString& srcPath = settings.items(itemIdx).source_path();
+            if (!srcPath) {
+                explain = "source_path is required for FS import items";
+                return false;
+            }
+
+            auto& item = importInfo.Items.emplace_back(dstPath);
+            // For FS imports, source_path is the full relative path from base_path
+            item.SrcPath = NBackup::NormalizeItemPath(srcPath);
         }
 
         return true;
@@ -414,9 +474,17 @@ private:
         LOG_I("TImport::TTxProgress: Get scheme"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
-
-        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
-        Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+        
+        if (importInfo->Kind == TImportInfo::EKind::S3) {
+            item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
+            Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+        } else {
+            LOG_I("TImport::TTxProgress: Get scheme for FS import is not supported"
+                << ": info# " << importInfo->ToString()
+                << ", item# " << item.ToString(itemIdx));
+            // item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx));
+            // Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+        }
     }
 
     void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
@@ -1110,8 +1178,12 @@ private:
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
-            if (importInfo->Settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+            // Only S3 imports support schema mapping with encryption
+            if (importInfo->Kind == TImportInfo::EKind::S3) {
+                auto settings = importInfo->GetS3Settings();
+                if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
+                    return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                }
             }
         }
 

@@ -1,5 +1,9 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/shutdown/state.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/shutdown/controller.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>

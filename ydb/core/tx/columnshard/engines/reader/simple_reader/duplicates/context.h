@@ -134,10 +134,10 @@ private:
     using TPortionIndex = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Context);
-    YDB_READONLY_DEF(TPortionIndex, RequiredPortions);
-    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
+    TPortionIndex RequiredPortions;
     YDB_READONLY_DEF(TFieldByColumn, Columns);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, SnapshotSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
@@ -146,7 +146,7 @@ private:
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<TFilterAccumulator>& context, TPortionIndex&& portions,
-        std::vector<TIntervalInfo>&& intervals, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
+        const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<ISnapshotSchema>& snapshotSchema,
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
@@ -154,9 +154,9 @@ public:
         : Owner(owner)
         , Context(context)
         , RequiredPortions(std::move(portions))
-        , Intervals(std::move(intervals))
         , Columns(columns)
         , PKSchema(pkSchema)
+        , SnapshotSchema(snapshotSchema)
         , ColumnDataManager(columnDataManager)
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
@@ -166,16 +166,13 @@ public:
         AFL_VERIFY(Owner);
         AFL_VERIFY(Context);
         AFL_VERIFY(RequiredPortions.size());
-        AFL_VERIFY(Intervals.size());
         AFL_VERIFY(Columns.size());
+        AFL_VERIFY(PKSchema);
+        AFL_VERIFY(SnapshotSchema);
         AFL_VERIFY(ColumnDataManager);
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
         AFL_VERIFY(SelfMemory);
-        for (ui64 i = 1; i < Intervals.size(); ++i) {
-            AFL_VERIFY_DEBUG(
-                Intervals[i - 1].GetEnd() < Intervals[i].GetBegin() || Intervals[i - 1].GetEnd().IsEquivalent(Intervals[i].GetBegin()));
-        }
     }
 
     std::set<ui32> GetFetchingColumnIds() const {
@@ -189,7 +186,7 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << '{';
-        sb << "intervals=" << Intervals.size() << ';';
+        sb << "accumulator=" << Context->DebugString() << ';';
         sb << '}';
         return sb;
     }
@@ -199,8 +196,13 @@ public:
                (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
     ui64 GetDataSize() const {
-        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) + Intervals.capacity() * sizeof(TIntervalInfo) +
-               Context->GetDataSize();
+        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) + Context->GetDataSize();
+    }
+
+    TPortionInfo::TConstPtr GetPortion(const ui64 portionId) const {
+        auto* findPortion = RequiredPortions.FindPtr(portionId);
+        AFL_VERIFY(findPortion)("id", portionId)("context", DebugString());
+        return *findPortion;
     }
 };
 

@@ -199,11 +199,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
     std::optional<std::map<std::string, TStatistics>>
     BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, TRelationGraph graph) {
-        Cout << "================================= CREATE =================================\n";
-        graph.DumpGraph(Cout);
-
-        Cout << "================================= REORDER ================================\n";
-        graph.ReorderDFS();
+        Cout << "================================= GRAPH ==================================\n";
         graph.DumpGraph(Cout);
 
         Cout << "================================= PREPARE ================================\n";
@@ -473,6 +469,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         ui64 topologyGenerationRepeats = args.GetArgOrDefault<uint64_t>("gen-n", "1").GetValue();
         ui64 mcmcRepeats = args.GetArgOrDefault<uint64_t>("mcmc-n", "1").GetValue();
         ui64 equiJoinKeysGenerationRepeats = args.GetArgOrDefault<uint64_t>("keys-n", "1").GetValue();
+        bool reorder = args.GetArgOrDefault<uint64_t>("reorder", "1").GetValue() != 0;
 
         std::string topologyName = args.GetStringOrDefault("type", "star");
         auto generateTopology = GetTopology(topologyName);
@@ -540,9 +537,19 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                                                  << "mu=" << mu << "; ";
                                         }
 
+                                        if (args.HasArg("reorder")) {
+                                            Cout << "reorder=" << reorder << "; ";
+                                        }
+
                                         Cout << "state=" << state << "'\n";
 
                                         try {
+                                            if (reorder) {
+                                                Cout << "================================= GRAPH BEFORE REODERING =================\n";
+                                                graph.DumpGraph(Cout);
+                                                graph.ReorderDFS();
+                                            }
+
                                             auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
                                             if (!result) {
                                                 goto stop;

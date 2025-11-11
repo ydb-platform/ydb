@@ -21,6 +21,7 @@ class DynamicConfigGenerator(object):
         grpc_endpoint=None,
         local_binary_path=None,
         host_info_provider=None,
+        enable_modules=False,
         **kwargs
     ):
         self._template = template
@@ -28,11 +29,12 @@ class DynamicConfigGenerator(object):
         self._local_binary_path = local_binary_path or binary_path
         self._output_dir = output_dir
         self._host_info_provider = host_info_provider
-        self._cluster_details = base.ClusterDetailsProvider(template, host_info_provider=self._host_info_provider)
+        self._enable_modules = template.get("enable_modules", enable_modules)
+        self._cluster_details = base.ClusterDetailsProvider(template, host_info_provider=self._host_info_provider, enable_modules=self._enable_modules)
         self._grpc_endpoint = grpc_endpoint
         self.__configure_request = None
         self.__static_config = static.StaticConfigGenerator(
-            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path, **kwargs
+            template, binary_path, output_dir, host_info_provider=host_info_provider, local_binary_path=local_binary_path, enable_modules=self._enable_modules, **kwargs
         )
 
     @property

@@ -274,7 +274,7 @@ def normalize_domain(domain_name):
 
 
 class ClusterDetailsProvider(object):
-    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+    def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False, enable_modules=False):
 
         if not validator:
             validator = validation.default_validator()
@@ -325,6 +325,7 @@ class ClusterDetailsProvider(object):
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
 
+        self._enable_modules = self.__cluster_description.get("enable_modules", enable_modules)
         self._hosts = None
         self._thread_pool = ThreadPoolExecutor(max_workers=8)
 
@@ -418,13 +419,24 @@ class ClusterDetailsProvider(object):
         return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
     def _get_module(self, host_description):
-        if host_description.get("module") is not None:
-            return str(host_description.get("module"))
-        module = host_description.get("location", {}).get("module", None)
+        module = (
+            host_description.get("module") or
+            host_description.get("location", {}).get("module")
+        )
         if module is not None:
             return str(module)
 
-        module_from_provider = self._host_info_provider.get_module(host_description.get("name", host_description.get("host")))
+        hostname = host_description.get("name", host_description.get("host"))
+
+        # module is optional - check if it's enabled
+        if not self._enable_modules:
+            return ""
+
+        # Don't call provider if it's NopHostsInformationProvider
+        if isinstance(self._host_info_provider, walle.NopHostsInformationProvider):
+            return ""
+
+        module_from_provider = self._host_info_provider.get_module(hostname)
         return str(module_from_provider) if module_from_provider else ""
 
     def _collect_drives_info(self, host_description):

@@ -2458,6 +2458,10 @@ public:
     void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr&) {
         YQL_ENSURE(QueryState);
         QueryState->KeepSession = false;
+        {
+            auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Query execution is cancelled because session was requested to be closed.");
+            Send(SelfId(), abort.Release());
+        }
     }
 
     void HandleCleanup(TEvKqp::TEvCloseSessionRequest::TPtr&) {

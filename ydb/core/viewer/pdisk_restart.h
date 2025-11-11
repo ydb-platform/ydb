@@ -103,7 +103,7 @@ public:
                     in: query
                     description: pdisk identifier in format 'node_id-pdisk_id' or 'pdisk_id' if node_id is also specified
                     required: true
-                    type: integer
+                    type: string
                   - name: timeout
                     in: query
                     description: timeout in ms

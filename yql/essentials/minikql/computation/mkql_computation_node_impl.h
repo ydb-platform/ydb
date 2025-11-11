@@ -96,6 +96,7 @@ protected:
     mutable TConstComputationNodePtrVector Dependencies_;
     mutable TComputationExternalNodePtrSet Owned_;
     TComputationExternalNodePtrSet Upvalues_;
+    mutable bool UpvaluesCollected_;
 
     const ui32 ValueIndex_;
     const EValueRepresentation RepresentationKind_;
@@ -193,6 +194,7 @@ private:
     }
 
     TComputationExternalNodePtrSet GetUpvalues() const final {
+        MKQL_ENSURE(this->UpvaluesCollected_, "Upvalues have not been collected yet");
         return this->Upvalues_;
     }
 
@@ -210,7 +212,6 @@ private:
 
     void CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const final {
         this->CollectUpvaluesImpl(upvalues);
-        std::erase_if(upvalues, [this](IComputationExternalNode* uv) { return this->Owned_.find(uv) != this->Owned_.cend(); });
     }
 
     const IComputationNode* GetSource() const final {
@@ -307,10 +308,10 @@ private:
 
     void CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const final {
         this->CollectUpvaluesImpl(upvalues);
-        std::erase_if(upvalues, [this](IComputationExternalNode* uv) { return this->Owned_.find(uv) != this->Owned_.cend(); });
     }
 
     TComputationExternalNodePtrSet GetUpvalues() const final {
+        MKQL_ENSURE(this->UpvaluesCollected_, "Upvalues have not been collected yet");
         return this->Upvalues_;
     }
 
@@ -380,6 +381,7 @@ class TFlowBaseComputationNode: public TRefCountedComputationNode<IFlowInterface
 protected:
     TFlowBaseComputationNode(const IComputationNode* source)
         : Source_(source)
+        , UpvaluesCollected_(false)
     {
     }
 
@@ -472,6 +474,7 @@ private:
     }
 
     TComputationExternalNodePtrSet GetUpvalues() const final {
+        MKQL_ENSURE(this->UpvaluesCollected_, "Upvalues have not been collected yet");
         return this->Upvalues_;
     }
 
@@ -493,8 +496,17 @@ private:
     }
 
     void CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const final {
+        // XXX: If upvalues for the node are already collected,
+        // just enrich the set, given by the caller;..
+        if (this->UpvaluesCollected_) {
+            upvalues.insert(this->Upvalues_.cbegin(), this->Upvalues_.cend());
+            return;
+        }
+        // ... otherwise, recursively collect the upvalue candidates...
         std::for_each(Dependencies_.cbegin(), Dependencies_.cend(), std::bind(&IComputationNode::CollectUpvalues, std::placeholders::_1, std::ref(upvalues)));
+        // ... and filter out the owned nodes.
         std::erase_if(upvalues, [this](IComputationExternalNode* uv) { return this->Owned_.find(uv) != this->Owned_.cend(); });
+        this->UpvaluesCollected_ = true;
     }
 
     void PrepareStageOne() final {
@@ -518,6 +530,7 @@ protected:
     mutable TConstComputationNodePtrVector Dependencies_;
     mutable TComputationExternalNodePtrSet Owned_;
     TComputationExternalNodePtrSet Upvalues_;
+    mutable bool UpvaluesCollected_;
 };
 
 template <typename TDerived>
@@ -868,6 +881,7 @@ protected:
     IComputationNode* const Node_;
     const EValueRepresentation Kind_;
     TComputationExternalNodePtrSet Upvalues_;
+    mutable bool UpvaluesCollected_;
 };
 
 template <typename TDerived>
@@ -912,7 +926,15 @@ private:
     }
 
     void CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const final {
+        // XXX: If upvalues for the node are already collected,
+        // just enrich the set, given by the caller;..
+        if (this->UpvaluesCollected_) {
+            upvalues.insert(this->Upvalues_.cbegin(), this->Upvalues_.cend());
+            return;
+        }
+        // ... otherwise, recursively collect the upvalues.
         Node_->CollectUpvalues(upvalues);
+        this->UpvaluesCollected_ = true;
     }
 
     ui32 GetDependentWeight() const final {
@@ -924,6 +946,7 @@ private:
     }
 
     TComputationExternalNodePtrSet GetUpvalues() const final {
+        MKQL_ENSURE(this->UpvaluesCollected_, "Upvalues have not been collected yet");
         return this->Upvalues_;
     }
 
@@ -961,6 +984,7 @@ protected:
     IComputationNode* const Right_;
     const EValueRepresentation Kind_;
     TComputationExternalNodePtrSet Upvalues_;
+    mutable bool UpvaluesCollected_;
 };
 
 template <typename TDerived>
@@ -1026,8 +1050,16 @@ protected:
     }
 
     void CollectUpvalues(TComputationExternalNodePtrSet& upvalues) const final {
+        // XXX: If upvalues for the node are already collected,
+        // just enrich the set, given by the caller;..
+        if (this->UpvaluesCollected_) {
+            upvalues.insert(this->Upvalues_.cbegin(), this->Upvalues_.cend());
+            return;
+        }
+        // ... otherwise, recursively collect the upvalues.
         Left_->CollectUpvalues(upvalues);
         Right_->CollectUpvalues(upvalues);
+        this->UpvaluesCollected_ = true;
     }
 
     ui32 GetDependentWeight() const final {
@@ -1039,6 +1071,7 @@ protected:
     }
 
     TComputationExternalNodePtrSet GetUpvalues() const final {
+        MKQL_ENSURE(this->UpvaluesCollected_, "Upvalues have not been collected yet");
         return this->Upvalues_;
     }
 

@@ -30,12 +30,12 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
 
     log(f'Workdir: {workdir}')
     log('Checkout base commit...')
-    exec(f'git checkout {opts.base_commit}')
+    exec(f'git checkout {base_commit}')
     log('Build graph for base commit...')
     exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
 
     log('Checkout head commit...')
-    exec(f'git checkout {opts.head_commit}')
+    exec(f'git checkout {head_commit}')
     log('Build graph for head commit...')
     exec(f'{ya_make_command} ydb -k --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 

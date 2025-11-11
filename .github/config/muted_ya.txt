@@ -1,3 +1,4 @@
+ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage GroupLayoutSanitizer.StressMirror3of4
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
@@ -33,6 +34,7 @@ ydb/library/yql/dq/actors/compute/ut TAsyncComputeActorTest.InputTransformMultic
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestarts
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_50k_100times_50tx
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Read_Big_Messages_1
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Read_Gigant_Messages_2
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1

@@ -57,6 +57,19 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     TVector<TExprBase> effects;
     effects.emplace_back(tableDelete);
 
+    const bool isSink = NeedSinks(table, kqpCtx);
+    const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
+        && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type == TIndexDescription::EType::GlobalSync
+                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+        });
+
+    if (isSink && canUseStreamIndex) {
+        return Build<TExprList>(ctx, del.Pos())
+            .Add(effects)
+            .Done();
+    }
+
     for (const auto& [tableNode, indexDesc] : indexes) {
         THashSet<TStringBuf> indexTableColumnsSet;
         TVector<TStringBuf> indexTableColumns;

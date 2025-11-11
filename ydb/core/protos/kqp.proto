@@ -835,6 +835,7 @@ message TKqpTableSinkIndexSettings {
     repeated TKqpColumnMetadataProto Columns = 3;
     optional bool IsUniq = 4;
     repeated uint32 WriteIndexes = 5;
+    optional uint32 KeyPrefixSize = 6;
 }
 
 message TKqpTableSinkSettings {

@@ -26,6 +26,7 @@ SRCS(
     kqp_join_order_ut.cpp
     kqp_join_topology_generator.cpp
     kqp_join_topology_ut.cpp
+    kqp_benches_ut.cpp
 )
 
 PEERDIR(

@@ -246,7 +246,7 @@ public:
                 TStringBuilder sb;
                 sb << "node_" << node << "_counters_" << i << ".json";
                 counterBlock->Setname(sb);
-                block->Setcontent(Counters[node][i]);
+                counterBlock->Setcontent(Counters[node][i]);
             }
         }
         operation.mutable_result()->PackFrom(result);

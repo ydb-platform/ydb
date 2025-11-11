@@ -37,8 +37,8 @@ void TCommandClusterStateFetch::Config(TConfig& config) {
         "If set to zero or omitted, only a single collection is done.")
     .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
-    config.Opts->AddLongOption('f', "filename", "File name to save the results\n")
-        .RequiredArgument("[out.tar.gz]").StoreResult(&FileName);
+    config.Opts->AddLongOption('f', "filename", "File name to save the results in .tar.bz2 format\n")
+        .RequiredArgument("[out.tar.bz2]").StoreResult(&FileName);
     config.AllowEmptyDatabase = true;
 }
 
@@ -47,44 +47,55 @@ void TCommandClusterStateFetch::Parse(TConfig& config) {
     ParseOutputFormats();
 }
 
-struct TARFileHeader {
-    char filename[100];
-    char padding[24];
-    char fileSize[12];
-    char lastModification[12];
-    char checksum[8];
-    char padding2[356];
+struct TARFile {
+    struct TARFileHeader {
+        char filename[100];
+        char padding[24];
+        char fileSize[12];
+        char lastModification[12];
+        char checksum[8];
+        char padding2[356];
 
-    TARFileHeader(TString name, ui32 size) {
-        memset(this, 0, sizeof(TARFileHeader));
-        strcpy(filename, name.c_str());
-        strcpy(fileSize, ToOct(size).c_str());
-        CalcChecksum();
-    }
-
-    std::string ToOct(ui64 n){
-        std::string result;
-        std::stringstream ss;
-        ss << std::oct << n;
-        ss >> result;
-        return result;
-    }
-
-    void CalcChecksum() {
-        memset(checksum, ' ', 8);
-        ui64 unsignedSum = 0;
-        for (ui32 i : xrange(sizeof(TARFileHeader))) {
-            unsignedSum += ((unsigned char*) this)[i];
+        TARFileHeader(const TString& name, ui32 size) {
+            memset(this, 0, sizeof(TARFileHeader));
+            strcpy(filename, name.c_str());
+            strcpy(fileSize, ToOct(size).c_str());
+            CalcChecksum();
         }
-        strcpy(checksum, ToOct(unsignedSum).c_str());
-    }
 
-    void ToStream(IOutputStream& out) {
-        for (ui32 i : xrange(sizeof(TARFileHeader))) {
-            out.Write(((char*) this)[i]);
+        std::string ToOct(ui64 n){
+            std::string result;
+            std::stringstream ss;
+            ss << std::oct << n;
+            ss >> result;
+            return result;
         }
-    }
 
+        void CalcChecksum() {
+            memset(checksum, ' ', 8);
+            ui64 unsignedSum = 0;
+            for (ui32 i : xrange(sizeof(TARFileHeader))) {
+                unsignedSum += ((unsigned char*) this)[i];
+            }
+            strcpy(checksum, ToOct(unsignedSum).c_str());
+        }
+
+        void ToStream(IOutputStream& out) {
+            for (ui32 i : xrange(sizeof(TARFileHeader))) {
+                out.Write(((char*) this)[i]);
+            }
+        }
+    };
+
+    static void ToStream(IOutputStream& out, const TString& name, const TString& content) {
+        TARFileHeader h(name, content.size());
+        h.ToStream(out);
+        out << content;
+        size_t paddingBytes = (512 - (content.size() % 512)) % 512;
+        TString s;
+        s.resize(paddingBytes);
+        out << s;
+    }
 };
 
 int TCommandClusterStateFetch::Run(TConfig& config) {
@@ -100,18 +111,13 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
     TBZipCompress compress(&out);
     TString r = proto.Getresult();
     if (!r.empty()) {
-        TARFileHeader h("result.json", r.size());
-        h.ToStream(compress);
-        compress << r;
+        TARFile::ToStream(compress, "result.json", r);
     }
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
-        auto& content = block.Getcontent();
-        TARFileHeader h(block.Getname(), content.size());
-        h.ToStream(compress);
-        compress << content;
+        TARFile::ToStream(compress, block.Getname(), block.Getcontent());
     }
-
+    TARFile::ToStream(compress, "", "");
     return EXIT_SUCCESS;
 }
 

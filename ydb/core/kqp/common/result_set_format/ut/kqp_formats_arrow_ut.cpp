@@ -2909,7 +2909,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
     }
 
     // Pg types
-    // They are converted using NYql::NCommon::PgValueToNativeText, so testing of all types is not required
+    // They are converted using NYql::NCommon::PgValueToNativeText, so testing all types is not required
     Y_UNIT_TEST(PgType_Bool) {
         TestPgTypeConversion<BOOLOID>();
     }

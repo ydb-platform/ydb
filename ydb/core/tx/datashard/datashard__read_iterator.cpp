@@ -2201,7 +2201,8 @@ public:
 
         if (!Result) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                << " TReadOperation::Execute() finished without Result, aborting");
+                << " TReadOperation::Execute() finished without Result, aborting"
+                << TraceIdSuffix(&request->ReadSpan));
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, TStringBuilder()
                 << "Iterator aborted"
@@ -2226,7 +2227,8 @@ public:
             record.SetReadId(state.ReadId.ReadId);
             record.SetSeqNo(state.SeqNo + 1);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                << " TReadOperation::Execute() finished with error, aborting: " << record.DebugString());
+                << " TReadOperation::Execute() finished with error, aborting: " << record.DebugString()
+                << TraceIdSuffix(&request->ReadSpan));
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
 
             request->ReadSpan.EndError("Finished with error");
@@ -2243,7 +2245,8 @@ public:
             << ", quota bytes left# " << (state.Quota.Bytes - Reader->GetBytesRead())
             << ", hasUnreadQueries# " << Reader->HasUnreadQueries()
             << ", total queries# " << Reader->GetQueriesCount()
-            << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
+            << ", firstUnprocessed# " << state.FirstUnprocessedQuery
+            << TraceIdSuffix(&request->ReadSpan));
 
         // Note: we only send useful non-empty results
         if (!Reader->FillResult(*Result, state)) {
@@ -2269,7 +2272,8 @@ public:
         auto* request = state.Request;
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Complete read# " << state.ReadId
-            << " after executionsCount# " << ExecuteCount);
+            << " after executionsCount# " << ExecuteCount
+            << TraceIdSuffix(request ? &request->ReadSpan : nullptr));
 
         SendResult(ctx);
 
@@ -2290,11 +2294,13 @@ public:
             } else {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
-                    << " read iterator# " << state.ReadId << " exhausted");
+                    << " read iterator# " << state.ReadId << " exhausted"
+                    << TraceIdSuffix(request ? &request->ReadSpan : nullptr));
             }
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                << " finished in read");
+                << " finished in read"
+                << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
 
             request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
@@ -3125,7 +3131,8 @@ public:
                 addLock->SetPathId(state.PathId.LocalPathId);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                    << " TTxReadContinue::Execute() found broken lock# " << state.Lock->GetLockId());
+                    << " TTxReadContinue::Execute() found broken lock# " << state.Lock->GetLockId()
+                    << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
 
                 // A broken write lock means we are reading inconsistent results and must abort
                 if (state.Lock->IsWriteLock()) {
@@ -3151,7 +3158,8 @@ public:
 
         if (!Result) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                << " TTxReadContinue::Execute() finished without Result, aborting");
+                << " TTxReadContinue::Execute() finished without Result, aborting"
+                << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
 
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
@@ -3169,7 +3177,8 @@ public:
             record.SetSeqNo(state.SeqNo + 1);
             record.SetReadId(state.ReadId.ReadId);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString());
+                << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString()
+                << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
             Self->SendImmediateReadResult(state.ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Finished with error");
@@ -3186,7 +3195,8 @@ public:
             << ", quota bytes left# " << (state.Quota.Bytes - Reader->GetBytesRead())
             << ", hasUnreadQueries# " << Reader->HasUnreadQueries()
             << ", total queries# " << Reader->GetQueriesCount()
-            << ", firstUnprocessed# " << state.FirstUnprocessedQuery);
+            << ", firstUnprocessed# " << state.FirstUnprocessedQuery
+            << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
 
         // Note: we only send useful non-empty results
         bool useful = Reader->FillResult(*Result, state);
@@ -3206,11 +3216,13 @@ public:
             } else if (!wasExhausted) {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
-                    << " read iterator# " << state.ReadId << " exhausted");
+                    << " read iterator# " << state.ReadId << " exhausted"
+                    << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
             }
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << state.ReadId
-                << " finished in ReadContinue");
+                << " finished in ReadContinue"
+                << TraceIdSuffix(state.Request ? &state.Request->ReadSpan : nullptr));
             
             state.Request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);

@@ -855,6 +855,10 @@ public:
         return OperationSpan.GetTraceId();
     }
 
+    TString TraceIdForLog() const {
+        return TraceIdSuffix(OperationSpan);
+    }
+
     /**
      * Called to attempt migrating volatile operations to a newer generation
      *

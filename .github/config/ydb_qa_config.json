@@ -29,6 +29,7 @@
   "variables": {
   },
   "flags": {
-      "enable_statistics": true
+      "enable_statistics": true,
+      "enable_backup_write": false
   }
 }

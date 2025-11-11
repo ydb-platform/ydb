@@ -388,6 +388,10 @@ public:
         }
     }
 
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion;
+    }
+
     ui64 GetSchemaVersionVerified() const {
         AFL_VERIFY(SchemaVersion);
         return SchemaVersion;

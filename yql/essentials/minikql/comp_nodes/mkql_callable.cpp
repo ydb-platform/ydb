@@ -26,11 +26,15 @@ private:
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
-            Upvalues.SetUpvalues(CompCtx);
-
             for (const auto node : ArgNodes) {
                 node->SetValue(CompCtx, NUdf::TUnboxedValuePod(*args++));
             }
+
+            if (!Upvalues) {
+                return ResultNode->GetValue(CompCtx);
+            }
+
+            Upvalues.SetUpvalues(CompCtx);
 
             const auto result = ResultNode->GetValue(CompCtx);
 
@@ -61,6 +65,10 @@ private:
 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override {
+            if (!Upvalues) {
+                return RunFunc(Ctx, args);
+            }
+
             Upvalues.SetUpvalues(*Ctx);
 
             const auto result = RunFunc(Ctx, args);

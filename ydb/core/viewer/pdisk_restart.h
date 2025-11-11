@@ -9,27 +9,12 @@ namespace NKikimr::NViewer {
 using namespace NActors;
 
 class TJsonPDiskRestart : public TViewerPipeClient {
-    enum EEv {
-        EvRetryNodeRequest = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-        EvEnd
-    };
-
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-    struct TEvRetryNodeRequest : NActors::TEventLocal<TEvRetryNodeRequest, EvRetryNodeRequest> {
-        TEvRetryNodeRequest()
-        {}
-    };
-
 protected:
     using TThis = TJsonPDiskRestart;
     using TBase = TViewerPipeClient;
     using TBase::ReplyAndPassAway;
 
     TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> Response;
-
-    ui32 NodeId = 0;
-    ui32 PDiskId = 0;
     bool Force = false;
 
 public:
@@ -38,25 +23,30 @@ public:
     {}
 
     void Bootstrap() override {
-        ui32 nodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
-        ui32 pDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
-        bool force = FromStringWithDefault<bool>(Params.Get("force"), false);
-
-        if (pDiskId == Max<ui32>()) {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"));
-        }
         if (!PostData.IsDefined()) {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
-        if (force && !Viewer->CheckAccessAdministration(Event->Get())) {
-            return ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+        if (!Viewer->CheckAccessMonitoring(GetRequest())) {
+            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
-
-        if (!nodeId) {
-            nodeId = TlsActivationContext->ActorSystem()->NodeId;
+        ui32 nodeId = 0;
+        ui32 pDiskId = 0;
+        TVector<TString> parts = StringSplitter(Params.Get("pdisk_id")).Split('-').SkipEmpty();
+        if (parts.size() > 2) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'pdisk_id' parameter"));
         }
-
-        Response = RequestBSControllerPDiskRestart(nodeId, pDiskId, force);
+        if (parts.size() == 2) {
+            nodeId = FromStringWithDefault<ui32>(parts[0]);
+            pDiskId = FromStringWithDefault<ui32>(parts[1]);
+        } else {
+            pDiskId = FromStringWithDefault<ui32>(parts[0]);
+            nodeId = FromStringWithDefault<ui32>(Params.Get("node_id"));
+        }
+        if (nodeId == 0 || pDiskId == 0) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'pdisk_id' parameter"));
+        }
+        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
+        Response = RequestBSControllerPDiskRestart(nodeId, pDiskId, Force);
 
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
@@ -75,17 +65,17 @@ public:
     }
 
     void ReplyAndPassAway() override {
-        NJson::TJsonValue json;
         if (Response.IsOk()) {
+            NJson::TJsonValue json;
             if (Response->Record.GetResponse().GetSuccess()) {
                 json["result"] = true;
             } else {
                 json["result"] = false;
                 TString error;
                 bool forceRetryPossible = false;
-                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
+                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), GetRequest(), error, forceRetryPossible);
                 json["error"] = error;
-                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
+                if (!Force && forceRetryPossible) {
                     json["forceRetryPossible"] = true;
                 }
             }
@@ -108,10 +98,10 @@ public:
                     in: query
                     description: node identifier
                     type: integer
-                    required: true
+                    required: false
                   - name: pdisk_id
                     in: query
-                    description: pdisk identifier
+                    description: pdisk identifier in format 'node_id-pdisk_id' or 'pdisk_id' if node_id is also specified
                     required: true
                     type: integer
                   - name: timeout

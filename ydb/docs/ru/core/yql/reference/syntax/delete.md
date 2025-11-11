@@ -39,11 +39,3 @@ $to_delete = (
 DELETE FROM my_table ON
 SELECT * FROM $to_delete;
 ```
-
-{% if feature_batch_operations %}
-
-## См. также
-
-* [BATCH DELETE](batch-delete.md)
-
-{% endif %}

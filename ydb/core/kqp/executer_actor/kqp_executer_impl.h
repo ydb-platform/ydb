@@ -49,6 +49,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/async/wait_for_event.h>
+#include <ydb/core/util/stlog.h>
 
 #include <util/generic/size_literals.h>
 
@@ -58,13 +59,23 @@ LWTRACE_USING(KQP_PROVIDER);
 namespace NKikimr {
 namespace NKqp {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+// Macro to automatically include common fields in all executer actor logs
+// Usage: LOG_X("message", (Field1, Value1), ...) where X is T, D, I, N, W, E, or C
+// The common fields (ActorId, TxId, Ctx) are added automatically before custom fields
+#define KQP_EXEC_LOG(PRIO, MARKER, MESSAGE, ...)                                           \
+    STLOG(PRIO, NKikimrServices::KQP_EXECUTER, MARKER, MESSAGE,                           \
+        (ActorId, SelfId()),                                                              \
+        (TxId, TxId),                                                                     \
+        (Ctx, *GetUserRequestContext())                                                   \
+        __VA_OPT__(,) __VA_ARGS__)
+
+#define LOG_T(MESSAGE, ...) KQP_EXEC_LOG(PRI_TRACE, KQP_EXEC_T, MESSAGE, ##__VA_ARGS__)
+#define LOG_D(MESSAGE, ...) KQP_EXEC_LOG(PRI_DEBUG, KQP_EXEC_D, MESSAGE, ##__VA_ARGS__)
+#define LOG_I(MESSAGE, ...) KQP_EXEC_LOG(PRI_INFO,  KQP_EXEC_I, MESSAGE, ##__VA_ARGS__)
+#define LOG_N(MESSAGE, ...) KQP_EXEC_LOG(PRI_NOTICE, KQP_EXEC_N, MESSAGE, ##__VA_ARGS__)
+#define LOG_W(MESSAGE, ...) KQP_EXEC_LOG(PRI_WARN,  KQP_EXEC_W, MESSAGE, ##__VA_ARGS__)
+#define LOG_E(MESSAGE, ...) KQP_EXEC_LOG(PRI_ERROR, KQP_EXEC_E, MESSAGE, ##__VA_ARGS__)
+#define LOG_C(MESSAGE, ...) KQP_EXEC_LOG(PRI_CRIT,  KQP_EXEC_C, MESSAGE, ##__VA_ARGS__)
 
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
@@ -180,7 +191,7 @@ public:
             CancelAt = StartTime + *Request.CancelAfter;
         }
 
-        LOG_T("Bootstrap done, become ReadyState");
+        LOG_T("Bootstrap done", (NextState, "ReadyState"));
     }
 
     TActorId SelfId() {
@@ -238,8 +249,9 @@ protected:
                 ExecuterStateSpan.EndError(Ydb::StatusIds_StatusCode_Name(reply.Status));
             }
 
-            LOG_W("Shards nodes resolve failed, status: " << Ydb::StatusIds_StatusCode_Name(reply.Status)
-                << ", issues: " << reply.Issues.ToString());
+            LOG_W("Shards nodes resolve failed",
+                (Status, Ydb::StatusIds_StatusCode_Name(reply.Status)),
+                (Issues, reply.Issues.ToString()));
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return false;
         }
@@ -247,7 +259,9 @@ protected:
             ExecuterStateSpan.EndOk();
         }
 
-        LOG_D("Shards nodes resolved, success: " << reply.ShardNodes.size() << ", failed: " << reply.Unresolved);
+        LOG_D("Shards nodes resolved",
+            (SuccessNodes, reply.ShardNodes.size()),
+            (FailedNodes, reply.Unresolved));
 
         TasksGraph.GetMeta().ShardIdToNodeId = std::move(reply.ShardNodes);
         for (const auto& [shardId, nodeId] : TasksGraph.GetMeta().ShardIdToNodeId) {
@@ -270,7 +284,7 @@ protected:
                        << "(total " << pair.second.size() << ") " << Endl;
                 }
             }
-            LOG_D(sb);
+            LOG_D("Shards on nodes dump", (Details, sb));
         }
         return true;
     }
@@ -317,9 +331,10 @@ protected:
             txResult.ColumnOrder, txResult.ColumnHints);
 
         // TODO: Calculate rows/bytes count for the arrow format of result set
-        LOG_D("Send TEvStreamData to "
-            << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
-            << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
+        LOG_D("Send TEvStreamData",
+            (Recipient, Target),
+            (SeqNo, streamEv->Record.GetSeqNo()),
+            (Rows, streamEv->Record.GetResultSet().rows().size()));
 
         SentResultIndexes.insert(resultIndex);
         this->Send(Target, streamEv.Release());
@@ -385,8 +400,10 @@ protected:
                 ui64 rowCount = batch.RowCount();
                 ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
-                LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
-                    << ", nRows: " << rowCount);
+                LOG_D("Staging TEvStreamData",
+                    (Recipient, Target),
+                    (SeqNo, computeData.Proto.GetSeqNo()),
+                    (Rows, rowCount));
             }
 
             return;
@@ -404,12 +421,17 @@ protected:
         Stats->ResultBytes += batch.Size();
         Stats->ResultRows += batch.RowCount();
 
-        LOG_T("Got result, channelId: " << channel.Id
-            << ", inputIndex: " << channel.DstInputIndex << ", from: " << ev->Sender
-            << ", finished: " << channelData.GetFinished());
+        LOG_T("Got result",
+            (ChannelId, channel.Id),
+            (InputIndex, channel.DstInputIndex),
+            (Sender, ev->Sender),
+            (Finished, channelData.GetFinished()));
 
         ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
-        LOG_T("Send ack to channelId: " << channel.Id << ", seqNo: " << record.GetSeqNo() << ", to: " << ev->Sender);
+        LOG_T("Send channel ack",
+            (ChannelId, channel.Id),
+            (SeqNo, record.GetSeqNo()),
+            (Recipient, ev->Sender));
 
         auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
         ackEv->Record.SetSeqNo(record.GetSeqNo());
@@ -437,12 +459,12 @@ protected:
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         i64 freeSpace = ev->Get()->Record.GetFreeSpace();
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId
-            << ", send ack to channelId: " << channelId
-            << ", seqNo: " << seqNo
-            << ", enough: " << ev->Get()->Record.GetEnough()
-            << ", freeSpace: " << freeSpace
-            << ", to: " << channelComputeActorId);
+        LOG_D("Send channel ack",
+            (ChannelId, channelId),
+            (SeqNo, seqNo),
+            (Enough, ev->Get()->Record.GetEnough()),
+            (FreeSpace, freeSpace),
+            (Recipient, channelComputeActorId));
 
         auto ackEv = MakeHolder<NYql::NDq::TEvDqCompute::TEvChannelDataAck>();
         ackEv->Record.SetSeqNo(seqNo);
@@ -457,11 +479,12 @@ protected:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
 
-        LOG_D("ActorState: " << CurrentStateFuncName()
-            << ", got execution state from compute actor: " << computeActor
-            << ", task: " << taskId
-            << ", state: " << NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())
-            << ", stats: " << state.GetStats());
+        LOG_D("Received compute state",
+            (ActorState, CurrentStateFuncName()),
+            (ComputeActor, computeActor),
+            (TaskId, taskId),
+            (State, NYql::NDqProto::EComputeState_Name((NYql::NDqProto::EComputeState) state.GetState())),
+            (StatsText, state.GetStats()));
 
         YQL_ENSURE(Stats);
 
@@ -647,7 +670,9 @@ protected:
 
         if (IsDebugLogEnabled()) {
             for (auto& tx : Request.Transactions) {
-                LOG_D("Executing physical tx, type: " << (ui32) tx.Body->GetType() << ", stages: " << tx.Body->StagesSize());
+                LOG_D("Executing physical tx",
+                    (TxType, (ui32)tx.Body->GetType()),
+                    (Stages, tx.Body->StagesSize()));
             }
         }
 
@@ -661,7 +686,7 @@ protected:
         auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
-        LOG_T("Got request, become WaitResolveState");
+        LOG_T("Got request", (NextState, "WaitResolveState"));
         this->Become(&TDerived::WaitResolveState);
 
         auto now = TAppData::TimeProvider->Now();
@@ -693,7 +718,7 @@ protected:
                     sb << "CA " << ca.first << ", ";
                 }
             }
-            LOG_D(sb);
+            LOG_D("Pending execution items", (Details, sb));
         }
 
         return false;
@@ -713,7 +738,10 @@ protected:
             case TEvKqpNode::TEvStartKqpTasksRequest::EventType: {
                 switch (reason) {
                     case TEvents::TEvUndelivered::EReason::ReasonActorUnknown: {
-                        LOG_D("Schedule a retry by ActorUnknown reason, nodeId:" << ev->Sender.NodeId() << " requestId: " << ev->Cookie);
+                        LOG_D("Schedule retry for StartKqpTasksRequest",
+                            (Reason, "ActorUnknown"),
+                            (NodeId, ev->Sender.NodeId()),
+                            (RequestId, ev->Cookie));
                         this->Schedule(TDuration::MilliSeconds(Planner->GetCurrentRetryDelay(ev->Cookie)), new typename TEvPrivate::TEvRetry(ev->Cookie, ev->Sender));
                         return;
                     }
@@ -731,7 +759,9 @@ protected:
                 }
             }
             default: {
-                LOG_E("Event lost, type: " << eventType << ", reason: " << reason);
+                LOG_E("Event lost",
+                    (EventType, eventType),
+                    (Reason, reason));
             }
         }
     }
@@ -747,7 +777,7 @@ protected:
 
     void HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         auto nodeId = ev->Get()->NodeId;
-        LOG_N("Disconnected node " << nodeId);
+        LOG_N("Node disconnected", (NodeId, nodeId));
 
         if (Planner) {
             for (auto computeActor : Planner->GetPendingComputeActors()) {
@@ -772,8 +802,9 @@ protected:
             auto reason = record.GetNotStartedTasks()[0].GetReason();
             auto& message = record.GetNotStartedTasks()[0].GetMessage();
 
-            LOG_E("Stop executing, reason: " << NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)
-                << ", message: " << message);
+            LOG_E("Stop executing",
+                (Reason, NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)),
+                (Message, message));
 
             switch (reason) {
                 case NKikimrKqp::TEvStartKqpTasksResponse::NOT_ENOUGH_MEMORY: {
@@ -831,7 +862,9 @@ protected:
             auto& task = TasksGraph.GetTask(taskId);
 
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
-            LOG_D("Executing task: " << taskId << " on compute actor: " << computeActorId);
+            LOG_D("Executing task",
+                (TaskId, taskId),
+                (ComputeActor, computeActorId));
             YQL_ENSURE(Planner);
             bool ack = Planner->AcknowledgeCA(taskId, computeActorId, nullptr);
             if (ack) {
@@ -853,8 +886,9 @@ protected:
             NYql::NDqProto::StatusIds::StatusCode statusCode,
             const NYql::TIssues& issues,
             const bool sessionSender) {
-        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)
-            << ", message: " << issues.ToOneLineString());
+        LOG_D("Abort execution received",
+            (Status, NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)),
+            (Issues, issues.ToOneLineString()));
         auto ydbStatusCode = NYql::NDq::DqStatusToYdbStatus(statusCode);
         if (ydbStatusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
@@ -895,14 +929,18 @@ protected:
         if (Request.RlPath) {
             auto actorId = ReportToRl(ru, Database, UserToken->GetSerializedToken(), Request.RlPath.GetRef());
 
-            LOG_D("Resource usage for last stat interval: " << consumption
-                  << " ru: " << ru << " rl path: " << Request.RlPath.GetRef()
-                  << " rl actor: " << actorId
-                  << " force flag: " << force);
+            LOG_D("Resource usage stats",
+                (Consumption, TStringBuilder() << consumption),
+                (RequestUnits, ru),
+                (RlPath, Request.RlPath.GetRef()),
+                (RlActor, actorId),
+                (ForceUpdate, force));
         } else {
-            LOG_D("Resource usage for last stat interval: " << consumption
-                  << " ru: " << ru << " rate limiter was not found"
-                  << " force flag: " << force);
+            LOG_D("Resource usage stats",
+                (Consumption, TStringBuilder() << consumption),
+                (RequestUnits, ru),
+                (RateLimiterFound, false),
+                (ForceUpdate, force));
         }
     }
 
@@ -968,13 +1006,17 @@ protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
         for (const auto& task : this->TasksGraph.GetTasks()) {
             if (task.ComputeActorId && !task.Meta.Completed) {
-                LOG_I("aborting compute actor execution, message: " << issues.ToOneLineString()
-                    << ", compute actor: " << task.ComputeActorId << ", task: " << task.Id);
+                LOG_I("Abort compute actor execution",
+                    (Issues, issues.ToOneLineString()),
+                    (ComputeActor, task.ComputeActorId),
+                    (TaskId, task.Id));
 
                 auto ev = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDq::YdbStatusToDqStatus(code), issues);
                 this->Send(task.ComputeActorId, ev.Release());
             } else {
-                LOG_I("task: " << task.Id << ", does not have the CA id yet or is already complete");
+                LOG_I("Skip compute actor termination",
+                    (TaskId, task.Id),
+                    (Reason, "Compute actor not assigned or task completed"));
             }
         }
     }
@@ -986,16 +1028,21 @@ protected:
 protected:
     void UnexpectedEvent(const TString& state, ui32 eventType) {
         if (eventType == TEvents::TEvPoison::EventType) {
-            LOG_D("TKqpExecuter, TEvPoison event at state:" << state << ", selfID: " << this->SelfId());
+            LOG_D("Received TEvPoison",
+                (State, state),
+                (SelfId, this->SelfId()));
             InternalError(TStringBuilder() << "TKqpExecuter got poisoned, state: " << state);
         } else {
-            LOG_E("TKqpExecuter, unexpected event: " << eventType << ", at state:" << state << ", selfID: " << this->SelfId());
+            LOG_E("Unexpected event",
+                (EventType, eventType),
+                (State, state),
+                (SelfId, this->SelfId()));
             InternalError(TStringBuilder() << "Unexpected event at TKqpExecuter, state: " << state << ", event: " << eventType);
         }
     }
 
     void InternalError(const NYql::TIssues& issues) {
-        LOG_E(issues.ToOneLineString());
+        LOG_E("Internal error", (Issues, issues.ToOneLineString()));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, "Internal error while executing transaction.");
         for (const NYql::TIssue& i : issues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -1008,14 +1055,16 @@ protected:
     }
 
     void ReplyUnavailable(const TString& message) {
-        LOG_E("UNAVAILABLE: " << message);
+        LOG_E("Reply unavailable", (Message, message));
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
         issue.AddSubIssue(new NYql::TIssue(message));
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, issue);
     }
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
-        LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
+        LOG_E("Runtime error",
+            (Status, Ydb::StatusIds_StatusCode_Name(code)),
+            (Issues, issues.ToOneLineString()));
         ReplyErrorAndDie(code, issues);
     }
 
@@ -1033,7 +1082,9 @@ protected:
 
     void TimeoutError(bool sessionSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
-            LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
+            const TString backtrace = TBackTrace().PrintToString();
+            LOG_E("Timeout after reply",
+                (Backtrace, backtrace));
             return;
         }
 
@@ -1046,7 +1097,9 @@ protected:
 
         AlreadyReplied = true;
 
-        LOG_E("Abort execution: " << NYql::NDqProto::StatusIds_StatusCode_Name(status) << ", " << issues.ToOneLineString());
+        LOG_E("Abort execution",
+            (Status, NYql::NDqProto::StatusIds_StatusCode_Name(status)),
+            (Issues, issues.ToOneLineString()));
         if (ExecuterSpan) {
             ExecuterSpan.EndError(TStringBuilder() << NYql::NDqProto::StatusIds_StatusCode_Name(status));
         }
@@ -1060,7 +1113,7 @@ protected:
             this->Send(Target, abortEv.Release());
         }
 
-        LOG_E("Sending timeout response to: " << Target);
+        LOG_E("Sending timeout response", (Recipient, Target));
 
         // Pass away immediately, since we already sent response - don't wait for stats.
         this->PassAway();
@@ -1070,7 +1123,9 @@ protected:
         google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* issues)
     {
         if (AlreadyReplied) {
-            LOG_E("Error when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
+            const TString backtrace = TBackTrace().PrintToString();
+            LOG_E("Reply error after response sent",
+                (Backtrace, backtrace));
             return;
         }
 
@@ -1084,8 +1139,9 @@ protected:
             response.MutableIssues()->Swap(issues);
         }
 
-        LOG_T("ReplyErrorAndDie. Response: " << response.DebugString()
-            << ", to ActorId: " << Target);
+        LOG_T("ReplyErrorAndDie",
+            (Response, response.DebugString()),
+            (TargetActor, Target));
 
         if constexpr (ExecType == EExecType::Data) {
             if (status != Ydb::StatusIds::SUCCESS) {
@@ -1112,7 +1168,10 @@ protected:
     bool ValidateTaskSize(const TCollection& tasks) {
         for (const auto& task : tasks) {
             if (ui32 size = task->ByteSize(); size > MaxTaskSize) {
-                LOG_E("Abort execution. Task #" << task->GetId() << " size is too big: " << size << " > " << MaxTaskSize);
+                LOG_E("Task size exceeded",
+                    (TaskId, task->GetId()),
+                    (Size, size),
+                    (MaxSize, MaxTaskSize));
                 ReplyErrorAndDie(Ydb::StatusIds::ABORTED,
                     MakeIssue(NKikimrIssues::TIssuesIds::SHARD_PROGRAM_SIZE_EXCEEDED, TStringBuilder() <<
                         "Datashard program size limit exceeded (" << size << " > " << MaxTaskSize << ")"));
@@ -1176,7 +1235,8 @@ protected:
             if (Stats->CollectStatsByLongTasks) {
                 const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                 if (!txPlansWithStats.empty()) {
-                    LOG_I("Full stats: " << response.GetResult().GetStats());
+                    LOG_I("Full stats collected",
+                        (StatsText, response.GetResult().GetStats().ShortDebugString()));
                 }
             }
 
@@ -1206,7 +1266,9 @@ protected:
         }
 
         for (auto channelPair: ResultChannelProxies) {
-            LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
+            LOG_D("Terminate result channel",
+                (ChannelId, channelPair.first),
+                (ProxyActor, channelPair.second->SelfId()));
 
             TAutoPtr<IEventHandle> ev = new IEventHandle(
                 channelPair.second->SelfId(), SelfId(), new TEvents::TEvPoison
@@ -1214,7 +1276,7 @@ protected:
             channelPair.second->Receive(ev);
         }
 
-        LOG_D("terminate execution.");
+        LOG_D("Terminate execution");
         if (KqpShardsResolverId) {
             this->Send(KqpShardsResolverId, new TEvents::TEvPoison);
         }
@@ -1228,7 +1290,7 @@ protected:
         }
 
         this->Send(this->SelfId(), new TEvents::TEvPoison);
-        LOG_T("Terminate, become ZombieState");
+        LOG_T("Terminate", (NextState, "ZombieState"));
         this->Become(&TKqpExecuterBase::ZombieState);
     }
 

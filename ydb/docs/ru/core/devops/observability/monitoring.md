@@ -69,7 +69,7 @@ http://<ydb-server-address>:<ydb-port>/counters/counters=<servicename>/prometheu
           targets:
           - "localhost:8765"
         ```
-
+        
     1. В файле [`ydbd-database.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-database.yml) в секции `targets` укажите адреса всех серверов кластера {{ ydb-short-name }} и порты узлов баз данных, работающих на серверах.
 
         ```json

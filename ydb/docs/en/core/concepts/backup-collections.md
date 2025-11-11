@@ -1,6 +1,6 @@
-# Backup Collections
+# Backup collections
 
-Backup collections provide an advanced backup solution for YDB that organizes full and incremental backups into managed collections. This approach is designed for production workloads requiring efficient disaster recovery and point-in-time recovery capabilities.
+Backup collections provide an advanced backup solution for {{ ydb-short-name }} that organizes full and incremental backups into managed collections. This approach is designed for production workloads requiring efficient disaster recovery and point-in-time recovery capabilities.
 
 ## What are backup collections? {#what-are-backup-collections}
 
@@ -19,19 +19,19 @@ Currently only tables are supported. Support for other objects is planned for fu
 
 ### Backup collection {#backup-collection}
 
-A named container that groups backups for a specific set of database objects (currently tables only). Collections ensure that all included objects are backed up consistently.
+A named container that groups backups for a specific set of database objects. Collections ensure consistent backup of all included objects.
 
 ### Full backup {#full-backup}
 
-A complete snapshot of all selected tables at a specific point in time. Serves as the baseline for subsequent incremental backups and contains all data needed for independent restoration.
+A complete snapshot of all selected objects at a specific point in time. Serves as the foundation for subsequent incremental backups and contains all data necessary for independent restoration.
 
 ### Incremental backup {#incremental-backup}
 
-Captures only the changes (inserts, updates, deletes) since the previous backup in the chain. Significantly smaller than full backups for datasets with limited changes.
+Captures only changes (inserts, updates, deletes) since the previous backup in the chain. Significantly smaller than full backups with low change frequency.
 
 ### Backup chain {#backup-chain}
 
-An ordered sequence of backups starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain for complete restoration.
+An ordered sequence of backups starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain.
 
 ## Backup workflow {#backup-workflow}
 
@@ -93,19 +93,19 @@ Creates a named container that coordinates backups across multiple database obje
 
 ### Initial full backup {#initial-full-backup}
 
-Creates a transactionally consistent snapshot of all objects in the collection at a specific point in time. This baseline backup contains all data and schemas, and can be restored independently without requiring other backups. A full backup is required before you can create any incremental backups.
+Creates a consistent snapshot of all objects in the collection at a specific point in time. This baseline backup contains all data and can be restored independently without requiring other backups. A full backup is required before creating any incremental backups.
 
 [See operations guide](../maintenance/manual/backup-collections.md#create-backup)
 
 ### Incremental backups {#incremental-backups-creation}
 
-Captures only the data that has changed since the previous backup, which significantly reduces storage requirements. **Important**: There is no built-in scheduler, so you must trigger incremental backups manually or use an external scheduling system. To restore from an incremental backup, you need the entire backup chain starting from the initial full backup.
+Captures only data that changed since the previous backup, significantly reducing storage requirements. **Important**: Incremental backups must be triggered manually or using an external scheduling system. To restore from an incremental backup, you need the entire chain of backups starting from the initial full backup.
 
 [See operations guide](../maintenance/manual/backup-collections.md#create-backup)
 
 ### Drop collection {#backup-collection-cleanup}
 
-When a backup collection is no longer needed, drop it to remove all associated metadata and free up resources. This permanently deletes the collection definition and all backups in the chain. Only drop collections after ensuring you no longer need the backups or have safely archived them to external storage.
+When a backup collection is no longer needed, delete it to remove all associated metadata and free up resources. This permanently deletes the collection and all its backups. Delete the collection only after you're sure the backups are no longer needed and/or they've been exported to external storage.
 
 [See operations guide](../maintenance/manual/backup-collections.md#cleanup)
 
@@ -137,9 +137,9 @@ block-beta
 
 ### Import from filesystem {#restore-import}
 
-If your backups are stored in external storage (filesystem or object storage), import them back into the cluster using YDB CLI import operations. Import all backups in the chain in the correct order, starting from the full backup followed by incremental backups. This step is only needed if you're restoring from external storage.
+If your backups are stored in external storage (filesystem or object storage), import them back into the cluster using {{ ydb-short-name }} CLI import operations. Import all backups in the chain in the correct order, starting from the full backup followed by incremental backups. This step is only needed if you're restoring from external storage.
 
-[See YDB CLI export/import](../reference/ydb-cli/export-import/index.md)
+[See {{ ydb-short-name }} CLI export/import](../reference/ydb-cli/export-import/index.md)
 
 ### Create collection for restore {#restore-collection-creation}
 
@@ -165,9 +165,9 @@ After successfully restoring and verifying your data, drop the restore collectio
 
 You are responsible for tracking and maintaining your backup chains. Use `ydb scheme ls` to view the chain structure and identify which backups can be safely deleted. Be careful when removing backups to avoid breaking chain dependencies, as incremental backups rely on their parent backups being available.
 
-To move backups to external storage (filesystem or object storage like S3), use manual export or dump operations via YDB CLI. Each backup in the chain must be exported/dumped separately. When restoring from external storage, use import and restore operations via YDB CLI. Preserve the chain order during export/import to ensure successful restoration.
+To move backups to external storage (filesystem or S3-compatible storage), use manual export or dump operations via compatible commands (`ydb export` or `ydb tools dump`) CLI (`ydb import` or `ydb tools restore`). Each backup in the chain must be exported/dumped separately. When restoring from external storage, use import and restore operations. Preserve the chain order during export/import to ensure successful restoration.
 
-[See YDB CLI export/import](../reference/ydb-cli/export-import/index.md) | [See monitoring guide](../maintenance/manual/backup-collections.md#monitoring) | [See cleanup procedures](../maintenance/manual/backup-collections.md#cleanup)
+[See {{ ydb-short-name }} CLI export/import](../reference/ydb-cli/export-import/index.md) | [See monitoring guide](../maintenance/manual/backup-collections.md#monitoring) | [See cleanup procedures](../maintenance/manual/backup-collections.md#cleanup)
 
 ## Architecture and components {#architecture}
 
@@ -202,7 +202,9 @@ Each backup contains:
 
 #### Cluster storage {#cluster-storage}
 
-Backups are stored within the YDB cluster itself, providing:
+### Internal storage
+
+Backups are stored within the {{ ydb-short-name }} cluster itself, providing:
 
 - **High availability**: Leverages cluster replication and fault tolerance.
 - **Performance**: Fast backup and restore operations.
@@ -235,7 +237,7 @@ ydb tools dump --path .backups/collections/my_collection \
 All backup operations run asynchronously in the background, allowing you to:
 
 - Continue normal database operations during backups.
-- Monitor progress using YDB CLI operation commands.
+- Monitor progress using {{ ydb-short-name }} CLI operation commands.
 - Handle large datasets without blocking other activities.
 
 ## How backup collections work internally {#how-they-work}
@@ -301,6 +303,6 @@ Without backup collections, only full export/import operations are available.
 
 ## See also {#see-also}
 
-- [General backup concepts](backup.md) - Overview of all backup approaches in YDB
+- [General backup concepts](backup.md) - Overview of all backup approaches in {{ ydb-short-name }}
 - [Operations guide](../maintenance/manual/backup-collections.md) - Step-by-step instructions and practical examples
 - [Common recipes](../recipes/backup-collections.md) - Real-world usage scenarios and best practices

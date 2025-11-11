@@ -36,7 +36,7 @@ RESTORE `production_backups`;
 
 ## Monitoring restore operations
 
-Restore operations run asynchronously in the background. You can monitor their progress using YDB CLI:
+Restore operations run asynchronously in the background. You can monitor their progress using {{ ydb-short-name }} CLI:
 
 ```bash
 # List restore operations

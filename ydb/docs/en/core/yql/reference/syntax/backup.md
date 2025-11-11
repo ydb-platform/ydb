@@ -65,7 +65,7 @@ BACKUP `daily_backups` INCREMENTAL;
 
 ## Monitoring backup operations
 
-Backup operations run asynchronously in the background. You can monitor their progress using YDB CLI:
+Backup operations run asynchronously in the background. You can monitor their progress using {{ ydb-short-name }} CLI:
 
 ```bash
 # List backup operations

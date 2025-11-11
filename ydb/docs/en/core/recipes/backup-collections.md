@@ -153,7 +153,6 @@ ydb tools restore -i /backup/exports/backup_20240315 -d .backups/collections/eme
 ### Manual cleanup
 
 ```bash
-```bash
 # Remove old backup directories (manual cleanup)
 ydb scheme rmdir -r .backups/collections/production_backups/20250821141425Z_full/
 

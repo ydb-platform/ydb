@@ -26,6 +26,7 @@ void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topi
 void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName);
 TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings);
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings);
+TActorId CreateUnlockerActor(NActors::TTestActorRuntime& runtime, TUnlockerSettings&& settings);
 TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, TMessageDeadlineChangerSettings&& settings);
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime,const TString& databasePath, const TString& topicPath);
 THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime);

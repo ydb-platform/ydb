@@ -35,13 +35,39 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
 );
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
-    const NKikimrPQ::TPQTabletConfig::TConsumer consumer,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     ui64 offset,
     ui64 cookie = 0
+);
+
+std::unique_ptr<TEvPersQueue::TEvHasDataInfo> MakeEvHasData(
+    const TActorId& selfId,
+    ui32 partitionId,
+    ui64 offset,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer
 );
 
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
 bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev);
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
+
+NActors::IActor* CreateMessageEnricher(ui64 tabletId,
+                                       const ui32 partitionId,
+                                       const TString& consumerName,
+                                       std::deque<TReadResult>&& replies);
+
+struct TDLQMoverSettings {
+    TActorId ParentActorId;
+    TString Database;
+    ui64 TabletId;
+    ui32 PartitionId;
+    TString ConsumerName;
+    ui64 ConsumerGeneration;
+    TString DestinationTopic;
+    ui64 FirstMessageSeqNo;
+    std::deque<ui64> Messages;
+};
+
+NActors::IActor* CreateDLQMover(TDLQMoverSettings&& settings);
 
 } // namespace NKikimr::NPQ::NMLP

@@ -2,13 +2,12 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-TMessageEnricherActor::TMessageEnricherActor(const TActorId& tabletActorId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
+TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_ENRICHER)
-    , TabletActorId(tabletActorId)
+    , TabletId(tabletId)
     , PartitionId(partitionId)
     , ConsumerName(consumerName)
     , Queue(std::move(replies))
-    , Backoff(5, TDuration::MilliSeconds(50))
     , PendingResponse(std::make_unique<TEvPQ::TEvMLPReadResponse>())
 {
 }
@@ -16,7 +15,6 @@ TMessageEnricherActor::TMessageEnricherActor(const TActorId& tabletActorId, ui32
 void TMessageEnricherActor::Bootstrap() {
     Become(&TThis::StateWork);
     ProcessQueue();
-    Schedule(Timeout, new TEvents::TEvWakeup());
 }
 
 void TMessageEnricherActor::PassAway() {
@@ -24,6 +22,8 @@ void TMessageEnricherActor::PassAway() {
     for (auto& reply : Queue) {
         Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
+
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
 
     TBase::PassAway();
 }
@@ -81,27 +81,15 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     ProcessQueue();
 }
 
-void TMessageEnricherActor::Handle(TEvPQ::TEvError::TPtr&) {
-    LOG_D("Handle TEvPQ::TEvError");
-    ProcessQueue();
-}
-
-void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {
-    LOG_D("TEvents::TEvWakeup");
-
-    for (auto& reply : Queue) {
-        Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::TIMEOUT, "Enrich timeout"), 0, reply.Cookie);
-    }
-    Queue.clear();
-
+void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     PassAway();
 }
 
 STFUNC(TMessageEnricherActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
-        hFunc(TEvPQ::TEvError, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateWork", ev));
@@ -121,7 +109,7 @@ void TMessageEnricherActor::ProcessQueue() {
         auto firstOffset = reply.Offsets.front();
         auto lastOffset = Queue.back().Offsets.back();
         auto count = lastOffset - firstOffset + 1;
-        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletActorId);
+        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletId);
 
         auto request = std::make_unique<TEvPersQueue::TEvRequest>();
         auto* partitionRequest = request->Record.MutablePartitionRequest();
@@ -131,7 +119,7 @@ void TMessageEnricherActor::ProcessQueue() {
         read->SetOffset(firstOffset);
         read->SetTimeoutMs(0);
 
-        Send(TabletActorId, std::move(request), 0, ++Cookie);
+        SendToPQTablet(std::move(request));
 
         return;
     }
@@ -139,6 +127,19 @@ void TMessageEnricherActor::ProcessQueue() {
     if (Queue.empty()) {
         return PassAway();
     }
+}
+
+void TMessageEnricherActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
+    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstRequest, 1);
+    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+    FirstRequest = false;
+}
+
+NActors::IActor* CreateMessageEnricher(ui64 tabletId,
+                                       const ui32 partitionId,
+                                       const TString& consumerName,
+                                       std::deque<TReadResult>&& replies) {
+    return new TMessageEnricherActor(tabletId, partitionId, consumerName, std::move(replies));
 }
 
 } // namespace NKikimr::NPQ::NMLP

@@ -8,7 +8,7 @@ namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPConsumerTests) {
 
-Y_UNIT_TEST(Reload) {
+Y_UNIT_TEST(ReloadPQTablet) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
@@ -78,14 +78,21 @@ Y_UNIT_TEST(Reload) {
     Cerr << ">>>>> BEGIN REBOOT " << Endl;
     ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
 
-    Sleep(TDuration::Seconds(2));
+    for (size_t i = 0; i < 10; ++i) {
+        Sleep(TDuration::Seconds(1));
 
-    auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        if (i < 9 && result->Messages.size() != 2) {
+            continue;
+        }
 
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Locked);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
-    UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, TStorage::EMessageStatus::Unprocessed);
+
+        break;
+    }
 }
 
 Y_UNIT_TEST(AlterConsumer) {

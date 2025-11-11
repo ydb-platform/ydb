@@ -2,21 +2,22 @@
 
 #include "mlp.h"
 
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <util/datetime/base.h>
 
 #include <deque>
 #include <map>
-#include <set>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
 
-// TODO MLP Slow zone
 class TStorage {
     static constexpr size_t MAX_MESSAGES = 48000;
     static constexpr size_t MIN_MESSAGES = 100;
+    static constexpr size_t MAX_PROCESSING_COUNT = 1023;
 
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
@@ -46,22 +47,23 @@ public:
     };
 
     struct TMessage {
-        ui64 Status: 3 = EMessageStatus::Unprocessed;
-        ui64 Reserve: 3;
+        ui32 Status: 3 = EMessageStatus::Unprocessed;
+        ui32 Reserve: 3;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
         // but it has never been processed successfully.
-        ui64 ReceiveCount: 10 = 0;
+        ui32 ProcessingCount: 10 = 0;
         // For locked messages, the time after which the message should be returned to the queue by timeout.
-        ui64 DeadlineDelta: 16 = 0;
-        ui64 HasMessageGroupId: 1 = false;
+        ui32 DeadlineDelta: 16 = 0;
+        ui32 HasMessageGroupId: 1 = false;
         // Hash of the message group. For consumers who keep the order of messages, it is guaranteed that
         // messages within the same group are processed sequentially in the order in which they were recorded
         // in the topic.
-        ui64 MessageGroupIdHash: 31 = 0;
-        ui64 WriteTimestampDelta: 26 = 0;
+        ui32 MessageGroupIdHash: 31 = 0;
+        ui32 WriteTimestampDelta: 26 = 0;
+        ui32 Reserve2: 6;
     };
-    static_assert(sizeof(TMessage) == sizeof(ui64) * 2);
+    static_assert(sizeof(TMessage) == sizeof(ui32) * 3);
 
     struct TMessageWrapper {
         bool SlowZone;
@@ -104,6 +106,7 @@ public:
         void AddNewMessage(ui64 offset);
         void AddChange(ui64 offset);
         void AddDLQ(ui64 offset);
+        void DeleteFromDLQ(ui64 offset);
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
 
@@ -117,6 +120,7 @@ public:
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
         std::vector<ui64> DLQ;
+        size_t DeletedFromDLQ = 0;
         std::vector<ui64> MovedToSlowZone;
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
@@ -140,6 +144,7 @@ public:
     void SetKeepMessageOrder(bool keepMessageOrder);
     void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
+    void SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy);
 
     ui64 GetFirstOffset() const;
     size_t GetMessageCount() const;
@@ -162,10 +167,6 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
-    struct NextResult {
-        ui64 Message;
-        TPosition Position;
-    };
     std::optional<ui64> Next(TInstant deadline, TPosition& position);
     bool Commit(ui64 message);
     bool Unlock(ui64 message);
@@ -173,9 +174,9 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
+    bool MarkDLQMoved(ui64 offset);
 
     size_t ProccessDeadlines();
-    // TODO MLP удалять сообщения если в партиции сместился StartOffset
     size_t Compact();
     void MoveBaseDeadline();
 
@@ -218,6 +219,7 @@ private:
     bool KeepMessageOrder = false;
     ui32 MaxMessageProcessingCount = 1000;
     std::optional<TDuration> RetentionPeriod = TDuration::Days(365);
+    std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> DeadLetterPolicy;
 
     // Offset of the first message loaded for processing. All messages with a smaller offset
     // have either already been committed or deleted from the partition.

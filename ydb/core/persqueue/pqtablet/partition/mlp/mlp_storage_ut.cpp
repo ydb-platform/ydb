@@ -34,6 +34,7 @@ struct TUtils {
         Storage.SetKeepMessageOrder(true);
         Storage.SetMaxMessageProcessingCount(1);
         Storage.SetRetentionPeriod(TDuration::Seconds(10));
+        Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
     }
 
     TIntrusivePtr<MockTimeProvider> TimeProvider;
@@ -143,7 +144,9 @@ struct TUtils {
 
     ui64 Next(TDuration timeout = TDuration::Seconds(8)) {
         TStorage::TPosition position;
-        return Storage.Next(TimeProvider->Now() + timeout, position).value();
+        auto result = Storage.Next(TimeProvider->Now() + timeout, position);
+        UNIT_ASSERT(result);
+        return result.value();
     }
 
     bool Commit(ui64 offset) {
@@ -1132,86 +1135,73 @@ Y_UNIT_TEST(StorageSerialization_WAL_Committed) {
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
-    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TUtils utils;
+    auto writeTimestamp = utils.BaseWriteTimestamp + TDuration::Seconds(7);
 
-    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(13);
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
 
-    NKikimrPQ::TMLPStorageSnapshot snapshot;
-    NKikimrPQ::TMLPStorageWAL wal;
+    auto r = utils.Next();
+    UNIT_ASSERT(r);
+    utils.Storage.Unlock(3);
 
+    utils.End();
+
+    auto it = utils.Storage.begin();
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
-        storage.SetMaxMessageProcessingCount(1);
-        storage.SerializeTo(snapshot);
-
-        storage.AddMessage(3, true, 5, writeTimestamp);
-
-        TStorage::TPosition position;
-        auto r = storage.Next(timeProvider->Now() + TDuration::Seconds(7), position);
-        UNIT_ASSERT(r);
-
-        storage.Unlock(3);
-
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::DLQ);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
-            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
-        }
-        ++it;
-        UNIT_ASSERT(it == storage.end());
-
-        const auto& dlq = storage.GetDLQMessages();
-        UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
-
-        auto batch = storage.GetBatch();
-        UNIT_ASSERT_VALUES_EQUAL(batch.AddedMessageCount(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(batch.ChangedMessageCount(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(batch.DLQMessageCount(), 1);
-        batch.SerializeTo(wal);
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::DLQ);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
 
-    timeProvider->Tick(TDuration::Seconds(5));
+    const auto& dlq = utils.Storage.GetDLQMessages();
+    UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
 
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(StorageSerialization_WAL_DeadLetterPolicy_Delete) {
+    TUtils utils;
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+    auto writeTimestamp = utils.BaseWriteTimestamp + TDuration::Seconds(7);
+
+    utils.Begin();
+    utils.Storage.AddMessage(3, true, 5, writeTimestamp);
+
+    auto r = utils.Next();
+    UNIT_ASSERT(r);
+    utils.Storage.Unlock(3);
+
+    utils.End();
+
+    auto it = utils.Storage.begin();
     {
-        TStorage storage(timeProvider);
-        storage.SetKeepMessageOrder(true);
-
-        storage.Initialize(snapshot);
-        storage.ApplyWAL(wal);
-
-        auto it = storage.begin();
-        {
-            UNIT_ASSERT(it != storage.end());
-            auto message = *it;
-            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
-            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::DLQ);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
-            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
-            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
-        }
-        ++it;
-        UNIT_ASSERT(it == storage.end());
-
-        auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 1);
-
-        const auto& dlq = storage.GetDLQMessages();
-        UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Committed);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
     }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
+
+    const auto& dlq = utils.Storage.GetDLQMessages();
+    UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 0);
+
+    utils.TimeProvider->Tick(TDuration::Seconds(5));
+
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
@@ -1474,6 +1464,8 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
 Y_UNIT_TEST(CompactStorage_WithDLQ) {
     TStorage storage(CreateDefaultTimeProvider());
     storage.SetMaxMessageProcessingCount(1);
+    storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+
     storage.AddMessage(3, true, 5, TInstant::Now());
     storage.AddMessage(4, true, 7, TInstant::Now());
 
@@ -1543,12 +1535,12 @@ Y_UNIT_TEST(ProccessDeadlines) {
     {
         auto [message, _] = storage.GetMessage(3);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
-        UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
     {
         auto [message, _] = storage.GetMessage(4);
         UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
-        UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(message->ProcessingCount, 1);
     }
 
     auto& metrics = storage.GetMetrics();
@@ -1855,6 +1847,46 @@ Y_UNIT_TEST(SlowZone_Retention_3message) {
     utils.AssertSlowZone({});
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 3);
     UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 5);
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(ChangeDeadLetterPolicy_Delete) {
+    TUtils utils;
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    utils.Storage.SetMaxMessageProcessingCount(1);
+
+    utils.AddMessage(1);
+    utils.Next();
+    utils.Storage.Unlock(0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+
+    utils.Begin();
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().CommittedMessageCount, 1);
+    utils.End();
+
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(ChangeDeadLetterPolicy_Unspecified) {
+    TUtils utils;
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    utils.Storage.SetMaxMessageProcessingCount(1);
+
+    utils.AddMessage(1);
+    utils.Next();
+    utils.Storage.Unlock(0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+
+    utils.Begin();
+    utils.Storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetMetrics().UnprocessedMessageCount, 1);
+    utils.End();
 
     utils.AssertLoad();
 }

@@ -161,35 +161,32 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
 {
     const auto& appConfig = runConfig.AppConfig;
     TAutoPtr<TLogBackend> logBackend;
+
     if (!appConfig.HasAuditConfig() || !appConfig.GetAuditConfig().HasUnifiedAgentBackend()) {
         return logBackend;
     }
 
     const auto& uaBackend = appConfig.GetAuditConfig().GetUnifiedAgentBackend();
-    auto createUaLogBackend = [&](const auto& uaClientConfig) -> TAutoPtr<TLogBackend> {
-        auto clusterName = appConfig.HasLogConfig() && appConfig.GetLogConfig().HasClusterName() ? appConfig.GetLogConfig().GetClusterName() : "";
-        const auto& dnConfig = appConfig.GetDynamicNameserviceConfig();
-        auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
-        auto logName = uaBackend.HasLogName() ? uaBackend.GetLogName() : uaClientConfig.GetLogName();
-        auto maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
 
-        return TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
-            uaClientConfig,
-            uaCounters,
-            logName,
-            runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
-            runConfig.TenantName,
-            clusterName
-        );
-    };
-
-    if (uaBackend.HasUAClientConfig()) {
-        logBackend = createUaLogBackend(uaBackend.GetUAClientConfig());
-    } else if (appConfig.HasLogConfig() && appConfig.GetLogConfig().HasUAClientConfig()) {
-        logBackend = createUaLogBackend(appConfig.GetLogConfig().GetUAClientConfig());
+    if (!uaBackend.HasUAClientConfig() && !(appConfig.HasLogConfig() && appConfig.GetLogConfig().HasUAClientConfig())) {
+        return logBackend;
     }
 
-    return logBackend;
+    auto clusterName = appConfig.HasLogConfig() && appConfig.GetLogConfig().HasClusterName() ? appConfig.GetLogConfig().GetClusterName() : "";
+    const auto& dnConfig = appConfig.GetDynamicNameserviceConfig();
+    auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
+    const auto& maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
+    const auto& uaClientConfig = uaBackend.HasUAClientConfig() ? uaBackend.GetUAClientConfig() : appConfig.GetLogConfig().GetUAClientConfig();
+    const auto& logName = uaBackend.HasLogName() ? uaBackend.GetLogName() : uaClientConfig.GetLogName();
+
+    return TLogBackendBuildHelper::CreateLogBackendFromUAClientConfig(
+        uaClientConfig,
+        uaCounters,
+        logName,
+        runConfig.NodeId <= maxStaticNodeId ? "static" : "slot",
+        runConfig.TenantName,
+        clusterName
+    );
 }
 
 THolder<TLogBackend> MaybeWrapWithJsonEnvelope(THolder<TLogBackend> logBackend, const TString& jsonEnvelope) {

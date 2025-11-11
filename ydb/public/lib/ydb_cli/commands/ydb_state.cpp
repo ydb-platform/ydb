@@ -48,24 +48,12 @@ void TCommandClusterStateFetch::Parse(TConfig& config) {
 }
 
 struct TARFileHeader {
-    char filename[100]; //NUL-terminated
-    char mode[8];
-    char uid[8];
-    char gid[8];
+    char filename[100];
+    char padding[24];
     char fileSize[12];
     char lastModification[12];
     char checksum[8];
-    char typeFlag; //Also called link indicator for none-UStar format
-    char linkedFileName[100];
-    //USTar-specific fields -- NUL-filled in non-USTAR version
-    char ustarIndicator[6]; //"ustar" -- 6th character might be NUL but results show it doesn't have to
-    char ustarVersion[2]; //00
-    char ownerUserName[32];
-    char ownerGroupName[32];
-    char deviceMajorNumber[8];
-    char deviceMinorNumber[8];
-    char filenamePrefix[155];
-    char padding[12];
+    char padding2[356];
 
     TARFileHeader(TString name, ui32 size) {
         memset(this, 0, sizeof(TARFileHeader));
@@ -85,14 +73,14 @@ struct TARFileHeader {
     void CalcChecksum() {
         memset(checksum, ' ', 8);
         ui64 unsignedSum = 0;
-        for (ui32 i = 0; i < sizeof(TARFileHeader); i++) {
+        for (ui32 i : xrange(sizeof(TARFileHeader))) {
             unsignedSum += ((unsigned char*) this)[i];
         }
         strcpy(checksum, ToOct(unsignedSum).c_str());
     }
 
     void ToStream(IOutputStream& out) {
-        for (ui32 i = 0; i < sizeof(TARFileHeader); i++) {
+        for (ui32 i : xrange(sizeof(TARFileHeader))) {
             out.Write(((char*) this)[i]);
         }
     }

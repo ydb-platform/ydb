@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                         messagesTextQueue.pop_front();
                     }
                     if (messagesTextQueue.empty()) {
-                        // we must recive data events for all messages except the first one
+                        // we must receive data events for all messages except the first one
                         break;
                     }
                 } else if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {

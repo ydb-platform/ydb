@@ -195,6 +195,7 @@ message ExportToFsSettings {
 
     // Base path on FS where to write export
     // Path to the mounted directory in the case of NFS
+    // Must be an absolute path
     // Example: /mnt/exports
     string base_path = 1 [(required) = true];
     

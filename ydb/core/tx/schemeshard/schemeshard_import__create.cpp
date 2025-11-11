@@ -479,11 +479,8 @@ private:
             item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
             Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
         } else {
-            LOG_I("TImport::TTxProgress: Get scheme for FS import is not supported"
-                << ": info# " << importInfo->ToString()
-                << ", item# " << item.ToString(itemIdx));
-            // item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx));
-            // Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+            item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetterFS(Self->SelfId(), importInfo, itemIdx));
+            Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
         }
     }
 
@@ -1182,7 +1179,7 @@ private:
             if (importInfo->Kind == TImportInfo::EKind::S3) {
                 auto settings = importInfo->GetS3Settings();
                 if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
-                    return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
                 }
             }
         }

@@ -95,13 +95,10 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
     }
 
     ui64 targetSeqNo = result->GetResult().SourceIdInfo.GetSeqNo() + 1;
-    for (SeqNo = Settings.FirstMessageSeqNo; SeqNo < targetSeqNo && !Queue.empty(); ++SeqNo) {
-        Processed.push_back(Queue.front());
+    while (!Queue.empty() && targetSeqNo > Queue.front().SeqNo) {
+        Processed.emplace_back(Queue.front().Offset, Queue.front().SeqNo);
         Queue.pop_front();
     }
-
-    // targetSeqNo can be eq to 0 if the topic has been recreated
-    AFL_ENSURE(targetSeqNo <= SeqNo)("t", targetSeqNo)("s", SeqNo);
 
     ProcessQueue();
 }
@@ -124,7 +121,7 @@ void TDLQMoverActor::ProcessQueue() {
     partitionRequest->SetPartition(Settings.PartitionId);
     auto* read = partitionRequest->MutableCmdRead();
     read->SetClientId(CLIENTID_WITHOUT_CONSUMER);
-    read->SetOffset(Queue.front());
+    read->SetOffset(Queue.front().Offset);
     read->SetTimeoutMs(0);
     read->SetCount(1);
 
@@ -142,7 +139,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
 
-    LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << SeqNo);
+    LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << Queue.front().SeqNo);
 
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
@@ -150,7 +147,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
     auto* write = request->AddCmdWrite();
     write->SetSourceId(ProducerId);
-    write->SetSeqNo(SeqNo++);
+    write->SetSeqNo(Queue.front().SeqNo);
     write->SetData(std::move(*result->MutableData()));
     write->SetCreateTimeMS(result->GetCreateTimestampMS());
     write->SetUncompressedSize(result->GetUncompressedSize());
@@ -186,7 +183,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    Processed.push_back(Queue.front());
+    Processed.emplace_back(Queue.front().Offset, Queue.front().SeqNo);
     Queue.pop_front();
 
     ProcessQueue();

@@ -50,11 +50,10 @@ private:
     TDLQMoverSettings Settings;
 
     TString ProducerId;
-    ui64 SeqNo;
-    std::deque<ui64> Queue;
+    std::deque<TDLQMessage> Queue;
 
     TString Error;
-    std::vector<ui64> Processed;
+    std::vector<std::pair<ui64, ui64>> Processed;
 
     NDescriber::TTopicInfo TopicInfo;
     const IPartitionChooser::TPartitionInfo* TargetPartition;

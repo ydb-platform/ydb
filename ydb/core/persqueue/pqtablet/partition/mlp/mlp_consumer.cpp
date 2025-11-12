@@ -206,7 +206,6 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         LOG_D("Read snapshot");
                         HasSnapshot = true;
                         LastWALIndex = snapshot.GetWALIndex();
-                        DLQMovedMessageCount = snapshot.GetMeta().GetDLQMovedMessages();
                         Storage->Initialize(snapshot);
                     } else {
                         LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
@@ -243,7 +242,6 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         if (Config.GetGeneration() == wal.GetGeneration()) {
                             LOG_D("Read WAL " << w.key());
                             LastWALIndex = wal.GetWALIndex();
-                            DLQMovedMessageCount = wal.GetDLQMovedMessages();
                             Storage->ApplyWAL(wal);
                         } else {
                             LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
@@ -554,7 +552,6 @@ void TConsumerActor::Persist() {
 
         NKikimrPQ::TMLPStorageWAL wal;
         wal.SetWALIndex(LastWALIndex);
-        wal.SetDLQMovedMessages(DLQMovedMessageCount);
         batch.SerializeTo(wal);
 
         auto data = wal.SerializeAsString();
@@ -581,7 +578,6 @@ void TConsumerActor::Persist() {
         Storage->SerializeTo(snapshot);
 
         snapshot.SetWALIndex(LastWALIndex);
-        snapshot.MutableMeta()->SetDLQMovedMessages(DLQMovedMessageCount);
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
 
@@ -721,8 +717,11 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
 }
 
 void TConsumerActor::MoveToDLQIfPossible() {
-    if (!DLQMoverActorId && !Storage->GetDLQMessages().empty()) {
-        std::deque<ui64> messages(Storage->GetDLQMessages());
+    if (DLQMoverActorId) {
+        return;
+    }
+    auto messages = Storage->GetDLQMessages();
+    if (!messages.empty()) {
         DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover({
             .ParentActorId = SelfId(),
             .Database = Database,
@@ -731,7 +730,6 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
             .DestinationTopic = Config.GetDeadLetterQueue(),
-            .FirstMessageSeqNo = DLQMovedMessageCount + 1,
             .Messages = std::move(messages)
         }));
     }
@@ -745,14 +743,18 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 
     auto& moved = ev->Get()->MovedMessages;
-    LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
+    //LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
 
     DLQMoverActorId = {};
-    for (auto offset : moved) {
-        AFL_ENSURE(Storage->MarkDLQMoved(offset))("o", offset);
+    for (auto [offset, seqNo] : moved) {
+        auto result = Storage->MarkDLQMoved({
+            .Offset = offset,
+            .SeqNo = seqNo
+        });
+        AFL_ENSURE(result)("o", offset)("s", seqNo);
     }
 
-    DLQMovedMessageCount += moved.size();
+    MoveToDLQIfPossible();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {

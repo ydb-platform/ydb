@@ -1360,6 +1360,10 @@ message TEvMLPChangeMessageDeadlineRequest {
 message TEvMLPChangeMessageDeadlineResponse {
 }
 
+message TMLPMetrics {
+    optional uint64 TotalMovedToDLQMessageCount = 1;
+}
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -1367,45 +1371,46 @@ message TMLPStorageSnapshot {
     }
     optional TConfiguration Configuration = 1;
 
+    optional uint64 FormatVersion = 2;
+
+    optional uint64 WALIndex = 3;
+
     message TMeta {
         optional uint64 FirstOffset = 1;
         optional uint64 FirstUncommittedOffset = 2;
         optional uint64 BaseDeadlineSeconds = 3;
         optional uint64 BaseWriteTimestampSeconds = 4;
-        optional uint64 DLQMovedMessages = 5;
     }
-    optional TMeta Meta = 2;
+    optional TMeta Meta = 4;
 
-    optional uint64 FormatVersion = 3;
-    optional bytes Messages = 4;
 
-    repeated uint64 DLQ = 5;
+    optional TMLPMetrics Metrics = 5;
 
-    optional uint64 WALIndex = 6;
+    optional bytes Messages = 6;
     optional bytes SlowMessages = 7;
+    optional bytes DLQMessages = 8;
 }
 
 message TMLPStorageWAL {
     optional uint64 Generation = 1;
     optional uint64 FormatVersion = 2;
+    optional uint64 WALIndex = 3;
 
-    optional uint64 FirstOffset = 3;
-    optional bytes ChangedMessages = 4;
+    optional TMLPMetrics Metrics = 4;
 
-    optional uint64 FirstAddedOffset = 5;
-    optional bytes AddedMessages = 6;
+    optional uint64 BaseDeadlineSeconds = 5;
+    optional uint64 BaseWriteTimestampSeconds = 6;
 
-    repeated uint64 DLQ = 7;
-    optional uint64 DLQMovedMessages = 8;
+    optional uint64 FirstOffset = 7;
+    optional bytes ChangedMessages = 8;
+    optional uint64 FirstAddedOffset = 9;
+    optional bytes AddedMessages = 10;
 
-    optional uint64 BaseDeadlineSeconds = 9;
-    optional uint64 BaseWriteTimestampSeconds = 10;
+    optional uint64 SlowFirstOffset = 11;
+    repeated uint64 MovedToSlowZone = 12;
+    repeated uint64 DeletedFromSlowZone = 13;
 
-    optional uint64 WALIndex = 11;
-
-    optional uint64 SlowFirstOffset = 12;
-    repeated uint64 MovedToSlowZone = 13;
-    repeated uint64 DeletedFromSlowZone = 14;
-    optional uint64 DeletedFromDLQ = 15;
+    optional bytes AddedToDLQMessages = 14;
+    repeated uint64 DeletedFromDLQMessages = 15;
 }
 

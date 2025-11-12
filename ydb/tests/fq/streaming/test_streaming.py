@@ -113,7 +113,7 @@ class TestStreamingInYdb(TestYdsBase):
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName, False)
 
-        name = "query1"
+        name = "test_restart_query"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -301,7 +301,7 @@ class TestStreamingInYdb(TestYdsBase):
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName, True)
 
-        name = "query1"
+        name = "test_json_errors"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -326,3 +326,61 @@ class TestStreamingInYdb(TestYdsBase):
 
         expected = ['hello1', 'hello2']
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+    def test_restart_query_by_rescaling(self, kikimr):
+        sourceName = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.init_topics(sourceName, partitions_count=10)
+        self.create_source(kikimr, sourceName, True)
+
+        name = "test_restart_query_by_rescaling"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 2 }}
+                ] @@;
+                $in = SELECT time FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%time%";
+                INSERT INTO `{source_name}`.`{output_topic}` SELECT time FROM $in;
+            END DO;'''
+
+        query_id = "query_id"  # TODO
+        kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        self.wait_completed_checkpoints(kikimr, query_id)
+
+        message_count = 20
+        for i in range(message_count):
+            self.write_stream(['{"time": "time to do it"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
+        assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to do it" for i in range(message_count)]
+        self.wait_completed_checkpoints(kikimr, query_id)
+
+        logging.debug(f"stopping query {name}")
+        kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        sql = R'''ALTER STREAMING QUERY `{query_name}` SET (
+            RUN = TRUE,
+            FORCE = TRUE
+            ) AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 3 }}
+                ] @@;
+                $in = SELECT time FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%lunch%";
+                INSERT INTO `{source_name}`.`{output_topic}` SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+
+        message = '{"time": "time to lunch"}'
+        for i in range(message_count):
+            self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
+        assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to lunch" for i in range(message_count)]
+
+        kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")

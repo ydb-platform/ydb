@@ -15,7 +15,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 from ydb.tests.tools.fq_runner.kikimr_runner import TenantConfig
 
 from ydb.tests.tools.datastreams_helpers.control_plane import list_read_rules
-from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule
+from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, create_read_rule, delete_stream
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 
@@ -1233,3 +1233,52 @@ class TestPqRowDispatcher(TestYdsBase):
             assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
             time.sleep(1)
         stop_yds_query(client, query_id)
+
+    @yq_v1
+    def test_delete_topic(self, kikimr, client):
+        self.init(client, "test_delete_topic")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['101', '102', '103']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+        kikimr.compute_plane.wait_completed_checkpoints(
+            query_id, kikimr.compute_plane.get_completed_checkpoints(query_id) + 2
+        )
+        stop_yds_query(client, query_id)
+
+        delete_stream(self.input_topic)
+        create_stream(self.input_topic)
+
+        client.modify_query(
+            query_id,
+            "simple",
+            sql,
+            type=fq.QueryContent.QueryType.STREAMING,
+            state_load_mode=fq.StateLoadMode.EMPTY,
+            streaming_disposition=StreamingDisposition.from_last_checkpoint(),
+        )
+
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}',
+            '{"time": 103, "data": "hello3", "event": "event3"}',
+            '{"time": 104, "data": "hello4", "event": "event4"}',
+        ]
+
+        self.write_stream(data)
+        expected = ['104']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected

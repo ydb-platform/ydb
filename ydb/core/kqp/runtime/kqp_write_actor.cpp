@@ -780,12 +780,12 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            TxManager->SetError(ev->Get()->Record.GetOrigin());
 
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
             } else {
+                TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -2522,7 +2522,6 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
-                hFunc(TEvPersQueue::TEvProposeTransactionResult, HandleRollback);
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleRollback);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, HandleRollback);
 
@@ -3254,8 +3253,9 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");
 
+        const auto rollbackCookie = isRollback ? RollbackMessageCookie : 0;
         SendTime[shardId] = TInstant::Now();
-        CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
+        CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isRollback=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
                 TStringBuilder builder;
@@ -3264,7 +3264,7 @@ public:
                 }
                 return builder;
             }()
-            << ", Size=" << 0 << ", Cookie=" << 0
+            << ", Size=" << 0 << ", Cookie=" << rollbackCookie
             << ", OperationsCount=" << 0 << ", IsFinal=" << 1
             << ", Attempts=" << 0);
 
@@ -3512,14 +3512,6 @@ public:
         default:
             HandleError(ev);
         }
-    }
-
-    void HandleRollback(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev) {
-        CA_LOG_D("Got ProposeTransactionResult" <<
-              ", PQ tablet: " << ev->Get()->Record.GetOrigin() <<
-              ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(ev->Get()->Record.GetStatus()));
-        // TODO: Check RollbackMessageCookie == ev->Cookie for topics
-        OnRolledback(ev->Get()->Record.GetOrigin());
     }
 
     static TString GetPQErrorMessage(const NKikimrPQ::TEvProposeTransactionResult& event, TStringBuf default_) {
@@ -3861,7 +3853,8 @@ public:
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
-        if (RollbackMessageCookie == ev->Cookie) {
+        if (RollbackMessageCookie == ev->Cookie
+                || ev->Get()->GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             OnRolledback(ev->Get()->Record.GetOrigin());
         }
     }
@@ -4302,6 +4295,7 @@ public:
     void ReplyErrorImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
         CA_LOG_E("statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". Issue=" << issues.ToString() << ". sessionActorId=" << SessionActorId << ".");
 
+        TxManager->SetError();
         CancelProposal();
         Become(&TKqpBufferWriteActor::StateError);
 

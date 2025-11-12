@@ -28,6 +28,7 @@ class TKqpTransactionManager : public IKqpTransactionManager {
         COLLECTING,
         PREPARING,
         EXECUTING,
+        ERROR,
         ROLLINGBACK,
     };
 public:
@@ -35,7 +36,7 @@ public:
         : CollectOnly(collectOnly) {}
 
     void AddShard(ui64 shardId, bool isOlap, const TString& path) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(shardId);
         auto& shardInfo = ShardsInfo[shardId];
         shardInfo.IsOlap = isOlap;
@@ -47,7 +48,7 @@ public:
     }
 
     void AddAction(ui64 shardId, ui8 action) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsInfo.at(shardId).Flags |= action;
         if (action & EAction::WRITE) {
             ReadOnly = false;
@@ -56,7 +57,7 @@ public:
     }
 
     void AddTopic(ui64 topicId, const TString& path) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         ShardsIds.insert(topicId);
         auto& shardInfo = ShardsInfo[topicId];
 
@@ -82,7 +83,7 @@ public:
     }
 
     bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lockProto) override {
-        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING);
+        Y_ABORT_UNLESS(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
         TKqpLock lock(lockProto);
         bool isError = (lock.Proto.GetCounter() >= NKikimr::TSysTables::TLocksTable::TLock::ErrorMin);
         bool isInvalidated = (lock.Proto.GetCounter() == NKikimr::TSysTables::TLocksTable::TLock::ErrorAlreadyBroken)
@@ -113,7 +114,7 @@ public:
             broken = isInvalidated || isLocksAcquireFailure;
         }
 
-        if (broken && !LocksIssue) {
+        if (broken && !LocksIssue && State != ETransactionState::ERROR) {
             if (isLocksAcquireFailure) {
                 LocksIssue = YqlIssue(NYql::TPosition(), NYql::TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE);
                 return false;
@@ -150,6 +151,10 @@ public:
     void SetError(ui64 shardId) override {
         auto& shardInfo = ShardsInfo.at(shardId);
         shardInfo.State = EShardState::ERROR;
+    }
+
+    void SetError() override {
+        State = ETransactionState::ERROR;
     }
 
     void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {

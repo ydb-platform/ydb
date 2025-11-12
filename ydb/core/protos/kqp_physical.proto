@@ -642,4 +642,6 @@ message TKqpPhyQuery {
     optional bool EnableHtapTx = 14;
     optional bool ForceImmediateEffectsExecution = 15;
     uint32 LangVer = 16;
+
+    bool DisableCheckpoints = 17;
 }

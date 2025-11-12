@@ -326,3 +326,27 @@ class TestStreamingInYdb(TestYdsBase):
 
         expected = ['hello1', 'hello2']
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+    def test_pragma(self, kikimr):
+        sourceName = "test_pragma"
+        self.init_topics(sourceName, partitions_count=10)
+        self.create_source(kikimr, sourceName)
+
+        query_name="test_pragma1"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.DisableCheckpoints="true";
+                $in = SELECT time FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL));
+                INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+
+        self.write_stream(['{"time": "lunch time"}'])
+        assert self.read_stream(1, topic_path=self.output_topic) == ['lunch time']
+
+        kikimr.YdbClient.query(f"DROP STREAMING QUERY `{query_name}`")

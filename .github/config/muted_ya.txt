@@ -460,7 +460,6 @@ ydb/tests/postgres_integrations/go-libpq py3test.[docker_wrapper_test.py] chunk
 ydb/tests/stress/cdc/tests py3test.sole chunk
 ydb/tests/stress/cdc/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
-ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
 ydb/tests/stress/show_create/view/tests py3test.sole chunk

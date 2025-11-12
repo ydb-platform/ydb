@@ -46,7 +46,10 @@ public:
     ~TGRpcConnectionsImpl();
 
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
-    void ScheduleOneTimeTask(TSimpleCb&& fn, TDeadline::Duration timeout);
+
+    void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline);
+    void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay);
+
     NThreading::TFuture<bool> ScheduleFuture(
         TDuration timeout,
         IQueueClientContextPtr token = nullptr

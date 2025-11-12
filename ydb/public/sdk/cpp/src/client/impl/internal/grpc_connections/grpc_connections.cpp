@@ -219,34 +219,38 @@ void TGRpcConnectionsImpl::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration
     }
 }
 
-void TGRpcConnectionsImpl::ScheduleOneTimeTask(TSimpleCb&& fn, TDeadline::Duration timeout) {
-    auto cbLow = [this, fn = std::move(fn)](NYdb::NIssue::TIssues&&, EStatus status) mutable {
-        if (status != EStatus::SUCCESS) {
-            return false;
+void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline) {
+    auto cbLow = [this, fn = std::move(fn)](bool ok) mutable {
+        if (!ok) {
+            return;
         }
 
-        std::shared_ptr<IQueueClientContext> context;
-
-        if (!TryCreateContext(context)) {
-            // Shutting down, fn must handle it
-            fn();
-        } else {
-            // Enqueue to user pool
-            auto resp = new TSimpleCbResult(
-                std::move(fn),
-                this,
-                std::move(context));
-            EnqueueResponse(resp);
-        }
-
-        return false;
+        // Enqueue to user pool
+        auto resp = new TSimpleCbResult(std::move(fn));
+        EnqueueResponse(resp);
     };
 
-    if (timeout > TDeadline::Duration::zero()) {
-        AddPeriodicTask(std::move(cbLow), timeout);
-    } else {
-        cbLow(NYdb::NIssue::TIssues(), EStatus::SUCCESS);
+    std::shared_ptr<IQueueClientContext> context;
+    if (!TryCreateContext(context)) {
+        cbLow(false);
+        return;
     }
+
+    if (deadline <= TDeadline::Now()) {
+        cbLow(true);
+        return;
+    }
+
+    auto action = MakeIntrusive<TDelayedAction>(
+        std::move(cbLow),
+        this,
+        std::move(context),
+        deadline);
+    action->Start();
+}
+
+void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay) {
+    ScheduleDelayedTask(std::move(fn), TDeadline::AfterDuration(delay));
 }
 
 NThreading::TFuture<bool> TGRpcConnectionsImpl::ScheduleFuture(

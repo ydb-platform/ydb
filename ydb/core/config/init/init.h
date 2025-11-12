@@ -24,6 +24,7 @@ struct TConfigItemInfo {
         ReplaceConfigWithConsoleYaml,
         ReplaceConfigWithConsoleProto,
         ReplaceConfigWithBase,
+        ReplaceConfigWithSeedNodes,
         LoadYamlConfigFromFile,
         SetExplicitly,
         UpdateExplicitly,
@@ -182,6 +183,7 @@ public:
     virtual ~IStorageConfigResult() {}
     virtual const TString& GetMainYamlConfig() const = 0;
     virtual const TString& GetStorageYamlConfig() const = 0;
+    virtual const TString& GetSourceAddress() const = 0;
 };
 
 class IConfigClient {

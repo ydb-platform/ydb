@@ -187,6 +187,7 @@ class KikimrConfigGenerator(object):
             enable_static_auth=False,
             cms_config=None,
             explicit_statestorage_config=None,
+            system_tablets=None,
             protected_mode=False,
             tiny_mode=False,
     ):
@@ -215,6 +216,7 @@ class KikimrConfigGenerator(object):
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
+        self.system_tablets = system_tablets
         self.protected_mode = protected_mode
         self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
@@ -609,6 +611,9 @@ class KikimrConfigGenerator(object):
             self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
             self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
             self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
+
+        if self.system_tablets:
+            self.yaml_config["system_tablets"] = self.system_tablets
 
         if metadata_section:
             self.full_config["metadata"] = metadata_section

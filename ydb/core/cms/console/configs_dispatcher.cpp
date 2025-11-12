@@ -200,6 +200,7 @@ public:
             hFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
             hFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
             // Events from clients
+            hFuncTraced(TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
             hFuncTraced(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
             hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
             // Resolve

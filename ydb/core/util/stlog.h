@@ -96,6 +96,7 @@ namespace NKikimr::NStLog {
     };
 
     template<typename T> struct TIsIterable { static constexpr bool value = false; };
+    template<typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
@@ -112,6 +113,12 @@ namespace NKikimr::NStLog {
 
     template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
     template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
+
+    template<typename T> struct TIsVariant { static constexpr bool value = false; };
+    template<typename... Ts> struct TIsVariant<std::variant<Ts...>> { static constexpr bool value = true; };
+
+    template<typename T> struct TIsTuple { static constexpr bool value = false; };
+    template<typename... Ts> struct TIsTuple<std::tuple<Ts...>> { static constexpr bool value = true; };
 
     template<typename Base, typename T>
     class TBoundParam : public Base {
@@ -199,9 +206,22 @@ namespace NKikimr::NStLog {
                     OutputParam(s, v);
                 }
                 s << '}';
+            } else if constexpr (TIsVariant<Tx>::value) {
+                std::visit([&](auto& x) { OutputParam(s, x); }, value);
+            } else if constexpr (TIsTuple<Tx>::value) {
+                s << '[';
+                std::apply([&](const auto&... args) { OutputParam(s, args...); }, value);
+                s << ']';
             } else {
                 s << value;
             }
+        }
+
+        template<typename TValue, typename... TRest>
+        static void OutputParam(IOutputStream& s, const TValue& first, const TRest&... rest) {
+            OutputParam(s, first);
+            s << ':';
+            OutputParam(s, rest...);
         }
 
         template<typename TValue>
@@ -246,11 +266,23 @@ namespace NKikimr::NStLog {
                 json.Write(value.GetRawId());
             } else if constexpr (std::is_constructible_v<NJson::TJsonValue, Tx>) {
                 json.Write(value);
+            } else if constexpr (TIsVariant<Tx>::value) {
+                std::visit([&](auto& x) { OutputParam(json, x); }, value);
+            } else if constexpr (TIsTuple<Tx>::value) {
+                json.OpenArray();
+                std::apply([&](const auto&... args) { OutputParam(json, args...); }, value);
+                json.CloseArray();
             } else {
                 TStringStream stream;
                 OutputParam(stream, value);
                 json.Write(stream.Str());
             }
+        }
+
+        template<typename TValue, typename... TRest>
+        static void OutputParam(NJson::TJsonWriter& json, const TValue& first, const TRest&... rest) {
+            OutputParam(json, first);
+            OutputParam(json, rest...);
         }
     };
 

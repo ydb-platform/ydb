@@ -35,30 +35,34 @@ END DO;
 
 ### Формат raw {#raw}
 
-Данный формат позволяет считывать содержимое сообщений как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../../../yql/reference/udf/list/string).
+Данный формат позволяет считывать содержимое сообщений как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../../../yql/reference/udf/list/string). Cхема по умолчанию: `SCHEMA(Data String)`.
 
 ### Поддерживаемые типы данных (#schema)
 
 Таблица всех поддерживаемых типов  в схеме запроса:
 |Тип                                  |json_each_row|raw|
 |-------------------------------------|-------------|---|
-|`Bool`,<br/>`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓||
+|`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓||
+|`Bool`                               |             |   |
 |`DyNumber`                           |             |   |
-|`String`, `Utf8`, `Json`             |✓            |✓  |
+|`String`, `Utf8`, `Json`             |✓            |✓?  |
 |`JsonDocument`                       |             |   |
-|`Yson`                               |             |✓  |
+|`Yson`                               |             |✓?  |
 |`Uuid`                               |             |   |
-|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|✓    |  |
-|`Interval`                           |✓            |   |
-|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|✓     |    |
+|`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|    |  |
+|`Interval`                           |            |   |
+|`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|     |    |
 |`Optional<T>`                        |✓            |✓  |
 
 
-### Пример
+### Примеры
+
+Чтение в формате `json_each_row`:
 
 ```sql
 CREATE STREAMING QUERY `my_queries/query_name`
 DO BEGIN
+    PRAGMA pq.Consumer = "ConsumerName";
     $input = SELECT * FROM `source_name`.`input_topic_name` WITH (
         FORMAT = "json_each_row",
         SCHEMA (
@@ -73,5 +77,15 @@ DO BEGIN
     
     $json = SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $number_errors;
     INSERT INTO `source_name`.`output_topic_name` SELECT * FROM $json;
+END DO;
+```
+
+Чтение в формате `raw`:
+
+```sql
+CREATE STREAMING QUERY `my_queries/query_name`
+DO BEGIN
+    PRAGMA pq.Consumer = "ConsumerName";
+    TODO
 END DO;
 ```

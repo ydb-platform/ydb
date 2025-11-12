@@ -105,6 +105,8 @@ std::pair<TString, TViewDescription> TableKeyImpl(const std::pair<bool, TString>
 
 std::pair<TString, TViewDescription> TableKeyImpl(const TRule_table_key& node, TTranslation& ctx, bool hasAt);
 
+TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx);
+
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx);
 
 /// \return optional prefix

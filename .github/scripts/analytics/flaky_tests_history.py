@@ -39,7 +39,7 @@ def main():
         """
         
         try:
-            results = ydb_wrapper.execute_scan_query(last_date_query, query_name="get_last_date_from_history")
+            results = ydb_wrapper.execute_scan_query(last_date_query, query_name=f"get_last_date_from_history_{branch}")
             
             default_start_date = datetime.date(2024, 9, 1)
             base_date = datetime.date(1970, 1, 1)
@@ -172,7 +172,7 @@ def main():
                 )
             """
                 
-                results = ydb_wrapper.execute_scan_query(query_get_history, query_name="get_flaky_test_history_for_date")
+                results = ydb_wrapper.execute_scan_query(query_get_history, query_name=f"get_flaky_test_history_for_date_{branch}")
                 print(f'📈 History data captured, {len(results)} rows')
                 
                 # Prepare data for upsert

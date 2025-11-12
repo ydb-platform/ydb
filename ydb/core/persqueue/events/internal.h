@@ -212,6 +212,8 @@ struct TEvPQ {
         EvMLPChangeMessageDeadlineResponse,
         EvGetMLPConsumerStateRequest,
         EvGetMLPConsumerStateResponse,
+        EvMLPConsumerUpdateConfig,
+        EvMLPDLQMoverResponse,
         EvEnd
     };
 
@@ -1563,6 +1565,10 @@ struct TEvPQ {
     // Response from the MLP consumer. Only for testing purposes.
     //
     struct TEvGetMLPConsumerStateResponse : TEventLocal<TEvGetMLPConsumerStateResponse, EvGetMLPConsumerStateResponse> {
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
+
         struct TMessage {
             ui64 Offset;
             ui32 Status;
@@ -1572,6 +1578,35 @@ struct TEvPQ {
         };
 
         std::vector<TMessage> Messages;
+    };
+
+    struct TEvMLPConsumerUpdateConfig : TEventLocal<TEvMLPConsumerUpdateConfig, EvMLPConsumerUpdateConfig> {
+
+        TEvMLPConsumerUpdateConfig(
+            const NKikimrPQ::TPQTabletConfig::TConsumer& config,
+            std::optional<TDuration> retentionPeriod
+        )
+            : Config(config)
+            , RetentionPeriod(retentionPeriod)
+        {
+        }
+
+        NKikimrPQ::TPQTabletConfig::TConsumer Config;
+        std::optional<TDuration> RetentionPeriod;
+    };
+
+    struct TEvMLPDLQMoverResponse : TEventLocal<TEvMLPDLQMoverResponse, EvMLPDLQMoverResponse> {
+
+        TEvMLPDLQMoverResponse(Ydb::StatusIds::StatusCode status, std::vector<ui64>&& movedMessages, TString&& errorDescription = "")
+            : Status(status)
+            , MovedMessages(std::move(movedMessages))
+            , ErrorDescription(std::move(errorDescription))
+        {
+        }
+
+        Ydb::StatusIds::StatusCode Status;
+        std::vector<ui64> MovedMessages;
+        TString ErrorDescription;
     };
 };
 

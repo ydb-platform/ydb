@@ -371,6 +371,12 @@ message TPQTabletConfig {
         CONSUMER_TYPE_MLP = 1;
     }
 
+    enum EDeadLetterPolicy {
+        DEAD_LETTER_POLICY_UNSPECIFIED = 0;
+        DEAD_LETTER_POLICY_DELETE = 1;
+        DEAD_LETTER_POLICY_MOVE = 2;
+    }
+
     message TConsumer {
         optional string Name = 1;
         optional uint64 ReadFromTimestampsMs = 2 [default = 0];
@@ -383,9 +389,12 @@ message TPQTabletConfig {
         optional bool Important = 9 [default = false];
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
-        optional bool KeepMessageOrder = 13 [default = false]; // For MLP consumers
-        optional uint32 MaxMessageReceiveCount = 14 [default = 1000]; // For MLP consumers
-        optional uint32 DefaultVisibilityTimeoutSeconds = 15 [default = 30]; // For MLP consumers
+        optional bool KeepMessageOrder = 12 [default = false]; // For MLP consumers
+        optional bool DeadLetterPolicyEnabled = 13 [default = false]; // For MLP consumers
+        optional EDeadLetterPolicy DeadLetterPolicy = 14 [default = DEAD_LETTER_POLICY_UNSPECIFIED]; // For MLP consumers
+        optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
+        optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
+        optional string DeadLetterQueue = 17; // For MLP consumers
     }
 
     repeated TConsumer Consumers = 37;
@@ -1397,5 +1406,6 @@ message TMLPStorageWAL {
     optional uint64 SlowFirstOffset = 12;
     repeated uint64 MovedToSlowZone = 13;
     repeated uint64 DeletedFromSlowZone = 14;
+    optional uint64 DeletedFromDLQ = 15;
 }
 

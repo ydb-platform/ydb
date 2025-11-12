@@ -53,6 +53,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, _EnablePrecompute);
     REGISTER_SETTING(*this, EnableDqReplicate);
     REGISTER_SETTING(*this, WatermarksMode);
+    REGISTER_SETTING(*this, WatermarksIdleTimeoutMs);
     REGISTER_SETTING(*this, WatermarksGranularityMs);
     REGISTER_SETTING(*this, WatermarksLateArrivalDelayMs);
     REGISTER_SETTING(*this, WatermarksEnableIdlePartitions);

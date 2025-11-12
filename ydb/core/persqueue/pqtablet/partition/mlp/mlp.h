@@ -14,12 +14,13 @@ namespace NKikimr::NPQ::NMLP {
 
 // MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
 NActors::IActor* CreateConsumerActor(
+    const TString& database,
     ui64 tabletId,
     const NActors::TActorId& tabletActorId,
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    const std::optional<TDuration> reteintion
+    const std::optional<TDuration> retentionPeriod
 );
 
 } // namespace NKikimr::NPQ::NMLP

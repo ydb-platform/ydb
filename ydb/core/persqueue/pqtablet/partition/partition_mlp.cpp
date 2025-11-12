@@ -83,6 +83,20 @@ void TPartition::ProcessMLPPendingEvents() {
 }
 
 void TPartition::InitializeMLPConsumers() {
+    auto retentionPeriod = [&](const auto& consumer) -> std::optional<TDuration> {
+        if (consumer.GetImportant()) {
+            return std::nullopt;
+        }
+        if (consumer.HasAvailabilityPeriodMs()) {
+            return TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
+        } else if (Config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
+            // retention by storage is not supported yet
+            return std::nullopt;
+        } else {
+            return TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
+        }
+    };
+
     std::unordered_map<TString, NKikimrPQ::TPQTabletConfig::TConsumer> consumers;
     for (auto& consumer : Config.GetConsumers()) {
         if (consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
@@ -94,7 +108,11 @@ void TPartition::InitializeMLPConsumers() {
 
     for (auto it = MLPConsumers.begin(); it != MLPConsumers.end();) {
         auto &[name, consumerInfo] = *it;
-        if (consumers.contains(name)) {
+        if (auto cit = consumers.find(name); cit != consumers.end()) {
+            LOG_I("Updateing MLP consumer '" << name << "' config");
+            auto& config = cit->second;
+            Send(consumerInfo.ActorId, new TEvPQ::TEvMLPConsumerUpdateConfig(config, retentionPeriod(config)));
+
             ++it;
             continue;
         }
@@ -111,23 +129,14 @@ void TPartition::InitializeMLPConsumers() {
         }
 
         LOG_I("Creating MLP consumer '" << name << "'");
-
-        std::optional<TDuration> reteintion;
-        if (!consumer.GetImportant()) {
-            if (consumer.HasAvailabilityPeriodMs()) {
-                reteintion = TDuration::MilliSeconds(consumer.GetAvailabilityPeriodMs());
-            } else {
-                reteintion = TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds());
-            }
-        }
-
         auto actorId = RegisterWithSameMailbox(NMLP::CreateConsumerActor(
+            DbPath,
             TabletId,
             TabletActorId,
             Partition.OriginalPartitionId,
             SelfId(),
             consumer,
-            reteintion
+            retentionPeriod(consumer)
         ));
         MLPConsumers.emplace(consumer.GetName(), actorId);
     }

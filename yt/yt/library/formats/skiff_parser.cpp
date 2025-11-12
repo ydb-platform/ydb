@@ -107,7 +107,7 @@ TPrimitiveTypeConverter<IsNullable, TFunction> CreatePrimitiveTypeConverter(ui32
     return TPrimitiveTypeConverter<IsNullable, TFunction>(columnId, function);
 }
 
-template<bool isNullable>
+template <bool isNullable>
 class TYson32TypeConverterImpl
 {
 public:

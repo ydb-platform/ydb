@@ -541,9 +541,8 @@ TExprNode::TPtr OptimizeExistsAndUnwrap(const TExprNode::TPtr& node, TExprContex
 
 bool IsExtractCommonPredicatesFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString enable = to_lower(TString("ExtractCommonPredicatesFromLogicalOps"));
-    static const TString disable = to_lower(TString("DisableExtractCommonPredicatesFromLogicalOps"));
-    return optCtx.Types->OptimizerFlags.contains(enable) && !optCtx.Types->OptimizerFlags.contains(disable);
+    static const char optName[] = "ExtractCommonPredicatesFromLogicalOps";
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 size_t GetNodeId(const TExprNode* node, const TNodeMap<size_t>& node2id) {

@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    common.h
+    common.cpp
 )
 
 PEERDIR(
@@ -11,5 +11,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     library/cpp/testing/unittest
 )
+
+YQL_LAST_ABI_VERSION()
 
 END()

@@ -462,12 +462,22 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
 
 TTableMetadataResult EnrichExternalTable(const TTableMetadataResult& externalTable, const TTableMetadataResult& externalDataSource) {
     TTableMetadataResult result;
+
     if (!externalTable.Success()) {
         result.AddIssues(externalTable.Issues());
         return result;
     }
+
     if (!externalDataSource.Success()) {
         result.AddIssues(externalDataSource.Issues());
+        return result;
+    }
+
+    if (externalTable.Metadata->ExternalSource.Type != externalDataSource.Metadata->ExternalSource.Type) {
+        result.AddIssue(YqlIssue({}, TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder()
+            << "Internal error. External table type mismatch, expected: " << externalTable.Metadata->ExternalSource.Type
+            << ", but underlying external data source has type: " << externalDataSource.Metadata->ExternalSource.Type
+        ));
         return result;
     }
 
@@ -480,6 +490,7 @@ TTableMetadataResult EnrichExternalTable(const TTableMetadataResult& externalTab
     tableMeta->ExternalSource.ServiceAccountIdSignature = externalDataSource.Metadata->ExternalSource.ServiceAccountIdSignature;
     tableMeta->ExternalSource.AwsAccessKeyId = externalDataSource.Metadata->ExternalSource.AwsAccessKeyId;
     tableMeta->ExternalSource.AwsSecretAccessKey = externalDataSource.Metadata->ExternalSource.AwsSecretAccessKey;
+    tableMeta->ExternalSource.UnderlyingExternalSourceMetadata = externalDataSource.Metadata;
     return result;
 }
 
@@ -885,7 +896,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     // In the case of reading from an external data source,
     // we have a construction of the form: `/Root/external_data_source`.`/path_in_external_system` WITH (...)
     // In this syntax, information about path_in_external_system is already known and we only need information about external_data_source.
-    // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard
+    // To do this, we go to the DefaultCluster and get information about external_data_source from scheme shard.
+    // In case of external data source `cluster` = "/Root/external_data_source" and `id` = "/path_in_external_system"
     const bool resolveEntityInsideDataSource = (cluster != Cluster);
     TMaybe<TString> externalPath;
     TPath entityName = id;

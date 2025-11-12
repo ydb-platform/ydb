@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     static void DropTable(Tests::TServer::TPtr server, TActorId sender, const TString& name)
     {
         ui64 txId = AsyncDropTable(server, sender, "/Root", name);
-        WaitTxNotification(server, sender, txId);
+        WaitTxNotification(server, txId);
     }
 
     static void CreatePrefixTable(Tests::TServer::TPtr server, TActorId sender, TShardedTableOptions options)

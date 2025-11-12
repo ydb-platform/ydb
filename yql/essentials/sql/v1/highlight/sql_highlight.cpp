@@ -134,17 +134,25 @@ TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
         .Kind = EUnitKind::TypeIdentifier,
         .Patterns = {
             {s.Get("ID_PLAIN"), s.Get("LESS")},
+            {.Body = "DECIMAL", .IsCaseInsensitive = true},
             {Merged(std::move(types))},
         },
     };
 }
 
-template <>
-TUnit MakeUnit<EUnitKind::FunctionIdentifier>(Syntax& s) {
+TUnit MakeUnitUDF(Syntax& s) {
     return {
         .Kind = EUnitKind::FunctionIdentifier,
         .Patterns = {
             {s.Concat({"ID_PLAIN", "NAMESPACE", "ID_PLAIN"})},
+        },
+    };
+}
+
+TUnit MakeUnitBuiltin(Syntax& s) {
+    return {
+        .Kind = EUnitKind::FunctionIdentifier,
+        .Patterns = {
             {s.Get("ID_PLAIN"), s.Get("LPAREN")},
         },
     };
@@ -181,6 +189,8 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
         .RangePatterns = {
             {R"(')", R"(')", R"re(\\.)re"},
             {R"(")", R"(")", R"re(\\.)re"},
+            {TRangePattern::EmbeddedPythonBegin, R"(@@)", R"re(\@\@\@\@)re"},
+            {TRangePattern::EmbeddedJavaScriptBegin, R"(@@)", R"re(\@\@\@\@)re"},
             {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
         },
         .Patterns = {{s.Get("STRING_VALUE")}},
@@ -239,8 +249,9 @@ THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
     h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::OptionIdentifier>(s));
-    h.Units.emplace_back(MakeUnit<EUnitKind::FunctionIdentifier>(s));
+    h.Units.emplace_back(MakeUnitUDF(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
+    h.Units.emplace_back(MakeUnitBuiltin(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
     h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));

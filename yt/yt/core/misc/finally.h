@@ -10,7 +10,7 @@ namespace NYT {
 //! A simple guard that executes a given function at the end of scope.
 
 template <class TCallback>
-class TFinallyGuard
+class [[nodiscard]] TFinallyGuard
 {
 public:
     template <class T>

@@ -3468,7 +3468,8 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .FinishHandler(finishLambda)
         .SaveHandler(saveLambda)
         .LoadHandler(loadLambda)
-        .template WatermarkMode<TCoAtom>().Build(ToString(false));
+        .WatermarkMode<TCoAtom>().Build(ToString(false))
+        .HoppingColumn<TCoAtom>().Build(hopTraits.Column);
 
     return Build<TCoPartitionsByKeys>(ctx, pos)
         .Input(aggregate.Input())
@@ -3481,10 +3482,10 @@ TExprNode::TPtr RewriteAsHoppingWindowFullOutput(const TCoAggregate& aggregate, 
         .SortKeySelectorLambda(timeExtractorLambda)
         .ListHandlerLambda()
             .Args(streamArg)
-            .template Body<TCoForwardList>()
+            .Body<TCoForwardList>()
                 .Stream(Build<TCoMap>(ctx, pos)
                     .Input(multiHoppingCoreBuilder
-                        .template Input<TCoIterator>()
+                        .Input<TCoIterator>()
                             .List(streamArg)
                             .Build()
                         .Done())
@@ -3844,8 +3845,8 @@ TExprNode::TPtr OptimizeMerge(const TExprNode::TPtr& node, TExprContext& ctx, TO
 
 bool IsEarlyExpandOfSkipNullAllowed(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString skipNullFlags = to_lower(TString("EarlyExpandSkipNull"));
-    return optCtx.Types->OptimizerFlags.contains(skipNullFlags);
+    static const char optName[] = "EarlyExpandSkipNull";
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

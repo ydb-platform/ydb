@@ -8,6 +8,7 @@ import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/bridge.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrWhiteboard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -150,6 +151,7 @@ message TPDiskStateInfo {
     optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
     optional uint32 SlotSizeInUnits = 25;
+    optional double PDiskUsage = 26; // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
 }
 
 message TEvPDiskStateRequest {
@@ -236,6 +238,10 @@ message TVDiskStateInfo {
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
 
     optional uint32 GroupSizeInUnits = 32;
+    optional double VDiskSlotUsage = 33; // 100.0 * Owner.Used / Owner.LightYellowLimit
+    optional double NormalizedOccupancy = 34;
+    optional double VDiskRawUsage = 35; // 100.0 * Owner.Used / Owner.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 36;
 }
 
 message TEvVDiskStateRequest {

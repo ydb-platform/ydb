@@ -187,8 +187,9 @@ class KikimrConfigGenerator(object):
             enable_static_auth=False,
             cms_config=None,
             explicit_statestorage_config=None,
-            system_tablets=None
-            protected_mode=False
+            system_tablets=None,
+            protected_mode=False,
+            tiny_mode=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -274,6 +275,8 @@ class KikimrConfigGenerator(object):
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
+
+        self.tiny_mode = tiny_mode
 
         self.__bs_cache_file_path = bs_cache_file_path
 

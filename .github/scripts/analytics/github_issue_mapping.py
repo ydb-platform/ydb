@@ -19,8 +19,10 @@ from github_issue_utils import create_test_issue_mapping
 
 
 def get_github_issues_data(ydb_wrapper):
-    """Get GitHub issues data from the github_data/issues table"""
-    query = """
+    """Get GitHub issues data from the issues table"""
+    # Get table path from config
+    issues_table = ydb_wrapper.get_table_path("issues")
+    query = f"""
     SELECT 
         issue_number,
         title,
@@ -29,7 +31,7 @@ def get_github_issues_data(ydb_wrapper):
         body,
         created_at,
         updated_at
-    FROM `github_data/issues`
+    FROM `{issues_table}`
     WHERE body IS NOT NULL
     AND body != ''
     """
@@ -117,16 +119,13 @@ def main():
     """Main function to create the test-to-issue mapping table"""
     print("Starting GitHub issue mapping table creation")
     script_start_time = time.time()
-    script_name = os.path.basename(__file__)
     
-    # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
         
-        table_path = "test_results/analytics/github_issue_mapping"
-        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
+        table_path = ydb_wrapper.get_table_path("github_issue_mapping")
         
         try:
             # Get GitHub issues data
@@ -145,12 +144,12 @@ def main():
             mapping_data = convert_mapping_to_table_data(test_to_issue)
             print(f"Converted to {len(mapping_data)} table records")
             
-            # Create mapping table
-            create_test_issue_mapping_table(ydb_wrapper, full_table_path)
+            # Create mapping table (wrapper will add database_path automatically)
+            create_test_issue_mapping_table(ydb_wrapper, table_path)
             
-            # Bulk upsert mapping data
+            # Bulk upsert mapping data (wrapper will add database_path automatically)
             if mapping_data:
-                bulk_upsert_mapping_data(ydb_wrapper, full_table_path, mapping_data)
+                bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)
             else:
                 print("No mapping data to insert")
         

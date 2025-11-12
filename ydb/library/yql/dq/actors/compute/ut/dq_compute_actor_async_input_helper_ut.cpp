@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TComputeActorAsyncInputHelperTest) {
     Y_UNIT_TEST(PollAsyncInput) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__,  NKikimr::TAlignedPagePoolCounters(), true, true);
         TDummyDqComputeActorAsyncInput input;
-        TDummyAsyncInputHelper helper("MyPrefix", 13, NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED);
+        TDummyAsyncInputHelper helper("MyPrefix", 13, NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED, TDuration::Max());
         helper.AsyncInput = &input;
         TDqComputeActorMetrics metrics{NMonitoring::TDynamicCounterPtr{}};
         TDqComputeActorWatermarks watermarks("");

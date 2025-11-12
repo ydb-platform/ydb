@@ -31,6 +31,17 @@ using namespace NTestUtils;
 
 namespace {
 
+void FillRootTable(TTestEnv& env, ui16 tableNum = 0) {
+    TTableClient client(env.GetDriver());
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    NKqp::AssertSuccessResult(session.ExecuteDataQuery(Sprintf(R"(
+        REPLACE INTO `Root/Table%u` (Key, Value) VALUES
+            (0u, "X"),
+            (1u, "Y"),
+            (2u, "Z");
+    )", tableNum), TTxControl::BeginTx().CommitTx()).GetValueSync());
+}
+
 void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false, ui16 tableNum = 0) {
     env.GetClient().CreateTable("/Root", Sprintf(R"(
         Name: "Table%u"
@@ -40,16 +51,23 @@ void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = fa
         UniformPartitionsCount: %lu
     )", tableNum, partitionCount));
 
-    if (fillTable) {
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-            REPLACE INTO `Root/Table0` (Key, Value) VALUES
-                (0u, "X"),
-                (1u, "Y"),
-                (2u, "Z");
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
-    }
+    if (fillTable)
+        FillRootTable(env, tableNum);
+}
+
+void CreateRootColumnTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false, ui16 tableNum = 0) {
+    NQuery::TQueryClient client(env.GetDriver());
+    auto result = client.ExecuteQuery(Sprintf(R"(
+        CREATE TABLE `/Root/Table%u` (
+            Key Int32 NOT NULL,
+            Value Utf8,
+            PRIMARY KEY(Key)
+        ) WITH (STORE=COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %lu);
+    )", tableNum, partitionCount), NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    if (fillTable)
+        FillRootTable(env, tableNum);
 }
 
 void BreakLock(TSession& session, const TString& tableName) {
@@ -2659,67 +2677,26 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(1u); // LastTtlRowsErased
     }
 
-    Y_UNIT_TEST(PartitionStatsAfterRemoveColumnTable) {
-        TTestEnv env;
-        NQuery::TQueryClient client(env.GetDriver());
+    Y_UNIT_TEST_TWIN(PartitionStatsAfterDropTable, UseColumnTable) {
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
+        if (UseColumnTable)
+            CreateRootColumnTable(env);
+        else
+            CreateRootTable(env);
 
-        {
-            auto result = client.ExecuteQuery(R"(
-                CREATE TABLE `/Root/test_table` (
-                    key int not null,
-                    value utf8,
-                    PRIMARY KEY(key)
-                ) WITH (STORE=COLUMN);
-            )", NQuery::TTxControl::NoTx()).GetValueSync();
+        TTableClient client(env.GetDriver());
 
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
 
-        {
-            auto result = client.ExecuteQuery(R"(
-                SELECT Path FROM `/Root/.sys/partition_stats`
-                GROUP BY Path;
-            )", NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            auto parser = result.GetResultSetParser(0);
-            bool existsPath = false;
-            while (parser.TryNextRow()) {
-                auto path = parser.ColumnParser("Path").GetOptionalUtf8();
-                UNIT_ASSERT(path);
-                if (*path == "/Root/test_table") {
-                    existsPath = true;
-                    break;
-                }
-            }
-            UNIT_ASSERT_C(existsPath, "Path /Root/test_table not found");
-        }
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            DROP TABLE `Root/Table0`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        {
-            auto result = client.ExecuteQuery(R"(
-                DROP TABLE `/Root/test_table`
-            )", NQuery::TTxControl::NoTx()).GetValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto result = client.ExecuteQuery(R"(
-                SELECT Path FROM `/Root/.sys/partition_stats`
-                GROUP BY Path;
-            )", NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            auto parser = result.GetResultSetParser(0);
-            bool existsPath = false;
-            while (parser.TryNextRow()) {
-                auto path = parser.ColumnParser("Path").GetOptionalUtf8();
-                UNIT_ASSERT(path);
-                if (*path == "/Root/test_table") {
-                    existsPath = true;
-                    break;
-                }
-            }
-            UNIT_ASSERT_C(!existsPath, "Path /Root/test_table found");
-        }
+        // Verify Table0 is removed from partition_stats
+        auto table0Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+        UNIT_ASSERT_VALUES_EQUAL(table0Count, 0);
     }
 
     Y_UNIT_TEST(PartitionStatsLocksFields) {
@@ -2748,6 +2725,34 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64(1); // LocksAcquired
         check.Uint64(0); // LocksWholeShard
         check.Uint64(1); // LocksBroken
+    }
+
+    Y_UNIT_TEST_TWIN(PartitionStatsAfterRenameTable, UseColumnTable) {
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
+        if (UseColumnTable)
+            CreateRootColumnTable(env);
+        else
+            CreateRootTable(env);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `Root/Table0` RENAME TO `Root/Table1`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+
+        // Verify Table0 is no longer in partition_stats
+        auto table0Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+        UNIT_ASSERT_VALUES_EQUAL(table0Count, 0);
+
+        // Verify Table1 exists in partition_stats
+        auto table1Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+        UNIT_ASSERT_VALUES_EQUAL(table1Count, 1);
     }
 
     Y_UNIT_TEST(PartitionStatsFields) {
@@ -2804,6 +2809,7 @@ R"(CREATE TABLE `test_show_create` (
                 TabletId,
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
+                TxCompleteLag,
                 FollowerId,
                 LocksAcquired,
                 LocksWholeShard,
@@ -2814,7 +2820,7 @@ R"(CREATE TABLE `test_show_create` (
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-        TYsonFieldChecker check(ysonString, 27);
+        TYsonFieldChecker check(ysonString, 28);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -2838,6 +2844,7 @@ R"(CREATE TABLE `test_show_create` (
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
+        check.Int64(0); // TxCompleteLag
         check.Uint64(0u); // FollowerId
         check.Uint64(0u); // LocksAcquired
         check.Uint64(0u); // LocksWholeShard
@@ -3699,7 +3706,7 @@ R"(CREATE TABLE `test_show_create` (
                 UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
 
                 const auto& columns = systemView.GetTableColumns();
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
                 UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
                 UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -3719,7 +3726,7 @@ R"(CREATE TABLE `test_show_create` (
                 const auto& columns = table.GetTableColumns();
                 const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
                 UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
                 UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 

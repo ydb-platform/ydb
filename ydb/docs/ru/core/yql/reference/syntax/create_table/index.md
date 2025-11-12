@@ -41,8 +41,8 @@
 
 `column_option_list` - список опций для колонки. Для указания этих опций существует два синтаксиса:
 
-1. `option_1 option_2 ... option_n`
-2. `(option_1, option_2, ..., option_n)`
+1. `option_1 option_2 ... option_n`;
+2. `(option_1, option_2, ..., option_n)`.
 
 Возможные значения опций:
 

@@ -1270,6 +1270,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& set
     AFL_ENSURE(settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP);
     AFL_ENSURE(!settings.KeepRowsOrder);
     AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
+    AFL_ENSURE(settings.LookupKeyColumns.size() <= settings.KeyColumns.size());
     return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
 }
 

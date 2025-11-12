@@ -3392,6 +3392,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = MakeTabletID(false, 1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
 
+        auto syncReassign = runtime.AddObserver<TEvHive::TEvReassignTablet>([] (auto&& ev) { ev->Get()->Record.SetAsync(false); });
+
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         TVector<ui64> tablets;
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
@@ -8461,7 +8463,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         void Notify() {
             for (auto subscriber : Subscribers) {
                 auto pile = (subscriber.NodeId() - Runtime.GetNodeId(0)) % 2;
-                auto ev  = std::make_unique<TEvNodeWardenStorageConfig>(nullptr, nullptr, true, BridgeInfos[pile]);
+                auto ev  = std::make_unique<TEvNodeWardenStorageConfig>(nullptr, true, BridgeInfos[pile]);
                 Runtime.Send(new IEventHandle(subscriber, subscriber, ev.release()));
             }
         }
@@ -9051,6 +9053,11 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
                     case TEvLocal::EvBootTablet: {
                         const auto& info = ev->Get<TEvLocal::TEvBootTablet>()->Record.GetInfo();
                         OnBootTablet(info);
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+                    case TEvHive::EvReassignTablet: {
+                        auto& record = ev->Get<TEvHive::TEvReassignTablet>()->Record;
+                        record.SetAsync(false);
                         return TTestActorRuntime::EEventAction::PROCESS;
                     }
                 }

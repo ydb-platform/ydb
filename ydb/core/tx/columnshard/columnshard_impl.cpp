@@ -176,15 +176,14 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
     auto plannedTx = ProgressTxController->GetPlannedTx();
     if (plannedTx) {
         // We may only read just before the first transaction in the queue
-        auto maxReadVersion = TRowVersion(plannedTx->Step, plannedTx->TxId).Prev();
-        return NOlap::TSnapshot(maxReadVersion.Step, maxReadVersion.TxId);
+        auto firstPlannedSnapshot = NOlap::TSnapshot(plannedTx->Step, plannedTx->TxId);
+        return firstPlannedSnapshot.GetPreviousSnapshot();
+    } else {
+        // the same snapshot is used by bulk upsert and aborts
+        // aborts are fine, but be careful with bulk upsert,
+        // it must correctly break conflicting serializable txs
+        return GetCurrentSnapshotForInternalModification();
     }
-    ui64 step = LastPlannedStep;
-    if (MediatorTimeCastEntry) {
-        ui64 mediatorStep = MediatorTimeCastEntry->Get(TabletID());
-        step = Max(step, mediatorStep);
-    }
-    return NOlap::TSnapshot(step, Max<ui64>());
 }
 
 ui64 TColumnShard::GetOutdatedStep() const {
@@ -1233,6 +1232,7 @@ private:
     std::vector<TPortionConstructorV2> Portions;
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        TMemoryProfileGuard mpg("TAccessorsParsingTask::Execute");
         std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>> accessors;
         accessors.reserve(Portions.size());
         for (auto&& i : Portions) {

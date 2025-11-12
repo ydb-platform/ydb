@@ -29,6 +29,7 @@ private:
     void Handle(TEvSubscribeExternal::TPtr& ev);
     void Handle(TEvUnsubscribeExternal::TPtr& ev);
     void Handle(TEvObjectsOperation::TPtr& ev);
+    void Handle(TEvResetManagerRegistration::TPtr& ev);
 
     void PrepareManagers(std::vector<IClassBehaviour::TPtr> managers, TAutoPtr<IEventBase> ev, const NActors::TActorId& sender);
     void Activate();
@@ -55,6 +56,7 @@ public:
             hFunc(TEvPrepareManager, Handle);
             hFunc(TEvSubscribeExternal, Handle);
             hFunc(TEvUnsubscribeExternal, Handle);
+            hFunc(TEvResetManagerRegistration, Handle);
 
             default:
                 Y_ABORT_UNLESS(false);
@@ -69,4 +71,4 @@ public:
 
 NActors::IActor* CreateService(const TConfig& config);
 
-}
+} // namespace NKikimr::NMetadata::NProvider

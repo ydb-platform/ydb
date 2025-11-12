@@ -44,7 +44,13 @@ TExprNode::TPtr PlanConverter::RemoveScalarSubplans(TExprNode::TPtr node) {
 TOpRoot PlanConverter::ConvertRoot(TExprNode::TPtr node) {
     auto opRoot = TKqpOpRoot(node);
     auto rootInput = ExprNodeToOperator(opRoot.Input().Ptr());
-    auto res = TOpRoot(rootInput, node->Pos());
+    TVector<TString> columnOrder;
+
+    for (auto c : opRoot.ColumnOrder()) {
+        columnOrder.push_back(c.StringValue());
+    }
+
+    auto res = TOpRoot(rootInput, node->Pos(), columnOrder);
     res.Node = node;
     res.PlanProps = PlanProps;
     return res;
@@ -208,7 +214,8 @@ std::shared_ptr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr
         keyColumns.push_back(TInfoUnit(TString(keyColumn)));
     }
 
-    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, node->Pos());
+    const bool distinctAll = opAggregate.DistinctAll() == "True" ? true : false;
+    return std::make_shared<TOpAggregate>(input, opAggTraitsList, keyColumns, EAggregationPhase::Final, distinctAll, node->Pos());
 }
 
 } // namespace NKqp

@@ -32,6 +32,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/retry/retry_policy.h>
 
+#include <util/system/env.h>
 #include <util/generic/guid.h>
 #include <util/generic/utility.h>
 
@@ -194,13 +195,9 @@ public:
 
 private:
     static TMaybe<NACLib::TDiffACL> GetTableACL(const NKikimrConfig::TFeatureFlags& featureFlags) {
-        if (!featureFlags.GetEnableSecureScriptExecutions()) {
-            return Nothing();
-        }
-
         NACLib::TDiffACL acl;
         acl.ClearAccess();
-        acl.SetInterruptInheritance(true);
+        acl.SetInterruptInheritance(featureFlags.GetEnableSecureScriptExecutions());
         return acl;
     }
 
@@ -4871,7 +4868,12 @@ private:
 } // anonymous namespace
 
 IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime) {
-    return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, LEASE_DURATION);
+    TDuration leaseDuration = LEASE_DURATION;
+    ui64 seconds = 0;
+    if (TryFromString<ui64>(GetEnv("YDB_TEST_LEASE_DURATION_SEC"), seconds) && seconds) {
+        leaseDuration = TDuration::Seconds(seconds);
+    }
+    return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, leaseDuration);
 }
 
 IActor* CreateScriptExecutionsTablesCreator(const NKikimrConfig::TFeatureFlags& featureFlags) {

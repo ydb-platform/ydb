@@ -5,6 +5,8 @@
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/security/ticket_parser.h>
 
+#include <ydb/core/protos/grpc_pq_old.pb.h>
+
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -1530,10 +1532,22 @@ Y_UNIT_TEST(TestTimeRetention) {
     });
 }
 
-Y_UNIT_TEST(TestCompactifiedWithRetention) {
-    // TODO(abcdef): temporarily deleted
-    return;
+TString GetSerializedData(ui64 seqNo, const TString& payload, const TString& key) {
+    NKikimrPQClient::TDataChunk proto;
+    proto.SetSeqNo(seqNo);
+    proto.SetData(payload);
+    if (!key.empty()) {
+        auto *msgMeta = proto.AddMessageMeta();
+        msgMeta->set_key("__key");
+        msgMeta->set_value(key);
+    }
+    TString dataChunkStr;
+    bool res = proto.SerializeToString(&dataChunkStr);
+    Y_ABORT_UNLESS(res);
+    return dataChunkStr;
+}
 
+Y_UNIT_TEST(TestCompactifiedWithRetention) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1545,24 +1559,29 @@ Y_UNIT_TEST(TestCompactifiedWithRetention) {
 
         tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
-        TVector<std::pair<ui64, TString>> data;
-        activeZone = PlainOrSoSlow(true, false);
-
+        ui64 key = 1;
         TString s{32, 'c'};
         ui32 pp = 8 + 4 + 2 + 9;
-        for (ui32 i = 0; i < 10; ++i) {
-            data.push_back({i + 1, s.substr(pp)});
-        }
+        auto getData = [&] () {
+            TVector<std::pair<ui64, TString>> data;
+            for (ui32 i = 0; i < 10; ++i) {
+                data.push_back({i + 1, GetSerializedData(i + 1, s.substr(pp), ToString(key++))});
+            }
+            return data;
+        };
+        activeZone = PlainOrSoSlow(true, false);
+
+
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = true}, {}, tc);
-        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
-        CmdWrite(0, "sourceid1", data, tc, false);
-        CmdWrite(0, "sourceid2", data, tc, false);
+        CmdWrite(0, "sourceid0", getData(), tc, false, {}, true);
+        CmdWrite(0, "sourceid1", getData(), tc, false);
+        CmdWrite(0, "sourceid2", getData(), tc, false);
         PQGetPartInfo(0, 30, tc);
 
         PQTabletPrepare({.maxCountInPartition=1000, .deleteTime=0, .lowWatermark=100, .enableCompactificationByKey = false}, {}, tc);
-        CmdWrite(0, "sourceid3", data, tc, false);
-        CmdWrite(0, "sourceid4", data, tc, false);
-        CmdWrite(0, "sourceid5", data, tc, false);
+        CmdWrite(0, "sourceid3", getData(), tc, false);
+        CmdWrite(0, "sourceid4", getData(), tc, false);
+        CmdWrite(0, "sourceid5", getData(), tc, false);
         Cerr << "Get part info with compactification disabled\n";
         PQGetPartInfo(50, 60, tc);
     });

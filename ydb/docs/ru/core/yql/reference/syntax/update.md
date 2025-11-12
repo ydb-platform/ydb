@@ -34,7 +34,7 @@ SELECT * FROM $to_update;
 ```
 
 ## UPDATE ... RETURNING {update-returning}
- 
+
 Используется для обновления строк и одновременного возврата их новых значений. Это позволяет получить информацию об обновленных записях за один запрос, избавляя от необходимости выполнять дополнительный SELECT.
 
 ### Примеры
@@ -52,7 +52,7 @@ RETURNING *;
 
 ```yql
 UPDATE products
-SET price = price * 0.9 
+SET price = price * 0.9
 WHERE category = 'Electronics'
 RETURNING product_id, name, price AS new_price;
 ```

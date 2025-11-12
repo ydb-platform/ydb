@@ -484,7 +484,6 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
 
-
     Y_UNIT_TEST(TestBuckets) {
         TBlockLayoutConverterTestData data;
 

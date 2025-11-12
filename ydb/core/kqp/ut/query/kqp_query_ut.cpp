@@ -3486,32 +3486,21 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             "DISCARD SELECT should return no result sets, got: " << result2.GetResultSets().size());
     }
 
-    Y_UNIT_TEST(ChannelData) {
+    Y_UNIT_TEST(NoChannelDataEventsWhenDiscard) {
         TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
-        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
-        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
-
-        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
-                SELECT COUNT(*) FROM `/Root/TwoShard`;
-            )")).GetValueSync();
-        });
-        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
-        auto dataQuery = prepareResult.GetQuery();
+        auto db = kikimr.GetQueryClient();
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         ui32 channelDataCount = 0;
         TActorId executerId;
         bool executerIdCaptured = false;
 
-        auto& runtime = *kikimr.GetTestServer().GetRuntime();
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            // Capture executer ID from first TEvTxRequest
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxRequest::EventType && !executerIdCaptured) {
                 executerId = ev->Recipient;
                 executerIdCaptured = true;
                 Cerr << "Captured ExecuterId: " << executerId << Endl;
             }
-
-            // Track ChannelData events sent to executer
             if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvChannelData::EventType) {
                 auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvChannelData>()->Record;
                 Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId() 
@@ -3520,29 +3509,43 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 if (executerIdCaptured && ev->Recipient == executerId) {
                     ++channelDataCount;
                     Cerr << "ChannelData sent to Executer! Count: " << channelDataCount << Endl;
+                    return TTestActorRuntime::EEventAction::PROCESS;
                 }
             }
-
             return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(20));
-        kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
-
-        TDispatchOptions opts;
-        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
-                && ev.Sender == executerId;
-        });
-
-        UNIT_ASSERT(runtime.DispatchEvents(opts));
+        };
+        runtime.SetObserverFunc(observer);
         
-        Cerr << "Test finished. ChannelData to Executer count: " << channelDataCount << Endl;
-        
-        // В данном тесте проверяем, что ChannelData НЕ прилетает напрямую в Executer
-        // (он должен прилетать в Compute Actor, а затем результаты передаются через другие механизмы)
-        UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0, 
-            "ChannelData should not be sent directly to Executer, count: " << channelDataCount);
+        Y_DEFER { // to reset observer when test is finished
+            runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return db.ExecuteQuery(R"(
+                    DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0, 
+                "ChannelData should not be sent when DISCARD is used, count: " << channelDataCount);
+        }
+        {
+            auto result = kikimr.RunCall([&] {
+                return db.ExecuteQuery(R"(
+                    SELECT COUNT(*) FROM `/Root/TwoShard`;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+
+            UNIT_ASSERT_C(channelDataCount > 0, 
+                "ChannelDataCount for SELECT: " << channelDataCount);
+        }
     }
 }
 

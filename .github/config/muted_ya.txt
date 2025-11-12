@@ -1,12 +1,12 @@
+ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusErrorWith_1_2_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_1_1_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/pdisk/ut TPDiskTest.ChunkWriteDifferentOffsetAndSize
 ydb/core/blobstorage/ut_blobstorage Acceleration.TestThresholdPutMirror3dc1Slow
+ydb/core/blobstorage/ut_blobstorage Defragmentation.CorruptedReadHandling
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration GroupReconfigurationRace.Test_block42
-ydb/core/blobstorage/ut_blobstorage/ut_group_reconfiguration unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
@@ -16,6 +16,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
+ydb/core/blobstorage/ut_vdisk TBsVDiskGC.TGCManyVPutsDelTabletTest
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
@@ -27,16 +28,23 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_Types_Optional_1
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,1024,10,1000,0,BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,false,1,0,1000,0.5,BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,false,1,10,1000,0.5,CATEGORY_BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,true,0,0,1000,0,CATEGORY_BLOOM_FILTER]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,true,1024,10,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[10,true,1,0,100,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[10,true,1024,1000,100,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,false,1,1000,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,true,1024,1000,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[1,false,1,10,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[10,false,0,0,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[10,true,1,0,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeVariants[10,true,0,0,100,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst[10,false,1,0,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants[1,false,0,0,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants[10,false,1,1000,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariantsCount[10,true,1,1000,0,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[10,true,0,1000,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,false,0,10,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,false,0,1000,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.OrFilterVariants[10,true,1024,1000,100,0]
@@ -45,6 +53,7 @@ ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1,0,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1,10,100,0]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFullJsonVariants[2,false,1024,1000,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreJsonArrayVariants[10,true,1,0,1000000,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants[1,true,1,1000,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
@@ -69,12 +78,15 @@ ydb/core/sys_view/ut SystemView.AuthGroups_Access
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
+ydb/core/tx/schemeshard/ut_restore TImportTests.ViewCreationRetry
 ydb/core/tx/schemeshard/ut_system_names TSchemeShardSysNames.ESchemeOpCreateExternalTable-Protect-DbAdmin-clusteradmin
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-NoAuth-LocalUser-CreateUser-21
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_topic_data_cdc
+ydb/core/viewer/ut Viewer.TenantInfo5kkTablets
 ydb/library/actors/core/ut_fat HeavyActorBenchmark.SendActivateReceiveCSV_10Pairs_LONG
 ydb/library/actors/core/ut_fat unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
@@ -85,7 +97,6 @@ ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Write_50k_100times_50tx
 ydb/public/sdk/cpp/src/client/topic/ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestarts
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_And_Read_Huge_Messages_1
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
@@ -102,7 +113,6 @@ ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[
 ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[rolling_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility test_statistics.py.TestStatisticsTLI.test_statistics_tli[restart_prestable-25-3_to_prestable-25-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_prestable-25-3_to_current]
-ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_prestable-25-3_to_current-row-True]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_prestable-25-3_to_current]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_prestable-25-3]
@@ -124,10 +134,12 @@ ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite[select_1]
+ydb/tests/functional/restarts test_restarts.py.TestRestartClusterBlock42.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror3DC.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v0-std]
+ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_fifo_groups_with_dlq_in_cloud[tables_format_v0]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
 ydb/tests/functional/sqs/multinode test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-std]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--false]

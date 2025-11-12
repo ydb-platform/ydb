@@ -128,7 +128,6 @@ public:
         request->Record.MutableRequest()->SetQuery(Queries.back());
         Queries.pop_back();
         request->Record.MutableRequest()->SetKeepSession(true);
-        request->Record.MutableRequest()->SetTimeoutMs(5000);
         request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
         ++Requested;
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());

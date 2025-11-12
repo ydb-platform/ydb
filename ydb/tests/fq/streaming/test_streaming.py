@@ -8,6 +8,7 @@ from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wra
 
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +393,7 @@ class TestStreamingInYdb(TestYdsBase):
         sourceName = "test_pragma"
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName)
+        create_read_rule(self.input_topic, self.consumer_name)
 
         query_name="test_pragma1"
         sql = R'''
@@ -399,6 +401,7 @@ class TestStreamingInYdb(TestYdsBase):
             DO BEGIN
                 PRAGMA ydb.DisableCheckpoints="true";
                 PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA pq.Consumer = "{consumer_name}";
                 $in = SELECT time FROM {source_name}.`{input_topic}`
                 WITH (
                     FORMAT="json_each_row",
@@ -406,7 +409,7 @@ class TestStreamingInYdb(TestYdsBase):
                 INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
             END DO;'''
 
-        kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        kikimr.YdbClient.query(sql.format(query_name=query_name, consumer_name = self.consumer_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
 
         self.write_stream(['{"time": "lunch time"}'])
         assert self.read_stream(1, topic_path=self.output_topic) == ['lunch time']

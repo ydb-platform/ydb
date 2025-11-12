@@ -20,7 +20,7 @@ TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
 void TDLQMoverActor::Bootstrap() {
     Become(&TDLQMoverActor::StateDescribe);
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { Settings.DestinationTopic }));
-    LOG_D("QUEUE: " << Queue.size());
+    LOG_D("QUEUE: " << Queue.size() << " " << JoinRange(", ", Queue.begin(), Queue.end()));
 }
 
 void TDLQMoverActor::PassAway() {

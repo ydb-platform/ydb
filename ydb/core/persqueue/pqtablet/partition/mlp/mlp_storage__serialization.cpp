@@ -62,6 +62,7 @@ struct TDLQMessageV1 {
     ui64 SeqNo;
 };
 
+
 void VarintSerialize(TString& buffer, ui64 value) {
     const auto outValue = static_cast<i64>(value);
     char varIntOut[sizeof(outValue) + 1];
@@ -368,7 +369,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         TDeserializer<TDLQMessageV1> deserializer(snapshot.GetDLQMessages());
         TDLQMessageV1 message;
         while(deserializer.Next(message)) {
-            DLQQueue.emplace(message.Offset, message.SeqNo);
+            DLQQueue.push_back({
+                .Offset = message.Offset,
+                .SeqNo = message.SeqNo
+            });
         }
     }
 
@@ -529,7 +533,10 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         TDeserializer<TDLQMessageV1> deserializer(wal.GetAddedToDLQMessages());
         TDLQMessageV1 message;
         while(deserializer.Next(message)) {
-            DLQQueue.emplace(message.Offset, message.SeqNo);
+            DLQQueue.push_back({
+                .Offset = message.Offset,
+                .SeqNo = message.SeqNo
+            });
         }
 
         /*
@@ -651,23 +658,21 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         wal.SetChangedMessages(std::move(serializer.Buffer));
     }
 
-    {
+    if (!Storage->DLQQueue.empty()) {
+        auto firstSeqNo = Storage->DLQQueue.begin()->SeqNo;
+
         TSerializer<TDLQMessageV1> serializer;
-        std::sort(AddedToDLQ.begin(), AddedToDLQ.end());
-        ui64 LastProcessed = Max<ui64>();
-        for (auto offset : AddedToDLQ) {
-            if (LastProcessed == offset) {
+        for (auto [offset, seqNo] : AddedToDLQ) {
+            if (seqNo < firstSeqNo) {
                 continue;
             }
-            LastProcessed = offset;
-
-            auto it = Storage->DLQQueue.find(offset);
-            if (it == Storage->DLQQueue.end()) {
+            auto [message, _] = Storage->GetMessageInt(offset, EMessageStatus::DLQ);
+            if (!message) {
                 continue;
             }
             serializer.Add({
                 .Offset = offset,
-                .SeqNo = it->second
+                .SeqNo = seqNo
             });
         }
         wal.SetAddedToDLQMessages(std::move(serializer.Buffer));

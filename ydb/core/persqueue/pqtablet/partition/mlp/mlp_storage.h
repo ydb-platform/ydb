@@ -107,7 +107,7 @@ public:
     protected:
         void AddNewMessage(ui64 offset);
         void AddChange(ui64 offset);
-        void AddToDLQ(ui64 offset);
+        void AddToDLQ(ui64 offset, ui64 seqNo);
         void DeleteFromDLQ(ui64 offset);
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
@@ -121,8 +121,7 @@ public:
         std::vector<ui64> ChangedMessages;
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
-        // offset -> seqNo
-        std::vector<ui64> AddedToDLQ;
+        std::vector<TDLQMessage> AddedToDLQ;
         std::vector<ui64> DeletedFromDLQ;
         std::vector<ui64> MovedToSlowZone;
         std::vector<ui64> DeletedFromSlowZone;
@@ -241,7 +240,7 @@ private:
     std::unordered_set<ui32> LockedMessageGroupsId;
     // offset->seqNo
     // This map implementation has an iterator with the order in which the element is added.
-    THashMap<ui64, ui64> DLQQueue;
+    std::deque<TDLQMessage> DLQQueue;
 
     TBatch Batch;
     TMetrics Metrics;

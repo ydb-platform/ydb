@@ -350,15 +350,10 @@ namespace NKikimr::NStorage {
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
             const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out) {
-        auto getQuorum = [&](auto& config, const char *name, bool allowUnformatted) {
-            // config quorum goes first -- if we have (or don't have one) -- we return it; if we don't know (because
-            // we have no static groups) -- then we use disk-wise quorum (more than 1/2 nodes with more than 1/2 disks)
-            auto q = HasStorageQuorum(config, successful, bridgePileNameMap, singleBridgePileId, nwConfig,
-                allowUnformatted, out, name);
-            return q ? *q : HasDiskQuorum(config, successful, bridgePileNameMap, singleBridgePileId, out, name);
-        };
-        return getQuorum(config, "new", true) && (!mindPrev || !config.HasPrevConfig() ||
-            getQuorum(config.GetPrevConfig(), "prev", false));
+        return HasDiskQuorum(config, successful, bridgePileNameMap, singleBridgePileId, out, "new") &&
+            HasStorageQuorum(config, successful, bridgePileNameMap, singleBridgePileId, nwConfig, true, out, "new").value_or(true) &&
+            (!mindPrev || !config.HasPrevConfig() || HasStorageQuorum(config.GetPrevConfig(), successful,
+                bridgePileNameMap, singleBridgePileId, nwConfig, false, out, "prev").value_or(true));
     }
 
 } // NKikimr::NStorage

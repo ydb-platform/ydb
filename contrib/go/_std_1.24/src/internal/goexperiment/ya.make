@@ -20,7 +20,7 @@ IF (TRUE)
         exp_rangefunc_off.go
         exp_regabiargs_off.go
         exp_regabiwrappers_off.go
-        exp_spinbitmutex_on.go
+        exp_spinbitmutex_off.go
         exp_staticlockranking_off.go
         exp_swissmap_on.go
         exp_synchashtriemap_on.go

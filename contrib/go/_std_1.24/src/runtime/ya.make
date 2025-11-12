@@ -64,7 +64,7 @@ IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM6
         linkname_swiss.go
         linkname_unix.go
         lock_sema.go
-        lock_spinbit.go
+        lock_sema_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -244,7 +244,7 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND A
         linkname_swiss.go
         linkname_unix.go
         lock_sema.go
-        lock_spinbit.go
+        lock_sema_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -423,7 +423,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         linkname_swiss.go
         linkname_unix.go
         lock_sema.go
-        lock_spinbit.go
+        lock_sema_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -601,7 +601,7 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND 
         linkname_swiss.go
         linkname_unix.go
         lock_sema.go
-        lock_spinbit.go
+        lock_sema_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -781,7 +781,7 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -966,7 +966,7 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND A
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -1150,7 +1150,7 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -1336,7 +1336,7 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND AR
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -1515,7 +1515,7 @@ ELSEIF (OS_LINUX AND ARCH_ARM6 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_ARM
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -1698,7 +1698,7 @@ ELSEIF (OS_LINUX AND ARCH_ARM6 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -1885,7 +1885,7 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         linkname.go
         linkname_swiss.go
         lock_sema.go
-        lock_spinbit.go
+        lock_sema_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -2057,7 +2057,7 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AN
         linkname.go
         linkname_swiss.go
         lock_sema.go
-        lock_spinbit.go
+        lock_sema_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -2230,7 +2230,7 @@ ELSEIF (OS_ANDROID AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_ANDROID AND ARC
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go
@@ -2417,7 +2417,7 @@ ELSEIF (OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_ANDROID AND
         linkname_swiss.go
         linkname_unix.go
         lock_futex.go
-        lock_spinbit.go
+        lock_futex_tristate.go
         lockrank.go
         lockrank_off.go
         malloc.go

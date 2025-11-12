@@ -3158,6 +3158,199 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
     }
+
+    Y_UNIT_TEST(TestCacheInvalidationOnExternalDataSourceChange) {
+        constexpr char bucket[] = "testCacheInvalidationOnExternalDataSourceChange";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto query = fmt::format(R"(
+            INSERT INTO `{external_source}`.`path/` WITH (
+                FORMAT = json_each_row
+            ) (year, month) VALUES (2020, 1))",
+            "external_source"_a = externalDataSourceName
+        );
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = TStringBuilder() << GetEnv("S3_ENDPOINT") << "/unknown_bucket/"
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The specified bucket does not exist");
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+    }
+
+    Y_UNIT_TEST(TestCacheInvalidationOnExternalTableChange) {
+        constexpr char bucket[] = "testCacheInvalidationOnExternalTableChange";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        constexpr char externalTableName[] = "externalTable";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    year Int32 NOT NULL,
+                    month Int32 NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{external_source}",
+                    LOCATION="path/",
+                    FORMAT="json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto query = fmt::format(
+            "INSERT INTO `{external_table}` (year, month) VALUES (2020, 1)",
+            "external_table"_a = externalTableName
+        );
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL TABLE `{external_table}` (
+                    yearx String NOT NULL,
+                    monthx String NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{external_source}",
+                    LOCATION="path/",
+                    FORMAT="json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to convert input columns types to scheme types");
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+    }
+
+    Y_UNIT_TEST(TestCacheInvalidationOnUnderlyingExternalDataSourceChange) {
+        constexpr char bucket[] = "testCacheInvalidationOnUnderlyingExternalDataSourceChange";
+        CreateBucket(bucket);
+
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableReplaceIfExistsForExternalEntities(true);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char externalDataSourceName[] = "externalDataSource";
+        constexpr char externalTableName[] = "externalTable";
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );
+                CREATE EXTERNAL TABLE `{external_table}` (
+                    year Int32 NOT NULL,
+                    month Int32 NOT NULL
+                ) WITH (
+                    DATA_SOURCE="{external_source}",
+                    LOCATION="path/",
+                    FORMAT="json_each_row"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "external_table"_a = externalTableName,
+                "location"_a = GetBucketLocation(bucket)
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto query = fmt::format(
+            "INSERT INTO `{external_table}` (year, month) VALUES (2020, 1)",
+            "external_table"_a = externalTableName
+        );
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{external_source}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "external_source"_a = externalDataSourceName,
+                "location"_a = TStringBuilder() << GetEnv("S3_ENDPOINT") << "/unknown_bucket/"
+            ), TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "The specified bucket does not exist");
+            UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(bucket), "{\"month\":1,\"year\":2020}\n");
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

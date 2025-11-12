@@ -42,6 +42,7 @@ class TllTieringTestBase(object):
                     "enable_external_data_sources": True,
                     "enable_write_portions_on_insert": True,
                     "enable_tiering_in_column_shard": True,
+                    "enable_columnshard_bool": True,
                 },
                 column_shard_config={
                     "lag_for_compaction_before_tierings_ms": 0,

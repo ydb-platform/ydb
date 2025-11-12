@@ -14,6 +14,7 @@ SRCS(
     GLOBAL blobs_sharing_ut.cpp
     GLOBAL kqp_olap_ut.cpp
     aggregations_ut.cpp
+    bool_ut.cpp
     clickbench_ut.cpp
     compaction_ut.cpp
     compression_ut.cpp
@@ -47,5 +48,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(bool_test_enums.h)
 
 END()

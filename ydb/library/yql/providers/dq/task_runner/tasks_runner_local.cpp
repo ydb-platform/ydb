@@ -36,7 +36,7 @@ public:
     {}
 
     void Push(TDqSerializedBatch&& data) override {
-        Channel->Push(std::move(data));
+        Channel->Push(std::move(data), Nothing());
     }
 
     i64 GetFreeSpace() override {

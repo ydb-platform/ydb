@@ -41,8 +41,9 @@ public:
         return FreeSpace;
     }
 
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) override
     {
+        Y_DEBUG_ABORT_UNLESS(watermark.Empty());
         Inflight++;
         PushStarted = true;
         Finished = finished;

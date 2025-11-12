@@ -107,9 +107,13 @@ private:
         while (i < Alive) {
             auto currentIndex = (startIndex + i) % Alive;
             auto& input = Inputs[currentIndex];
-            if (input->Pop(Batch)) {
+
+            TMaybe<TInstant> watermark;
+            if (input->Pop(Batch, watermark)) {
+                Cout << (TStringBuilder() << TInstant::Now() << " Input Producer Watermark: " << watermark << "\n");
                 return NUdf::EFetchStatus::Ok;
             }
+            Cout << (TStringBuilder() << TInstant::Now() << " Input Producer Watermark: " << watermark << "\n");
             if (input->IsFinished()) {
                 std::swap(Inputs[currentIndex], Inputs[Alive - 1]);
                 --Alive;
@@ -173,9 +177,13 @@ private:
     public:
         NUdf::EFetchStatus FindBuffer() {
             Data->clear();
-            if (Input->Pop(*Data)) {
+
+            TMaybe<TInstant> watermark;
+            if (Input->Pop(*Data, watermark)) {
+                Cout << (TStringBuilder() << TInstant::Now() << " Input Producer Watermark: " << watermark << "\n");
                 return NUdf::EFetchStatus::Ok;
             }
+            Cout << (TStringBuilder() << TInstant::Now() << " Input Producer Watermark: " << watermark << "\n");
 
             return Input->IsFinished() ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
         }
@@ -474,13 +482,16 @@ private:
             const ui32 width = Parent_->ItemTypes_.size();
             while (IsEmpty()) {
                 while (FetchedValues_.empty()) {
-                    if (!Input_->Pop(FetchedValues_)) {
+                    TMaybe<TInstant> watermark;
+                    if (!Input_->Pop(FetchedValues_, watermark)) {
+                        Cout << (TStringBuilder() << TInstant::Now() << " Input Producer Watermark: " << watermark << "\n");
                         if (Input_->IsFinished()) {
                             IsFinished_ = true;
                             return NUdf::EFetchStatus::Finish;
                         }
                         return NUdf::EFetchStatus::Yield;
                     }
+                    Cout << (TStringBuilder() << TInstant::Now() << " Input Producer Watermark: " << watermark << "\n");
                 }
                 NUdf::TUnboxedValue* values = FetchedValues_.Head();
                 CurrentRow_.clear();

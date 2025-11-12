@@ -338,7 +338,7 @@ private:
         auto channelId = ev->Get()->ChannelId;
         auto inputChannel = TaskRunner->GetInputChannel(channelId);
         if (ev->Get()->Data) {
-            inputChannel->Push(std::move(*ev->Get()->Data));
+            inputChannel->Push(std::move(*ev->Get()->Data), Nothing());
         }
         const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
@@ -371,7 +371,7 @@ private:
         bool finish) override
     {
         auto source = TaskRunner->GetSource(index);
-        source->Push(std::move(batch), space);
+        source->Push(std::move(batch), space, Nothing());
         if (finish) {
             source->Finish();
         }

@@ -32,7 +32,7 @@ public:
         return PopStats;
     }
 
-    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
+    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, TMaybe<TInstant> watermark) override {
         Pending = space != 0;
         if (!batch.empty()) {
             auto rows = AddBatch(std::move(batch), space);
@@ -50,6 +50,9 @@ public:
             if (GetFreeSpace() < 0) {
                 PopStats.TryPause();
             }
+        }
+        if (watermark) {
+            PushWatermark(*watermark);
         }
     }
 

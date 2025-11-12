@@ -55,9 +55,9 @@ public:
     }
 
     virtual i64 GetFreeSpace() const = 0;
-    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) = 0;
+    virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) = 0;
 
-    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, TDqComputeActorWatermarks& watermarksTracker, i64 asyncInputPushLimit) {
+    TMaybe<EResumeSource> PollAsyncInput(TDqComputeActorMetrics& metricsReporter, TDqComputeActorWatermarks* watermarksTracker, i64 asyncInputPushLimit) {
         if (Finished) {
             CA_LOG_T("Skip polling async input[" << Index << "]: finished");
             return {};
@@ -82,8 +82,8 @@ public:
 
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
-            if (watermark && !finished) {
-                const auto inputWatermarkChanged = watermarksTracker.NotifyAsyncInputWatermarkReceived(
+            if (watermarksTracker && watermark && !finished) {
+                const auto inputWatermarkChanged = watermarksTracker->NotifyAsyncInputWatermarkReceived(
                     Index,
                     *watermark);
 
@@ -93,7 +93,7 @@ public:
                 }
             }
             const bool emptyBatch = batch.empty();
-            AsyncInputPush(std::move(batch), space, finished);
+            AsyncInputPush(std::move(batch), watermark, space, finished);
             if (!emptyBatch) {
                 // If we have read some data, we must run such reading again
                 // to process the case when async input notified us about new data
@@ -119,8 +119,8 @@ struct TComputeActorAsyncInputHelperSync: public TComputeActorAsyncInputHelper
 public:
     using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
 
-    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, bool finished) override {
-        Buffer->Push(std::move(batch), space);
+    void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, TMaybe<TInstant> watermark, i64 space, bool finished) override {
+        Buffer->Push(std::move(batch), space, watermark);
         if (finished) {
             Buffer->Finish();
             Finished = true;

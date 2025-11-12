@@ -843,6 +843,7 @@ public:
     }
 
     void SetWatermarkIn(TInstant time) override {
+        Cerr << (TStringBuilder() << TInstant::Now() << " [TODO][StageId=" << StageId << "][TaskId=" << TaskId << "] SetWatermarkIn: " << time << ", watermark: " << Watermark.WatermarkIn << "\n");
         Watermark.WatermarkIn = std::move(time);
     }
 
@@ -984,6 +985,8 @@ private:
             } else {
                 fetchStatus = AllocatedHolder->ResultStream.Fetch(value);
             }
+
+            Cerr << (TStringBuilder() << TInstant::Now() << " [TODO][StageId=" << StageId << "][TaskId=" << TaskId << "] Fetch: " << fetchStatus << ", watermark: " << Watermark.WatermarkIn << "\n");
 
             switch (fetchStatus) {
                 case NUdf::EFetchStatus::Ok: {

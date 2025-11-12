@@ -148,8 +148,8 @@ def main():
                                 status
                             from  `{test_runs_table}`
                             where
-                                run_timestamp <= Date('{date}') + Interval("P1D")
-                                and run_timestamp >= Date('{date}') - 2*Interval("P1D") 
+                                run_timestamp >= Date('{date}')
+                                and run_timestamp < Date('{date}') + Interval("P1D")
 
                                 and job_name in (
                                     'Nightly-run',

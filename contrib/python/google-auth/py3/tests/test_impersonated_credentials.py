@@ -179,6 +179,15 @@ class TestImpersonatedCredentials(object):
         )
         assert isinstance(credentials, impersonated_credentials.Credentials)
 
+    def test_from_impersonated_service_account_info_with_trust_boundary(self):
+        info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
+        info["trust_boundary"] = self.VALID_TRUST_BOUNDARY
+        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
+            info
+        )
+        assert isinstance(credentials, impersonated_credentials.Credentials)
+        assert credentials._trust_boundary == self.VALID_TRUST_BOUNDARY
+
     def test_from_impersonated_service_account_info_with_invalid_source_credentials_type(
         self,
     ):
@@ -204,6 +213,23 @@ class TestImpersonatedCredentials(object):
                 info
             )
         assert excinfo.match(r"Cannot extract target principal from")
+
+    def test_from_impersonated_service_account_info_with_scopes(self):
+        info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
+        info["scopes"] = ["scope1", "scope2"]
+        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
+            info
+        )
+        assert credentials._target_scopes == ["scope1", "scope2"]
+
+    def test_from_impersonated_service_account_info_with_scopes_param(self):
+        info = copy.deepcopy(IMPERSONATED_SERVICE_ACCOUNT_AUTHORIZED_USER_SOURCE_INFO)
+        info["scopes"] = ["scope_from_info_1", "scope_from_info_2"]
+        scopes_param = ["scope_from_param_1", "scope_from_param_2"]
+        credentials = impersonated_credentials.Credentials.from_impersonated_service_account_info(
+            info, scopes=scopes_param
+        )
+        assert credentials._target_scopes == scopes_param
 
     def test_get_cred_info(self):
         credentials = self.make_credentials()
@@ -647,8 +673,8 @@ class TestImpersonatedCredentials(object):
         credentials._source_credentials.token = "Token"
 
         with mock.patch(
-            "google.oauth2.service_account.Credentials.refresh", autospec=True
-        ) as source_cred_refresh:
+            "google.oauth2.service_account.Credentials._refresh_token", autospec=True
+        ) as source_cred_refresh_token:
             expire_time = (
                 _helpers.utcnow().replace(microsecond=0)
                 + datetime.timedelta(seconds=500)
@@ -660,15 +686,10 @@ class TestImpersonatedCredentials(object):
 
             credentials.refresh(request)
 
-            assert credentials.valid
-            assert not credentials.expired
-
-            # Source credentials is refreshed only if it is expired within
-            # _helpers.REFRESH_THRESHOLD
-            if time_skew > 0:
-                source_cred_refresh.assert_not_called()
+            if time_skew <= 0:
+                source_cred_refresh_token.assert_called_once()
             else:
-                source_cred_refresh.assert_called_once()
+                source_cred_refresh_token.assert_not_called()
 
     def test_refresh_failure_malformed_expire_time(self, mock_donor_credentials):
         credentials = self.make_credentials(lifetime=None)

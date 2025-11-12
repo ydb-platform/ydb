@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(Normalizers) {
 
         auto batch = NConstruction::TRecordBatchConstructor({ idColumn, jsonColumn }).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
-        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        AFL_VERIFY(writer.Write(batch, columnsIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         planStep = writer.StartCommit(txId);
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 

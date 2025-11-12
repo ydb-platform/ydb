@@ -117,15 +117,19 @@ public:
         if (Queries.empty()) {
             return;
         }
+
         auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
         request->Record.MutableRequest()->SetDatabase("/Root");
+        SetAuthToken(request, *Request);
         request->Record.MutableRequest()->SetSessionId(SessionId);
+        ActorIdToProto(SelfId(), request->Record.MutableRequestActorId());
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         request->Record.MutableRequest()->SetQuery(Queries.back());
         Queries.pop_back();
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->SetTimeoutMs(5000);
+        request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
         ++Requested;
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());
     }

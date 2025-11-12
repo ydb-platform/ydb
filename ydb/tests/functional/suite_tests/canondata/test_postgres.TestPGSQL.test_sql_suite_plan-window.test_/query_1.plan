@@ -35,11 +35,20 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "[Arg.depname,Arg.salary,Arg.empno]"
+                                                "TopSortBy": "[row.depname,row.salary,row.empno]"
                                             },
                                             {
                                                 "Inputs": [

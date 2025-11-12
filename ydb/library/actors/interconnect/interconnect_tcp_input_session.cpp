@@ -70,34 +70,13 @@ namespace NActors {
     }
 
     static void ReallocPayload(TRope& rope) {
-        bool needRealloc = false;
-        for (TRope::TConstIterator it = rope.Begin(); it != rope.End(); ++it) {
-            const TRcBuf& chunk = it.GetChunk();
-            const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
-            if (NeedReallocateRdma(region)) {
-                needRealloc = true;
-            }
-        }
-
-        if (!needRealloc) {
-            return;
-        }
-
-        TRope newRope;
-
         for (TRope::TIterator it = rope.Begin(); it != rope.End(); ++it) {
-            TRcBuf chunk = it.GetChunk();
+            TRcBuf& chunk = it.GetChunk();
             const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
             if (NeedReallocateRdma(region)) {
-                auto newBuf = TRcBuf::Copy(chunk.GetContiguousSpan(), chunk.Headroom(), chunk.Tailroom());
-                newRope.Insert(newRope.End(), TRope(std::move(newBuf)));
-            } else {
-                newRope.Insert(newRope.End(), TRope(std::move(chunk)));
+                chunk = TRcBuf::Copy(chunk.GetContiguousSpan(), chunk.Headroom(), chunk.Tailroom());
             }
         }
-
-        rope.clear();
-        rope = newRope;
     }
 
     TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequestsResult TReceiveContext::TPerChannelContext::ScheduleRdmaReadRequests(

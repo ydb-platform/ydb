@@ -92,7 +92,7 @@ namespace NMonitoring {
      *
      * @param bucketsCount the total number of buckets. The value must be >= 2.
      * @param base         the exponential growth factor for the buckets width.
-     *                     The value must be >= 1.0.
+     *                     The value must be > 1.0.
      * @param scale        the linear scale for the buckets. The value must be >= 1.0.
      */
     IHistogramCollectorPtr ExponentialHistogram(

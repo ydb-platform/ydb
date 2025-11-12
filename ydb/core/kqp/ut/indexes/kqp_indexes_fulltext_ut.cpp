@@ -91,6 +91,23 @@ void AddIndexCovered(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+void AddIndexSnowball(NQuery::TQueryClient& db) {
+    TString query = R"sql(
+        ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+            GLOBAL USING fulltext
+            ON (Text)
+            WITH (
+                layout=flat,
+                tokenizer=standard,
+                use_filter_lowercase=true,
+                use_filter_snowball=true,
+                language=english
+            )
+    )sql";
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
 TResultSet ReadIndex(NQuery::TQueryClient& db) {
     TString query = R"sql(
         SELECT * FROM `/Root/Texts/fulltext_idx/indexImplTable`;
@@ -221,6 +238,31 @@ Y_UNIT_TEST(AddIndexEdgeNGram) {
         [[400u];"lov"];
         [[100u];"sma"];
         [[200u];"sma"]
+    ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(AddIndexSnowball) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndexSnowball(db);
+    const auto index = ReadIndex(db);
+    CompareYson(R"([
+        [[[100u];"anim"];
+        [[100u];"cat"];
+        [[200u];"cat"];
+        [[300u];"cat"];
+        [[100u];"chase"];
+        [[200u];"chase"];
+        [[200u];"dog"];
+        [[400u];"dog"];
+        [[400u];"fox"];
+        [[300u];"love"];
+        [[400u];"love"];
+        [[100u];"small"];
+        [[200u];"small"]
     ])", NYdb::FormatResultSetYson(index));
 }
 

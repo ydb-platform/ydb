@@ -287,7 +287,7 @@ namespace NYql::NDqs {
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
-    void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleTimeoutUs = Nothing()) {
+    void TDqsExecutionPlanner::BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleTimeoutUs) {
         std::stack<TDqsTasksGraph::TTaskType*> tasksStack;
         std::vector<bool> processedTasks(TasksGraph.GetTasks().size());
         // TODO use toposort instead of Dreadful O(n^2)

@@ -3150,7 +3150,9 @@ void THive::RequestPoolsInformation() {
 }
 
 ui32 THive::GetEventPriority(IEventHandle* ev) {
+    // lower number = higher priority
     switch (ev->GetTypeRewrite()) {
+        // requests from viewer/healthcheck - need to be answered fast so that hive is not reported as unresponsive
         case TEvHive::EvRequestHiveInfo:
         case TEvHive::EvRequestHiveDomainStats:
         case TEvHive::EvRequestHiveNodeStats:
@@ -3158,6 +3160,9 @@ ui32 THive::GetEventPriority(IEventHandle* ev) {
             return 10;
         default:
             return 50;
+        // update metrics - there can be a lot of these, but they have no urgency
+        case TEvHive::EvTabletMetrics:
+            return 100;
     }
 }
 

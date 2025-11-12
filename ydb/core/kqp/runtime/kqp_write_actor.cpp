@@ -200,12 +200,9 @@ namespace {
         return true;
     }
 
-<<<<<<< HEAD
     const TStringBuf ConflictWithExistingKeyErrorText = "Conflict with existing key.";
     const TStringBuf DuplicateKeyErrorText = "Duplicated keys found.";
-=======
     constexpr ui64 RollbackMessageCookie = 1;
->>>>>>> be94c68e98e (wait)
 }
 
 
@@ -3014,7 +3011,7 @@ public:
         for (auto& [cookie, writeTask] : WriteTasks) {
             writeTask.Process();
             if (writeTask.IsError()) {
-                ReplyErrorAndDie(
+                ReplyError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                     TStringBuilder() << writeTask.GetError(),

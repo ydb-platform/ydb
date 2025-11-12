@@ -3692,7 +3692,7 @@ Y_UNIT_TEST(BlobKeyFilfer)
             pair->SetStatus(NKikimrProto::OK);
             pair->SetKey(k);
         }
-        return FilterBlobsMetaData(result, partitionId);
+        return FilterBlobsMetaData({1, result}, partitionId);
     };
 
     TVector<TString> actualKeys{

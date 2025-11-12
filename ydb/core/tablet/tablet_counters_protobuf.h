@@ -640,10 +640,9 @@ public:
               SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, Nothing())
     {
-        TVector<TString> groups;
-        StringSplitter(group).Split('/').SkipEmpty().Collect(&groups);
+        const size_t groups = StringSplitter(group).Split('/').SkipEmpty().Count();
 
-        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups.size());
+        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", SimpleOpts()->GetGroupNamesSize(), groups, group.Quote().c_str());
     }
 
     TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
@@ -652,10 +651,9 @@ public:
               SimpleOpts()->Size, SimpleOpts()->GetSVNames(), SimpleOpts()->GetCounterTypes(),
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
     {
-        TVector<TString> groups;
-        StringSplitter(group).Split('|').Collect(&groups);
+        const size_t groups = StringSplitter(group).Split('|').Count();
 
-        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups.size());
+        Y_ABORT_UNLESS(SimpleOpts()->GetGroupNamesSize() == groups, "%zu != %zu; group=%s", SimpleOpts()->GetGroupNamesSize(), groups, group.Quote().c_str());
     }
 };
 

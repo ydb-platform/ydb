@@ -88,18 +88,6 @@ private:
         file.Write(serialized);
     }
 
-    static void CreateTableSchemeFile(const TString& dirPath, const TString& tableName) {
-        CreateTableSchemeFile(
-            dirPath,
-            tableName,
-            {
-                {"key", Ydb::Type::UTF8},
-                {"value", Ydb::Type::UTF8}
-            },
-            {"key"}
-        );
-    }
-
     static void CreatePermissionsFile(const TString& dirPath) {
         Ydb::Scheme::ModifyPermissionsRequest permissions;
 
@@ -149,7 +137,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardImportFromFsTests) {
         UNIT_ASSERT_VALUES_EQUAL(settings.items(0).source_path(), "backup/Table");
         UNIT_ASSERT_VALUES_EQUAL(settings.items(0).destination_path(), "/MyRoot/RestoredTable");
 
-        // Verify that the table was actually created
         TestDescribeResult(DescribePath(runtime, "/MyRoot/RestoredTable"), {
             NLs::PathExist,
             NLs::IsTable

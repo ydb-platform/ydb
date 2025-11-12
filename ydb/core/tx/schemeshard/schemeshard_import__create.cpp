@@ -1145,7 +1145,7 @@ private:
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
-            // Only S3 imports support schema mapping with encryption
+            // TODO(st-shchetinin): Only S3 imports support schema mapping with encryption (add for FS)
             if (importInfo->Kind == TImportInfo::EKind::S3) {
                 auto settings = importInfo->GetS3Settings();
                 if (settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {

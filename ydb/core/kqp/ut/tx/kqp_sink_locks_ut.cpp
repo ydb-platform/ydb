@@ -507,7 +507,6 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
     }
 
     Y_UNIT_TEST(OlapVisibleUncommittedRowsUpdate) {
-        return; // Fix it
         TVisibleUncommittedRowsUpdate tester;
         tester.SetIsOlap(true);
         tester.Execute();

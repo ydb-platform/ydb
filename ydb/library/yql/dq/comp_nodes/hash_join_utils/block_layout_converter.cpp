@@ -19,6 +19,8 @@
 
 namespace NKikimr::NMiniKQL {
 
+namespace {
+
 template<typename Buffer = NYql::NUdf::TResizeableBuffer>
 std::unique_ptr<arrow::Buffer> MakeBufferWithSize(int size, arrow::MemoryPool* pool){
     auto buff = NUdf::AllocateResizableBuffer<Buffer>(size, pool);
@@ -689,6 +691,8 @@ private:
     bool RememberNullBitmaps_;
     TVector<bool> IsBitmapNull_;
 };
+
+} // anonymous namespace
 
 // ------------------------------------------------------------
 

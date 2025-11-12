@@ -499,6 +499,7 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Ranges.push_back(range);
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
+                PQ_INIT_ENSURE(range.PairSize());
                 RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }

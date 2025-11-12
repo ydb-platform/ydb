@@ -736,7 +736,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
     proto.set_important(Important_);
     if (AvailabilityPeriod_ != TDuration::Zero()) {
         proto.mutable_availability_period()->set_seconds(AvailabilityPeriod_.Seconds());
-        proto.mutable_availability_period()->set_nanos((AvailabilityPeriod_.MicroSeconds() % 1'000'000) * 1'000);
+        proto.mutable_availability_period()->set_nanos(AvailabilityPeriod_.NanoSecondsOfSecond());
     } else {
         proto.clear_availability_period();
     }
@@ -790,7 +790,7 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
     if (SetAvailabilityPeriod_) {
         if (SetAvailabilityPeriod_ != TDuration::Zero()) {
             proto.mutable_set_availability_period()->set_seconds(SetAvailabilityPeriod_->Seconds());
-            proto.mutable_set_availability_period()->set_nanos((SetAvailabilityPeriod_->MicroSeconds() % 1'000'000) * 1'000);
+            proto.mutable_set_availability_period()->set_nanos(SetAvailabilityPeriod_->NanoSecondsOfSecond());
         } else {
             proto.mutable_reset_availability_period();
         }

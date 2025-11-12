@@ -260,7 +260,7 @@ size_t TStorage::CompactDLQ() {
             auto offset = DLQQueue.front();
 
             auto [message, slow] = GetMessageInt(offset);
-            if (message->WriteTimestampDelta >= retentionDeadlineDelta.value()) {
+            if (message->WriteTimestampDelta > retentionDeadlineDelta.value()) {
                 break;
             }
 

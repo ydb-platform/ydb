@@ -337,6 +337,7 @@ class TestStreamingInYdb(TestYdsBase):
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.DisableCheckpoints="true";
+                PRAGMA ydb.MaxTasksPerStage = "1";
                 $in = SELECT time FROM {source_name}.`{input_topic}`
                 WITH (
                     FORMAT="json_each_row",

@@ -4,6 +4,7 @@ import time
 import logging
 import pytest
 import requests
+import resource
 import json
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -24,6 +25,10 @@ class TestPDiskSlotSizeInUnits(object):
 
     @pytest.fixture(autouse=True)
     def setup(self):
+        resource.setrlimit(
+            resource.RLIMIT_CORE,
+            (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
+
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
             'BS_CONTROLLER': LogLevels.DEBUG,

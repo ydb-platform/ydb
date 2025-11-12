@@ -60,9 +60,11 @@ TArrowCSV::TArrowCSV(const TColummns& columns, bool header, const std::set<std::
     ReadOptions.block_size = DEFAULT_BLOCK_SIZE;
     ReadOptions.use_threads = false;
     ReadOptions.autogenerate_column_names = false;
-    auto SetOptionsForColumns = [&](const auto& col) {
+    auto SetOptionsForColumns = [&](const auto& col) -> decltype(auto) {
         if (col.Precision > 0) {
             ConvertOptions.column_types[col.Name] = arrow::decimal128(static_cast<int32_t>(col.Precision), static_cast<int32_t>(col.Scale));
+        } else if (col.IsBool) {
+            ConvertOptions.column_types[col.Name] = arrow::boolean();
         } else {
             ConvertOptions.column_types[col.Name] = col.CsvArrowType;
         }
@@ -158,6 +160,21 @@ std::shared_ptr<arrow::RecordBatch> TArrowCSV::ConvertColumnTypes(std::shared_pt
                     Y_ABORT_UNLESS(false);
                 }
             }());
+        } else if (fArr->type()->id() == arrow::BooleanType::type_id && originalType->id() == arrow::UInt8Type::type_id) {
+            auto boolArray = std::static_pointer_cast<arrow::BooleanArray>(fArr);
+            arrow::UInt8Builder builder;
+            Y_ABORT_UNLESS(builder.Reserve(boolArray->length()).ok());
+            for (int64_t i = 0; i < boolArray->length(); ++i) {
+                if (boolArray->IsNull(i)) {
+                    Y_ABORT_UNLESS(builder.AppendNull().ok());
+                } else {
+                    builder.UnsafeAppend(boolArray->Value(i) ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0));
+                }
+            }
+
+            std::shared_ptr<arrow::Array> out;
+            Y_ABORT_UNLESS(builder.Finish(&out).ok());
+            resultColumns.emplace_back(out);
         } else if (fArr->type()->id() == arrow::Decimal128Type::type_id && originalType->id() == arrow::FixedSizeBinaryType::type_id) {
             auto fixedSizeBinaryType = std::static_pointer_cast<arrow::FixedSizeBinaryType>(originalType);
             const auto& decData = fArr->data();

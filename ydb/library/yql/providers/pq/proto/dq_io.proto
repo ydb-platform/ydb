@@ -91,6 +91,7 @@ message TDqPqTopicSource {
     string WatermarkExpr = 24;
     repeated uint64 NodeIds = 25;
     bool UseActorSystemThreadsInTopicClient = 26;
+    bool SkipJsonErrors = 27;
 }
 
 message TDqPqTopicSink {

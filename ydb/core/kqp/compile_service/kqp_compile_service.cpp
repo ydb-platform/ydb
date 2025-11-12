@@ -361,6 +361,8 @@ private:
 
         bool enableDqHashCombineByDefault = TableServiceConfig.GetEnableDqHashCombineByDefault();
 
+        bool enableFilterPushdownOverJoinOptionalSide = TableServiceConfig.GetFilterPushdownOverJoinOptionalSide();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -407,7 +409,8 @@ private:
             TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||
             TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
             TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex ||
-            TableServiceConfig.GetEnableDqHashCombineByDefault() != enableDqHashCombineByDefault)
+            TableServiceConfig.GetEnableDqHashCombineByDefault() != enableDqHashCombineByDefault ||
+            TableServiceConfig.GetFilterPushdownOverJoinOptionalSide() != enableFilterPushdownOverJoinOptionalSide)
         {
 
             QueryCache->Clear();

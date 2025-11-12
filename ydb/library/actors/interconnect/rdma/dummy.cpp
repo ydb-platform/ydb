@@ -37,6 +37,7 @@ THandshakeData TQueuePair::GetHandshakeData() const noexcept {
 
 namespace NLinkMgr {
     TRdmaCtx* GetCtx(NInterconnect::TAddress const&) { return nullptr; }
+    bool Init() { return false; }
 }
 
 }

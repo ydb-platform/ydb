@@ -293,6 +293,12 @@ bool TupleKeysEqual(const TTupleLayout *layout,
     const ui8 *rhsRow, const ui8 *rhsOverflow);
 
 Y_FORCE_INLINE
+ui32 Hash(const ui8* row) {
+    return ReadUnaligned<ui32>(row);
+}
+
+
+Y_FORCE_INLINE
 bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
                              const ui8 *rhsRow, const ui8 *rhsOverflow) const {
     const ui8 keyNullMask = (1u << KeyColumnsNum) - 1;

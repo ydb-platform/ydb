@@ -13,7 +13,16 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 struct TJoinTestData {
-    std::unique_ptr<TDqSetup<false>> Setup = std::make_unique<TDqSetup<false>>();
+    TJoinTestData(){
+        Setup->Alloc.SetLimit(10000);
+        Setup->Alloc.Ref().SetIncreaseMemoryLimitCallback([&](ui64 limit, ui64 required) {
+            auto newLimit = std::max(required, limit);
+            Cout << std::format("alloc limit {} -> {}, TotalAllocated_: {}", Setup->Alloc.GetLimit(), newLimit, Setup->Alloc.GetAllocated());
+            Cout << Endl;
+            Setup->Alloc.SetLimit(newLimit);
+        });
+    }
+    std::unique_ptr<TDqSetup<false, true>> Setup = std::make_unique<TDqSetup<false, true>>();
     EJoinKind Kind;
     TypeAndValue Left;
     TVector<ui32> LeftKeyColmns = {0};
@@ -97,6 +106,7 @@ TJoinTestData MixedKeysInnerTestData() {
 
     TJoinTestData td;
     auto& setup = *td.Setup;
+    // setup.Alloc.SetLimit(size_t limit)
     TVector<ui64> leftKeys = {1, 1, 2, 3, 4};
     TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
 
@@ -420,6 +430,7 @@ void Test(TJoinTestData testData, bool blockJoin) {
 
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr);
+    // got->GetContext().SpillerFactory
     // FromWideStream
     if (blockJoin) {
         CompareListAndBlockStreamIgnoringOrder(testData.Result, *got);

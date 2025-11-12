@@ -17,6 +17,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+CFLAGS(-Wmissing-field-initializers)
 
 SRCS(
 

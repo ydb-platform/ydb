@@ -10,7 +10,6 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-#include <algorithm>
 #include <arrow/scalar.h>
 
 #include "dq_join_common.h"
@@ -97,8 +96,8 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
 
     struct PackedTuplesData {
-        std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
-        std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
+        TMKQLVector<ui8> PackedTuples;
+        TMKQLVector<ui8> Overflow;
     };
 
     struct TuplePairs {
@@ -107,7 +106,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     };
 
     auto MakeConsumeFn() {
-        return [this](TSides<NJoinTable::TNeumannJoinTable::Tuple> tuples) {
+        return [this](TSides<TSingleTuple> tuples) {
             ForEachSide([&](ESide side) {
                 Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
                     tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
@@ -178,10 +177,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get());
     }
 
+
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;
-        using JoinType = TJoinPackedTuples<TBlockPackedTupleSource>;
+        using JoinType = TJoinPackedTuples<TBlockPackedTupleSource, RuntimeStorageSettings>;
 
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
@@ -193,7 +193,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                                                     .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
                     ctx.MakeLogger(), "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()})
+                                                              .Probe = Converters_.Probe->GetTupleLayout()}, ctx)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
         {}
@@ -223,6 +223,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
                 switch (res) {
                 case EFetchResult::Finish: {
+                    Cout << "finished" << Endl;
                     if (Output_.SizeTuples() == 0) {
                         return NYql::NUdf::EFetchStatus::Finish;
                     }

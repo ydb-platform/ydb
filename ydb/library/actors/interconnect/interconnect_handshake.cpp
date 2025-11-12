@@ -930,31 +930,34 @@ namespace NActors {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
 
-                if (Rdma && success.HasQpPrepared()) {
-                    const auto& remoteQpPrepared = success.GetQpPrepared();
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_TRACE,
-                        "peer has prepared qp: %d", remoteQpPrepared.GetQpNum());
-                    NInterconnect::NRdma::THandshakeData hd {
-                        .QpNum = remoteQpPrepared.GetQpNum(),
-                        .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
-                        .InterfaceId = remoteQpPrepared.GetInterfaceId(),
-                        .MtuIndex = remoteQpPrepared.GetMtuIndex(),
-                    };
-                    int err = Rdma.Qp->ToRtsState(hd);
-                    if (err) {
-                        TStringBuilder sb;
-                        sb << hd;
+                if (Rdma) {
+                    if (success.HasQpPrepared()) {
+                        const auto& remoteQpPrepared = success.GetQpPrepared();
+                        LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_TRACE,
+                            "peer has prepared qp: %d", remoteQpPrepared.GetQpNum());
+                        NInterconnect::NRdma::THandshakeData hd {
+                            .QpNum = remoteQpPrepared.GetQpNum(),
+                            .SubnetPrefix = remoteQpPrepared.GetSubnetPrefix(),
+                            .InterfaceId = remoteQpPrepared.GetInterfaceId(),
+                            .MtuIndex = remoteQpPrepared.GetMtuIndex(),
+                        };
+                        int err = Rdma.Qp->ToRtsState(hd);
+                        if (err) {
+                            TStringBuilder sb;
+                            sb << hd;
+                            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
+                                    "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
+                            Rdma.HandShakeMemRegion.Reset();
+                            Rdma.Clear();
+                        } else {
+                            Params.ChecksumRdmaEvent = remoteQpPrepared.GetRdmaChecksum();
+                        }
+                    } else {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                                "Unable to promote QP to RTS, err: %d (%s), handshake data: %s", err, strerror(err), sb.data());
+                            "Non success qp response from remote side");
                         Rdma.HandShakeMemRegion.Reset();
                         Rdma.Clear();
                     }
-                    Params.ChecksumRdmaEvent = remoteQpPrepared.GetRdmaChecksum();
-                } else {
-                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
-                        "Non success qp response from remote side");
-                    Rdma.HandShakeMemRegion.Reset();
-                    Rdma.Clear();
                 }
 
                 // recover peer process info from peer's reply

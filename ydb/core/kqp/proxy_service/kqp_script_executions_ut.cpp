@@ -2,6 +2,7 @@
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
@@ -90,6 +91,9 @@ struct TScriptExecutionsYdbSetup {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
         }
 
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(secureScriptExecutions);
+
         MsgBusPort = PortManager.GetPort(2134);
         GrpcPort = PortManager.GetPort(2135);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort);
@@ -97,6 +101,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetEnableScriptExecutionBackgroundChecks(enableScriptExecutionBackgroundChecks);
         ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
         ServerSettings->SetGrpcPort(GrpcPort);
+        ServerSettings->SetAppConfig(appConfig);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 
@@ -194,50 +199,78 @@ struct TScriptExecutionsYdbSetup {
     }
 
     void CreateTableInDbSync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, i32 numberOfRequests = 1, TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
-                             TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing()) {
-
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(), bool isSystemUser = false, TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
+    {
         TVector<TActorId> edgeActors;
         for (i32 i = 0; i < numberOfRequests; ++i) {
-            edgeActors.push_back(CreateTableInDbAsync(columns, pathComponents, keyColumns, ttlSettings));
+            edgeActors.push_back(CreateTableInDbAsync(columns, pathComponents, keyColumns, ttlSettings, isSystemUser, tableAclDiff));
         }
         WaitTableCreation(std::move(edgeActors));
     }
 
     TActorId CreateTableInDbAsync(TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS, TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<TString> keyColumns = TEST_KEY_COLUMNS,
-                             TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing()) {
-        const ui32 node = 0;
-        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(CreateTableCreator(std::move(pathComponents), std::move(columns), std::move(keyColumns),
-            NKikimrServices::KQP_PROXY, std::move(ttlSettings)), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(), bool isSystemUser = false, TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
+    {
+        TActorId edgeActor = GetRuntime()->AllocateEdgeActor();
+        GetRuntime()->Register(CreateTableCreator(
+            std::move(pathComponents),
+            std::move(columns),
+            std::move(keyColumns),
+            NKikimrServices::KQP_PROXY,
+            std::move(ttlSettings),
+            {},
+            isSystemUser,
+            {},
+            std::move(tableAclDiff)
+        ), 0, 0, TMailboxType::Simple, 0, edgeActor);
         return edgeActor;
     }
 
     void WaitTableCreation(TVector<TActorId> edgeActors) {
-        for (const auto& actor: edgeActors) {
-            GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor, TestTimeout);
+        for (const auto& actor : edgeActors) {
+            const auto reply = GetRuntime()->GrabEdgeEvent<TEvTableCreator::TEvCreateTableResponse>(actor, TestTimeout);
+            UNIT_ASSERT_C(reply, "CreateTable response is empty");
+            UNIT_ASSERT_C(reply->Get()->Success, reply->Get()->Issues.ToOneLineString());
         }
     }
 
-    void VerifyColumnsList( TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS) {
-        TStringBuilder path;
-        path << "/dc-1/";
-        for (size_t i = 0; i < pathComponents.size() - 1; ++i) {
-            path << pathComponents[i] << "/";
-        }
-        path << pathComponents.back();
+    void VerifyColumnsList(TVector<TString> pathComponents = TEST_TABLE_PATH, TVector<NKikimrSchemeOp::TColumnDescription> columns = DEFAULT_COLUMNS,
+        bool isSystemUser = false, const std::optional<std::vector<NYdb::NScheme::TPermissions>>& effectivePermissions = std::nullopt)
+    {
+        NYdb::NTable::TTableClient client(*YdbDriver, NYdb::NTable::TClientSettings().AuthToken(""));
+        const auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(sessionResult.GetStatus(), NYdb::EStatus::SUCCESS, sessionResult.GetIssues().ToOneLineString());
+        const auto result = sessionResult.GetSession().DescribeTable(JoinPath({"dc-1", JoinPath(pathComponents)})).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
-        auto result = TableClientSession->DescribeTable(path).ExtractValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto&  existingColumns = result.GetTableDescription().GetColumns();
-        UNIT_ASSERT_C(existingColumns.size() == columns.size(), "Expected size: " << columns.size() << ", actual size: " << existingColumns.size());
+        const auto& tableDesc = result.GetTableDescription();
+        const auto& existingColumns = tableDesc.GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(existingColumns.size(), columns.size());
 
         THashSet<TString> existingNames;
-        for (const auto& col: existingColumns) {
+        existingNames.reserve(existingColumns.size());
+        for (const auto& col : existingColumns) {
             existingNames.emplace(col.Name);
         }
 
-        for (const auto& col: columns) {
+        for (const auto& col : columns) {
             UNIT_ASSERT_C(existingNames.contains(col.GetName()), "Column \"" << col.GetName() << "\" is not present" );
+        }
+
+        if (effectivePermissions) {
+            const auto& existingPermissions = tableDesc.GetEffectivePermissions();
+            UNIT_ASSERT_VALUES_EQUAL(existingPermissions.size(), effectivePermissions->size());
+
+            for (ui64 i = 0; i < existingPermissions.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(existingPermissions[i].Subject, effectivePermissions->at(i).Subject);
+                UNIT_ASSERT_VALUES_EQUAL(existingPermissions[i].PermissionNames, effectivePermissions->at(i).PermissionNames);
+            }
+        }
+
+        if (isSystemUser) {
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetOwner(), BUILTIN_ACL_METADATA);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetOwner(), BUILTIN_ACL_ROOT);
         }
     }
 
@@ -645,18 +678,60 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
         ydb.CreateQueryInDb();
 
-        for (const auto& table : {"script_executions", "script_execution_leases", "result_sets"}) {
-            const TString sql = fmt::format(R"(
-                SELECT
-                    COUNT(*)
-                FROM `.metadata/{table}`
-            )", "table"_a = table);
+        const auto result = ydb.TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
+                GRANT ALL ON `/dc-1/.metadata` TO `{user}`;
+            )", "user"_a = BUILTIN_ACL_ROOT
+        )).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
-            const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            const auto& issues = result.GetIssues().ToString();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
-            UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot find table");
-        }
+        const std::vector<TString> tables = {"script_executions", "script_execution_leases", "result_sets"};
+        const auto testNoAccess = [&]() {
+            for (const auto& table : tables) {
+                const TString sql = fmt::format(R"(
+                    SELECT
+                        COUNT(*)
+                    FROM `.metadata/{table}`
+                )", "table"_a = table);
+
+                const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                const auto& issues = result.GetIssues().ToString();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
+                UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot find table");
+            }
+        };
+        const auto testAccessAllowed = [&]() {
+            for (const auto& table : tables) {
+                const TString sql = fmt::format(R"(
+                    SELECT
+                        COUNT(*)
+                    FROM `.metadata/{table}`
+                )", "table"_a = table);
+
+                const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            }
+        };
+        const auto switchAccess = [&](bool allowed) {
+            auto ev = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            ev->Record.MutableConfig()->MutableFeatureFlags()->SetEnableSecureScriptExecutions(!allowed);
+
+            auto& runtime = *ydb.GetRuntime();
+            const auto edgeActor = runtime.AllocateEdgeActor();
+            runtime.Send(MakeKqpProxyID(runtime.GetNodeId()), edgeActor, ev.release());
+            const auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(edgeActor, TDuration::Seconds(10));
+            UNIT_ASSERT(response);
+
+            ydb.RunSelect42Script();
+            Sleep(TDuration::Seconds(1));
+        };
+
+        testNoAccess();
+
+        switchAccess(/* allowed */ true);
+        testAccessAllowed();
+
+        switchAccess(/* allowed */ false);
+        testNoAccess();
     }
 }
 
@@ -736,12 +811,22 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
 }
 
 Y_UNIT_TEST_SUITE(TableCreation) {
-
     Y_UNIT_TEST(SimpleTableCreation) {
         TScriptExecutionsYdbSetup ydb;
 
         ydb.CreateTableInDbSync();
-        ydb.VerifyColumnsList();
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+    }
+
+    Y_UNIT_TEST(TableCreationWithAcl) {
+        TScriptExecutionsYdbSetup ydb;
+
+        NACLib::TDiffACL acl;
+        acl.ClearAccess();
+        acl.SetInterruptInheritance(true);
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, true, acl);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>());
     }
 
     Y_UNIT_TEST(ConcurrentTableCreation) {
@@ -819,6 +904,70 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS);
     }
 
+    Y_UNIT_TEST(UpdateTableWithAclModification) {
+        TScriptExecutionsYdbSetup ydb;
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+
+        NACLib::TDiffACL acl;
+        acl.ClearAccess();
+        acl.SetInterruptInheritance(true);
+
+        ydb.CreateTableInDbSync(EXTENDED_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, true, acl);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>());
+    }
+
+    Y_UNIT_TEST(UpdateTableWithAclRollback) {
+        TScriptExecutionsYdbSetup ydb;
+
+        NACLib::TDiffACL aclInterrupt;
+        aclInterrupt.ClearAccess();
+        aclInterrupt.SetInterruptInheritance(true);
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, true, aclInterrupt);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>());
+
+        NACLib::TDiffACL aclRollback;
+        aclRollback.ClearAccess();
+        aclRollback.SetInterruptInheritance(false);
+
+        ydb.CreateTableInDbSync(EXTENDED_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, false, aclRollback);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+    }
+
+    Y_UNIT_TEST(UpdateTableAcl) {
+        TScriptExecutionsYdbSetup ydb;
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, false, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+
+        NACLib::TDiffACL acl;
+        acl.ClearAccess();
+        acl.SetInterruptInheritance(true);
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, true, acl);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>());
+    }
+
+    Y_UNIT_TEST(RollbackTableAcl) {
+        TScriptExecutionsYdbSetup ydb;
+
+        NACLib::TDiffACL aclInterrupt;
+        aclInterrupt.ClearAccess();
+        aclInterrupt.SetInterruptInheritance(true);
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, true, aclInterrupt);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>());
+
+        NACLib::TDiffACL aclRollback;
+        aclRollback.ClearAccess();
+        aclRollback.SetInterruptInheritance(false);
+
+        ydb.CreateTableInDbSync(DEFAULT_COLUMNS, 1, TEST_TABLE_PATH, TEST_KEY_COLUMNS, {}, false, aclRollback);
+        ydb.VerifyColumnsList(TEST_TABLE_PATH, DEFAULT_COLUMNS, true, std::vector<NYdb::NScheme::TPermissions>{NYdb::NScheme::TPermissions(BUILTIN_ACL_ROOT, {"ydb.generic.full"})});
+    }
+
     Y_UNIT_TEST(ConcurrentUpdateTable) {
         TScriptExecutionsYdbSetup ydb;
 
@@ -837,7 +986,6 @@ Y_UNIT_TEST_SUITE(TableCreation) {
         ydb.CreateTableInDbSync(DEFAULT_COLUMNS);
         ydb.VerifyColumnsList(TEST_TABLE_PATH, EXTENDED_COLUMNS);
     }
-
 }
 
 } // namespace NKikimr::NKqp

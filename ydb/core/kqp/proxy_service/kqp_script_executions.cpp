@@ -195,13 +195,9 @@ public:
 
 private:
     static TMaybe<NACLib::TDiffACL> GetTableACL(const NKikimrConfig::TFeatureFlags& featureFlags) {
-        if (!featureFlags.GetEnableSecureScriptExecutions()) {
-            return Nothing();
-        }
-
         NACLib::TDiffACL acl;
         acl.ClearAccess();
-        acl.SetInterruptInheritance(true);
+        acl.SetInterruptInheritance(featureFlags.GetEnableSecureScriptExecutions());
         return acl;
     }
 

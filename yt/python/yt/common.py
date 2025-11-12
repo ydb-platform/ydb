@@ -326,6 +326,10 @@ class YtError(Exception):
         # TODO(ifsmirnov) migrate to error code, YT-10993
         return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
 
+    def is_hunk_tablet_store_toggle_conflict(self):
+        """Hunk tablet store toggle conflict."""
+        return self.contains_code(1745)
+
     def is_no_such_tablet(self):
         """No such tablet."""
         return self.contains_code(1701)

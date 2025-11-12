@@ -146,7 +146,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
             logging.info("Successfully connected to YDB")
             
             logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string, query_name="get_tests_monitor_data")
+            results = ydb_wrapper.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
             
             logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
             return results
@@ -178,6 +178,8 @@ def aggregate_test_data(all_data, period_days):
     
     # Helper function to convert date to days if needed
     def to_days(date_value):
+        if date_value is None:
+            return -1
         if isinstance(date_value, datetime.date):
             return (date_value - base_date).days
         return date_value
@@ -190,7 +192,16 @@ def aggregate_test_data(all_data, period_days):
     processed_count = 0
     total_count = len(all_data)
     
-    for test in all_data:
+    # Сортируем записи по дате, чтобы история состояний формировалась в хронологическом порядке
+    sorted_data = sorted(
+        all_data,
+        key=lambda test: (
+            to_days(test.get('date_window')),
+            test.get('full_name') or ''
+        )
+    )
+    
+    for test in sorted_data:
         processed_count += 1
         # Показываем прогресс каждые 1000 записей или каждые 10%
         if processed_count % 10000 == 0 or processed_count % max(1, total_count // 10) == 0:

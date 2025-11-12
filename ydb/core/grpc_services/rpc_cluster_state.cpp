@@ -24,6 +24,9 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <google/protobuf/util/json_util.h>
 
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -42,7 +45,15 @@ public:
     TVector<ui32> NodeReceived;
     ui32 Requested = 0;
     ui32 Received = 0;
+    TString SessionId;
+    std::deque<TString> Queries = {
+        "SELECT * FROM `/Root/.sys/partition_stats` LIMIT 100",
+        "SELECT * FROM `/Root/.sys/nodes` LIMIT 100",
+        "SELECT * FROM `/Root/.sys/query_sessions` LIMIT 100",
 
+    };
+
+    TVector<TVector<TString>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     NKikimrClusterStateInfoProto::TClusterStateInfo State;
     TInstant Started;
@@ -67,6 +78,7 @@ public:
     }
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        RequestSession();
         RequestHealthCheck();
         RequestBaseConfig();
         Nodes = ev->Get()->Nodes;
@@ -81,6 +93,7 @@ public:
             node->SetLocation(ni.Location.ToString());
             SendRequest(i);
         }
+        Counters.resize(Nodes.size());
         RequestCounters();
         Period = TDuration::Seconds(GetProtoRequest()->period_seconds());
         if (Period > TDuration::Zero()) {
@@ -91,6 +104,56 @@ public:
         } else {
             ReplyAndPassAway();
         }
+    }
+
+    void RequestSession() {
+        auto kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
+        auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        remoteRequest->Record.MutableRequest()->SetDatabase("/Root");
+        ++Requested;
+        Send(kqpProxyId, remoteRequest.release());
+    }
+
+    void CloseSession() {
+        auto kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
+        auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        remoteRequest->Record.MutableRequest()->SetSessionId(SessionId);
+        Send(kqpProxyId, remoteRequest.release());
+    }
+
+    void DoQueryRequest() {
+        if (Queries.empty()) {
+            return;
+        }
+
+        auto request = std::make_unique<NKqp::TEvKqp::TEvQueryRequest>();
+        request->Record.MutableRequest()->SetDatabase("/Root");
+        SetAuthToken(request, *Request);
+        request->Record.MutableRequest()->SetSessionId(SessionId);
+        ActorIdToProto(SelfId(), request->Record.MutableRequestActorId());
+        request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        request->Record.MutableRequest()->SetQuery(Queries.back());
+        Queries.pop_back();
+        request->Record.MutableRequest()->SetKeepSession(true);
+        request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
+        ++Requested;
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());
+    }
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr ev) {
+        ++Received;
+        auto record = ev->Get()->Record;
+        SessionId = record.GetResponse().GetSessionId();
+        DoQueryRequest();
+    }
+
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
+        auto record = ev->Get()->Record;
+        auto* q = State.AddQueries();
+        q->CopyFrom(record.GetResponse());
+        DoQueryRequest();
+        ++Received;
+        CheckReply();
     }
 
     void RequestBaseConfig() {
@@ -132,7 +195,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        State.MutableNodeInfos(idx)->AddCountersInfo(std::move(ev->Get()->Record.GetResponse()));
+        Counters[idx].push_back(std::move(ev->Get()->Record.GetResponse()));
         NodeStateInfoReceived(idx);
     }
 
@@ -216,6 +279,8 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
+            hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            hFunc(NKqp::TEvKqp::TEvQueryResponse, Handle)
             hFunc(NKikimr::NStorage::TEvNodeWardenBaseConfig, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
@@ -225,16 +290,29 @@ public:
     }
 
     void ReplyAndPassAway() {
+        CloseSession();
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);
         operation.set_status(Ydb::StatusIds::SUCCESS);
-        Ydb::Monitoring::ClusterStateResult result;
         google::protobuf::util::JsonPrintOptions jsonOpts;
         jsonOpts.add_whitespace = true;
         TString data;
         google::protobuf::util::MessageToJsonString(State, &data, jsonOpts);
-        result.Setresult(data);
+        Ydb::Monitoring::ClusterStateResult result;
+        auto* block = result.Addblocks();
+        block->Setname("cluster_state.json");
+        block->Setcontent(data);
+
+        for (ui32 node : xrange(Counters.size())) {
+            for (ui32 i : xrange(Counters[node].size())) {
+                auto* counterBlock = result.Addblocks();
+                TStringBuilder sb;
+                sb << "node_" << node << "_counters_" << i << ".json";
+                counterBlock->Setname(sb);
+                counterBlock->Setcontent(Counters[node][i]);
+            }
+        }
         operation.mutable_result()->PackFrom(result);
         return Reply(response);
     }

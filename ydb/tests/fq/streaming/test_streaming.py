@@ -113,7 +113,7 @@ class TestStreamingInYdb(TestYdsBase):
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName, False)
 
-        name = "query1"
+        name = "test_restart_query"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -301,7 +301,7 @@ class TestStreamingInYdb(TestYdsBase):
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName, True)
 
-        name = "query1"
+        name = "test_json_errors"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -332,7 +332,7 @@ class TestStreamingInYdb(TestYdsBase):
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName, True)
 
-        name = "query1"
+        name = "test_restart_query_by_rescaling"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN

@@ -344,7 +344,7 @@ class TestStreamingInYdb(TestYdsBase):
                     FORMAT="json_each_row",
                     SCHEMA=(time String NOT NULL))
                 WHERE time like "%time%";
-                INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
+                INSERT INTO `{source_name}`.`{output_topic}` SELECT time FROM $in;
             END DO;'''
 
         query_id = "query_id"  # TODO
@@ -373,7 +373,7 @@ class TestStreamingInYdb(TestYdsBase):
                     FORMAT="json_each_row",
                     SCHEMA=(time String NOT NULL))
                 WHERE time like "%lunch%";
-                INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
+                INSERT INTO `{source_name}`.`{output_topic}` SELECT time FROM $in;
             END DO;'''
 
         kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))

@@ -228,17 +228,19 @@ private:
                 // TxStartPreparation may be executed AFTER all the ReadSets from secondary.
                 // So, TxBroken may already be set, we must not ignore that.
                 op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
+                AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
+                AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))("receive", Self->TabletID());
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             }
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
-            auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
-
-            AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
-            AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))("receive", Self->TabletID());
-            op->InitializeRequests(*Self);
+            // the tx may already be finished and the operator deleted,
+            // and that is good, we improve the latency!
+            if (auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true)) {
+                op->InitializeRequests(*Self);
+            }
         }
 
     public:

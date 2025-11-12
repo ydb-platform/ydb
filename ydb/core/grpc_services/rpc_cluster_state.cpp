@@ -47,9 +47,10 @@ public:
     ui32 Received = 0;
     TString SessionId;
     std::deque<TString> Queries = {
-        "SELECT * FROM `/Root/.sys/partition_stats` LIMIT 10",
-        "SELECT * FROM `/Root/.sys/nodes` LIMIT 10",
-        "SELECT * FROM `/Root/.sys/query_sessions` LIMIT 10"
+        "SELECT * FROM `/Root/.sys/partition_stats` LIMIT 100",
+        "SELECT * FROM `/Root/.sys/nodes` LIMIT 100",
+        "SELECT * FROM `/Root/.sys/query_sessions` LIMIT 100",
+
     };
 
     TVector<TVector<TString>> Counters;
@@ -110,6 +111,13 @@ public:
         auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         remoteRequest->Record.MutableRequest()->SetDatabase("/Root");
         ++Requested;
+        Send(kqpProxyId, remoteRequest.release());
+    }
+
+    void CloseSession() {
+        auto kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
+        auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        remoteRequest->Record.MutableRequest()->SetSessionId(SessionId);
         Send(kqpProxyId, remoteRequest.release());
     }
 
@@ -282,6 +290,7 @@ public:
     }
 
     void ReplyAndPassAway() {
+        CloseSession();
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         operation.set_ready(true);

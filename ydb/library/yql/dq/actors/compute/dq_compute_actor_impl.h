@@ -529,6 +529,11 @@ protected:
     }
 
 protected:
+    void PassAway() override {
+        Y_ABORT_UNLESS(Terminated);
+        NActors::TActorBootstrapped<TDerived>::PassAway();
+    }
+
     void Terminate(bool success, const TIssues& issues) {
         {
             TStringStream ss(TerminatedBacktrace);
@@ -596,8 +601,8 @@ protected:
             RuntimeSettings.TerminateHandler(success, issues);
         }
 
-        this->PassAway();
         Terminated = true;
+        this->PassAway();
     }
 
     void Terminate(bool success, const TString& message) {

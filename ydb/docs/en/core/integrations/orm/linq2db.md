@@ -24,16 +24,17 @@ Add dependencies:
 
   ```xml
   <ItemGroup>
-  <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
-  <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
-  <PackageReference Include="Ydb.Sdk" Version="$(YdbSdkVersion)" />  </ItemGroup>
+      <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
+      <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
+      <PackageReference Include="Ydb.Sdk" Version="$(YdbSdkVersion)" /> 
+  </ItemGroup>
   ```
 
 {% endlist %}
 
 If you use a providers configuration file, the configuration name must contain `YDB` so the provider is picked automatically (for example, `"YDB"`).
 
-## Provider configuration {#configuration-provider}
+## Provider Configuration {#configuration-provider}
 
 Configure LinqToDB to use {{ ydb-short-name }} in code:
 
@@ -62,15 +63,13 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
 
 {% endlist %}
 
----
-
 ## Usage {#using}
 
 Use the provider like any other Linq To DB provider: map your entity classes to tables and run queries via `DataConnection`/`ITable<T>`. Below you’ll find the type mapping table and schema generation examples.
 
-### .NET ↔ {{ ydb-short-name }} type mapping {#types}
+### Type Mapping between .NET and {{ ydb-short-name }} {#types}
 
-| .NET type(s)                  | Linq To DB `DataType`                     | YDB type           | Notes                                                                 |
+| .NET type(s)                  | Linq To DB `DataType`                     | { ydb-short-name }} type           | Notes                                                                 |
 | ----------------------------- | ----------------------------------------- | ------------------ | --------------------------------------------------------------------- |
 | `bool`                        | `Boolean`                                 | `Bool`             | —                                                                     |
 | `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`             | UTF-8 string.                                                         |
@@ -102,9 +101,8 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 
 > By default (when DbType is not specified on a column) the provider uses the legacy YDB temporal types: Date, Datetime, Timestamp, Interval.
 To opt in to the new temporal types per column, set DbType on that column, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
----
 
-### Schema generation from attributes
+### Schema Generation from Attributes
 
 Describe an entity using Linq To DB attributes; the provider will create a table and indexes.
 
@@ -346,7 +344,7 @@ var employee = new Employee
 {
     Id         = 1L,
     FullName   = "Example",
-    Email      = "example@bk.com",
+    Email      = "example@example.com",
     HireDate   = new DateTime(2023, 12, 20),
     Salary     = 500000.000000000m,
     IsActive   = true,
@@ -362,7 +360,7 @@ var loaded = db.GetTable<Employee>()
 // UPDATE Email/Department/Salary by primary key
 db.GetTable<Employee>()
   .Where(e => e.Id == employee.Id)
-  .Set(e => e.Email,      "example+updated@bk.com")
+  .Set(e => e.Email,      "example+updated@example.com")
   .Set(e => e.Department, "Analytics")
   .Set(e => e.Salary,     550000.000000000m)
   .Update();

@@ -227,10 +227,9 @@ protected:
     }
 
     ~TDqComputeActorBase() override {
-        if (Terminated) {
-            return;
+        if (!Terminated) {
+            Free();
         }
-        Free();
     }
 
     void Free() {
@@ -357,24 +356,22 @@ protected:
     void DoExecute() {
         Y_ABORT_UNLESS(!Terminated, "Terminated at:\n%s", TerminatedBacktrace.c_str());
 
-        {
-            auto guard = BindAllocator();
-            auto* alloc = guard.GetMutex();
+        auto guard = BindAllocator();
+        auto* alloc = guard.GetMutex();
 
-            if (State == NDqProto::COMPUTE_STATE_FINISHED) {
-                if (!DoHandleChannelsAfterFinishImpl()) {
-                    return;
-                }
-            } else {
-                DoExecuteImpl();
+        if (State == NDqProto::COMPUTE_STATE_FINISHED) {
+            if (!DoHandleChannelsAfterFinishImpl()) {
+                return;
             }
-
-            if (MemoryQuota) {
-                MemoryQuota->TryShrinkMemory(alloc);
-            }
-
-            ReportStats();
+        } else {
+            DoExecuteImpl();
         }
+
+        if (MemoryQuota) {
+            MemoryQuota->TryShrinkMemory(alloc);
+        }
+
+        ReportStats();
     }
 
     virtual void DoExecuteImpl() = 0;
@@ -648,8 +645,7 @@ protected:
         }
     }
 
-    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool forceTerminate = false)
-    {
+    void ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues, bool forceTerminate = false) {
         auto execEv = MakeHolder<TEvDqCompute::TEvState>();
         auto& record = execEv->Record;
 

@@ -108,7 +108,7 @@ protected: //TDqComputeActorChannels::ICallbacks
             batch.Proto = std::move(*channelData.Proto.MutableData());
             batch.Payload = std::move(channelData.Payload);
             auto guard = TBase::BindAllocator();
-            channel->Push(std::move(batch));
+            channel->Push(std::move(batch), Nothing());
         }
 
         if (channelData.Proto.HasCheckpoint()) {

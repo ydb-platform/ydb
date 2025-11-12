@@ -15,6 +15,7 @@ PEERDIR(
     yt/yt/core/rpc/grpc
     yt/yt/core/rpc/http
     yt/yt/core/https
+    yt/yt/core/test_framework
     library/cpp/testing/gtest
 )
 

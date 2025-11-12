@@ -211,8 +211,9 @@ size_t TStorage::Compact() {
                     return message.DeadlineDelta <= dieProcessingDelta;
                 case EMessageStatus::Unprocessed:
                 case EMessageStatus::Committed:
-                case EMessageStatus::DLQ:
                     return message.WriteTimestampDelta <= retentionDeadlineDelta.value();
+                case EMessageStatus::DLQ:
+                    return false;
                 default:
                     return false;
             }
@@ -249,6 +250,28 @@ size_t TStorage::Compact() {
     Batch.Compacted(removed);
 
     return removed;
+}
+
+size_t TStorage::CompactDLQ() {
+    size_t compacted = 0;
+
+    if (auto retentionDeadlineDelta = GetRetentionDeadlineDelta(); retentionDeadlineDelta.has_value()) {
+        while(!DLQQueue.empty()) {
+            auto offset = DLQQueue.front();
+
+            auto [message, slow] = GetMessageInt(offset);
+            if (message->WriteTimestampDelta >= retentionDeadlineDelta.value()) {
+                break;
+            }
+
+            DoCommit(offset);
+
+            DLQQueue.pop_front();
+            Batch.DeleteFromDLQ(offset);
+        }
+    }
+
+    return compacted;
 }
 
 void TStorage::RemoveMessage(const TMessage& message) {
@@ -324,13 +347,18 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         Batch.MoveBaseTime(TimeProvider->Now(), BaseWriteTimestamp);
     }
 
+    ui32 writeTimestampDelta = static_cast<ui32>((TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds());
+    if (writeTimestampDelta > MaxWriteTimestampDelta) {
+        return false;
+    }
+
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,
         .ProcessingCount = 0,
         .DeadlineDelta = 0,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
-        .WriteTimestampDelta = static_cast<ui32>((TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds())
+        .WriteTimestampDelta = writeTimestampDelta
     });
 
     Batch.AddNewMessage(offset);

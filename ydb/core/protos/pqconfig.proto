@@ -1360,6 +1360,11 @@ message TEvMLPChangeMessageDeadlineRequest {
 message TEvMLPChangeMessageDeadlineResponse {
 }
 
+message TMLPConsumerMetrics {
+    optional uint64 TotalDLQMovedMessageCount = 1;
+    optional uint64 TotalDLQDeletedByRetentionMessageCount = 2;
+};
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -1372,9 +1377,9 @@ message TMLPStorageSnapshot {
         optional uint64 FirstUncommittedOffset = 2;
         optional uint64 BaseDeadlineSeconds = 3;
         optional uint64 BaseWriteTimestampSeconds = 4;
-        optional uint64 DLQMovedMessages = 5;
     }
     optional TMeta Meta = 2;
+    optional TMLPConsumerMetrics Metrics = 8;
 
     optional uint64 FormatVersion = 3;
     optional bytes Messages = 4;
@@ -1389,6 +1394,8 @@ message TMLPStorageWAL {
     optional uint64 Generation = 1;
     optional uint64 FormatVersion = 2;
 
+    optional TMLPConsumerMetrics Metrics = 16;
+
     optional uint64 FirstOffset = 3;
     optional bytes ChangedMessages = 4;
 
@@ -1396,7 +1403,6 @@ message TMLPStorageWAL {
     optional bytes AddedMessages = 6;
 
     repeated uint64 DLQ = 7;
-    optional uint64 DLQMovedMessages = 8;
 
     optional uint64 BaseDeadlineSeconds = 9;
     optional uint64 BaseWriteTimestampSeconds = 10;

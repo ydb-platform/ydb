@@ -33,6 +33,9 @@ public:
     // The maximum supported time delta. If it has reached this value, then it is necessary
     // to shift the BaseDeadline. Allows you to store deadlines for up to 18 hours.
     static constexpr size_t MaxDeadlineDelta = Max<ui16>();
+    // The maximum supported write timestamp delta. If it has reached this value, then it is necessary
+    // to shift the BaseWriteTimestamp. Allows you to store deadlines for up to 2 years.
+    static constexpr size_t MaxWriteTimestampDelta = (1 << 26) - 1;
 
 public:
     enum EMessageStatus {
@@ -48,7 +51,7 @@ public:
 
     struct TMessage {
         ui32 Status: 3 = EMessageStatus::Unprocessed;
-        ui32 Reserve: 3;
+        ui32 Reserve: 3 = 0;
         // It stores how many times the message was submitted to work.
         // If the value is large, then the message has been processed several times,
         // but it has never been processed successfully.
@@ -61,7 +64,7 @@ public:
         // in the topic.
         ui32 MessageGroupIdHash: 31 = 0;
         ui32 WriteTimestampDelta: 26 = 0;
-        ui32 Reserve2: 6;
+        ui32 Reserve2: 6 = 0;
     };
     static_assert(sizeof(TMessage) == sizeof(ui32) * 3);
 
@@ -178,6 +181,7 @@ public:
 
     size_t ProccessDeadlines();
     size_t Compact();
+    size_t CompactDLQ();
     void MoveBaseDeadline();
 
     TBatch GetBatch();

@@ -181,6 +181,11 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
         return Restart(TStringBuilder() << "Received KV error on initialization: " << record.GetStatus());
     }
 
+    auto readMetrics = [&](const NKikimrPQ::TMLPConsumerMetrics& metrics) {
+        Metrics.TotalDLQMovedMessageCount = metrics.GetTotalDLQMovedMessageCount();
+        Metrics.TotalDLQDeletedByRetentionMessageCount = metrics.GetTotalDLQDeletedByRetentionMessageCount();
+    };
+
     switch (record.GetCookie()) {
         case static_cast<int>(EKvCookie::InitialRead): {
             if (record.ReadResultSize() != 1) {
@@ -206,7 +211,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         LOG_D("Read snapshot");
                         HasSnapshot = true;
                         LastWALIndex = snapshot.GetWALIndex();
-                        DLQMovedMessageCount = snapshot.GetMeta().GetDLQMovedMessages();
+                        readMetrics(snapshot.GetMetrics());
                         Storage->Initialize(snapshot);
                     } else {
                         LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << snapshot.GetConfiguration().GetGeneration());
@@ -243,7 +248,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         if (Config.GetGeneration() == wal.GetGeneration()) {
                             LOG_D("Read WAL " << w.key());
                             LastWALIndex = wal.GetWALIndex();
-                            DLQMovedMessageCount = wal.GetDLQMovedMessages();
+                            readMetrics(wal.GetMetrics());
                             Storage->ApplyWAL(wal);
                         } else {
                             LOG_W("Received snapshot from old consumer generation: " << Config.GetGeneration() << " vs " << wal.GetGeneration());
@@ -548,13 +553,18 @@ void TConsumerActor::Persist() {
         }
     };
 
+    auto writeMetrics = [&](NKikimrPQ::TMLPConsumerMetrics& metrics) {
+        metrics.SetTotalDLQMovedMessageCount(Metrics.TotalDLQMovedMessageCount);
+        metrics.SetTotalDLQDeletedByRetentionMessageCount(Metrics.TotalDLQDeletedByRetentionMessageCount);
+    };
+
     auto withWAL = HasSnapshot && Storage->GetMessageCount() > 32;
     if (withWAL) {
         auto key = MakeWALKey(PartitionId, Config.GetName(), ++LastWALIndex);
 
         NKikimrPQ::TMLPStorageWAL wal;
         wal.SetWALIndex(LastWALIndex);
-        wal.SetDLQMovedMessages(DLQMovedMessageCount);
+        writeMetrics(*wal.MutableMetrics());
         batch.SerializeTo(wal);
 
         auto data = wal.SerializeAsString();
@@ -581,7 +591,7 @@ void TConsumerActor::Persist() {
         Storage->SerializeTo(snapshot);
 
         snapshot.SetWALIndex(LastWALIndex);
-        snapshot.MutableMeta()->SetDLQMovedMessages(DLQMovedMessageCount);
+        writeMetrics(*snapshot.MutableMetrics());
 
         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
 
@@ -731,7 +741,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .ConsumerName = Config.GetName(),
             .ConsumerGeneration = Config.GetGeneration(),
             .DestinationTopic = Config.GetDeadLetterQueue(),
-            .FirstMessageSeqNo = DLQMovedMessageCount + 1,
+            .FirstMessageSeqNo = Metrics.TotalDLQMovedMessageCount + Metrics.TotalDLQDeletedByRetentionMessageCount + 1,
             .Messages = std::move(messages)
         }));
     }
@@ -749,10 +759,12 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 
     DLQMoverActorId = {};
     for (auto offset : moved) {
-        AFL_ENSURE(Storage->MarkDLQMoved(offset))("o", offset);
+        auto result = Storage->MarkDLQMoved(offset);
+        AFL_ENSURE(result)("o", offset);
     }
 
-    DLQMovedMessageCount += moved.size();
+    Metrics.TotalDLQMovedMessageCount += moved.size();
+    Metrics.TotalDLQDeletedByRetentionMessageCount += Storage->CompactDLQ();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {

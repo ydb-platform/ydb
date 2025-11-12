@@ -12,7 +12,12 @@ class TDuration;
 
 namespace NKikimr::NPQ::NMLP {
 
-// MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
+struct TConsumerMetrics {
+    size_t TotalDLQMovedMessageCount = 0;
+    size_t TotalDLQDeletedByRetentionMessageCount = 0;
+};
+
+// TODO MLP не работает если включена компактифкация по ключу!!! (иначе не понятно как прореживать скомпакченные значения)
 NActors::IActor* CreateConsumerActor(
     const TString& database,
     ui64 tabletId,

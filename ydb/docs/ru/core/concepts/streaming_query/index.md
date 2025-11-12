@@ -32,7 +32,7 @@
 
 ## Синтаксис
 
-Чтение реализована через [внешние источники данных](../datamodel/external_data_source), поэтому предварительно необходимо создать источник через [CREATE EXTERNAL DATA SOURCE](../../../yql/reference/syntax/create-external-data-source).
+Чтение реализовано через [внешние источники данных](../datamodel/external_data_source), поэтому предварительно необходимо создать источник через [CREATE EXTERNAL DATA SOURCE](../../../yql/reference/syntax/create-external-data-source).
 
 Пример:
 

@@ -384,3 +384,65 @@ class TestStreamingInYdb(TestYdsBase):
         assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to lunch" for i in range(message_count)]
 
         kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+    def test_types(self, kikimr):
+        sourceName = "test_types"
+        self.init_topics(sourceName, partitions_count=1)
+        create_read_rule(self.input_topic, self.consumer_name)
+
+        self.create_source(kikimr, sourceName)
+
+        query_name="test_types1"
+        def test_type(self, kikimr, type, input, expected_output):
+            sql = R'''
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    $in = SELECT field_name FROM {source_name}.`{input_topic}`
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field_name {type_name} NOT NULL));
+                    INSERT INTO {source_name}.`{output_topic}` SELECT CAST(field_name as String) FROM $in;
+                END DO;'''
+
+            kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, type_name=type, input_topic=self.input_topic, output_topic=self.output_topic))
+            self.write_stream([f"{{\"field_name\": {input}}}"])
+            assert self.read_stream(1, topic_path=self.output_topic) == [expected_output]
+            kikimr.YdbClient.query(f"DROP STREAMING QUERY `{query_name}`")
+
+        test_type(self, kikimr, type="String", input='"lunch time"', expected_output='lunch time')
+        test_type(self, kikimr, type="Utf8", input='"Relativitätstheorie"', expected_output='Relativitätstheorie')
+        #test_type(self, kikimr, type="Json", input='{"name": "value"}', expected_output='{"name": "value"}')
+        #test_type(self, kikimr, type="JsonDocument", input='{"name": "value"}', expected_output='lunch time')   # Unsupported
+        #test_type(self, kikimr, type="Bool", input='True', expected_output='True')
+        test_type(self, kikimr, type="Int8", input='42', expected_output='42')
+        test_type(self, kikimr, type="Uint64", input='777', expected_output='777')
+        test_type(self, kikimr, type="Float", input='1024.1024', expected_output='1024.1024')
+        test_type(self, kikimr, type="Double", input='-777.777', expected_output='-777.777')
+        test_type(self, kikimr, type="Timestamp", input='"2025-08-25 10:49:00"', expected_output='2025-08-25T10:49:00Z')
+        
+    def test_raw_format(self, kikimr):
+        sourceName = "test_restart_query" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.init_topics(sourceName, partitions_count=10)
+        self.create_source(kikimr, sourceName, False)
+
+        query_name = "test_restart_query"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $input = SELECT CAST(data AS Json) as json FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="raw",
+                    SCHEMA=(data String NOT NULL));
+                $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
+                INSERT INTO {source_name}.`{output_topic}` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
+            END DO;'''
+        query_id = "query_id"  # TODO
+        kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        self.wait_completed_checkpoints(kikimr, query_id)
+
+        data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
+        expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
+        self.write_stream(data)
+
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        kikimr.YdbClient.query(f"DROP STREAMING QUERY `{query_name}`")

@@ -3100,7 +3100,7 @@ public:
         });
 
         if (!TxManager->NeedCommit()) {
-            Rollback(std::move(traceId));
+            Rollback(std::move(traceId), /* waitForResult */ true);
         } else if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
@@ -3189,7 +3189,7 @@ public:
         SendCommitToCoordinator();
     }
 
-    void Rollback(NWilson::TTraceId traceId) noexcept {
+    void Rollback(NWilson::TTraceId traceId, bool waitForResult) noexcept {
         AFL_ENSURE(CurrentStateFunc() != &TThis::StateRollback);
         AFL_ENSURE(!TxManager->IsRollBack());
         Become(&TThis::StateRollback);
@@ -3200,12 +3200,13 @@ public:
             CA_LOG_D("Start rollback");
             const auto& shardsToRollback = TxManager->StartRollback();
 
-            if (shardsToRollback.empty()) {
+            if (shardsToRollback.empty() && waitForResult) {
                 OnRollbackFinished();
-            } else {
-                for (const ui64 shardId : shardsToRollback) {
-                    SendToExternalShard(shardId, /* isRollback */ true);
-                }
+                return;
+            }
+
+            for (const ui64 shardId : shardsToRollback) {
+                SendToExternalShard(shardId, /* isRollback */ true);
             }
         } catch (...) {
             CA_LOG_E("Failed to rollback transaction. Error: " << CurrentExceptionMessage() << ".");
@@ -3517,9 +3518,8 @@ public:
         CA_LOG_D("Got ProposeTransactionResult" <<
               ", PQ tablet: " << ev->Get()->Record.GetOrigin() <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(ev->Get()->Record.GetStatus()));
-        if (RollbackMessageCookie == ev->Cookie) {
-            OnRolledback(ev->Get()->Record.GetOrigin());
-        }
+        // TODO: Check RollbackMessageCookie == ev->Cookie for topics
+        OnRolledback(ev->Get()->Record.GetOrigin());
     }
 
     static TString GetPQErrorMessage(const NKikimrPQ::TEvProposeTransactionResult& event, TStringBuf default_) {
@@ -3733,7 +3733,7 @@ public:
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         if (!TxManager->IsRollBack()) {
             CancelProposal();
-            Rollback(BufferWriteActorSpan.GetTraceId());
+            Rollback(BufferWriteActorSpan.GetTraceId(), /* waitForResult */ false);
         }
         PassAway();
     }
@@ -3774,7 +3774,7 @@ public:
 
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        Rollback(std::move(ev->TraceId));
+        Rollback(std::move(ev->TraceId), /* waitForResult */ true);
     }
 
     void OnAllTasksFinised() {

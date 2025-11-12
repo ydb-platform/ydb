@@ -41,12 +41,10 @@
 
 `column_option_list` - список опций для колонки. Для указания этих опций существует два синтаксиса:
 
-```
-    column_option_list_first: column_option*;
-    column_option_list_second: (column_option, column_option*);
-```
+1. `option_1 option_2 ... option_n`
+2. `(option_1, option_2, ..., option_n)`
 
-Возможные опции:
+Возможные значения опций:
 
 * `NOT NULL` — колонка не может содержать `NULL`.
 * `FAMILY column_family` — указывает, что данная колонка принадлежит [группе колонок](./family.md).

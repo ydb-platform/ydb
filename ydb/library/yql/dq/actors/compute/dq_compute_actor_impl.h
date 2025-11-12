@@ -355,6 +355,8 @@ protected:
     }
 
     void DoExecute() {
+        Y_ABORT_UNLESS(!Terminated, "Terminated at:\n%s", TerminatedBacktrace.c_str());
+
         {
             auto guard = BindAllocator();
             auto* alloc = guard.GetMutex();
@@ -528,6 +530,11 @@ protected:
 
 protected:
     void Terminate(bool success, const TIssues& issues) {
+        {
+            TStringStream ss(TerminatedBacktrace);
+            FormatBackTrace(&ss);
+        }
+
         if (MemoryQuota) {
             MemoryQuota->TryReleaseQuota();
         }
@@ -2129,6 +2136,7 @@ private:
     TInstant LastSendStatsTime;
     bool PassExceptions = false;
     bool Terminated = false;
+    TString TerminatedBacktrace;
 protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryQuota;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputChannelSize;

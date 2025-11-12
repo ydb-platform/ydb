@@ -232,9 +232,9 @@ public:
 
         auto argType = argsTuple.GetElementType(0);
         auto argTag = GetArg(*typeInfoHelper, argType, builder);
-        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector})) {
+        if (!ValidTag(argTag, {TagStoredVector, TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector})) {
             TStringBuilder sb;
-            sb << "A result from 'ToBinaryString[Float|Int8|Uint8]' is expected as an argument but got '";
+            sb << "A result from 'ToBinaryString[Float|Int8|Uint8|Bit]' is expected as an argument but got '";
             TTypePrinter(*typeInfoHelper, argsTuple.GetElementType(0)).Out(sb.Out);
             sb << "'";
             builder.SetError(std::move(sb));
@@ -243,7 +243,7 @@ public:
 
         builder.UserType(userType);
         builder.Args(1)->Add(argType).Flags(ICallablePayload::TArgumentFlags::AutoMap);
-        if (ValidTag(argTag, {TagFloatVector, TagInt8Vector, TagUint8Vector}) && argType == argsTuple.GetElementType(0)) {
+        if (ValidTag(argTag, {TagFloatVector, TagInt8Vector, TagUint8Vector, TagBitVector}) && argType == argsTuple.GetElementType(0)) {
             builder.Returns<TListType<float>>().IsStrict();
         } else {
             builder.Returns<TOptional<TListType<float>>>().IsStrict();

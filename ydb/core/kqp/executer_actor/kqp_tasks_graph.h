@@ -230,6 +230,7 @@ struct TGraphMeta {
     std::map<TString, TString> SecureParams;
     bool AllowOlapDataQuery = true; // used by Data executer - always true for Scan executer
     bool StreamResult = false;
+    THashSet<ui32> DiscardResultIndices; // indices of DISCARD results that should not send data
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;

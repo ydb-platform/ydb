@@ -43,6 +43,7 @@ ydb/core/statistics/service/ut BasicStatistics.PersistenceWithStorageFailuresAnd
 ydb/core/statistics/service/ut [*/*] chunk chunk
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_FlatIndex
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
+ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_sequence_reboots [*/*] chunk chunk
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long

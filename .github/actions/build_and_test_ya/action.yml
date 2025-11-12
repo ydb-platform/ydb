@@ -106,9 +106,6 @@ runs:
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}
         increment: ${{ inputs.increment }}
-        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
-        testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
-        testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
         link_threads: ${{ inputs.link_threads }}
         additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
@@ -119,3 +116,6 @@ runs:
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
         add_vcs_info: ${{ inputs.add_vcs_info }}
+        telegram_ydbot_token:  ${{ fromJSON( inputs.secs ).TELEGRAM_YDBOT_TOKEN || '' }}
+        telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
+        telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}

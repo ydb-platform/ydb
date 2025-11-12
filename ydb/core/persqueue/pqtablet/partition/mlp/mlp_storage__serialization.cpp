@@ -13,7 +13,7 @@ struct TSnapshotMessage {
         union {
             struct {
                 ui64 Status: 3;
-                ui64 Reserve: 3 = 0;
+                ui64 Reserve: 3;
                 ui64 ProcessingCount: 10;
                 ui64 DeadlineDelta: 16;
                 ui64 HasMessageGroupId: 1;

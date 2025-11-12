@@ -4,7 +4,7 @@
 
 Это руководство по использованию [LinqToDB](https://linq2db.github.io/) с {{ ydb-short-name }}.
 
-LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предоставляющий типобезопасные LINQ‑запросы и точный контроль над SQL. Провайдер {{ ydb-short-name }} формирует корректный YQL, поддерживает типы YDB, генерацию схемы и массовые операции (Bulk Copy).
+LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предоставляющий типобезопасные [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) запросы и точный контроль над SQL. Провайдер {{ ydb-short-name }} формирует корректный YQL, поддерживает типы YDB, генерацию схемы и массовые операции (Bulk Copy).
 
 ## Установка провайдера {{ ydb-short-name }} {#install-provider}
 
@@ -17,21 +17,18 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
   ```bash
   dotnet add package Community.Ydb.Linq2db
   dotnet add package linq2db
-  dotnet add package Ydb.Sdk
   ```
 
 - csproj (PackageReference)
 
   ```xml
   <ItemGroup>
-  <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
-  <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
-  <PackageReference Include="Ydb.Sdk" Version="$(YdbSdkVersion)" />  </ItemGroup>
+      <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
+      <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
+  </ItemGroup>
   ```
 
 {% endlist %}
-
-Если вы используете конфигурационный файл провайдеров, имя конфигурации должно содержать `YDB`, чтобы провайдер определился автоматически (например, `"YDB"`).
 
 ## Конфигурация провайдера {#configuration-provider}
 
@@ -52,10 +49,6 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
   var options = new DataOptions()
       .UseConnectionString(YdbTools.GetDataProvider(),
           "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>")
-      .UseOptions(new YdbOptions(
-          BulkCopyType: BulkCopyType.ProviderSpecific,   // дефолтный режим BulkCopy
-          UseParametrizedDecimal: true                   // Decimal(p,s) в DDL
-      ));
   DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
   using var db2 = new DataConnection(options);
   ```
@@ -70,37 +63,80 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 
 ### Таблица соответствия .NET типов с типами {{ ydb-short-name }} {#types}
 
-| .NET тип(ы)                   | Linq To DB `DataType`                     | Тип в YDB          | Примечание                                |
-| ----------------------------- | ----------------------------------------- | ------------------ |-------------------------------------------|
-| `bool`                        | `Boolean`                                 | `Bool`             | —                                         |
-| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`             | Строка UTF-8.                             |
-| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`            | Бинарные данные.                          |
-| `Guid`                        | `Guid`                                    | `Uuid`             | —                                         |
-| `DateOnly` / `DateTime`       | `Date`                                    | `Date`             | Время игнорируется.                       |
-| `DateTime`                    | `DateTime`                                | `Datetime`         | Секундная точность.                       |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`        | Микросекунды.                             |
-| `TimeSpan`                    | `Interval`                                | `Interval`         | Длительность.                             |
-| `decimal`                     | `Decimal`                                 | `Decimal(p,s)`     | По умолчанию `Decimal(22,9)`              |
-| `float`                       | `Single`                                  | `Float`            | —                                         |
-| `double`                      | `Double`                                  | `Double`           | —                                         |
-| `sbyte` / `byte`              | `SByte` / `Byte`                          | `Int8` / `Uint8`   | —                                         |
-| `short` / `ushort`            | `Int16` / `UInt16`                        | `Int16` / `Uint16` | —                                         |
-| `int` / `uint`                | `Int32` / `UInt32`                        | `Int32` / `Uint32` | —                                         |
-| `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64` | —                                         |
-| `string`                      | `Json`                                    | `Json`             | Текстовый JSON.                           |
-| `byte[]`                      | `BinaryJson`                              | `JsonDocument`     | Бинарный JSON.                            |
-| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | Расширенный диапазон даты.                |
-| `DateTime`                    | `DateTime`                                | `Datetime64`       | Секундная точность, расширенный диапазон. |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | Микросекунды, расширенный диапазон.       |
-| `TimeSpan`                    | `Interval`                                | `Interval64`       | Расширенный диапазон интервалов.          |
+| .NET тип(ы)                   | Linq To DB `DataType`                     | Тип в YDB          | Примечание                                                                                                                      |
+|-------------------------------|-------------------------------------------|--------------------|---------------------------------------------------------------------------------------------------------------------------------|
+| `bool`                        | `Boolean`                                 | `Bool`             | —                                                                                                                               |
+| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Utf8`             | UTF-8 строка. Text и Utf8 — одно и то же; что выводить, решает генератор DDL                                                    |
+| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `String`           | Бинарные данные. Bytes и String в YDB равнозначны                                                                               |
+| `Guid`                        | `Guid`                                    | `Uuid`             | 128-битный UUID (RFC 4122). Проверка версии (v1/v4/v7) не выполняется — нужную версию генерируйте в приложении                  |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date`             | Дата в UTC (время отбрасывается). Диапазон 1970-01-01..2106-01-01                                                               |
+| `DateTime`                    | `DateTime`                                | `Datetime`         | Точность до секунд, хранится как момент в UTC. Диапазон 1970-01-01..2106-01-01                                                  |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`        | Точность до микросекунд, хранится как момент в UTC. Диапазон 1970-01-01..2106-01-01                                             |
+| `TimeSpan`                    | `Interval`                                | `Interval`         | Длительность с точностью до микросекунды; значение округляется вниз до кратного 10 тикам.                                       |
+| `decimal`                     | `Decimal`                                 | `Decimal(p,s)`     | По умолчанию — Decimal(22,9). Чтобы задать свои Precision/Scale, используйте Decimal(p,s). [Пример](#пример-кастомного-decimal) |
+| `float`                       | `Single`                                  | `Float`            | —                                                                                                                               |
+| `double`                      | `Double`                                  | `Double`           | —                                                                                                                               |
+| `sbyte` / `byte`              | `SByte` / `Byte`                          | `Int8` / `Uint8`   | —                                                                                                                               |
+| `short` / `ushort`            | `Int16` / `UInt16`                        | `Int16` / `Uint16` | —                                                                                                                               |
+| `int` / `uint`                | `Int32` / `UInt32`                        | `Int32` / `Uint32` | —                                                                                                                               |
+| `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64` | —                                                                                                                               |
+| `string`                      | `Json`                                    | `Json`             | Текстовый JSON.                                                                                                                 |
+| `byte[]`                      | `BinaryJson`                              | `JsonDocument`     | Бинарный JSON.                                                                                                                  |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | Более широкий диапазон дат. Укажите DbType = "Date32". [Пример](#пример-кастомного-decimal)                                     |
+| `DateTime`                    | `DateTime`                                | `Datetime64`       | Точность до секунд, расширенный диапазон. Укажите DbType = "Datetime64". [Пример](#пример-кастомного-decimal)                   |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | Точность до микросекунд, расширенный диапазон. Укажите DbType = "Timestamp64". [Пример](#пример-кастомного-decimal)             |
+| `TimeSpan`                    | `Interval`                                | `Interval64`       | Более широкий диапазон интервалов. Укажите DbType = "Interval64". [Пример](#пример-кастомного-decimal)                          |
 
-> Точное `Precision`/`Scale` можно задать атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]` или глобально через `YdbOptions(UseParametrizedDecimal: true)`.
- 
-> Типы с таймзоной (`TzDate`/`TzDatetime`/`TzTimestamp`) **не используются как типы колонок**. При создании таблиц будут сведены к `Date`/`Datetime`/`Timestamp`. В выражениях/литералах допустимы.
+{% note tip "Точность Decimal" %}
+Точное `Precision`/`Scale` задаётся атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`.
+{% endnote %}
 
-> По умолчанию (если на колонке не задан DbType) провайдер создаёт и использует старые типы времени в YDB:
-Date, Datetime, Timestamp, Interval. Чтобы включить новые типы точечно, укажите DbType на колонке. Например  `[Column(DbType = "Date32")]`
+{% note info "Временные типы: по умолчанию и включение расширенных" %}
+По умолчанию (если на колонке не задан `DbType`) применяются базовые типы YDB: `Date`, `Datetime`, `Timestamp`, `Interval`.
+Чтобы точечно включить расширенные типы, укажи `DbType`, например: `[Column(DbType = "Date32")]`. Обе семьи типов могут сосуществовать в одной таблице.
+{% endnote %}
+
 ---
+
+### Пример кастомного Decimal
+
+```csharp
+[Table("amounts")]
+public sealed class AmountRow
+{
+    [PrimaryKey] public long Id { get; set; }
+
+    // Custom precision & scale: Decimal(25,10)
+    [Column("amount", DataType = DataType.Decimal, Precision = 25, Scale = 10), NotNull]
+    public decimal Amount { get; set; }
+}
+```
+
+### Пример кастомного DbType
+
+```csharp
+[Table("events")]
+public sealed class EventRow
+{
+[PrimaryKey] public long Id { get; set; }
+
+    // Extended-range timestamp
+    [Column("happened_at", DbType = "Timestamp64"), NotNull]
+    public DateTime HappenedAt { get; set; }
+
+    // Extended-range date
+    [Column("due_on", DbType = "Date32"), NotNull]
+    public DateTime DueOn { get; set; }
+
+    // Second precision date
+    [Column("made_at", DbType = "Datetime64"), NotNull]
+    public DateTime MadeAt { get; set; }
+
+    // Extended-range interval
+    [Column("duration", DbType = "Interval64"), NotNull]
+    public TimeSpan Duration { get; set; }
+}
+```
 
 ### Генерация схемы из атрибутов
 
@@ -113,7 +149,7 @@ Date, Datetime, Timestamp, Interval. Чтобы включить новые ти
   ```csharp
   using LinqToDB.Mapping;
 
-  [Table(Name = "Groups", IsColumnAttributeRequired = false)]
+  [Table(Name = "Groups")]
   [Index("GroupName", Name = "group_name_index")]
   public class Group
   {
@@ -162,7 +198,87 @@ ALTER TABLE Groups
    ADD COLUMN Department Utf8;
 ```
 
-> Linq To DB не управляет миграциями — используйте Liquibase/Flyway или ручные DDL‑скрипты. Методы `CreateTable<T>()`/`DropTable<T>()` удобны для тестов и локальной разработки.
+{% note info "Миграции" %}
+LinqToDB не управляет миграциями. DDL ниже — иллюстративный; применяйте его через Liquibase/Flyway (рекомендуется). Для быстрых локальных изменений можно выполнить его напрямую через db.Execute(...) или YDB CLI.
+{% endnote %}
+
+```csharp
+using var db = new DataConnection("YDB", connectionString);
+
+// Применяем изменение схемы (добавляем колонку):
+db.Execute(@"
+ALTER TABLE Groups
+   ADD COLUMN Department Utf8;
+");
+```
+
+
+### Индексы YDB: как задать параметры
+Через атрибут [Index] вы задаёте имя, колонки и уникальность индекса. Провайдер создаёт вторичный индекс как GLOBAL.
+Параметры ASYNC/SYNC и COVER(...) через атрибут не задаются — их добавляют отдельной DDL-командой после создания таблицы.
+
+**Вариант A — через атрибут (имя + Unique)**
+```csharp
+[Table(Name = "Groups", IsColumnAttributeRequired = false)]
+[Index("GroupName", Name = "group_name_index", Unique = true)]
+public class Group
+{
+    [PrimaryKey, Column("GroupId")] public int Id { get; set; }
+    [Column("GroupName")] public string? Name { get; set; }
+
+    // Колонка, которую при желании можно добавить в COVER отдельной командой
+    [Column] public string? Department { get; set; }
+}
+
+// При db.CreateTable<Group>() будет создан GLOBAL UNIQUE индекс по GroupName.
+```
+
+**Сгенерированный DDL будет эквивалентен**
+
+```yql
+CREATE TABLE Groups (
+    GroupId Int32 NOT NULL,
+    GroupName Utf8,
+    Department Utf8,
+    PRIMARY KEY (GroupId)
+);
+
+ALTER TABLE Groups
+  ADD INDEX group_name_index GLOBAL UNIQUE
+       ON (GroupName);
+```
+
+**Вариант B — расширенные параметры (ASYNC, COVER) отдельной командой**
+
+```csharp
+[Table(Name = "Groups", IsColumnAttributeRequired = false)]
+public class Group
+{
+    [PrimaryKey, Column("GroupId")] public int Id { get; set; }
+    [Column("GroupName")] public string? Name { get; set; }
+    [Column] public string? Department { get; set; }
+}
+
+public static class Demo
+{
+    public static void Main()
+    {
+        using var db = new DataConnection("YDB", "Host=localhost;Port=2136;Database=/local;UseTls=false");
+
+        // 1) Создаём таблицу из атрибутов
+        db.CreateTable<Group>();
+
+        // 2) Добавляем индекс с параметрами ASYNC и COVER
+        db.Execute(@"
+            ALTER TABLE Groups
+                ADD INDEX group_name_index GLOBAL ASYNC
+                ON (GroupName)
+                COVER (Department);
+        ");
+    }
+}
+
+```
 
 ### Связи между сущностями
 
@@ -224,9 +340,40 @@ CREATE TABLE Students (
 );
 ```
 
-> Внешние ключи как ограничения на уровне БД не создаются провайдером автоматически. Следите за целостностью на прикладном уровне либо добавляйте проверки отдельными скриптами.
-
 ### Примеры сгенерированного YQL для выборок по связям
+
+{% list tabs %}
+
+- “Lazy” loading (two queries)
+
+  ```csharp
+    // 1) SELECT g.GroupId, g.GroupName FROM Groups AS g WHERE g.GroupName = 'M3439';
+    var grp = db.GetTable<Group>()
+    .Where(g => g.Name == "M3439")
+    .Select(g => new { g.Id, g.Name })
+    .FirstOrDefault();
+    
+    // 2) SELECT s.StudentId, s.StudentName, s.GroupId FROM Students AS s WHERE s.GroupId = ?;
+    var students = grp == null
+    ? new List<Student>()
+    : db.GetTable<Student>()
+    .Where(s => s.GroupId == grp.Id)
+    .Select(s => new { s.Id, s.Name, s.GroupId })
+    .ToList();
+  ```
+
+- “Eager” loading (JOIN)
+
+  ```csharp
+    var joined =
+    (from g in db.GetTable<Group>()
+    join s in db.GetTable<Student>() on g.Id equals s.GroupId
+    where g.Name == "M3439"
+    select new { GroupId = g.Id, GroupName = g.Name, StudentId = s.Id, StudentName = s.Name, s.GroupId })
+    .ToList();
+  ```
+
+{% endlist %}
 
 {% list tabs %}
 
@@ -273,7 +420,13 @@ CREATE TABLE Students (
 
 ### Пример «прикладной» сущности и генерируемого DDL
 
-Создадим сущность `Employee` с типами колонок и индексом:
+Этот раздел показывает практическую сущность. Он демонстрирует:
+- реалистичный набор колонок (ФИО, e-mail, дата найма, зарплата, флаги, целочисленные значения);
+- точные типы (например, Decimal(22,9) для денежных значений, Date для дат, Utf8/Bool/Int32/Int64);
+- GLOBAL вторичный индекс по full_name для быстрых поисков и сортировки;
+- сквозной сценарий: маппинг → создание таблицы → CRUD с сгенерированным YQL/DDL.
+
+При вызове `db.CreateTable<Employee>()` Linq To DB создаёт таблицу и применяет атрибут [Index] как GLOBAL-индекс YDB.
 
 {% list tabs group=lang %}
 
@@ -344,7 +497,7 @@ var employee = new Employee
 {
     Id         = 1L,
     FullName   = "Example",
-    Email      = "example@bk.com",
+    Email      = "example@example.com",
     HireDate   = new DateTime(2023, 12, 20),
     Salary     = 500000.000000000m,
     IsActive   = true,
@@ -360,7 +513,7 @@ var loaded = db.GetTable<Employee>()
 // Обновим Email/Department/Salary у сотрудника с заданным Id
 db.GetTable<Employee>()
   .Where(e => e.Id == employee.Id)
-  .Set(e => e.Email,      "example+updated@bk.com")
+  .Set(e => e.Email,      "example+updated@example.com")
   .Set(e => e.Department, "Analytics")
   .Set(e => e.Salary,     550000.000000000m)
   .Update();
@@ -400,7 +553,9 @@ db.GetTable<Employee>()
   WHERE Id = ?;
   ```
 
-> Примечание: провайдер специально снимает алиас с таблицы для UPDATE, чтобы соответствовать правилам YQL, — это делает оптимизатор SQL провайдера.
+{% note info "Особенность YQL UPDATE" %}
+Провайдер выводит параметры (?), потому что значения и типы привязываются драйвером, а не объявляются в тексте запроса. Когда YQL требует типизированные параметры, провайдер автоматически добавляет соответствующие DECLARE. Для “нестандартных” паттернов вроде upsert-записей используйте UPSERT с параметризацией — провайдер генерирует такие выражения? как обычный YQL с параметрами.
+{% endnote %}
 
 - Удаление по первичному ключу
 
@@ -410,39 +565,22 @@ DELETE FROM employee WHERE Id = ?;
 
 ### Массовые операции: вставка, обновление и удаление
 
-Массовая вставка (BulkCopy)
+#### Массовая вставка (BulkCopy)
 
-{% list tabs group=lang %}
+`BulkCopy` в провайдере YDB выполняется через нативный `API BulkUpsert` и не генерирует текстовый YQL. Данные отправляются в YDB как поток типизированных строк по двоичному протоколу SDK, поэтому не используются DECLARE и параметрические плейсхолдеры (?)
 
-- C#
-
-  ```csharp
-  var now  = DateTime.UtcNow;
-  var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
-  {
-      Id      = i,
-      IntVal  = i,
-      DecVal  = 0m,
-      StrVal  = $"Name {i}",
-      BoolVal = (i & 1) == 0,
-      DtVal   = now,
-  }); 
-  ```
-
-- YQL
-
-  ```yql
-  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-  SELECT
-      COUNT(*) as COUNT_1
-  FROM
-      SimpleEntity t
-  WHERE
-      t.Id IN $Gen_List_Primitive_1 AND
-      (t.DecVal <> Decimal('1.23', 22, 9) OR t.StrVal <> 'updated'u OR t.StrVal IS NULL OR t.BoolVal = false)
-  ```
-
-{% endlist %}
+```csharp
+var now  = DateTime.UtcNow;
+var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
+{
+    Id      = i,
+    IntVal  = i,
+    DecVal  = 0m,
+    StrVal  = $"Name {i}",
+    BoolVal = (i & 1) == 0,
+    DtVal   = now,
+}); 
+```
 
 Массовое обновление (WHERE IN)
 
@@ -454,9 +592,9 @@ DELETE FROM employee WHERE Id = ?;
   var ids = Enumerable.Range(0, 15_000).ToArray();
   
   table.Where(t => ids.Contains(t.Id))
-      .Set(_ => _.DecVal,  _ => 1.23m)
-      .Set(_ => _.StrVal,  _ => "updated")
-      .Set(_ => _.BoolVal, _ => true)
+      .Set(_ => _.DecVal, 1.23m)
+      .Set(_ => _.StrVal, "updated")
+      .Set(_ => _.BoolVal, true)
       .Update();
   ```
 

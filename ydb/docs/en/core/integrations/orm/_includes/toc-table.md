@@ -7,4 +7,4 @@
 | [JOOQ](https://www.jooq.org/)                                   | [Instruction](../jooq.md)             |
 | [Dapper](https://www.learndapper.com/)                          | [Instruction](../dapper.md)           |
 | [Entity Framework](https://docs.microsoft.com/ef/core/index)    | [Instruction](../entity-framework.md) |
-| [LinqToDB](https://linq2db.github.io/)                          | [Instruction](../linq2db.md)          |
+| [Linq To DB](https://linq2db.github.io/)                          | [Instruction](../linq2db.md)          |

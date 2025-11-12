@@ -4,7 +4,7 @@
 
 This guide explains how to use [LinqToDB](https://linq2db.github.io/) with {{ ydb-short-name }}.
 
-LinqToDB is a lightweight and fast ORM/µ-ORM for .NET that provides type-safe LINQ queries and precise SQL control. The {{ ydb-short-name }} provider generates correct YQL, supports YDB types, schema generation, and bulk operations (Bulk Copy).
+LinqToDB is a lightweight and fast ORM/µ-ORM for .NET that provides type-safe [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) queries and precise SQL control. The {{ ydb-short-name }} provider generates correct YQL, supports {{ ydb-short-name }} types, schema generation, and bulk operations (Bulk Copy).
 
 ## Installing the {{ ydb-short-name }} provider {#install-provider}
 
@@ -17,7 +17,6 @@ Add dependencies:
   ```bash
   dotnet add package Community.Ydb.Linq2db  
   dotnet add package linq2db
-  dotnet add package Ydb.Sdk
   ```
 
 - csproj (PackageReference)
@@ -26,13 +25,10 @@ Add dependencies:
   <ItemGroup>
       <PackageReference Include="Community.Ydb.Linq2db" Version="$(CommunityYdbLinqToDbVersion)" />
       <PackageReference Include="linq2db" Version="$(LinqToDbVersion)" />
-      <PackageReference Include="Ydb.Sdk" Version="$(YdbSdkVersion)" /> 
   </ItemGroup>
   ```
 
 {% endlist %}
-
-If you use a providers configuration file, the configuration name must contain `YDB` so the provider is picked automatically (for example, `"YDB"`).
 
 ## Provider Configuration {#configuration-provider}
 
@@ -47,16 +43,12 @@ Configure LinqToDB to use {{ ydb-short-name }} in code:
   using var db = YdbTools.CreateDataConnection(
       "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>"
   );
-    DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
+  DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
 
   // Option 2: via DataOptions
   var options = new DataOptions()
       .UseConnectionString(YdbTools.GetDataProvider(),
           "Endpoint=grpcs://<host>:2135;Database=/path/to/database;Token=<...>")
-      .UseOptions(new YdbOptions(
-          BulkCopyType: BulkCopyType.ProviderSpecific,   // default BulkCopy mode
-          UseParametrizedDecimal: true                   // Decimal(p,s) in DDL
-      ));
   DataConnection.AddProviderDetector(YdbTools.ProviderDetector);
   using var db2 = new DataConnection(options);
   ```
@@ -69,42 +61,81 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 
 ### Type Mapping between .NET and {{ ydb-short-name }} {#types}
 
-| .NET type(s)                  | Linq To DB `DataType`                     | { ydb-short-name }} type           | Notes                                                                 |
-| ----------------------------- | ----------------------------------------- | ------------------ | --------------------------------------------------------------------- |
-| `bool`                        | `Boolean`                                 | `Bool`             | —                                                                     |
-| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`             | UTF-8 string.                                                         |
-| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`            | Binary data.                                                          |
-| `Guid`                        | `Guid`                                    | `Uuid`             | —                                                                     |
-| `DateOnly` / `DateTime`       | `Date`                                    | `Date`             | Time component ignored.                                               |
-| `DateTime`                    | `DateTime`                                | `Datetime`         | Second precision.                                                     |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`        | Microseconds.                                                         |
-| `TimeSpan`                    | `Interval`                                | `Interval`         | Duration.                                                             |
-| `decimal`                     | `Decimal`                                 | `Decimal(p,s)`     | Defaults to `Decimal(22,9)`. Use `Decimal(p,s)` when feature enabled. |
-| `float`                       | `Single`                                  | `Float`            | —                                                                     |
-| `double`                      | `Double`                                  | `Double`           | —                                                                     |
-| `sbyte` / `byte`              | `SByte` / `Byte`                          | `Int8` / `Uint8`   | —                                                                     |
-| `short` / `ushort`            | `Int16` / `UInt16`                        | `Int16` / `Uint16` | —                                                                     |
-| `int` / `uint`                | `Int32` / `UInt32`                        | `Int32` / `Uint32` | —                                                                     |
-| `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64` | —                                                                     |
-| `string`                      | `Json`                                    | `Json`             | Text JSON.                                                            |
-| `byte[]`                      | `BinaryJson`                              | `JsonDocument`     | Binary JSON.                                                          |
-| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`           | **New type.** Wider date range. Use `DbType = "Date32"`.              |
-| `DateTime`                    | `DateTime`                                | `Datetime64`       | **New type.** Second precision, wider range. `DbType = "Datetime64"`. |
-| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | **New type.** Microseconds, wider range. `DbType = "Timestamp64"`.    |
-| `TimeSpan`                    | `Interval`                                | `Interval64`       | **New type.** Wider interval range. `DbType = "Interval64"`.          |
+| .NET type(s)                  | Linq To DB `DataType`                     | { ydb-short-name }} type | Notes                                                                                                                    |
+|-------------------------------|-------------------------------------------|--------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `bool`                        | `Boolean`                                 | `Bool`                   | —                                                                                                                        |
+| `string`                      | `NVarChar` / `VarChar` / `Char` / `NChar` | `Text`                   | UTF-8 text. Text and Utf8 are the same in YDB; the DDL generator may output either                                       |
+| `byte[]`                      | `VarBinary` / `Binary` / `Blob`           | `Bytes`                  | Binary data. Bytes and String are equivalent in YDB; DDL may show either                                                 |
+| `Guid`                        | `Guid`                                    | `Uuid`                   | 128-bit RFC 4122 UUID. No version enforcement (v1/v4/v7). Generate the desired version in the app                        |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date`                   | UTC date (time dropped). 1970-01-01..2106-01-01                                                                          |
+| `DateTime`                    | `DateTime`                                | `Datetime`               | Seconds precision, UTC instant 1970-01-01..2106-01-01.                                                                   |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp`              | Microseconds precision, UTC instant  1970-01-01..2106-01-01.                                                             |
+| `TimeSpan`                    | `Interval`                                | `Interval`               | Duration with microsecond precision. Sub-microsecond ticks are discarded (values rounded down to multiples of 10 ticks). |
+| `decimal`                     | `Decimal`                                 | `Decimal(p,s)`           | Default: Decimal(22,9). To use custom precision/scale, specify Decimal(p,s).  [Example](#custom-precision-scale-example) |
+| `float`                       | `Single`                                  | `Float`                  | —                                                                                                                        |
+| `double`                      | `Double`                                  | `Double`                 | —                                                                                                                        |
+| `sbyte` / `byte`              | `SByte` / `Byte`                          | `Int8` / `Uint8`         | —                                                                                                                        |
+| `short` / `ushort`            | `Int16` / `UInt16`                        | `Int16` / `Uint16`       | —                                                                                                                        |
+| `int` / `uint`                | `Int32` / `UInt32`                        | `Int32` / `Uint32`       | —                                                                                                                        |
+| `long` / `ulong`              | `Int64` / `UInt64`                        | `Int64` / `Uint64`       | —                                                                                                                        |
+| `string`                      | `Json`                                    | `Json`                   | Text JSON.                                                                                                               |
+| `byte[]`                      | `BinaryJson`                              | `JsonDocument`           | Binary JSON.                                                                                                             |
+| `DateOnly` / `DateTime`       | `Date`                                    | `Date32`                 | Wider date range. Use `DbType = "Date32"`. [Example](#dbtype-override-example)                                           |
+| `DateTime`                    | `DateTime`                                | `Datetime64`             | Second precision, wider range. `DbType = "Datetime64"`. [Example](#dbtype-override-example)                              |
+| `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`            | Microseconds, wider range. `DbType = "Timestamp64"`. [Example](#dbtype-override-example)                                 |
+| `TimeSpan`                    | `Interval`                                | `Interval64`             | Wider interval range. `DbType = "Interval64"`. [Example](#dbtype-override-example)                                       |
 
-> You can set exact `Precision`/`Scale` with attributes:  
-    >   `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`  
-    >   or globally via `YdbOptions(UseParametrizedDecimal: true)`.
+{% note tip "Decimal precision/scale" %}
+You can set exact `Precision`/`Scale` with attributes: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`.
+{% endnote %}
 
-> Time zone types (`TzDate`/`TzDatetime`/`TzTimestamp`) are **not used as column types**. When creating tables they will be reduced to `Date`/`Datetime`/`Timestamp`. They are allowed in expressions/literals.
+{% note info "Temporal types: defaults vs. opt-in" %}
+By default (when `DbType` is not specified), the provider uses legacy YDB temporal types: `Date`, `Datetime`, `Timestamp`, `Interval`. To opt in per column to extended types, set `DbType`, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
+{% endnote %}
 
-> By default (when DbType is not specified on a column) the provider uses the legacy YDB temporal types: Date, Datetime, Timestamp, Interval.
-To opt in to the new temporal types per column, set DbType on that column, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
+### Custom precision scale example
+
+```csharp
+[Table("amounts")]
+public sealed class AmountRow
+{
+    [PrimaryKey] public long Id { get; set; }
+
+    // Custom precision & scale: Decimal(25,10)
+    [Column("amount", DataType = DataType.Decimal, Precision = 25, Scale = 10), NotNull]
+    public decimal Amount { get; set; }
+}
+```
+
+### DbType override example
+
+```csharp
+[Table("events")]
+public sealed class EventRow
+{
+[PrimaryKey] public long Id { get; set; }
+
+    // Extended-range timestamp
+    [Column("happened_at", DbType = "Timestamp64"), NotNull]
+    public DateTime HappenedAt { get; set; }
+
+    // Extended-range date
+    [Column("due_on", DbType = "Date32"), NotNull]
+    public DateTime DueOn { get; set; }
+
+    // Second precision date
+    [Column("made_at", DbType = "Datetime64"), NotNull]
+    public DateTime MadeAt { get; set; }
+
+    // Extended-range interval
+    [Column("duration", DbType = "Interval64"), NotNull]
+    public TimeSpan Duration { get; set; }
+}
+```
 
 ### Schema Generation from Attributes
 
-Describe an entity using Linq To DB attributes; the provider will create a table and indexes.
+Describe an entity using Linq To DB attributes, then explicitly create the schema by calling db.CreateTable<YourEntity>(). At that moment the table is created, and any [Index] attributes are applied as database indexes.
 
 {% list tabs group=lang %}
 
@@ -113,7 +144,7 @@ Describe an entity using Linq To DB attributes; the provider will create a table
   ```csharp
   using LinqToDB.Mapping;
 
-  [Table(Name = "Groups", IsColumnAttributeRequired = false)]
+  [Table(Name = "Groups")]
   [Index("GroupName", Name = "group_name_index")]
   public class Group
   {
@@ -162,7 +193,83 @@ ALTER TABLE Groups
    ADD COLUMN Department Utf8;
 ```
 
-> Linq To DB does not manage migrations — use Liquibase/Flyway/your tool of choice. Methods like `CreateTable<T>()`/`DropTable<T>()` are convenient for tests and local development.
+{% note info "Migrations" %}
+Linq To DB doesn’t manage migrations. The DDL below is illustrative—apply it with Liquibase/Flyway (recommended). For quick local changes you can also run it directly with db.Execute(...) or the YDB CLI.
+{% endnote %}
+
+```csharp
+using var db = new DataConnection("YDB", connectionString);
+
+// Apply the schema change (adds the column):
+db.Execute(@"ALTER TABLE Groups
+   ADD COLUMN Department Utf8;");
+```
+
+### YDB Indexes how to set parameters
+With the [Index] attribute you can set name, columns, and uniqueness. The provider creates a GLOBAL secondary index.
+Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; add them using a separate DDL statement after table creation.
+
+**Option A — attribute (name + Unique)**
+
+```csharp
+[Table(Name = "Groups", IsColumnAttributeRequired = false)]
+[Index("GroupName", Name = "group_name_index", Unique = true)]
+public class Group
+{
+    [PrimaryKey, Column("GroupId")] public int Id { get; set; }
+    [Column("GroupName")] public string? Name { get; set; }
+
+    // A column you may include into COVER via separate DDL
+    [Column] public string? Department { get; set; }
+}
+
+// When you call db.CreateTable<Group>(), a GLOBAL UNIQUE index on GroupName is created.
+```
+
+**The generated DDL is effectively**
+```yql
+CREATE TABLE Groups (
+    GroupId Int32 NOT NULL,
+    GroupName Utf8,
+    Department Utf8,
+    PRIMARY KEY (GroupId)
+);
+
+ALTER TABLE Groups
+  ADD INDEX group_name_index GLOBAL UNIQUE
+       ON (GroupName);
+```
+
+**Option B — extended parameters (ASYNC, COVER) via separate DDL**
+
+```csharp
+[Table(Name = "Groups", IsColumnAttributeRequired = false)]
+public class Group
+{
+    [PrimaryKey, Column("GroupId")] public int Id { get; set; }
+    [Column("GroupName")] public string? Name { get; set; }
+    [Column] public string? Department { get; set; }
+}
+
+public static class Demo
+{
+    public static void Main()
+    {
+        using var db = new DataConnection("YDB", connectionString);
+
+        // 1) Create table from attributes (avoid duplicate indexes if you plan to add them via DDL)
+        db.CreateTable<Group>();
+
+        // 2) Add an index with ASYNC and COVER parameters
+        db.Execute(@"
+ALTER TABLE Groups
+  ADD INDEX group_name_index GLOBAL ASYNC
+       ON (GroupName)
+       COVER (Department);
+");
+    }
+}
+```
 
 ### Relationships between entities
 
@@ -224,9 +331,40 @@ CREATE TABLE Students (
 );
 ```
 
-> Foreign keys as database-level constraints are not created by the provider. Implement referential logic at the application level or add checks with separate scripts.
-
 ### Example generated YQL for relationship queries
+
+{% list tabs %}
+
+- “Lazy” loading (two queries)
+
+  ```csharp
+    // 1) SELECT g.GroupId, g.GroupName FROM Groups AS g WHERE g.GroupName = 'M3439';
+    var grp = db.GetTable<Group>()
+    .Where(g => g.Name == "M3439")
+    .Select(g => new { g.Id, g.Name })
+    .FirstOrDefault();
+    
+    // 2) SELECT s.StudentId, s.StudentName, s.GroupId FROM Students AS s WHERE s.GroupId = ?;
+    var students = grp == null
+    ? new List<Student>()
+    : db.GetTable<Student>()
+    .Where(s => s.GroupId == grp.Id)
+    .Select(s => new { s.Id, s.Name, s.GroupId })
+    .ToList();
+  ```
+
+- “Eager” loading (JOIN)
+
+  ```csharp
+    var joined =
+    (from g in db.GetTable<Group>()
+    join s in db.GetTable<Student>() on g.Id equals s.GroupId
+    where g.Name == "M3439"
+    select new { GroupId = g.Id, GroupName = g.Name, StudentId = s.Id, StudentName = s.Name, s.GroupId })
+    .ToList();
+  ```
+
+{% endlist %}
 
 {% list tabs %}
 
@@ -273,8 +411,13 @@ CREATE TABLE Students (
 
 ### “Business” entity example and generated DDL
 
-Create an `Employee` entity with column types and an index:
+This section shows a practical, production-style entity from a typical domain. It demonstrates:
+- a realistic column set (name, email, hire date, salary, flags, ints);
+- precise types (e.g., Decimal(22,9) for money-like values, Date for dates, Utf8/Bool/Int32/Int64);
+- a GLOBAL secondary index on full_name for lookups and ordering;
+- end-to-end flow: mapping → table creation → CRUD with generated YQL/DDL.
 
+When you call `db.CreateTable<Employee>()`, Linq To DB creates the table and applies the [Index] attribute as a YDB GLOBAL index.
 {% list tabs group=lang %}
 
 - C#
@@ -400,7 +543,10 @@ db.GetTable<Employee>()
   WHERE Id = ?;
   ```
 
-> Note: The vendor specifically removes the alias from the update table to comply with the YQL rules. This is done by the provider's SQL optimizer.
+{% note info "SQL optimizer" %}
+The provider emits parameters (?) because values and types are bound via the driver, not declared in the query text. When YQL requires typed parameters, the provider adds the necessary DECLARE statements automatically. For non-standard patterns such as upsert-style writes, use YDB’s UPSERT with parameter binding—the provider generates these statements as regular YQL with parameters.
+{% endnote %}
+
 
 - Delete by primary key
 
@@ -410,39 +556,24 @@ db.GetTable<Employee>()
 
 ### Bulk operations: insert, update and delete
 
-BulkCopy
+#### BulkCopy
 
-{% list tabs group=lang %}
+In the YDB provider, `BulkCopy` uses the native `BulkUpsert API` and does not generate textual YQL. Rows are sent to YDB as a stream of strongly-typed values over the SDK’s binary protocol, so there are no DECLARE statements or ? placeholders
 
-- C#
-
-  ```csharp
-  var now  = DateTime.UtcNow;
-  var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
-  {
-      Id      = i,
-      IntVal  = i,
-      DecVal  = 0m,
-      StrVal  = $"Name {i}",
-      BoolVal = (i & 1) == 0,
-      DtVal   = now,
-  }); 
+```csharp
+var now  = DateTime.UtcNow;
+var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
+{
+    Id      = i,
+    IntVal  = i,
+    DecVal  = 0m,
+    StrVal  = $"Name {i}",
+    BoolVal = (i & 1) == 0,
+    DtVal   = now,
+}); 
+  
+  db.BulkCopy(data)
   ```
-
-- YQL
-
-  ```yql
-  DECLARE $Gen_List_Primitive_1 AS List<Int32>;
-  SELECT
-      COUNT(*) as COUNT_1
-  FROM
-      SimpleEntity t
-  WHERE
-      t.Id IN $Gen_List_Primitive_1 AND
-      (t.DecVal <> Decimal('1.23', 22, 9) OR t.StrVal <> 'updated'u OR t.StrVal IS NULL OR t.BoolVal = false)
-  ```
-
-{% endlist %}
 
 Massive Update (WHERE IN)
 
@@ -454,9 +585,9 @@ Massive Update (WHERE IN)
   var ids = Enumerable.Range(0, 15_000).ToArray();
   
   table.Where(t => ids.Contains(t.Id))
-      .Set(_ => _.DecVal,  _ => 1.23m)
-      .Set(_ => _.StrVal,  _ => "updated")
-      .Set(_ => _.BoolVal, _ => true)
+      .Set(_ => _.DecVal, 1.23m)
+      .Set(_ => _.StrVal, "updated")
+      .Set(_ => _.BoolVal, true)
       .Update();
   ```
 

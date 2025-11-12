@@ -8,5 +8,4 @@ PEERDIR(
     ydb/core/grpc_services
 )
 
-
 END()

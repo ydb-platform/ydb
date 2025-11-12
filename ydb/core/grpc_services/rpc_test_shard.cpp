@@ -1,12 +1,14 @@
 #include "rpc_test_shard_base.h"
 
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/test_tablet/test_shard_impl.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/fyamlcpp/fyamlcpp.h>
@@ -42,6 +44,12 @@ public:
             return false;
         }
 
+        if (req->database().empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("database path is required");
+            return false;
+        }
+
         if (req->owner_idx() == 0) {
             status = Ydb::StatusIds::BAD_REQUEST;
             issues.AddIssue("owner_idx must be non-zero");
@@ -54,9 +62,9 @@ public:
             return false;
         }
 
-        if (req->channels_size() == 0) {
+        if (TBase::IsRootDomain(req->database()) && req->channels_size() == 0) {
             status = Ydb::StatusIds::BAD_REQUEST;
-            issues.AddIssue("at least one channel binding is required");
+            issues.AddIssue("channels must be explicitly specified for root domain (/Root)");
             return false;
         }
 
@@ -87,22 +95,60 @@ public:
         return true;
     }
 
-    void SendRequestToHive() {
+    void Proceed() {
         const auto* req = GetProtoRequest();
+        TBase::ResolveDatabase(req->database());
+    }
 
-        DomainUid = req->domain_uid() > 0 ? req->domain_uid() : 1;
-        HiveId = req->hive_id();
+    void OnDatabaseResolved(bool isRootDomain, const NSchemeCache::TDomainInfo* domainInfo = nullptr,
+                            const NSchemeCache::TSchemeCacheNavigate::TDomainDescription* domainDescription = nullptr) {
+        if (isRootDomain) {
+            const auto* appDomainInfo = AppData()->DomainsInfo.Get();
+            SubdomainKey = TPathId(appDomainInfo->Domain->SchemeRoot, 1);
+        } else {
+            SubdomainKey = domainInfo->DomainKey;
 
-        std::optional<TSubDomainKey> subdomainKey;
-        if (!req->subdomain().empty()) {
-            TStringBuf subdomain(req->subdomain());
-            TStringBuf schemeShard, pathId;
-            if (subdomain.TrySplit(':', schemeShard, pathId)) {
-                subdomainKey = TSubDomainKey(FromString<ui64>(schemeShard), FromString<ui64>(pathId));
+            const auto* req = GetProtoRequest();
+            if (req->channels_size() == 0) {
+                if (domainDescription && domainDescription->Description.StoragePoolsSize() > 0) {
+                    for (const auto& pool : domainDescription->Description.GetStoragePools()) {
+                        DomainStoragePools.push_back(pool.GetName());
+                    }
+                }
             }
         }
 
+        SendRequestToHive();
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        TBase::HandleNavigateResult(ev);
+    }
+
+    void SendRequestToHive() {
+        static constexpr ui32 DEFAULT_CHANNEL_COUNT = 3;
+        static constexpr ui32 HIVE_TIMEOUT = 15;
+
+        const auto* req = GetProtoRequest();
+
         SetupHivePipe(HiveId);
+
+        std::vector<TString> channels;
+        if (req->channels_size() > 0) {
+            for (const auto& channel : req->channels()) {
+                channels.push_back(channel);
+            }
+        } else {
+            if (DomainStoragePools.empty()) {
+                NYql::TIssues issues;
+                issues.AddIssue("No channels specified and no storage pools available in domain");
+                return Reply(Ydb::StatusIds::BAD_REQUEST, issues, Self()->ActorContext());
+            }
+
+            for (ui32 i = 0; i < DEFAULT_CHANNEL_COUNT; ++i) {
+                channels.push_back(DomainStoragePools[i % DomainStoragePools.size()]);
+            }
+        }
 
         for (ui32 i = 0; i < req->count(); ++i) {
             auto request = MakeHolder<TEvHive::TEvCreateTablet>();
@@ -113,30 +159,31 @@ public:
             record.SetTabletType(TTabletTypes::TestShard);
             record.SetChannelsProfile(0);
 
-            if (subdomainKey) {
-                *record.AddAllowedDomains() = *subdomainKey;
-            } else {
-                auto* domain = record.AddAllowedDomains();
-                domain->SetSchemeShard(DomainUid);
-                domain->SetPathId(1);
-            }
+            auto* domain = record.AddAllowedDomains();
+            domain->SetSchemeShard(SubdomainKey.OwnerId);
+            domain->SetPathId(SubdomainKey.LocalPathId);
 
-            for (const auto& channel : req->channels()) {
+            for (const auto& channel : channels) {
                 record.AddBindedChannels()->SetStoragePoolName(channel);
             }
 
             NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
-            ++PendingCreationResults;
         }
+
+        TotalTabletsToCreate = req->count();
+
+        Schedule(TDuration::Seconds(HIVE_TIMEOUT), new TEvents::TEvWakeup());
     }
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvHive::TEvCreateTabletReply, Handle);
             hFunc(TEvHive::TEvTabletCreationResult, Handle);
             hFunc(NTestShard::TEvControlResponse, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(TEvents::TEvWakeup, HandleTimeout);
         }
     }
 
@@ -162,7 +209,7 @@ private:
             return Reply(Ydb::StatusIds::GENERIC_ERROR, issues, Self()->ActorContext());
         }
 
-        if (--PendingCreationResults == 0) {
+        if (CreatedTabletIds.size() == TotalTabletsToCreate) {
             const auto* req = GetProtoRequest();
             if (!req->config().empty()) {
                 return InitializeTablets();
@@ -544,13 +591,15 @@ private:
             *request->Record.MutableInitialize() = initCmd;
 
             NTabletPipe::SendData(SelfId(), pipeId, request.Release());
-            ++PendingInitRequests;
         }
+
+        TotalTabletsToInitialize = CreatedTabletIds.size();
     }
 
     void Handle(NTestShard::TEvControlResponse::TPtr& /*ev*/) {
+        ++InitializedTabletsCount;
 
-        if (--PendingInitRequests == 0) {
+        if (InitializedTabletsCount == TotalTabletsToInitialize) {
             ReplySuccess();
         }
     }
@@ -563,10 +612,30 @@ private:
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/) {
         NYql::TIssues issues;
         issues.AddIssue("Tablet pipe destroyed unexpectedly");
         return Reply(Ydb::StatusIds::UNAVAILABLE, issues, Self()->ActorContext());
+    }
+
+    void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
+        if (CreatedTabletIds.size() == TotalTabletsToCreate &&
+            InitializedTabletsCount == TotalTabletsToInitialize) {
+            return;
+        }
+
+        NYql::TIssues issues;
+        if (CreatedTabletIds.size() < TotalTabletsToCreate) {
+            issues.AddIssue(TStringBuilder()
+                << "Timeout waiting for tablet creation from Hive. "
+                << "Hive may not be able to allocate storage groups for the specified channels. "
+                << "Received " << CreatedTabletIds.size() << " tablet IDs, but expected "
+                << TotalTabletsToCreate << " tablets.");
+        } else {
+            issues.AddIssue("Timeout during tablet initialization");
+        }
+
+        return Reply(Ydb::StatusIds::TIMEOUT, issues, Self()->ActorContext());
     }
 
     void ReplySuccess() {
@@ -589,9 +658,12 @@ private:
     }
 
 private:
-    ui32 PendingCreationResults = 0;
-    ui32 PendingInitRequests = 0;
-    TVector<ui64> CreatedTabletIds;
+    TPathId SubdomainKey;
+    std::vector<TString> DomainStoragePools;
+    ui32 TotalTabletsToCreate = 0;
+    ui32 TotalTabletsToInitialize = 0;
+    ui32 InitializedTabletsCount = 0;
+    std::vector<ui64> CreatedTabletIds;
     THashMap<ui64, TActorId> TestShardPipes;
 };
 
@@ -613,6 +685,12 @@ public:
             return false;
         }
 
+        if (req->database().empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("database path is required");
+            return false;
+        }
+
         if (req->owner_idx() == 0) {
             status = Ydb::StatusIds::BAD_REQUEST;
             issues.AddIssue("owner_idx must be non-zero");
@@ -628,17 +706,125 @@ public:
         return true;
     }
 
-    void SendRequestToHive() {
+    void Proceed() {
+        const auto* req = GetProtoRequest();
+        TBase::ResolveDatabase(req->database());
+    }
+
+    void OnDatabaseResolved(bool isRootDomain, const NSchemeCache::TDomainInfo* domainInfo = nullptr,
+                            const NSchemeCache::TSchemeCacheNavigate::TDomainDescription* = nullptr) {
+        if (isRootDomain) {
+            const auto* appDomainInfo = AppData()->DomainsInfo.Get();
+            SubdomainKey = TPathId(appDomainInfo->Domain->SchemeRoot, 1);
+        } else {
+            SubdomainKey = domainInfo->DomainKey;
+        }
+
+        LookupTablets();
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        TBase::HandleNavigateResult(ev);
+    }
+
+    void LookupTablets() {
         const auto* req = GetProtoRequest();
 
-        HiveId = req->hive_id();
         SetupHivePipe(HiveId);
 
+        TotalTabletsToLookup = req->count();
+
         for (ui32 i = 0; i < req->count(); ++i) {
+            auto request = MakeHolder<TEvHive::TEvLookupTablet>();
+            request->Record.SetOwner(0);
+            request->Record.SetOwnerIdx(req->owner_idx() + i);
+            NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release(), i);
+        }
+    }
+
+    void Handle(TEvHive::TEvCreateTabletReply::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        if (record.GetStatus() == NKikimrProto::NODATA) {
+            NYql::TIssues issues;
+            issues.AddIssue(TStringBuilder()
+                << "Tablet with owner_idx " << record.GetOwnerIdx() << " not found");
+            return Reply(Ydb::StatusIds::NOT_FOUND, issues, Self()->ActorContext());
+        }
+
+        if (record.GetStatus() != NKikimrProto::OK) {
+            NYql::TIssues issues;
+            issues.AddIssue(TStringBuilder()
+                << "Lookup failed for owner_idx " << record.GetOwnerIdx()
+                << ": " << NKikimrProto::EReplyStatus_Name(record.GetStatus()));
+            return Reply(Ydb::StatusIds::GENERIC_ERROR, issues, Self()->ActorContext());
+        }
+
+        LookedUpTabletIds.push_back(record.GetTabletID());
+
+        if (LookedUpTabletIds.size() == TotalTabletsToLookup) {
+            RequestTabletsInfo();
+        }
+    }
+
+    void RequestTabletsInfo() {
+        for (ui64 tabletId : LookedUpTabletIds) {
+            auto request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
+            request->Record.SetTabletID(tabletId);
+            NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
+        }
+    }
+
+    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        if (record.TabletsSize() == 0) {
+            NYql::TIssues issues;
+            issues.AddIssue("Tablet info not found in Hive response");
+            return Reply(Ydb::StatusIds::NOT_FOUND, issues, Self()->ActorContext());
+        }
+
+        const auto& tablet = record.GetTablets(0);
+
+        if (tablet.GetTabletType() != TTabletTypes::TestShard) {
+            NYql::TIssues issues;
+            issues.AddIssue(TStringBuilder()
+                << "Cannot delete tablet " << tablet.GetTabletID()
+                << ": wrong type " << TTabletTypes::TypeToStr(tablet.GetTabletType())
+                << ", expected TestShard");
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, issues, Self()->ActorContext());
+        }
+
+        bool domainMatches = false;
+        if (tablet.HasObjectDomain()) {
+            const auto& objectDomain = tablet.GetObjectDomain();
+            if (objectDomain.GetSchemeShard() == SubdomainKey.OwnerId &&
+                objectDomain.GetPathId() == SubdomainKey.LocalPathId) {
+                domainMatches = true;
+            }
+        }
+
+        if (!domainMatches) {
+            NYql::TIssues issues;
+            issues.AddIssue(TStringBuilder()
+                << "Cannot delete tablet " << tablet.GetTabletID()
+                << ": belongs to different database domain");
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, issues, Self()->ActorContext());
+        }
+
+        ValidatedTabletIds.push_back(tablet.GetTabletID());
+
+        if (ValidatedTabletIds.size() == LookedUpTabletIds.size()) {
+            DeleteTablets();
+        }
+    }
+
+    void DeleteTablets() {
+        for (ui64 tabletId : ValidatedTabletIds) {
             auto request = MakeHolder<TEvHive::TEvDeleteTablet>();
             auto& record = request->Record;
             record.SetShardOwnerId(0);
-            record.AddShardLocalIdx(req->owner_idx() + i);
+            record.AddTabletID(tabletId);
             NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
             ++PendingRequests;
         }
@@ -646,6 +832,9 @@ public:
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+            hFunc(TEvHive::TEvCreateTabletReply, Handle);
+            hFunc(TEvHive::TEvResponseHiveInfo, Handle);
             hFunc(TEvHive::TEvDeleteTabletReply, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
@@ -669,7 +858,7 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (PendingRequests > 0 && ev->Get()->Status != NKikimrProto::OK) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
             NYql::TIssues issues;
             issues.AddIssue("Failed to connect to Hive pipe");
             return Reply(Ydb::StatusIds::UNAVAILABLE, issues, Self()->ActorContext());
@@ -677,11 +866,9 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        if (PendingRequests > 0) {
-            NYql::TIssues issues;
-            issues.AddIssue("Hive pipe destroyed unexpectedly");
-            return Reply(Ydb::StatusIds::UNAVAILABLE, issues, Self()->ActorContext());
-        }
+        NYql::TIssues issues;
+        issues.AddIssue("Hive pipe destroyed unexpectedly");
+        return Reply(Ydb::StatusIds::UNAVAILABLE, issues, Self()->ActorContext());
     }
 
     void ReplySuccess() {
@@ -691,7 +878,11 @@ private:
     }
 
 private:
+    TPathId SubdomainKey;
+    ui32 TotalTabletsToLookup = 0;
     ui32 PendingRequests = 0;
+    std::vector<ui64> LookedUpTabletIds;
+    std::vector<ui64> ValidatedTabletIds;
 };
 
 

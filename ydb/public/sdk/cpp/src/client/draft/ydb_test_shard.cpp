@@ -16,8 +16,7 @@ public:
 
     TAsyncCreateTestShardResult CreateTestShard(uint64_t ownerIdx,
             const std::vector<std::string>& channels, uint32_t count,
-            const std::string& config, const std::string& subdomain,
-            uint64_t hiveId, uint32_t domainUid,
+            const std::string& config, const std::string& database,
             const TCreateTestShardSettings& settings) {
         auto request = MakeOperationRequest<Ydb::TestShard::CreateTestShardRequest>(settings);
         request.set_owner_idx(ownerIdx);
@@ -30,14 +29,8 @@ public:
         if (!config.empty()) {
             request.set_config(config);
         }
-        if (!subdomain.empty()) {
-            request.set_subdomain(subdomain);
-        }
-        if (hiveId > 0) {
-            request.set_hive_id(hiveId);
-        }
-        if (domainUid > 0) {
-            request.set_domain_uid(domainUid);
+        if (!database.empty()) {
+            request.set_database(database);
         }
 
         auto promise = NThreading::NewPromise<TCreateTestShardResult>();
@@ -68,15 +61,15 @@ public:
     }
 
     TAsyncStatus DeleteTestShard(uint64_t ownerIdx, uint32_t count,
-            uint64_t hiveId,
+            const std::string& database,
             const TDeleteTestShardSettings& settings) {
         auto request = MakeOperationRequest<Ydb::TestShard::DeleteTestShardRequest>(settings);
         request.set_owner_idx(ownerIdx);
         if (count > 1) {
             request.set_count(count);
         }
-        if (hiveId > 0) {
-            request.set_hive_id(hiveId);
+        if (!database.empty()) {
+            request.set_database(database);
         }
 
         return RunSimple<Ydb::TestShard::V1::TestShardService, Ydb::TestShard::DeleteTestShardRequest, Ydb::TestShard::DeleteTestShardResponse>(
@@ -94,16 +87,15 @@ TTestShardClient::~TTestShardClient() = default;
 
 TAsyncCreateTestShardResult TTestShardClient::CreateTestShard(uint64_t ownerIdx,
         const std::vector<std::string>& channels, uint32_t count,
-        const std::string& config, const std::string& subdomain,
-        uint64_t hiveId, uint32_t domainUid,
+        const std::string& config, const std::string& database,
         const TCreateTestShardSettings& settings) {
-    return Impl_->CreateTestShard(ownerIdx, channels, count, config, subdomain, hiveId, domainUid, settings);
+    return Impl_->CreateTestShard(ownerIdx, channels, count, config, database, settings);
 }
 
 TAsyncStatus TTestShardClient::DeleteTestShard(uint64_t ownerIdx,
-        uint32_t count, uint64_t hiveId,
+        uint32_t count, const std::string& database,
         const TDeleteTestShardSettings& settings) {
-    return Impl_->DeleteTestShard(ownerIdx, count, hiveId, settings);
+    return Impl_->DeleteTestShard(ownerIdx, count, database, settings);
 }
 
 } // namespace NYdb::inline Dev::NTestShard

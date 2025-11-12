@@ -42,15 +42,13 @@ public:
         const std::vector<std::string>& channels,
         uint32_t count = 1,
         const std::string& config = {},
-        const std::string& subdomain = {},
-        uint64_t hiveId = 0,
-        uint32_t domainUid = 0,
+        const std::string& database = {},
         const TCreateTestShardSettings& settings = {});
 
     TAsyncStatus DeleteTestShard(
         uint64_t ownerIdx,
         uint32_t count = 1,
-        uint64_t hiveId = 0,
+        const std::string& database = {},
         const TDeleteTestShardSettings& settings = {});
 
 private:

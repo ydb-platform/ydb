@@ -23,8 +23,8 @@ void TCommandTestShardCreate::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("owner-idx", "Unique owner index for idempotent tablet creation")
         .Required().RequiredArgument("IDX").StoreResult(&OwnerIdx);
-    config.Opts->AddLongOption("channels", "Storage pool names for tablet channels (comma-separated)")
-        .Required().RequiredArgument("POOLS").Handler([this](const TString& value) {
+    config.Opts->AddLongOption("channels", "Storage pool names for tablet channels (comma-separated, optional - uses database storage pools if not specified)")
+        .Optional().RequiredArgument("POOLS").Handler([this](const TString& value) {
             Channels = StringSplitter(value).Split(',').ToList<TString>();
         });
     config.Opts->AddLongOption("count", "Number of tablets to create (default: 1)")
@@ -33,12 +33,6 @@ void TCommandTestShardCreate::Config(TConfig& config) {
         .RequiredArgument("YAML").StoreResult(&ConfigYaml);
     config.Opts->AddLongOption('f', "config-file", "Path to YAML configuration file")
         .RequiredArgument("PATH").StoreResult(&ConfigFile);
-    config.Opts->AddLongOption("subdomain", "Subdomain for AllowedDomains in format schemeshard:pathid (e.g., 72057594046678944:2)")
-        .RequiredArgument("SUBDOMAIN").StoreResult(&Subdomain);
-    config.Opts->AddLongOption("hive-id", "Specific Hive tablet ID to use for tenant Hive")
-        .RequiredArgument("ID").StoreResult(&HiveId);
-    config.Opts->AddLongOption("domain-uid", "Domain UID (default: 1)")
-        .DefaultValue(1).RequiredArgument("UID").StoreResult(&DomainUid);
     config.Opts->MutuallyExclusive("config", "config-file");
     config.SetFreeArgsNum(0);
 }
@@ -51,11 +45,11 @@ void TCommandTestShardCreate::Parse(TConfig& config) {
     }
 
     if (Channels.empty()) {
-        ythrow yexception() << "channels list cannot be empty";
+        Cerr << "No channels specified. Using database default storage pools." << Endl;
     }
 
     if (ConfigYaml.empty() && ConfigFile.empty()) {
-        Cerr << "Warning: No configuration provided. TestShard tablets will be created but not initialized." << Endl;
+        Cerr << "No configuration provided. TestShard tablets will be created but not initialized." << Endl;
     }
 
     if (!ConfigFile.empty()) {
@@ -68,8 +62,8 @@ int TCommandTestShardCreate::Run(TConfig& config) {
     auto client = NYdb::NTestShard::TTestShardClient(*driver);
 
     auto result = client.CreateTestShard(
-        OwnerIdx, std::vector<std::string>(Channels.begin(), Channels.end()), Count, std::string(ConfigYaml),
-        std::string(Subdomain), HiveId, DomainUid).GetValueSync();
+        OwnerIdx, std::vector<std::string>(Channels.begin(), Channels.end()), Count,
+        std::string(ConfigYaml), config.Database).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "TestShard tablet(s) created successfully." << Endl;
@@ -95,8 +89,6 @@ void TCommandTestShardDelete::Config(TConfig& config) {
         .Required().RequiredArgument("IDX").StoreResult(&OwnerIdx);
     config.Opts->AddLongOption("count", "Number of consecutive tablets to delete (default: 1)")
         .DefaultValue(1).RequiredArgument("NUM").StoreResult(&Count);
-    config.Opts->AddLongOption("hive-id", "Specific Hive tablet ID to use for tenant Hive")
-        .RequiredArgument("ID").StoreResult(&HiveId);
     config.SetFreeArgsNum(0);
 }
 
@@ -112,7 +104,7 @@ int TCommandTestShardDelete::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
     auto client = NYdb::NTestShard::TTestShardClient(*driver);
 
-    auto result = client.DeleteTestShard(OwnerIdx, Count, HiveId).GetValueSync();
+    auto result = client.DeleteTestShard(OwnerIdx, Count, config.Database).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "TestShard tablet(s) deleted successfully." << Endl;

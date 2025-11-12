@@ -1563,7 +1563,6 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
 
 void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
     GetMeta().IsRestored = true;
-    GetMeta().AllowWithSpilling = false;
 
     const auto restoreDqTransform = [](const auto& protoInfo) -> TMaybe<TTransform> {
         if (!protoInfo.HasTransform()) {
@@ -1759,6 +1758,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                 const auto it = scheduledTaskCount.find(stageIdx);
                 BuildReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
             }
+
+            GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
     }
 }

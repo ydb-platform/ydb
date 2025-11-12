@@ -463,11 +463,11 @@ class LoadSuiteBase:
                     # Разбиваем на блоки по разделителю
                     blocks = oom_stdout.split('\n--\n')
                     for full_block in blocks:
-                        if 'invoked oom-killer' in full_block:
+                        if 'invoked oom-killer' in full_block.lower():
                             # Извлекаем строку с "invoked oom-killer" как паттерн
                             oom_line = ''
                             for line in full_block.split('\n'):
-                                if 'invoked oom-killer' in line:
+                                if 'invoked oom-killer' in line.lower():
                                     oom_line = line
                                     break
                             # Увеличиваем до 150 символов для лучшей уникальности паттерна

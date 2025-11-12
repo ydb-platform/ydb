@@ -350,6 +350,27 @@ private:
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;
     std::unordered_map<TString, TString> ServiceTokens;
+    
+    // Structure for pending tokens waiting for LoginProvider readiness
+    struct TPendingLoginToken {
+        TString Key;
+        TString Database;
+        TInstant RetryTime;
+        ui32 RetryCount = 0;
+        static constexpr ui32 MaxRetries = 5;
+        static constexpr TDuration RetryDelay = TDuration::MilliSeconds(100);
+        
+        bool ShouldRetry(TInstant now) const {
+            return RetryCount < MaxRetries && now >= RetryTime;
+        }
+        
+        void ScheduleNextRetry(TInstant now) {
+            RetryCount++;
+            RetryTime = now + RetryDelay * (1 << (RetryCount - 1)); // Exponential backoff
+        }
+    };
+    
+    TVector<TPendingLoginToken> PendingLoginTokens;
 
     TDerived* GetDerived() {
         return static_cast<TDerived*>(this);
@@ -847,10 +868,15 @@ private:
                 }
             } else {
                 if (record.TokenType == TDerived::ETokenType::Login) {
-                    SetError(key, record, {.Message = "Login state is not available yet", .Retryable = false});
-                    CounterTicketsLogin->Inc();
-                    BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 error");
-                    return true;
+                    // LoginProvider not ready - add token to pending queue
+                    TPendingLoginToken pendingToken;
+                    pendingToken.Key = key;
+                    pendingToken.Database = database;
+                    pendingToken.RetryTime = TlsActivationContext->Now() + TPendingLoginToken::RetryDelay;
+                    PendingLoginTokens.push_back(pendingToken);
+                    
+                    BLOG_TRACE("CanInitLoginToken, database " << database << ", A5 pending - LoginProvider not ready, scheduling retry");
+                    return true; // Token will be processed later
                 }
                 BLOG_TRACE("CanInitLoginToken, database " << database << ", A6 error");
             }
@@ -1525,6 +1551,9 @@ private:
         auto& loginProvider = LoginProviders[ev->Get()->SecurityState.GetAudience()];
         loginProvider.UpdateSecurityState(ev->Get()->SecurityState);
         BLOG_D("Updated state for " << loginProvider.Audience << " keys " << GetLoginProviderKeys(loginProvider));
+        
+        // Process pending tokens after state update
+        ProcessPendingLoginTokens();
     }
 
     void Handle(TEvTokenManager::TEvUpdateToken::TPtr& ev);
@@ -1560,6 +1589,9 @@ private:
             }
         }
         Schedule(RefreshPeriod, new NActors::TEvents::TEvWakeup());
+        
+        // Also process pending tokens during each refresh
+        ProcessPendingLoginTokens();
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
@@ -1908,6 +1940,102 @@ protected:
             keys << key;
         }
         return keys;
+    }
+    
+    // Method for processing pending login tokens
+    void ProcessPendingLoginTokens() {
+        if (PendingLoginTokens.empty()) {
+            return;
+        }
+        
+        TInstant now = TlsActivationContext->Now();
+        auto& userTokens = GetDerived()->GetUserTokens();
+        
+        // Process tokens that are ready for retry
+        for (auto it = PendingLoginTokens.begin(); it != PendingLoginTokens.end();) {
+            auto& pendingToken = *it;
+            
+            if (!pendingToken.ShouldRetry(now)) {
+                ++it;
+                continue;
+            }
+            
+            // Check if token still exists in cache
+            auto tokenIt = userTokens.find(pendingToken.Key);
+            if (tokenIt == userTokens.end()) {
+                // Token was removed from cache, remove from pending
+                it = PendingLoginTokens.erase(it);
+                continue;
+            }
+            
+            auto& record = tokenIt->second;
+            
+            // Check if LoginProvider is now ready
+            auto itLoginProvider = LoginProviders.find(pendingToken.Database);
+            if (itLoginProvider != LoginProviders.end()) {
+                // LoginProvider is ready, try to process token
+                BLOG_TRACE("ProcessPendingLoginTokens: LoginProvider ready for database " << pendingToken.Database << ", processing token");
+                
+                NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
+                auto response = loginProvider.ValidateToken({.Token = record.Ticket});
+                
+                if (response.Error) {
+                    if (!response.TokenUnrecognized || record.TokenType != TDerived::ETokenType::Unknown) {
+                        record.TokenType = TDerived::ETokenType::Login;
+                        SetError(pendingToken.Key, record, {.Message = response.Error, .Retryable = response.ErrorRetryable});
+                        CounterTicketsLogin->Inc();
+                        BLOG_TRACE("ProcessPendingLoginTokens: token validation error " << response.Error);
+                    }
+                } else {
+                    // Successful token validation
+                    record.TokenType = TDerived::ETokenType::Login;
+                    record.ExpireTime = ToInstant(response.ExpiresAt);
+                    CounterTicketsLogin->Inc();
+                    
+                    if (response.ExternalAuth) {
+                        record.EnableExternalAuth(response);
+                        HandleExternalAuthentication(pendingToken.Key, record, response);
+                    } else {
+                        TVector<NACLib::TSID> groups;
+                        if (response.Groups.has_value()) {
+                            const std::vector<TString>& tokenGroups = response.Groups.value();
+                            groups.assign(tokenGroups.begin(), tokenGroups.end());
+                        } else {
+                            const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(response.User);
+                            groups.assign(providerGroups.begin(), providerGroups.end());
+                        }
+                        SetToken(pendingToken.Key, record, new NACLib::TUserToken({
+                            .OriginalUserToken = record.Ticket,
+                            .UserSID = response.User,
+                            .GroupSIDs = groups,
+                            .AuthType = record.GetAuthType()
+                        }));
+                        BLOG_TRACE("ProcessPendingLoginTokens: token successfully processed");
+                    }
+                }
+                
+                // Respond to pending requests
+                Respond(record);
+                
+                // Remove from pending
+                it = PendingLoginTokens.erase(it);
+            } else {
+                // LoginProvider is still not ready
+                if (pendingToken.RetryCount >= TPendingLoginToken::MaxRetries) {
+                    // Maximum retry count exceeded
+                    SetError(pendingToken.Key, record, {.Message = "Login state is not available after retries", .Retryable = false});
+                    CounterTicketsLogin->Inc();
+                    Respond(record);
+                    it = PendingLoginTokens.erase(it);
+                    BLOG_TRACE("ProcessPendingLoginTokens: max retries exceeded for database " << pendingToken.Database);
+                } else {
+                    // Schedule next retry
+                    pendingToken.ScheduleNextRetry(now);
+                    ++it;
+                    BLOG_TRACE("ProcessPendingLoginTokens: LoginProvider still not ready for database " << pendingToken.Database << ", retry " << pendingToken.RetryCount);
+                }
+            }
+        }
     }
 
     template <typename TTokenRecord>

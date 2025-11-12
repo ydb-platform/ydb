@@ -117,7 +117,7 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot typeId, TFunc&& callback) 
  * @param type The MiniKQL type to check
  * @return true if the type needs external Optional wrapping, false otherwise
  *
- * @note Types that need wrapping: Void, Null, Variant, Optional, EmptyList, EmptyDict
+ * @note Types that need wrapping: Void, Null, Variant, Optional, EmptyList, EmptyDict, Pg
  */
 bool NeedWrapByExternalOptional(const NMiniKQL::TType* type);
 
@@ -136,6 +136,7 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type);
  * - Variant: converted to arrow::DenseUnionType
  * - Optional: nested optionals are flattened and represented via struct wrapping
  * - Tagged: converted to inner type
+ * - Pg: converted to arrow::StringType
  *
  * @param type The MiniKQL type to convert
  * @return Shared pointer to corresponding Arrow DataType, or arrow::NullType if unsupported
@@ -152,7 +153,7 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type);
  * @param type The MiniKQL type to validate
  * @return true if the type can be converted to Arrow format, false otherwise
  *
- * @note Incompatible types: Type, Stream, Callable, Any, Resource, Flow, Block, Pg, Multi, Linear
+ * @note Incompatible types: Type, Stream, Callable, Any, Resource, Flow, Block, Multi, Linear
  */
 bool IsArrowCompatible(const NMiniKQL::TType* type);
 

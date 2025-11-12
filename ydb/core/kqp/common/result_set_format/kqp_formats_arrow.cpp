@@ -4,6 +4,7 @@
 
 #include <yql/essentials/minikql/mkql_type_helper.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -567,6 +568,21 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
     }
 }
 
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TPgType* pgType) {
+    YQL_ENSURE(builder->type()->id() == arrow::Type::STRING, "Unexpected builder type");
+    auto stringBuilder = reinterpret_cast<arrow::StringBuilder*>(builder);
+
+    if (!value) {
+        auto status = stringBuilder->AppendNull();
+        YQL_ENSURE(status.ok(), "Failed to append null pg value: " << status.ToString());
+        return;
+    }
+
+    auto textValue = NYql::NCommon::PgValueToNativeText(value, pgType->GetTypeId());
+    auto status = stringBuilder->Append(textValue.data(), textValue.size());
+    YQL_ENSURE(status.ok(), "Failed to append pg value: " << status.ToString());
+}
+
 } // namespace
 
 bool NeedWrapByExternalOptional(const NMiniKQL::TType* type) {
@@ -576,7 +592,8 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
         case NMiniKQL::TType::EKind::Optional:
-        case NMiniKQL::TType::EKind::Variant: {
+        case NMiniKQL::TType::EKind::Variant:
+        case NMiniKQL::TType::EKind::Pg: {
             return true;
         }
 
@@ -597,7 +614,6 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Flow:
         case NMiniKQL::TType::EKind::ReservedKind:
         case NMiniKQL::TType::EKind::Block:
-        case NMiniKQL::TType::EKind::Pg:
         case NMiniKQL::TType::EKind::Multi:
         case NMiniKQL::TType::EKind::Linear: {
             YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
@@ -651,6 +667,10 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
             return GetArrowType(static_cast<const NMiniKQL::TTaggedType*>(type)->GetBaseType());
         }
 
+        case NMiniKQL::TType::EKind::Pg: {
+            return arrow::utf8();
+        }
+
         case NMiniKQL::TType::EKind::Type:
         case NMiniKQL::TType::EKind::Stream:
         case NMiniKQL::TType::EKind::Callable:
@@ -659,7 +679,6 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Flow:
         case NMiniKQL::TType::EKind::ReservedKind:
         case NMiniKQL::TType::EKind::Block:
-        case NMiniKQL::TType::EKind::Pg:
         case NMiniKQL::TType::EKind::Multi:
         case NMiniKQL::TType::EKind::Linear: {
             YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
@@ -674,7 +693,8 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
-        case NMiniKQL::TType::EKind::Data: {
+        case NMiniKQL::TType::EKind::Data:
+        case NMiniKQL::TType::EKind::Pg: {
             return true;
         }
 
@@ -739,7 +759,6 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Flow:
         case NMiniKQL::TType::EKind::ReservedKind:
         case NMiniKQL::TType::EKind::Block:
-        case NMiniKQL::TType::EKind::Pg:
         case NMiniKQL::TType::EKind::Multi:
         case NMiniKQL::TType::EKind::Linear: {
             return false;
@@ -807,6 +826,11 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             break;
         }
 
+        case NMiniKQL::TType::EKind::Pg: {
+            AppendElement(value, builder, static_cast<const NMiniKQL::TPgType*>(type));
+            break;
+        }
+
         case NMiniKQL::TType::EKind::Type:
         case NMiniKQL::TType::EKind::Stream:
         case NMiniKQL::TType::EKind::Callable:
@@ -815,7 +839,6 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case NMiniKQL::TType::EKind::Flow:
         case NMiniKQL::TType::EKind::ReservedKind:
         case NMiniKQL::TType::EKind::Block:
-        case NMiniKQL::TType::EKind::Pg:
         case NMiniKQL::TType::EKind::Multi:
         case NMiniKQL::TType::EKind::Linear: {
             YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());

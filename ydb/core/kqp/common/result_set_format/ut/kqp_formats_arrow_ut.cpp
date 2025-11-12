@@ -10,6 +10,9 @@
 
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/parser/pg_wrapper/interface/compare.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -22,6 +25,7 @@ using namespace NYql;
 
 inline static constexpr size_t TEST_ARRAY_DATATYPE_SIZE = 1 << 16;
 inline static constexpr size_t TEST_ARRAY_NESTED_SIZE = 1 << 8;
+inline static constexpr size_t TEST_ARRAY_PG_SIZE = TEST_ARRAY_DATATYPE_SIZE;
 inline static constexpr ui8 DECIMAL_PRECISION = 35;
 inline static constexpr ui8 DECIMAL_SCALE = 10;
 inline static constexpr ui32 VARIANT_NESTED_SIZE = 260;
@@ -800,6 +804,18 @@ struct TTestContext {
         return values;
     }
 
+    TType* GetOptionalPgValueType(ui32 pgTypeId) {
+        return TOptionalType::Create(GetPgType(pgTypeId), TypeEnv);
+    }
+
+    TUnboxedValueVector CreateOptionalsPgValue(ui32 quantity, ui32 pgTypeId) {
+        auto values = CreatePgValues(quantity, pgTypeId);
+        for (size_t i = 0; i < values.size(); ++i) {
+            values[i] = (i % 2 == 0) ? values[i].MakeOptional() : NUdf::TUnboxedValuePod();
+        }
+        return values;
+    }
+
     TType* GetOptionalOptionalValueType() {
         return TOptionalType::Create(GetOptionalDataValueType(), TypeEnv);
     }
@@ -1151,6 +1167,37 @@ struct TTestContext {
         }
         return values;
     }
+
+    TType* GetPgType(ui32 typeId) {
+        return TPgType::Create(typeId, TypeEnv);
+    }
+
+    TUnboxedValueVector CreatePgValues(ui32 quantity, ui32 typeId) {
+        TUnboxedValueVector values;
+        for (ui64 value = 0; value < quantity; ++value) {
+            if (value % 4 == 3) {
+                values.emplace_back(NUdf::TUnboxedValuePod());
+                continue;
+            }
+
+            std::string stringValue;
+            switch (typeId) {
+                case BOOLOID:
+                    stringValue = std::to_string(value % 2 == 0);
+                    break;
+                case INT8OID:
+                    stringValue = std::to_string(value);
+                    break;
+                case TEXTOID:
+                    stringValue = "text" + std::to_string(value);
+                    break;
+                default:
+                    UNIT_ASSERT_C(false, "You need to add a new case for type " << typeId);
+            }
+            values.emplace_back(NYql::NCommon::PgValueFromNativeText(stringValue, typeId));
+        }
+        return values;
+    }
 };
 
 void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue& right, TType* type) {
@@ -1298,6 +1345,13 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
             break;
         }
 
+        case TType::EKind::Pg: {
+            auto pgType = static_cast<const TPgType*>(type);
+            auto equate = MakePgEquate(pgType);
+            UNIT_ASSERT(equate->Equals(left, right));
+            break;
+        }
+
         default: {
             UNIT_ASSERT_C(false, TStringBuilder() << "Unsupported type: " << type->GetKindAsStr());
         }
@@ -1417,6 +1471,48 @@ void TestSingularTypeConversion() {
     for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
         auto arrowValue = ExtractUnboxedValue(array, i, type, context.HolderFactory);
         AssertUnboxedValuesAreEqual(arrowValue, values[i], type);
+    }
+}
+
+template <ui32 PgTypeId>
+void TestPgTypeConversion() {
+    TTestContext context;
+
+    auto pgType = context.GetPgType(PgTypeId);
+    auto values = context.CreatePgValues(TEST_ARRAY_PG_SIZE, PgTypeId);
+
+    UNIT_ASSERT(IsArrowCompatible(pgType));
+
+    auto array = MakeArrowArray(values, pgType);
+    UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+
+    UNIT_ASSERT(array->type_id() == arrow::Type::STRING);
+    auto stringArray = static_pointer_cast<arrow::StringArray>(array);
+    UNIT_ASSERT_VALUES_EQUAL(stringArray->length(), values.size());
+
+    if (stringArray->length() > 1) {
+        switch (PgTypeId) {
+            case BOOLOID:
+                UNIT_ASSERT_VALUES_EQUAL(stringArray->GetString(0), "t");
+                UNIT_ASSERT_VALUES_EQUAL(stringArray->GetString(1), "f");
+                break;
+            case INT8OID:
+                UNIT_ASSERT_VALUES_EQUAL(stringArray->GetString(0), "0");
+                UNIT_ASSERT_VALUES_EQUAL(stringArray->GetString(1), "1");
+                break;
+            case TEXTOID:
+                UNIT_ASSERT_VALUES_EQUAL(stringArray->GetString(0), "text0");
+                UNIT_ASSERT_VALUES_EQUAL(stringArray->GetString(1), "text1");
+                break;
+            default:
+                UNIT_ASSERT_C(false, "You need to add a new case for type " << PgTypeId);
+        }
+    }
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        auto arrowValue = ExtractUnboxedValue(array, i, pgType, context.HolderFactory);
+        AssertUnboxedValuesAreEqual(arrowValue, values[i], pgType);
     }
 }
 
@@ -2332,6 +2428,29 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         }
     }
 
+    Y_UNIT_TEST(NestedType_Optional_PgValue) {
+        TTestContext context;
+
+        auto optionalType = context.GetOptionalPgValueType(INT8OID);
+        auto values = context.CreateOptionalsPgValue(TEST_ARRAY_NESTED_SIZE, INT8OID);
+
+        UNIT_ASSERT(IsArrowCompatible(optionalType));
+
+        auto array = MakeArrowArray(values, optionalType);
+        UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRING);
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(arrowValue, values[i], optionalType);
+        }
+    }
+
     Y_UNIT_TEST(NestedType_Optional_OptionalValue) {
         TTestContext context;
 
@@ -2787,6 +2906,20 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], taggedType);
         }
+    }
+
+    // Pg types
+    // They are converted using NYql::NCommon::PgValueToNativeText, so testing all types is not required
+    Y_UNIT_TEST(PgType_Bool) {
+        TestPgTypeConversion<BOOLOID>();
+    }
+
+    Y_UNIT_TEST(PgType_Int8) {
+        TestPgTypeConversion<INT8OID>();
+    }
+
+    Y_UNIT_TEST(PgType_Text) {
+        TestPgTypeConversion<TEXTOID>();
     }
 }
 

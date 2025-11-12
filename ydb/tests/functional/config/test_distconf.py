@@ -243,7 +243,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
         self.cluster.nodes[self.console_node].stop()
 
-        seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items() if node.node_id != 3]
+        seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items() if node.node_id != self.console_node]
         seed_nodes_file = tempfile.NamedTemporaryFile(mode='w', prefix='seed_nodes_', suffix='.yaml', delete=False)
         try:
             yaml.dump(seed_nodes, seed_nodes_file)

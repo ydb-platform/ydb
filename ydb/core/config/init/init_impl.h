@@ -1620,7 +1620,7 @@ public:
         yamlConfig.SetYamlConfigEnabled(true);
         Labels["config_source"] = "seed_nodes";
         AddLabelToAppConfig("config_source", Labels["config_source"]);
-        
+
         if (sourceAddress) {
             Labels["config_source_address"] = sourceAddress;
             AddLabelToAppConfig("config_source_address", Labels["config_source_address"]);

@@ -25,6 +25,9 @@ struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
         case NKikimrExport::TExport::kExportToS3Settings:
             NOperationId::AddOptionalValue(operationId, "kind", "s3");
             break;
+        case NKikimrExport::TExport::kExportToFsSettings:
+            NOperationId::AddOptionalValue(operationId, "kind", "fs");
+            break;
         default:
             Y_DEBUG_ABORT("Unknown export kind");
             break;
@@ -59,6 +62,9 @@ struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
             break;
         case NKikimrExport::TExport::kExportToS3Settings:
             Fill<ExportToS3Metadata, ExportToS3Result>(operation, in, ClearEncryptionKey(in.GetExportToS3Settings()));
+            break;
+        case NKikimrExport::TExport::kExportToFsSettings:
+            Fill<ExportToFsMetadata, ExportToFsResult>(operation, in, in.GetExportToFsSettings());
             break;
         default:
             Y_DEBUG_ABORT("Unknown export kind");

@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blobstorage_synclogdata.h"
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
 #include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
@@ -71,5 +72,44 @@ namespace NKikimr {
             {}
         };
 
+        struct TEvPhantomFlagStorageAddFlagsFromSnapshot
+                : public TEventLocal<TEvPhantomFlagStorageAddFlagsFromSnapshot,
+                                     TEvBlobStorage::EvPhantomFlagStorageAddFlagsFromSnapshot>
+        {
+            TEvPhantomFlagStorageAddFlagsFromSnapshot(TPhantomFlags&& flags)
+                : Flags(std::move(flags))
+            {}
+
+            TPhantomFlags Flags;
+        };
+
+        struct TEvPhantomFlagStorageGetSnapshot
+                : public TEventLocal<TEvPhantomFlagStorageGetSnapshot,
+                                     TEvBlobStorage::EvPhantomFlagStorageGetSnapshot>
+        {};
+
+        struct TEvPhantomFlagStorageGetSnapshotResult
+                : public TEventLocal<TEvPhantomFlagStorageGetSnapshotResult,
+                                     TEvBlobStorage::EvPhantomFlagStorageGetSnapshotResult>
+        {
+            TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlagStorageSnapshot&& snapshot)
+                : Snapshot(std::move(snapshot))
+            {}
+
+            TPhantomFlagStorageSnapshot Snapshot;
+        };
+
+        struct TEvSyncLogUpdateNeighbourSyncedLsn
+            : public TEventLocal<TEvSyncLogUpdateNeighbourSyncedLsn,
+                                 TEvBlobStorage::EvSyncLogUpdateNeighbourSyncedLsn>
+        {
+            ui32 OrderNumber;
+            ui64 SyncedLsn;
+
+            TEvSyncLogUpdateNeighbourSyncedLsn(ui32 orderNumber, ui64 syncedLsn)
+                : OrderNumber(orderNumber)
+                , SyncedLsn(syncedLsn)
+            {}
+        };
     } // NSyncLog
 } // NKikimr

@@ -304,6 +304,12 @@ private:
         }
     }
 
+    void InsertDummyBarrier() {
+        if (PendingBarriers.empty() && PauseBarrier != TBarrier::NoBarrier) {
+            PendingBarriers.emplace_front(TBarrier { .Barrier = PauseBarrier });
+        }
+    }
+
 public:
     void PauseByWatermark(TInstant watermark) override {
         Y_ENSURE(PauseBarrier <= watermark);
@@ -315,7 +321,7 @@ public:
             return;
         }
         SkipWatermarksBeforeBarrier();
-        Y_ENSURE(!PendingBarriers.empty());
+        InsertDummyBarrier();
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
     }
 
@@ -367,9 +373,18 @@ public:
     }
 
     void AddWatermark(TInstant watermark) override {
+        if (watermark > TBarrier::MaxValidWatermark) {
+            watermark = TBarrier::MaxValidWatermark;
+        }
+        if (!PendingBarriers.empty() && watermark <= PauseBarrier) { // it is possible channel was paused by idle watermark, then real watermark less than the pausing watermark arrived; just ignore added watermark
+                                                                     // TODO: consider moving pausing barrier (watermark) backward
+            return;
+        }
+        Y_ENSURE(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);
         if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
             Y_ENSURE(PendingBarriers.back().Rows == 0);
             Y_ENSURE(PendingBarriers.back().Bytes == 0);
+            Y_ENSURE(PendingBarriers.back().Barrier <= watermark);
             PendingBarriers.back().Barrier = watermark;
         } else {
             PendingBarriers.emplace_back(TBarrier { .Barrier = watermark });
@@ -407,6 +422,7 @@ public:
         PendingBarriers.pop_front();
         // There can be watermarks before current barrier exposed by checkpoint removal
         SkipWatermarksBeforeBarrier();
+        InsertDummyBarrier();
     }
 
 protected:
@@ -429,6 +445,7 @@ protected:
     struct TBarrier {
         static constexpr TInstant NoBarrier = TInstant::Zero();
         static constexpr TInstant CheckpointBarrier = TInstant::Max();
+        static constexpr TInstant MaxValidWatermark = TInstant::Max() - TDuration::MicroSeconds(1);
         TInstant Barrier = CheckpointBarrier;
         ui64 Batches = 0;
         ui64 Bytes = 0;

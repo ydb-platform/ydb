@@ -689,18 +689,37 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
-        "restart_pdisk_monitoring": {
+        "restart_pdisk_database_force": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_monitoring": {
+            "debugMessage": "text",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "result": false
+        },
+        "restart_pdisk_monitoring_force": {
+            "debugMessage": "text",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "result": false
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
-            "error": "Calling this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...2181038083) to go into a dead state",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "forceRetryPossible": true,
             "result": false
+        },
+        "restart_pdisk_root_force": {
+            "debugMessage": "text",
+            "result": true
         },
         "restart_pdisk_viewer": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "Access denied"
+        },
+        "restart_pdisk_viewer_force": {
+            "status_code": 403,
+            "text": "Access denied"
         },
         "storage_nodes_database": {
             "FieldsAvailable": "10000000110011000000110100000011",

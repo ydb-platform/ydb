@@ -265,6 +265,8 @@ public:
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
                         srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
+                    } else if (name == WatermarksIdleTimeoutUsSetting) {
+                        srcDesc.MutableWatermarks()->SetIdleTimeoutUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
                     } else if (name == SkipJsonErrors) {
@@ -457,10 +459,15 @@ public:
                 .WatermarksLateArrivalDelayMs
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
+
         }
 
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
+            const auto idleTimeout = TDuration::MilliSeconds(wrSettings
+                .WatermarksIdleTimeoutMs
+                .GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs));
+            Add(props, WatermarksIdleTimeoutUsSetting, ToString(idleTimeout.MicroSeconds()), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

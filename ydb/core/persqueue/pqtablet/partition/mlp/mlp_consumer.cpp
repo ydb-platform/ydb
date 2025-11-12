@@ -732,6 +732,8 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
 
 void TConsumerActor::MoveToDLQIfPossible() {
     if (!DLQMoverActorId && !Storage->GetDLQMessages().empty()) {
+        Metrics.TotalDLQDeletedByRetentionMessageCount += Storage->CompactDLQ();
+
         std::deque<ui64> messages(Storage->GetDLQMessages());
         DLQMoverActorId = RegisterWithSameMailbox(CreateDLQMover({
             .ParentActorId = SelfId(),
@@ -764,7 +766,6 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 
     Metrics.TotalDLQMovedMessageCount += moved.size();
-    Metrics.TotalDLQDeletedByRetentionMessageCount += Storage->CompactDLQ();
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {

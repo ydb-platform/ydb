@@ -19,7 +19,7 @@ struct TSnapshotMessage {
                 ui64 HasMessageGroupId: 1;
                 ui64 MessageGroupIdHash: 31;
             } Fields;
-            ui64 Value;
+            ui64 Value = 0;
 
             static_assert(sizeof(Value) == sizeof(Fields));
         } Common;
@@ -33,7 +33,7 @@ struct TAddedMessage {
             ui32 HasMessageGroupId: 1;
             ui32 MessageGroupIdHash: 31;
         } Fields;
-        ui32 Value;
+        ui32 Value = 0;
 
         static_assert(sizeof(Value) == sizeof(Fields));
     } MessageGroup;
@@ -49,7 +49,7 @@ struct TMessageChange {
             ui32 ProcessingCount: 10;
             ui32 DeadlineDelta: 16;
         } Fields;
-        ui32 Value;
+        ui32 Value = 0;
 
         static_assert(sizeof(Value) == sizeof(Fields));
     } Common;
@@ -474,12 +474,12 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     }
 
     {
-        AFL_ENSURE(wal.GetDeletedFromDLQ() <= DLQQueue.size())("d", wal.GetDeletedFromDLQ())("q", DLQQueue.size());
-        for (size_t i = 0; i < wal.GetDeletedFromDLQ(); ++i) {
-            DLQQueue.pop_front();
-        }
         for (auto offset : wal.GetDLQ()) {
             DLQQueue.push_back(offset);
+        }
+        AFL_ENSURE(wal.GetDeletedFromDLQ() <= DLQQueue.size())("l", wal.GetDeletedFromDLQ())("r", DLQQueue.size());
+        for (size_t i = 0; i < wal.GetDeletedFromDLQ(); ++i) {
+            DLQQueue.pop_front();
         }
     }
 

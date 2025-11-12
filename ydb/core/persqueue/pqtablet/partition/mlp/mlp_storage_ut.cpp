@@ -1513,6 +1513,36 @@ Y_UNIT_TEST(CompactStorage_WithDLQ) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 1); // offset 3
 }
 
+Y_UNIT_TEST(CompactStorage_ByRetention_WithDLQ) {
+    TUtils utils;
+
+    utils.Begin();
+
+    utils.AddMessage(2);
+
+    // Move to DLQ message with offset 0
+    utils.Next(TDuration::Seconds(1));
+    utils.Unlock(0);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().front(), 0);
+
+    utils.Commit(1);
+
+    // All messages expired by retention
+    utils.TimeProvider->Tick(TDuration::Seconds(20));
+
+    auto compacted = utils.Storage.Compact();
+    UNIT_ASSERT_VALUES_EQUAL(compacted, 0); // DLQ messages was not compacted
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 1);
+
+    auto dlqCompacted = utils.Storage.CompactDLQ();
+    UNIT_ASSERT_VALUES_EQUAL(dlqCompacted, 1);
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetDLQMessages().size(), 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
 Y_UNIT_TEST(ProccessDeadlines) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
 

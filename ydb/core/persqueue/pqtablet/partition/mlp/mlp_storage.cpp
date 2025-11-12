@@ -268,6 +268,8 @@ size_t TStorage::CompactDLQ() {
 
             DLQQueue.pop_front();
             Batch.DeleteFromDLQ(offset);
+
+            ++compacted;
         }
     }
 

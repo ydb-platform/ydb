@@ -22,6 +22,7 @@
 
 #include <util/stream/file.h>
 #include <util/system/fs.h>
+#include <util/folder/path.h>
 #include <util/string/subst.h>
 
 #include <algorithm>
@@ -450,8 +451,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         LOG_T("Trying to parse metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
-
-        item.Metadata = NBackup::TMetadata::Deserialize(content);
+        try {
+            item.Metadata = NBackup::TMetadata::Deserialize(content);
+        } catch (const std::exception& e) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed to parse metadata: " << e.what());
+        }
 
         if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
             NeedValidateChecksums = false;
@@ -1409,12 +1413,9 @@ class TFSHelper {
 public:
     static TString GetFullPath(const TString& basePath, const TString& relativePath) {
         if (basePath.empty()) {
-            return "/" + relativePath;
+            return TStringBuilder() << "/" << relativePath;
         }
-        if (basePath.EndsWith('/')) {
-            return basePath + relativePath;
-        }
-        return basePath + "/" + relativePath;
+        return TFsPath(basePath) / relativePath;
     }
 
     static bool ReadFile(const TString& path, TString& content, TString& error) {
@@ -1437,13 +1438,13 @@ public:
 class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
 
     bool ProcessMetadata(const TString& content, TString& error) {
-        NJson::TJsonValue json;
-        if (!NJson::ReadJsonTree(content, &json)) {
-            error = "Failed to parse metadata json";
+        try {
+            ImportInfo->Items[ItemIdx].Metadata = NBackup::TMetadata::Deserialize(content);
+            return true;
+        } catch (const std::exception& e) {
+            error = TStringBuilder() << "Failed to parse metadata: " << e.what();
             return false;
         }
-
-        return true;
     }
 
     bool ProcessScheme(const TString& content, TString& error) {
@@ -1501,9 +1502,11 @@ public:
             return;
         }
 
-        const TString metadataPath = TFSHelper::GetFullPath(basePath, sourcePath + "/metadata.json");
-        TString metadataContent;
+        const TFsPath itemPath = TFsPath(basePath) / sourcePath;
         TString error;
+
+        const TString metadataPath = itemPath / "metadata.json";
+        TString metadataContent;
         
         if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
             Reply(false, error);
@@ -1516,8 +1519,7 @@ public:
         }
 
         const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
-
-        const TString schemePath = TFSHelper::GetFullPath(basePath, sourcePath + "/" + schemeFileName);
+        const TString schemePath = itemPath / schemeFileName;
         TString schemeContent;
         
         if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
@@ -1531,7 +1533,7 @@ public:
         }
 
         if (!ImportInfo->GetNoAcl()) {
-            const TString permissionsPath = TFSHelper::GetFullPath(basePath, sourcePath + "/permissions.pb");
+            const TString permissionsPath = itemPath / "permissions.pb";
             TString permissionsContent;
             
             if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {

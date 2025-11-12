@@ -1531,31 +1531,48 @@ class TestViewer(object):
         })
 
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_database'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        }), ['debugMessage'])
+
+        result['restart_pdisk_database_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.database_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
+            'force': '1',
+        }, headers={
+            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
+        }), ['debugMessage'])
+        result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
+            'pdisk_id': '1-1',
             'force': '1',
         }, headers={
             'Cookie': 'ydb_session_id=' + cls.root_session_id,
         }), ['debugMessage'])
-        result['restart_pdisk_monitoring'] = cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
-        result['restart_pdisk_viewer'] = cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
-        result['restart_pdisk_database'] = cls.post_viewer("/pdisk/restart", body={
-            'node_id': '1',
-            'pdisk_id': '1',
-            'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
         return result

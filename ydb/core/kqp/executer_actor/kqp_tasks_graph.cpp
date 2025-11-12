@@ -311,6 +311,13 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
         const auto& inputStageInfo = GetStageInfo(TStageId(txIdx, connection.GetStageIndex()));
         const auto& outputIdx = connection.GetOutputIndex();
 
+        // Mark DISCARD results (those without QueryResultIndex)
+        if (!result.HasQueryResultIndex()) {
+            GetMeta().DiscardResultIndices.insert(i);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
+                "Mark result " << i << " as DISCARD (no QueryResultIndex)");
+        }
+
         if (inputStageInfo.Tasks.size() < 1) {
             // it's empty result from a single partition stage
             continue;
@@ -1119,8 +1126,14 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
         YQL_ENSURE(it != resultChannelProxies.end());
         ActorIdToProto(it->second, channelDesc.MutableDstEndpoint()->MutableActorId());
     } else {
-        // For non-stream execution, collect results in executer and forward with response.
-        ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
+        // Check if this is a DISCARD result channel
+        const bool isDiscardResult = GetMeta().DiscardResultIndices.contains(channel.DstInputIndex);
+        
+        if (!isDiscardResult) {
+            // For non-stream execution, collect results in executer and forward with response.
+            ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
+        }
+        // For DISCARD results, don't set DstEndpoint - this prevents ChannelData from being sent
     }
 
     channelDesc.SetIsPersistent(false);

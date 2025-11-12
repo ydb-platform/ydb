@@ -238,6 +238,7 @@ struct TGraphMeta {
     bool ShardsResolved = false;
     TMap<ui64 /* shardId */, ui64 /* nodeId */> ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
+    THashSet<ui32> DiscardResultIndices; // indices of DISCARD results that should not send data
 
     bool UseFastChannels = false;
 

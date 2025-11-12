@@ -23,6 +23,7 @@ ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,true,0,10,0,0.5,BL
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[1,true,1,1000,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterVariants[10,false,0,1000,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFirstLevelVariants[2,false,1024,1000,0,0.5]
+ydb/core/kqp/ut/olap KqpOlapJson.SimpleVariants[10,true,1,1000,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.SimpleVariants[2,true,0,10,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
@@ -31,6 +32,7 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query KqpStats.CreateTableAsStats+IsOlap
+ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
@@ -52,12 +54,16 @@ ydb/core/persqueue/ut TPQTest.TestComactifiedWithRetention
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk Balancing.Balancing_ManyTopics_PQv1
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
+ydb/core/statistics/service/ut BasicStatistics.PersistenceWithStorageFailuresAndReboots
+ydb/core/statistics/service/ut [*/*] chunk chunk
 ydb/core/tablet_flat/ut TSharedPageCache.ClockPro
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_ColumnTable_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer1KM_1KP_ColumnTable
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/replication/controller/ut_assign_tx_id AssignTxId.Basic
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
+ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnManyTables
+ydb/core/tx/schemeshard/ut_export_reboots_s3 [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
@@ -98,6 +104,11 @@ ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_alloc_and_free[kikim
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
+ydb/tests/fq/s3 [test_format_setting.py] chunk chunk
+ydb/tests/fq/s3 test_explicit_partitioning_0.py.TestS3.test_projection_enum_type_invalid_validation[v1-false-client10-year String NOT NULL-True]
+ydb/tests/fq/s3 test_explicit_partitioning_1.py.TestS3.test_binding_projection_date_type_validation[v2-client6-column_type6-True]
+ydb/tests/fq/s3 test_format_setting.py.TestS3.test_parquet_converters_to_timestamp[v1]
+ydb/tests/fq/s3 test_format_setting.py.TestS3.test_timestamp_unix_time_insert[v2-timestamp/unix_time/test.parquet-parquet-UNIX_TIME_MICROSECONDS]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_top_level_listing_2[v1-kikimr_params0-false-client0]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_write_result[v1-kikimr_params0-client0]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
@@ -130,6 +141,7 @@ ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-row]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_25_1_to_current-row]
 ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[mixed-row]
@@ -138,10 +150,12 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/rename test_rename.py.test_client_gets_retriable_errors_when_rename[substitute_table-create_indexed_async_table-True]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v1-fifo]
+ydb/tests/functional/sqs/large test_leader_start_inflight.py.TestSqsMultinodeCluster.test_limit_leader_start_inflight[tables_format_v1-fifo]
 ydb/tests/functional/sqs/messaging test_fifo_messaging.py.TestSqsFifoMessagingWithPath.test_receive_attempt_reloads_same_messages[tables_format_v0-standard_mode]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join-group-by-with-null.test]
@@ -157,10 +171,23 @@ ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[p
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select2-4.test]
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select3-9.test]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsUniqueQueries.test_case
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_remove_database_wait[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/tenants test_tenants.py.TestTenants.test_resolve_nodes[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_can_create_user
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_cant_change_database_admin_group[add-subgroup]
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_cant_change_database_admin_group[add-user]
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_cant_change_database_admin_group[remove-admin-group]
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_cant_change_database_admin_group[remove-himself]
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_cant_change_database_admin_user[unblock]
+ydb/tests/functional/tenants test_user_administration.py.test_database_admin_cant_change_database_owner
+ydb/tests/functional/tenants test_user_administration.py.test_user_can_change_password_for_himself[dbadmin]
+ydb/tests/functional/tenants test_user_administration.py.test_user_can_change_password_for_himself[ordinaryuser]
+ydb/tests/functional/tenants test_users_groups_with_acl.py.test_query_create_group_by_domain_admin[domain_login_only--true-YDB]
 ydb/tests/functional/ydb_cli [test_ydb_backup.py] chunk chunk
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestClusterBackupRestore.test_cluster_backup_restore
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore

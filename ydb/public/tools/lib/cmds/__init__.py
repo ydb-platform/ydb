@@ -257,6 +257,10 @@ def enable_tls():
     return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
 
 
+def is_tiny_mode():
+    return os.getenv('YDB_TINY_MODE') == 'true'
+
+
 def report_monitoring_info():
     return os.getenv('YDB_REPORT_MONITORING_INFO') == 'true'
 
@@ -361,6 +365,9 @@ def deploy(arguments):
         services = os.environ['YDB_GRPC_SERVICES'].split(",")
         for service in services:
             enabled_grpc_services.append(service)
+
+    if is_tiny_mode():
+        optionals['tiny_mode'] = True
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),

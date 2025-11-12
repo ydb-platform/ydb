@@ -172,7 +172,28 @@ namespace {
             return false;
         }
 
-        if (settings.has_language()) {
+        if (settings.use_filter_snowball()) {
+            if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
+                error = "cannot set use_filter_snowball with use_filter_ngam or use_filter_edge_ngram at the same time";
+                return false;
+            }
+
+            if (!settings.has_language()) {
+                error = "language required when use_filter_snowball is set";
+                return false;
+            }
+
+            bool supportedLanguage = false;
+            for (auto ptr = sb_stemmer_list(); *ptr != nullptr; ++ptr) {
+                if (settings.language() == *ptr) {
+                    supportedLanguage = true;
+                }
+            }
+            if (!supportedLanguage) {
+                error = "language is not supported by snowball";
+                return false;
+            }
+        } else if (settings.has_language()) {
             error = "Unsupported language setting";
             return false;
         }
@@ -367,6 +388,8 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         analyzers->set_filter_length_min(ParseInt32(name, value, error));
     } else if (nameLower == "filter_length_max") {
         analyzers->set_filter_length_max(ParseInt32(name, value, error));
+    } else if (nameLower == "use_filter_snowball") {
+        analyzers->set_use_filter_snowball(ParseBool(name, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << name;
         return false;

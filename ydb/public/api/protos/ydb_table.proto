@@ -229,6 +229,10 @@ message FulltextIndexSettings {
         // Maximum token length to keep (inclusive)
         // Must be used with use_filter_length
         optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+
+        // Wether to apply stemming for each token
+        // TODO
+        optional bool use_filter_snowball = 140;
     }
 
     // Represents text analyzers settings for a specific column

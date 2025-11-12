@@ -103,15 +103,15 @@ public:
         return Stats;
     }
 
-    void UpdateShardStats(const TShardIdx shardIdx, const TPartitionStats& newStats) {
+    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPartitionStats& newStats, TInstant now) {
         Stats.Aggregated.PartCount = GetColumnShards().size();
         Stats.PartitionStats[shardIdx]; // insert if none
-        Stats.UpdateShardStats(shardIdx, newStats);
+        Stats.UpdateShardStats(diskSpaceUsageDelta, shardIdx, newStats, now);
     }
 
-    void UpdateTableStats(const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats) {
+    void UpdateTableStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, const TShardIdx shardIdx, const TPathId& pathId, const TPartitionStats& newStats, TInstant now) {
         Stats.TableStats[pathId].Aggregated.PartCount = GetColumnShards().size();
-        Stats.UpdateTableStats(shardIdx, pathId, newStats);
+        Stats.UpdateTableStats(diskSpaceUsageDelta, shardIdx, pathId, newStats, now);
     }
 
     TConclusion<std::shared_ptr<NOlap::NAlter::ISSEntity>> BuildEntity(const TPathId& pathId, const NOlap::NAlter::TEntityInitializationContext& iContext) const;

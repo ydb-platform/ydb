@@ -21,9 +21,7 @@ END DO];
 
 - `RUN = (TRUE|FALSE)` - запустить или остановить запрос.
 Статус запроса (запущен или остановлен) не изменяется, если явно не указывать настройку `RUN`.
-Если `RUN = TRUE`, то можно указать STREAMING_DISPOSITION для запуска запроса.
 - `FORCE = (TRUE|FALSE)`  нужно ли разрешать изменение запроса приводящее к невозможности его загрузки из чекпоинта, по умолчанию FALSE.
-- `STREAMING_DISPOSITION=...` - см. [CREATE STREAMING QUERY](create-streaming-query.md).
 Примеры:
 
 ```sql
@@ -34,8 +32,7 @@ ALTER STREAMING QUERY `my_queries/query_name` SET (
 
 -- Start created query
 ALTER STREAMING QUERY `my_queries/query_name` SET (
-    RUN = TRUE,
-    STREAMING_DISPOSITION = OLDEST
+    RUN = TRUE
 );
 
 -- Change query text
@@ -45,7 +42,7 @@ ALTER STREAMING QUERY `my_queries/query_name` SET (
 DO BEGIN
     PRAGMA FeatureR010="prototype";
 
-    $input = SELECT * FROM `source_name`.`input_topic_name`  WITH (
+    $input = SELECT * FROM `source_name`.`input_topic_name` WITH (
         FORMAT = "json_each_row",
         SCHEMA (
             time String NOT NULL,
@@ -72,10 +69,7 @@ END DO;
 
 -- Change and start query
 ALTER STREAMING QUERY `my_queries/query_name` SET (
-    RUN = TRUE,
-    STREAMING_DISPOSITION (
-        TIME_AGO = "PT1H"
-    )
+    RUN = TRUE
 ) AS
 DO BEGIN
     ...

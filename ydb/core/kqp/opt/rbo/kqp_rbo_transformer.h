@@ -36,13 +36,19 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
   public:
-    TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                          TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole)
-        : TypeCtx(typeCtx), KqpCtx(*kqpCtx),
+    TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+                          TTypeAnnotationContext &typeCtx,
+                          TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, 
+                          TAutoPtr<IGraphTransformer> typeAnnTransformer, 
+                          TAutoPtr<IGraphTransformer> peephole,
+                          const NMiniKQL::IFunctionRegistry& funcRegistry) :
+        TypeCtx(typeCtx), 
+        KqpCtx(*kqpCtx),
           RBO(
               {// std::make_shared<TRenameStage>(),
+                std::make_shared<TConstantFoldingStage>(),
                std::make_shared<TRuleBasedStage>(RuleStage1), std::make_shared<TRuleBasedStage>(RuleStage2)},
-              kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole) {}
+              kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry) {}
 
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) final;
@@ -54,10 +60,12 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
     TRuleBasedOptimizer RBO;
 };
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                                                       TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer> peepholeTransformer);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, 
+                                                      TTypeAnnotationContext &typeCtx,
+                                                      TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
+                                                      TAutoPtr<IGraphTransformer> typeAnnTransformer,
+                                                      TAutoPtr<IGraphTransformer> peepholeTransformer,
+                                                      const NMiniKQL::IFunctionRegistry& funcRegistry);
 
 class TKqpRBOCleanupTransformer : public TSyncTransformerBase {
   public:

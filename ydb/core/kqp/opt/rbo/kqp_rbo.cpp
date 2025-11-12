@@ -80,8 +80,12 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
     YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
 
-    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer);
+    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
 
+    if (root.ComputeTypes(context) != IGraphTransformer::TStatus::Ok) {
+        Y_ENSURE(false, "RBO type annotation failed");
+    }
+    
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
         auto stage = Stages[idx];

@@ -923,8 +923,9 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
                                                        TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer> peephole) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole);
+                                                       TAutoPtr<IGraphTransformer> peephole,
+                                                       const NMiniKQL::IFunctionRegistry& funcRegistry) {
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) {

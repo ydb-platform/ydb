@@ -144,12 +144,12 @@ const NYql::NDq::TDqAsyncStats& TDqPqReadActorBase::GetIngressStats() const {
     return IngressStats;
 }
 
-void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleDelay) {
+void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDuration idleTimeout) {
     const auto granularity = TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs());
     SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: " << granularity
         << " late arrival delay: " << lateArrivalDelay
         << " idle: " << SourceParams.GetWatermarks().GetIdlePartitionsEnabled()
-        << " idle delay: " << idleDelay
+        << " idle timeout: " << idleTimeout
         );
 
     if (!SourceParams.GetWatermarks().GetEnabled()) {
@@ -160,45 +160,17 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
         granularity,
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
         lateArrivalDelay,
-        idleDelay,
-        TInstant::Now()
+        idleTimeout,
+        LogPrefix
     );
 }
 
-bool TDqPqReadActorBase::HasEarlierPartitionIdlenessChecks(TInstant notifyTime) {
-    return !InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime;
-}
-
 void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
-    if (!WatermarkTracker) {
-        return;
+    Y_DEBUG_ABORT_UNLESS(WatermarkTracker);
+    if (const auto nextIdleCheckAt = WatermarkTracker->PrepareIdlenessCheck(systemTime)) {
+        SRC_LOG_T("Next idleness check scheduled at " << *nextIdleCheckAt);
+        SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
     }
-
-    RemoveExpiredPartitionIdlenessCheck(systemTime);
-
-    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-    if (!nextIdleCheckAt) {
-        return;
-    }
-    Y_DEBUG_ABORT_UNLESS(*nextIdleCheckAt >= systemTime);
-
-    if (HasEarlierPartitionIdlenessChecks(*nextIdleCheckAt)) {
-        // There are already idleness check scheduled at this or earlier time;
-        // Try to minimize infly checks
-        return;
-    }
-    InflyIdlenessChecks.push_front(*nextIdleCheckAt);
-    SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-    SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
-}
-
-bool TDqPqReadActorBase::RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime) {
-    bool removedAny = false;
-    while (HasEarlierPartitionIdlenessChecks(notifyTime)) {
-        InflyIdlenessChecks.pop_front();
-        removedAny = true;
-    }
-    return removedAny;
 }
 
 } // namespace NYql::NDq::NInternal

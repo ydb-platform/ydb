@@ -23,6 +23,7 @@ message TWatermarks {
     uint64 GranularityUs = 2;
     uint64 LateArrivalDelayUs = 3;
     bool IdlePartitionsEnabled = 4;
+    optional uint64 IdleTimeoutUs = 5;
 }
 
 message TDqPqFederatedCluster {

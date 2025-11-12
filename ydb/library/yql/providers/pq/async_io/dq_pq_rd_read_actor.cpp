@@ -567,7 +567,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
-    InitWatermarkTracker();
+    InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
 }
 
@@ -823,10 +823,13 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+    auto idleTimeoutUs = // TODO remove fallback
+        SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
+        SourceParams.GetWatermarks().GetIdleTimeoutUs() :
+        lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleDelayUs));
+            TDuration::MicroSeconds(idleTimeoutUs));
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1539,7 +1542,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
-    if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+    if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
         NotifyCA();
     }
 }

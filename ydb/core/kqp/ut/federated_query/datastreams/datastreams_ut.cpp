@@ -652,35 +652,39 @@ public:
         TTypeMappingSettings typeMappingSettings;
         typeMappingSettings.set_date_time_format(STRING_FORMAT);
 
-        auto describeTableBuilder = mockClient->ExpectDescribeTable();
-        describeTableBuilder
-            .Table(settings.TableName)
-            .DataSourceInstance(GetMockConnectorSourceInstance())
-            .TypeMappingSettings(typeMappingSettings);
-
-        auto listSplitsBuilder = mockClient->ExpectListSplits();
-        auto fillListSplitExpectation = listSplitsBuilder
-            .ValidateArgs(settings.ValidateListSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
-            .Select()
-                .DataSourceInstance(GetMockConnectorSourceInstance())
+        if (settings.DescribeCount) {
+            auto describeTableBuilder = mockClient->ExpectDescribeTable();
+            describeTableBuilder
                 .Table(settings.TableName)
-                .What();
+                .DataSourceInstance(GetMockConnectorSourceInstance())
+                .TypeMappingSettings(typeMappingSettings);
 
-        FillMockConnectorRequestColumns(fillListSplitExpectation, settings.Columns);
-
-        for (ui64 i = 0; i < settings.DescribeCount; ++i) {
-            auto responseBuilder = describeTableBuilder.Response();
-            FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
+            for (ui64 i = 0; i < settings.DescribeCount; ++i) {
+                auto responseBuilder = describeTableBuilder.Response();
+                FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
+            }
         }
 
-        for (ui64 i = 0; i < settings.ListSplitsCount; ++i) {
-            auto responseBuilder = listSplitsBuilder.Result()
-                .AddResponse(NYql::NConnector::NewSuccess())
-                    .Description("some binary description")
-                    .Select()
-                        .DataSourceInstance(GetMockConnectorSourceInstance())
-                        .What();
-            FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
+        if (settings.ListSplitsCount) {
+            auto listSplitsBuilder = mockClient->ExpectListSplits();
+            auto fillListSplitExpectation = listSplitsBuilder
+                .ValidateArgs(settings.ValidateListSplitsArgs ? TConnectorClientMock::EArgsValidation::Strict : TConnectorClientMock::EArgsValidation::DataSourceInstance)
+                .Select()
+                    .DataSourceInstance(GetMockConnectorSourceInstance())
+                    .Table(settings.TableName)
+                    .What();
+
+            FillMockConnectorRequestColumns(fillListSplitExpectation, settings.Columns);
+
+            for (ui64 i = 0; i < settings.ListSplitsCount; ++i) {
+                auto responseBuilder = listSplitsBuilder.Result()
+                    .AddResponse(NYql::NConnector::NewSuccess())
+                        .Description("some binary description")
+                        .Select()
+                            .DataSourceInstance(GetMockConnectorSourceInstance())
+                            .What();
+                FillMockConnectorRequestColumns(responseBuilder, settings.Columns);
+            }
         }
     }
 
@@ -1552,6 +1556,51 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto& readyOp = WaitScriptExecution(operationId);
         UNIT_ASSERT_STRING_CONTAINS(readyOp.Status().GetIssues().ToString(), "Runtime listing is not supported for streaming queries, pragma value was ignored");
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "{\"data\":\"x\"}\n{\"data\": \"x\"}");
+    }
+
+    Y_UNIT_TEST_F(CrossJoinWithNotExistingDataSource, TStreamingTestFixture) {
+        const auto connectorClient = SetupMockConnectorClient();
+
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "unknownSourceLookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {
+                {"fqdn", Ydb::Type::STRING},
+                {"payload", Ydb::Type::STRING}
+            };
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 1,
+                .ListSplitsCount = 0
+            });
+        }
+
+        ExecQuery(fmt::format(R"(
+                SELECT
+                    *
+                FROM `unknown-datasource`.`unknown-topic` WITH (
+                    FORMAT = raw,
+                    SCHEMA (Data String NOT NULL)
+                ) AS p
+                CROSS JOIN (
+                    SELECT * FROM `{ydb_source}`.`{table}`
+                ) AS l
+            )",
+            "ydb_source"_a = ydbSourceName,
+            "table"_a = ydbTable
+        ), EStatus::SCHEME_ERROR, "Cannot find table '/Root/unknown-datasource.[unknown-topic]' because it does not exist or you do not have access permissions");
     }
 }
 

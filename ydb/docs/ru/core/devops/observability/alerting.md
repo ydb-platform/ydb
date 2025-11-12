@@ -15,7 +15,7 @@
 - Требуется базовое понимание написания и использования [правил оповещения](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#rule)
 - Настроенные уведомления, чтобы получать оповещения в удобные для вас каналы. Подробнее про настройку в [документации](https://prometheus.io/docs/alerting/latest/alertmanager/)
 
-- **Ключевые параметры правила**
+**Ключевые параметры правил**
 ```yaml
 - alert: YDBHealthCheck -- Название алерта
   expr: ydb_healthcheck{STATUS!="GOOD"} -- Условие срабатывания алерта
@@ -25,17 +25,17 @@
 - **Где они хранятся?** Правила обычно определяются в отдельных файлах (например, rules.yml) и загружаются в конфигурацию Prometheus.
 - **Как они оцениваются?** Сервер Prometheus периодически (по умолчанию каждые 1-2 минуты) вычисляет выражения `expr`, указанные в правилах. Если условие истинно в течение заданного времени `for`, генерируется алерт.
 
-- **Состояния алерта:**
-    **Pending** (ожидание): Условие `expr` для срабатывания алерта выполняется (вычисление `expr` вернуло `true`), но заданный промежуток времени `for` ещё не истёк.
-    **Firing** (активный): Условие `expr` продолжает выполняться на протяжении всего времени, указанного в параметре `for`, и алерт считается активным.
-    **Resolved** (решён): Условие `expr` больше не выполняется, и алерт считается закрытым.
+**Состояния алерта:**
+  - **Pending** (ожидание): Условие `expr` для срабатывания алерта выполняется (вычисление `expr` вернуло `true`), но заданный промежуток времени `for` ещё не истёк.
+  - **Firing** (активный): Условие `expr` продолжает выполняться на протяжении всего времени, указанного в параметре `for`, и алерт считается активным.
+  - **Resolved** (решён): Условие `expr` больше не выполняется, и алерт считается закрытым.
 
-Более подробно об особенности системы и стуктуре правил смотрите в [официальной документации](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+Более подробно об особенности системы и структуре правил смотрите в [официальной документации](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
 
-### 1. {{ ydb-short-name }} Health Check
+### {{ ydb-short-name }} Health Check
 
 **Описание:** Правило отслеживает общее состояние здоровья {{ ydb-short-name }} кластера. Срабатывает, когда статус здоровья отличается от `GOOD`, что может указывать на проблемы с доступностью или производительностью базы данных. 
-**Что делать:** Это общий алерт системы самодиагностики, в сообщении будет указана причина, по которой сработал алерт. Подробнее про механизм Health Check в можно прочитать [здесь](../../reference/ydb-sdk/health-check-api.md#selfcheck-result)
+**Что делать:** Это общий алерт системы самодиагностики, в сообщении будет указана причина, по которой сработал алерт. Подробнее про механизм Health Check можно прочитать [здесь](../../reference/ydb-sdk/health-check-api.md#selfcheck-result)
 
 ```yaml
 - alert: YDBHealthCheck
@@ -62,19 +62,9 @@
 
 **Пример сработавшего алерта:**
 
-```text
-description: Health check failed for YDB.
-  - Status: RED
-  - Message: VDisk is not available
-  - Type: VDISK
-  - Database: /Root
-  - Domain: Root
-  - Instance: myt0-7514.search.yandex.net
-  This issue has been active for more than 1 minute.
-summary: YDB Health Issue in /Root (Status: RED)
-```
+![](../_assets/prometheus_health_check.png)
 
-### 2. {{ ydb-short-name }} ExecPool High Utilization
+### {{ ydb-short-name }} ExecPool High Utilization
 
 **Описание:** Правило контролирует загрузку [пулов](../../concepts/glossary.md#resource-pool) в {{ ydb-short-name }}. Срабатывает при превышении 90% утилизации, что может привести к деградации производительности и увеличению времени отклика запросов.
 **Что делать:** Проанализировать нагрузку. В сообщении алерта будет указано название пула, в котором превышена нагрузка. Подробнее про диагностику проблем с CPU можно прочитать в [статье](../../troubleshooting/performance/hardware/cpu-bottleneck.md)
@@ -112,8 +102,11 @@ summary: YDB Health Issue in /Root (Status: RED)
       - ExecPool: {{ $labels.execpool }}
       - Current utilization: {{ $value | humanizePercentage }}
 ```
+**Пример сработавшего алерта:**
 
-### 3. {{ ydb-short-name }} Authentication Errors
+![](../_assets/prometheus_exec_pool.png)
+
+### {{ ydb-short-name }} Authentication Errors
 
 **Описание:** Правило отслеживает ошибки аутентификации в {{ ydb-short-name }}. Срабатывает при появлении более 2 ошибок за период `for`. Это может означать, что кто-то неправильно вводит пароль, есть проблемы с настройками безопасности или что-то не так с конфигурацией системы.
 **Что делать:** Искать в [логах](./logging.md) ошибки аутентификации и разбираться в причинах.
@@ -137,10 +130,16 @@ summary: YDB Health Issue in /Root (Status: RED)
       - Host: {{ $labels.host }}
 ```
 
-### 4. {{ ydb-short-name }} Storage Usage Warning
+**Пример сработавшего алерта:**
 
-**Описание:** Предупреждающее правило о высоком использовании дискового пространства. Срабатывает при заполнении хранилища более чем на 80%.
-**Что делать:** Найти причину превышения базой ожидаемого размера. Удалить ненужные записи (например, старые логи) или увеличить лимит на размер базы, если это требуется. Подробнее про диагностику проблем с дисковым пространством можно прочитать в [статье] (../../troubleshooting/performance/hardware/disk-space.md)
+![](../_assets/prometheus_ticket_errors.png)
+
+### {{ ydb-short-name }} Storage Usage
+
+**Описание:** Это правило отслеживает уровень использования дискового пространства. Оно срабатывает, когда заполненность хранилища достигает критических значений. Рекомендуется настроить два порога: уведомление при использовании 80% диска и критическое оповещение — при 90%.
+**Что делать:** Найти причину превышения базой ожидаемого размера. Удалить ненужные записи (например, старые логи) или увеличить лимит на размер базы, если это требуется. Подробнее про диагностику проблем с дисковым пространством можно прочитать в [статье](../../troubleshooting/performance/hardware/disk-space.md)
+
+#### Warning Storage Usage (80%)
 
 ```yaml
 - alert: YDBStorageUsageWarning
@@ -164,10 +163,7 @@ summary: YDB Health Issue in /Root (Status: RED)
       - Duration: more than 5 minutes
 ```
 
-### 5. {{ ydb-short-name }} Storage Usage Critical
-
-**Описание:** Критическое правило о заполнении дискового пространства. Срабатывает при использовании более 90% хранилища.
-**Что делать:** Найти причину превышения базой ожидаемого размера. Удалить ненужные записи (например, старые логи) или увеличить лимит на размер базы, если это требуется. Подробнее про диагностику проблем с дисковым пространством можно прочитать в [статье] (../../troubleshooting/performance/hardware/disk-space.md)
+#### Critical Storage Usage (90%)
 
 ```yaml
 - alert: YDBStorageUsageCritical
@@ -191,9 +187,13 @@ summary: YDB Health Issue in /Root (Status: RED)
       - Duration: more than 5 minutes
 ```
 
+**Пример сработавшего алерта:**
+
+![](../_assets/prometheus_storage_usage_health_check.png)
+
 ## Полный конфигурационный файл
 
-Полный конфигурационный файл со всеми правилами указанными выше доступен по [ссылке] (https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/helm/ydb-prometheus/examples/ydb_prometheus_example.yaml)
+Полный конфигурационный файл со всеми правилами указанными выше доступен по [ссылке](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/helm/ydb-prometheus/examples/ydb_prometheus_example.yaml)
 
 ## Рекомендации по настройке
 

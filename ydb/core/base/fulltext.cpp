@@ -1,4 +1,7 @@
 #include "fulltext.h"
+
+#include <contrib/libs/snowball/include/libstemmer.h>
+
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
 
@@ -287,6 +290,20 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
             }
             return false;
         }), tokens.end());
+    }
+
+    if (settings.use_filter_snowball()) {
+        struct sb_stemmer* stemmer = sb_stemmer_new(settings.language().c_str(), nullptr);
+        for (auto& token : tokens) {
+            const sb_symbol* stemmed = sb_stemmer_stem(
+                stemmer,
+                reinterpret_cast<const sb_symbol*>(token.data()),
+                token.size()
+            );
+
+            const size_t resultLength = sb_stemmer_length(stemmer);
+            token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
+        }
     }
 
     if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {

@@ -478,6 +478,7 @@ TInitDataRangeStep::TInitDataRangeStep(TInitializer* initializer)
 }
 
 void TInitDataRangeStep::Execute(const TActorContext &ctx) {
+    Ranges.clear();
     RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), "");
 }
 

@@ -163,9 +163,10 @@ class TestStreamingInYdb(TestYdsBase):
                 WHERE time like "%lunch%";
                 INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
             END DO;'''
-
-        kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-        kikimr.YdbClient.query(sql.format(query_name="query2", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        query_name1 = "test_read_topic_shared_reading_insert_to_topic1"
+        query_name2 = "test_read_topic_shared_reading_insert_to_topic2"
+        kikimr.YdbClient.query(sql.format(query_name=query_name1, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        kikimr.YdbClient.query(sql.format(query_name=query_name2, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
 
         query_id = "query_id"  # TODO
         self.wait_completed_checkpoints(kikimr, query_id)
@@ -177,8 +178,8 @@ class TestStreamingInYdb(TestYdsBase):
         self.wait_completed_checkpoints(kikimr, query_id)
 
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);'''
-        kikimr.YdbClient.query(sql.format(query_name="query1"))
-        kikimr.YdbClient.query(sql.format(query_name="query2"))
+        kikimr.YdbClient.query(sql.format(query_name=query_name1))
+        kikimr.YdbClient.query(sql.format(query_name=query_name2))
 
         time.sleep(1)
 
@@ -187,13 +188,13 @@ class TestStreamingInYdb(TestYdsBase):
         self.write_stream(data)
 
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);'''
-        kikimr.YdbClient.query(sql.format(query_name="query1"))
-        kikimr.YdbClient.query(sql.format(query_name="query2"))
+        kikimr.YdbClient.query(sql.format(query_name=query_name1))
+        kikimr.YdbClient.query(sql.format(query_name=query_name2))
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
-        kikimr.YdbClient.query(sql.format(query_name="query1"))
-        kikimr.YdbClient.query(sql.format(query_name="query2"))
+        kikimr.YdbClient.query(sql.format(query_name=query_name1))
+        kikimr.YdbClient.query(sql.format(query_name=query_name2))
 
     def test_read_topic_shared_reading_restart_nodes(self, kikimr):
         sourceName = "source_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -211,7 +212,8 @@ class TestStreamingInYdb(TestYdsBase):
                 INSERT INTO {source_name}.`{output_topic}` SELECT value FROM $in;
             END DO;'''
 
-        kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        query_name = "test_read_topic_shared_reading_restart_nodes"
+        kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         query_id = "query_id"  # TODO
         self.wait_completed_checkpoints(kikimr, query_id)
 
@@ -267,7 +269,8 @@ class TestStreamingInYdb(TestYdsBase):
                     SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
             END DO;'''
 
-        kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        query_name = "test_read_topic_restore_state"
+        kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         query_id = "query_id"  # TODO
         self.wait_completed_checkpoints(kikimr, query_id)
 

@@ -1287,7 +1287,7 @@ class TestPqRowDispatcher(TestYdsBase):
         partitions_count = 3
         self.init(client, "redistribute", partitions=partitions_count)
         wait_row_dispatcher_sensor_value(kikimr, "KnownRowDispatchers", 2 * COMPUTE_NODE_COUNT - 1)
-        
+
         sql = Rf'''
             PRAGMA dq.Scheduler=@@{{"type": "single_node"}}@@;
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`

@@ -240,6 +240,9 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.breakpad_minidumps_script:
             command.extend(["--breakpad-minidumps-script", self.__configurator.breakpad_minidumps_script])
 
+        if getattr(self.__configurator, "tiny_mode", False):
+            command.append("--tiny-mode")
+
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command

@@ -364,10 +364,10 @@ void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
 
     for (auto it = Storage->begin(); it != Storage->end(); ++it) {
         auto msg = *it;
-    
+
         response->Messages.push_back({
             .Offset = msg.Offset,
-            .Status = msg.Status,
+            .Status = static_cast<ui8>(msg.Status),
             .ProcessingCount = msg.ProcessingCount,
             .ProcessingDeadline = msg.ProcessingDeadline,
             .WriteTimestamp = msg.WriteTimestamp

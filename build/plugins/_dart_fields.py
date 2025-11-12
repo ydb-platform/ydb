@@ -1404,7 +1404,7 @@ class TestFiles:
             if not upath.startswith(cls._TAXI_PREFIX):
                 if lint_name == 'clang_format_json':
                     raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
-                if lint_name == 'yamlfmt_format_yaml':
+                if lint_name == 'yamlfmt':
                     raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_YAML")
             resolved_files = []
             for path in files:

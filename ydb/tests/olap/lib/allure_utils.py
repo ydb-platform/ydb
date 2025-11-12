@@ -114,7 +114,7 @@ def _produce_oom_report(node_errors: list[NodeErrors]) -> str:
         host = node_error.node.host
         if host not in reported_hosts and node_error.oom_output is not None:
             html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">OOM events on {host} ({node_error.oom_events} events)</summary>'
-            html += f'<code>{node_error.oom_output.replace(chr(10), "<br/>")}</code></details>'
+            html += f'<code>{node_error.oom_output.replace('\n', "<br/>")}</code></details>'
             reported_hosts.add(host)
     return html
 

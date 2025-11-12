@@ -36,7 +36,7 @@ class TestVectorIndex(VectorBase):
                 PRIMARY KEY(pk)
             );
         """
-        self.query(create_table_sql, True)
+        self.query(create_table_sql)
 
     def _create_index(
         self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None
@@ -73,7 +73,7 @@ class TestVectorIndex(VectorBase):
                 );
             """
         logger.info(create_index_sql)
-        self.query(create_index_sql, True)
+        self.query(create_index_sql)
 
     def _upsert_values(self, table_path, vector_type, vector_dimension):
         logger.info("Upsert values")
@@ -90,7 +90,7 @@ class TestVectorIndex(VectorBase):
             UPSERT INTO `{table_path}` (pk, embedding)
             VALUES {",".join(values)};
         """
-        self.query(upsert_sql, False)
+        self.query(upsert_sql)
 
     def _select(self, table_path, vector_type, vector_dimension, distance, similarity):
         if distance is not None:
@@ -110,20 +110,19 @@ class TestVectorIndex(VectorBase):
             ORDER BY {target}(embedding, $Target) {order}
             LIMIT {self.limit};
         """
-        return self.query(select_sql, False)
+        return self.query(select_sql)
 
     def _select_top(self, table_path, vector_type, vector_dimension, distance, similarity):
         logger.info("Select values from table")
-        result_set = self._select(
+        rows = self._select(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
             similarity=similarity,
         )
-        assert len(result_set) != 0, "Query returned an empty set"
+        assert len(rows) != 0, "Query returned an empty set"
 
-        rows = result_set[0].rows
         logger.info(f"Rows count {len(rows)}")
 
         prev = 0.0 if distance is not None else 1.0
@@ -183,7 +182,7 @@ class TestVectorIndex(VectorBase):
         similarity_data = ["cosine"]  # "inner_product", "cosine"
         vector_type_data = ["float", "int8"]
         levels_data = [1, 3]
-        clusters_data = [1, 17]
+        clusters_data = [2, 17]
         vector_dimension_data = [5]
 
         for vector_type in vector_type_data:

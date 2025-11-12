@@ -12,6 +12,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
             NKikimrServices::PQ_MLP_DEADLINER,
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
+            NKikimrServices::PQ_MLP_DLQ_MOVER,
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
         },
@@ -69,6 +70,15 @@ TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&
 TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings) {
     auto edgeId = runtime.AllocateEdgeActor();
     auto readerId = runtime.Register(CreateCommitter(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
+TActorId CreateUnlockerActor(NActors::TTestActorRuntime& runtime, TUnlockerSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(CreateUnlocker(edgeId, std::move(settings)));
     runtime.EnableScheduleForActor(readerId);
     runtime.DispatchEvents();
 

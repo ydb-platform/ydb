@@ -1015,6 +1015,32 @@ inline TTableWriterPtr<T> IIOClient::CreateTableWriter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <>
+inline ITableFragmentWriterPtr<TNode> IIOClient::CreateTableFragmentWriter<TNode>(
+    const TDistributedWriteTableCookie& cookie,
+    const TTableFragmentWriterOptions& options)
+{
+    return CreateNodeFragmentWriter(cookie, options);
+}
+
+template <>
+inline ITableFragmentWriterPtr<TYaMRRow> IIOClient::CreateTableFragmentWriter<TYaMRRow>(
+    const TDistributedWriteTableCookie& /*cookie*/,
+    const TTableFragmentWriterOptions& /*options*/)
+{
+    ythrow yexception() << "Not implemented";
+}
+
+template <class T>
+inline ITableFragmentWriterPtr<T> IIOClient::CreateTableFragmentWriter(
+    const TDistributedWriteTableCookie& /*cookie*/,
+    const TTableFragmentWriterOptions& /*options*/)
+{
+    ythrow yexception() << "Not implemented";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <typename T>
 TTableReaderPtr<T> CreateConcreteProtobufReader(TTableReader<Message>* reader)
 {

@@ -1406,5 +1406,6 @@ message TMLPStorageWAL {
     optional uint64 SlowFirstOffset = 12;
     repeated uint64 MovedToSlowZone = 13;
     repeated uint64 DeletedFromSlowZone = 14;
+    optional uint64 DeletedFromDLQ = 15;
 }
 

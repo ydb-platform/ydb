@@ -38,6 +38,41 @@ void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
     RetentionPeriod = retentionPeriod;
 }
 
+void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy) {
+    DeadLetterPolicy = deadLetterPolicy;
+
+    if (DeadLetterPolicy && DeadLetterPolicy.value() == NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE) {
+        return;
+    }
+
+    auto policy = DeadLetterPolicy.value_or(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
+    while (!DLQQueue.empty()) {
+        auto offset = DLQQueue.front();
+        DLQQueue.pop_front();
+
+        Batch.AddChange(offset);
+        Batch.DeleteFromDLQ(offset);
+
+        switch (policy) {
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                // unreachable
+                break;
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                Commit(offset);
+                break;
+            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED: {
+                auto [message, _] = GetMessageInt(offset);
+                message->Status = EMessageStatus::Unprocessed;
+
+                --Metrics.DLQMessageCount;
+                ++Metrics.UnprocessedMessageCount;
+
+                break;
+            }
+        }
+    }
+}
+
 std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
     if (RetentionPeriod) {
         auto retentionDeadline = TrimToSeconds(TimeProvider->Now(), false) - RetentionPeriod.value();
@@ -217,21 +252,27 @@ size_t TStorage::Compact() {
 }
 
 void TStorage::RemoveMessage(const TMessage& message) {
+    AFL_ENSURE(Metrics.InflyMessageCount > 0);
     --Metrics.InflyMessageCount;
     switch(message.Status) {
         case EMessageStatus::Unprocessed:
+            AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
             --Metrics.UnprocessedMessageCount;
             break;
         case EMessageStatus::Locked:
+            AFL_ENSURE(Metrics.LockedMessageCount > 0);
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message.HasMessageGroupId && LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+                AFL_ENSURE(Metrics.LockedMessageGroupCount > 0);
                 --Metrics.LockedMessageGroupCount;
             }
             break;
         case EMessageStatus::Committed:
+            AFL_ENSURE(Metrics.CommittedMessageCount > 0);
             --Metrics.CommittedMessageCount;
             break;
         case EMessageStatus::DLQ:
+            AFL_ENSURE(Metrics.DLQMessageCount > 0);
             --Metrics.DLQMessageCount;
             break;
     }
@@ -285,17 +326,30 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     Messages.push_back({
         .Status = EMessageStatus::Unprocessed,
-        .ReceiveCount = 0,
+        .ProcessingCount = 0,
         .DeadlineDelta = 0,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
-        .WriteTimestampDelta = (TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds()
+        .WriteTimestampDelta = static_cast<ui32>((TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds())
     });
 
     Batch.AddNewMessage(offset);
 
     ++Metrics.InflyMessageCount;
     ++Metrics.UnprocessedMessageCount;
+
+    return true;
+}
+
+bool TStorage::MarkDLQMoved(ui64 offset) {
+    if (DLQQueue.empty() || DLQQueue.front() != offset) {
+        return false;
+    }
+
+    Commit(offset);
+
+    DLQQueue.pop_front();
+    Batch.DeleteFromDLQ(offset);
 
     return true;
 }
@@ -384,7 +438,9 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     AFL_VERIFY(message.Status == EMessageStatus::Unprocessed)("status", message.Status);
     message.Status = EMessageStatus::Locked;
     message.DeadlineDelta = NormalizeDeadline(deadline);
-    ++message.ReceiveCount;
+    if (message.ProcessingCount < MAX_PROCESSING_COUNT) {
+        ++message.ProcessingCount;
+    }
 
     Batch.AddChange(offset);
 
@@ -395,6 +451,7 @@ ui64 TStorage::DoLock(ui64 offset, TMessage& message, TInstant& deadline) {
     }
 
     ++Metrics.LockedMessageCount;
+    AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
     --Metrics.UnprocessedMessageCount;
 
     return offset;
@@ -412,6 +469,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 Batch.AddChange(offset);
                 ++Metrics.CommittedMessageCount;
             }
+            AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
             --Metrics.UnprocessedMessageCount;
             break;
         case EMessageStatus::Locked:
@@ -420,9 +478,11 @@ bool TStorage::DoCommit(ui64 offset) {
                 ++Metrics.CommittedMessageCount;
             }
 
+            AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message->HasMessageGroupId) {
                 if (LockedMessageGroupsId.erase(message->MessageGroupIdHash)) {
+                    AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
                     --Metrics.LockedMessageGroupCount;
                 }
             }
@@ -436,6 +496,7 @@ bool TStorage::DoCommit(ui64 offset) {
                 ++Metrics.CommittedMessageCount;
             }
 
+            AFL_ENSURE(Metrics.DLQMessageCount > 0)("o", offset);
             --Metrics.DLQMessageCount;
             break;
     }
@@ -443,6 +504,7 @@ bool TStorage::DoCommit(ui64 offset) {
     if (slowZone) {
         SlowMessages.erase(offset);
         Batch.DeleteFromSlow(offset);
+        AFL_ENSURE(Metrics.InflyMessageCount > 0)("o", offset);
         --Metrics.InflyMessageCount;
     } else {
         message->Status = EMessageStatus::Committed;
@@ -465,33 +527,47 @@ bool TStorage::DoUnlock(ui64 offset) {
     return true;
 }
 
-void TStorage::DoUnlock( ui64 offset, TMessage& message) {
+void TStorage::DoUnlock(ui64 offset, TMessage& message) {
     message.Status = EMessageStatus::Unprocessed;
     message.DeadlineDelta = 0;
 
+    Batch.AddChange(offset);
+
+    ++Metrics.UnprocessedMessageCount;
+
     if (KeepMessageOrder && message.HasMessageGroupId) {
         if (LockedMessageGroupsId.erase(message.MessageGroupIdHash)) {
+            AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("o", offset);
             --Metrics.LockedMessageGroupCount;
         }
     }
 
-    Batch.AddChange(offset);
-
+    AFL_ENSURE(Metrics.LockedMessageCount > 0)("o", offset);
     --Metrics.LockedMessageCount;
 
-    if (message.ReceiveCount >= MaxMessageProcessingCount) {
-        // TODO Move to DLQ or remove message
-        message.Status = EMessageStatus::DLQ;
-        DLQQueue.push_back(offset);
-        Batch.AddDLQ(offset);
+    if (message.ProcessingCount >= MaxMessageProcessingCount) {
+        if (DeadLetterPolicy) {
+            switch (DeadLetterPolicy.value()) {
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                    message.Status = EMessageStatus::DLQ;
+                    DLQQueue.push_back(offset);
+                    Batch.AddDLQ(offset);
 
-        ++Metrics.DLQMessageCount;
-    } else {
-        if (offset >= FirstOffset) {
-            FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
+                    AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("o", offset);
+                    --Metrics.UnprocessedMessageCount;
+                    ++Metrics.DLQMessageCount;
+                    return;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                    DoCommit(offset);
+                    return;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                    break;
+            }
         }
-        
-        ++Metrics.UnprocessedMessageCount;
+    }
+
+    if (offset >= FirstOffset) {
+        FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
     }
 }
 
@@ -634,6 +710,11 @@ void TStorage::TBatch::AddDLQ(ui64 offset) {
     DLQ.push_back(offset);
 }
 
+void TStorage::TBatch::DeleteFromDLQ(ui64 offset) {
+    Y_UNUSED(offset);
+    ++DeletedFromDLQ;
+}
+
 void TStorage::TBatch::AddNewMessage(ui64 offset) {
     if (!FirstNewMessage) {
         FirstNewMessage = offset;
@@ -662,6 +743,7 @@ bool TStorage::TBatch::Empty() const {
     return ChangedMessages.empty()
         && !FirstNewMessage.has_value()
         && DLQ.empty()
+        && DeletedFromDLQ == 0
         && !BaseDeadline.has_value()
         && !BaseWriteTimestamp.has_value()
         && MovedToSlowZone.empty()
@@ -713,7 +795,7 @@ TStorage::TMessageWrapper TStorage::TMessageIterator::operator*() const {
         .SlowZone = Iterator != Storage.SlowMessages.end(),
         .Offset = offset,
         .Status = static_cast<EMessageStatus>(message->Status),
-        .ProcessingCount = message->ReceiveCount,
+        .ProcessingCount = message->ProcessingCount,
         .ProcessingDeadline = static_cast<EMessageStatus>(message->Status) == EMessageStatus::Locked ?
             Storage.BaseDeadline + TDuration::Seconds(message->DeadlineDelta) : TInstant::Zero(),
         .WriteTimestamp = Storage.BaseWriteTimestamp + TDuration::Seconds(message->WriteTimestampDelta),

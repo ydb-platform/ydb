@@ -15,8 +15,8 @@ struct TSingleTuple {
 struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
     std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
-    int64_t NTuples{0};
-    int64_t AllocatedBytes() const;
+    i64 NTuples{0};
+    i64 AllocatedBytes() const;
     TPackResult() = default;
     ~TPackResult() = default;
     TPackResult(TPackResult&& other)

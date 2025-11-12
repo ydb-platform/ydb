@@ -23,6 +23,6 @@ struct TJsonParserConfig {
 };
 
 TValueStatus<ITopicParser::TPtr> CreateJsonParser(IParsedDataConsumer::TPtr consumer, const TJsonParserConfig& config, const TCountersDesc& counters);
-TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parserConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool skipErrors);
 
 }  // namespace NFq::NRowDispatcher

@@ -67,6 +67,7 @@ protected:
         }
 
         TaskRunner.Reset();
+        TBase::DoTerminateImpl();
     }
 
     void InvalidateMeminfo() override {

@@ -27,7 +27,8 @@ class TKqpTransactionManager : public IKqpTransactionManager {
     enum ETransactionState {
         COLLECTING,
         PREPARING,
-        EXECUTING,   
+        EXECUTING,
+        ROLLINGBACK,
     };
 public:
     TKqpTransactionManager(bool collectOnly)
@@ -472,6 +473,31 @@ public:
 
         ShardsToWait.erase(shardId);
         return ShardsToWait.empty();
+    }
+
+    const THashSet<ui64>& StartRollback() override {
+        AFL_ENSURE(State != ETransactionState::ROLLINGBACK);
+        State = ETransactionState::ROLLINGBACK;
+        for (auto& [shardId, shardInfo] : ShardsInfo) {
+            if (shardInfo.State != EShardState::ERROR) {
+                shardInfo.State = EShardState::FINISHED;
+            }
+            if (!shardInfo.Locks.empty()) {
+                ShardsToWait.insert(shardId);
+            }
+        }
+
+        return ShardsToWait;
+    }
+
+    bool ConsumeRollbackResult(ui64 shardId) override {
+        AFL_ENSURE(State == ETransactionState::ROLLINGBACK);
+        ShardsToWait.erase(shardId);
+        return ShardsToWait.empty();
+    }
+
+    bool IsRollBack() const override {
+        return State == ETransactionState::ROLLINGBACK;
     }
 
 private:

@@ -304,7 +304,6 @@ public:
                 IEventHandle::FlagTrackDelivery,
                 0,
                 ExecuterSpan.GetTraceId());
-            MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
             Become(&TKqpDataExecuter::FinalizeState);

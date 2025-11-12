@@ -138,6 +138,10 @@ public:
     virtual TCommitInfo GetCommitInfo() = 0;
 
     virtual bool ConsumeCommitResult(ui64 shardId) = 0;
+
+    virtual const THashSet<ui64>& StartRollback() = 0;
+    virtual bool ConsumeRollbackResult(ui64 shardId) = 0;
+    virtual bool IsRollBack() const = 0;
 };
 
 using IKqpTransactionManagerPtr = std::shared_ptr<IKqpTransactionManager>;

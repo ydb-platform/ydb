@@ -254,4 +254,3 @@ class ShowCreateTableWorkload:
         self.pool.stop()
         self.driver.stop()
         logger.info("Workload stopped.")
-

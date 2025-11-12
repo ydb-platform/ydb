@@ -226,7 +226,7 @@ public:
             MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
         }
 
-        InitWatermarkTracker();
+        InitWatermarkTracker(); // non-virtual!
         IngressStats.Level = statsLevel;
     }
 
@@ -370,7 +370,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
-        if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+        if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
             NotifyCA();
         }
     }
@@ -579,6 +579,7 @@ private:
         }
 
         if (WatermarkTracker) {
+            WatermarkTracker->ProcessIdlenessCheck(now); // drop obsolete checks
             const auto watermark = WatermarkTracker->HandleIdleness(now);
 
             if (watermark) {
@@ -618,8 +619,11 @@ private:
 
     void InitWatermarkTracker() override {
         auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-        auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
-        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
+        auto idleTimeoutUs = // TODO remove fallback
+            SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
+            SourceParams.GetWatermarks().GetIdleTimeoutUs() :
+            lateArrivalDelayUs;
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs));
     }
 
     void SchedulePartitionIdlenessCheck(TInstant at) override {

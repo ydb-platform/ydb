@@ -2347,6 +2347,91 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
     }
 
+    Y_UNIT_TEST_F(StreamingQueryWithDoubleYdbJoin, TStreamingTestFixture) {
+        const auto connectorClient = SetupMockConnectorClient();
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "doubleYdbJoinInputTopicName";
+        constexpr char outputTopicName[] = "doubleYdbJoinOutputTopicName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        constexpr char ydbSourceName[] = "ydbSourceName";
+        CreatePqSource(pqSourceName);
+        CreateYdbSource(ydbSourceName);
+
+        constexpr char ydbTable[] = "doubleYdbJoinLookup";
+        ExecExternalQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String,
+                PRIMARY KEY (fqdn)
+            ))",
+            "table"_a = ydbTable
+        ));
+
+        {   // Prepare connector mock
+            const std::vector<TColumn> columns = {{"fqdn", Ydb::Type::STRING}};
+            SetupMockConnectorTableDescription(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .DescribeCount = 2,
+                .ListSplitsCount = 1
+            });
+
+            const std::vector<std::string> fqdnColumn = {"host1", "host2"};
+            SetupMockConnectorTableData(connectorClient, {
+                .TableName = ydbTable,
+                .Columns = columns,
+                .NumberReadSplits = 2,
+                .ResultFactory = [&]() {
+                    return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()));
+                }
+            });
+        }
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    p.Data || "-" || la.fqdn || "-" || lb.fqdn
+                FROM `{pq_source}`.`{input_topic}` AS p
+                CROSS JOIN `{ydb_source}`.`{ydb_table}` AS la
+                CROSS JOIN `{ydb_source}`.`{ydb_table}` AS lb
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_source"_a = ydbSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(0, "data1");
+
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages({
+            "data1-host1-host2",
+            "data1-host2-host1",
+            "data1-host1-host1",
+            "data1-host2-host2"
+        }, /* sort  */ true);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        pqGateway->WaitReadSession(inputTopicName)->AddDataReceivedEvent(1, "data2");
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages({
+            "data2-host1-host2",
+            "data2-host2-host1",
+            "data2-host1-host1",
+            "data2-host2-host2"
+        }, /* sort  */ true);
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
         SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
 

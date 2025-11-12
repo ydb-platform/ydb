@@ -36,7 +36,7 @@ class TestVectorIndex(VectorBase):
                 PRIMARY KEY(pk)
             );
         """
-        self.query(create_table_sql, tx=None, stats=False)
+        self.query(create_table_sql)
 
     def _create_index(
         self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None
@@ -73,7 +73,7 @@ class TestVectorIndex(VectorBase):
                 );
             """
         logger.info(create_index_sql)
-        self.query(create_index_sql, tx=None, stats=False)
+        self.query(create_index_sql)
 
     def _upsert_values(self, table_path, vector_type, vector_dimension):
         logger.info("Upsert values")
@@ -90,7 +90,7 @@ class TestVectorIndex(VectorBase):
             UPSERT INTO `{table_path}` (pk, embedding)
             VALUES {",".join(values)};
         """
-        self.query(upsert_sql, tx=None, stats=False)
+        self.query(upsert_sql)
 
     def _select(self, table_path, vector_type, vector_dimension, distance, similarity):
         if distance is not None:
@@ -110,7 +110,7 @@ class TestVectorIndex(VectorBase):
             ORDER BY {target}(embedding, $Target) {order}
             LIMIT {self.limit};
         """
-        return self.query(select_sql, tx=None, stats=False)
+        return self.query(select_sql)
 
     def _select_top(self, table_path, vector_type, vector_dimension, distance, similarity):
         logger.info("Select values from table")

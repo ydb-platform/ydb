@@ -30,12 +30,12 @@ class EAction(Enum):
 class ParsedOptions:
     class DynconfigSpecialOptions:
         def __init__(self):
-            self.quite = False
+            self.quiet = False
 
     class SchemeSpecialOptions:
         def __init__(self):
             self.path = None
-            self.quite = False
+            self.quiet = False
 
     def __init__(self):
         self.endpoint = None
@@ -148,9 +148,9 @@ def parse_args() -> ParsedOptions:
     result.action = command_to_action[args.command]
     result.expected_result = result_to_enum[args.expected_result]
 
-    result.dynconfig_special_options.quite = getattr(args, 'quiet', False)
+    result.dynconfig_special_options.quiet = getattr(args, 'quiet', False)
 
-    result.scheme_special_options.quite = getattr(args, 'quiet', False)
+    result.scheme_special_options.quiet = getattr(args, 'quiet', False)
     result.scheme_special_options.path = getattr(args, 'path', None)
 
     if result.action == EAction.AlterDatabase:
@@ -327,7 +327,7 @@ def main():
                 ls_result = scheme_ls(client, parsed_args.scheme_special_options.path, parsed_args.expected_result)
 
                 if parsed_args.expected_result == EExpectedResult.Success:
-                    if parsed_args.scheme_special_options.quite:
+                    if parsed_args.scheme_special_options.quiet:
                         print("Scheme ls result fetched successfully")
                     else:
                         print(f"Scheme ls result:\n{ls_result}")
@@ -339,7 +339,7 @@ def main():
                 fetched_dynconfig = fetch_dynconfig(client, parsed_args.expected_result)
 
                 if parsed_args.expected_result == EExpectedResult.Success:
-                    if parsed_args.dynconfig_special_options.quite:
+                    if parsed_args.dynconfig_special_options.quiet:
                         print("Config fetched successfully")
                     else:
                         print(f"Fetched dynconfig:\n{fetched_dynconfig}")

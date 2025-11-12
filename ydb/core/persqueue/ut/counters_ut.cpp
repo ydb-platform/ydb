@@ -815,11 +815,13 @@ Y_UNIT_TEST(PartitionKeyCompaction) {
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
             group->GetNamedCounter("name", "topic.partition.uptime_milliseconds_min", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(600);
+            group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
             group = group->GetSubgroup("consumer", "__ydb_compaction_consumer");
             group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false)->Set(200);
             group->GetNamedCounter("name", "topic.partition.end_to_end_lag_milliseconds_max", false)->Set(30000);
             group->GetNamedCounter("name", "topic.partition.read.throttled_microseconds_max", false)->Set(2000);
             group->GetNamedCounter("name", "topic.partition.read.idle_milliseconds_max", false)->Set(300);
+            group->GetNamedCounter("name", "topic.partition.read.lag_milliseconds_max", false)->Set(300);
 
             TStringStream countersStr;
             dbGroup->OutputHtml(countersStr);

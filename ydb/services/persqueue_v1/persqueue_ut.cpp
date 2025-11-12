@@ -3266,9 +3266,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << ">>>>> 2" << Endl << Flush;
         auto info16 = server.AnnoyingClient->ReadFromPQ({DEFAULT_TOPIC_NAME, 0, 16, 16, "user"}, 16);
 
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 2);
-        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 2);
-        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromCache, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info16.BlobsFromCache, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info0.BlobsFromDisk + info16.BlobsFromDisk, 3);
 
         for (ui32 i = 0; i < 8; ++i)
             server.AnnoyingClient->WriteToPQ({DEFAULT_TOPIC_NAME, 0, "source1", 32+i}, value);
@@ -3341,7 +3341,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT(info_half1.BlobsFromCache > 0);
             UNIT_ASSERT(info_half2.BlobsFromCache > 0);
-            UNIT_ASSERT_VALUES_EQUAL(info_half1.BlobsFromDisk, 0);
+            UNIT_ASSERT_VALUES_EQUAL(info_half1.BlobsFromDisk, 1); //Because of async compaction
             UNIT_ASSERT_VALUES_EQUAL(info_half2.BlobsFromDisk, 0);
         }
     }

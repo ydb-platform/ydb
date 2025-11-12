@@ -1025,11 +1025,17 @@ class TestViewer(object):
             'query': "alter table table_test_topic_data_cdc add changefeed updates_feed WITH (FORMAT = 'JSON', MODE = 'UPDATES', INITIAL_SCAN = TRUE)"
         })
 
-        insert_response = cls.call_viewer("/viewer/query", {
-            'database': cls.dedicated_db,
-            'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
-            'schema': 'multi'
-        })
+        insert_response = None
+        for i in range(3):
+            insert_response = cls.call_viewer("/viewer/query", {
+                'database': cls.dedicated_db,
+                'query': 'insert into table_test_topic_data_cdc(id, name) values(11, "elleven")',
+                'schema': 'multi'
+            })
+            if 'error' in insert_response and insert_response['error']['issue_code'] == 2034:
+                continue
+            else:
+                break
 
         update_response = cls.call_viewer("/viewer/query", {
             'database': cls.dedicated_db,

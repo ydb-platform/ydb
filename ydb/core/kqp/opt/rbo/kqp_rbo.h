@@ -79,10 +79,20 @@ class ISinglePassStage : public IRBOStage {
  */
 class TRuleBasedOptimizer {
   public:
-    TRuleBasedOptimizer(TVector<std::shared_ptr<IRBOStage>> stages, const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
-                        TTypeAnnotationContext &typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole)
-        : Stages(stages), KqpCtx(*kqpCtx), TypeCtx(typeCtx), RBOTypeAnnTransformer(rboTypeAnnTransformer), TypeAnnTransformer(typeAnnTransformer),
-          PeepholeTransformer(peephole) {}
+    TRuleBasedOptimizer(TVector<std::shared_ptr<IRBOStage>> stages, 
+                      const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx,
+                      TTypeAnnotationContext &typeCtx, 
+                      TAutoPtr<IGraphTransformer> rboTypeAnnTransformer, 
+                      TAutoPtr<IGraphTransformer> typeAnnTransformer, 
+                      TAutoPtr<IGraphTransformer> peephole,
+                      const NMiniKQL::IFunctionRegistry& funcRegistry) : 
+        Stages(stages), 
+        KqpCtx(*kqpCtx), 
+        TypeCtx(typeCtx), 
+        RBOTypeAnnTransformer(rboTypeAnnTransformer), 
+        TypeAnnTransformer(typeAnnTransformer),
+        PeepholeTransformer(peephole),
+        FuncRegistry(funcRegistry) {}
 
     TExprNode::TPtr Optimize(TOpRoot &root, TExprContext &ctx);
 
@@ -92,6 +102,7 @@ class TRuleBasedOptimizer {
     TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnTransformer;
     TAutoPtr<IGraphTransformer> PeepholeTransformer;
+    const NMiniKQL::IFunctionRegistry& FuncRegistry;
 };
 
 /**

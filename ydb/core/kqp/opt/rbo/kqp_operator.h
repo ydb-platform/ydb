@@ -267,9 +267,9 @@ class IOperator {
 
     const TTypeAnnotationNode* GetIUType(TInfoUnit iu);
 
-    virtual TVector<TExpNode::TPtr> GetLambdas() { return {}; }
+    virtual TVector<TExprNode::TPtr> GetLambdas() { return {}; }
 
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) { Y_UNUSED(map); Y_UNUSED_(ctx); }
+    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) { Y_UNUSED(map); Y_UNUSED(ctx); }
 
     /***
      * Rename information units of this operator using a specified mapping
@@ -345,7 +345,7 @@ class TOpMap : public IUnaryOperator {
            bool project);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
-    virtual TVector<TExpNode::TPtr> GetLambdas() override;
+    virtual TVector<TExprNode::TPtr> GetLambdas() override;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
 
     bool HasRenames() const;
@@ -400,7 +400,7 @@ class TOpFilter : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetScalarSubplanIUs(TPlanProps& props) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TVector<TExpNode::TPtr> GetLambdas() override;
+    virtual TVector<TExprNode::TPtr> GetLambdas() override;
     virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
 
     TVector<TInfoUnit> GetFilterIUs(TPlanProps& props) const;
@@ -437,8 +437,6 @@ class TOpLimit : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TVector<TExpNode::TPtr> GetLambdas() override;
-    virtual void ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) override;
 
     TExprNode::TPtr LimitCond;
 };
@@ -532,6 +530,8 @@ class TOpRoot : public IUnaryOperator {
 };
 
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right);
+
+TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx);
 
 } // namespace NKqp
 } // namespace NKikimr

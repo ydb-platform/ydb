@@ -1,4 +1,5 @@
 #include "kqp_operator.h"
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace {
 using namespace NKikimr;
@@ -124,6 +125,14 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
     }
 }
 
+} // namespace
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYql;
+using namespace NNodes;
+
 TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
     try {
         TConvertToAstSettings settings;
@@ -141,14 +150,6 @@ TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext & ctx) {
         return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
     }
 }
-
-} // namespace
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
-using namespace NNodes;
 
 /**
  * Scan expression and retrieve all members
@@ -388,6 +389,10 @@ std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(TVecto
 }
 
 
+/**
+ * Base class Operator methods
+ */
+
 void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
     Y_UNUSED(renameMap);
     Y_UNUSED(ctx);
@@ -398,10 +403,18 @@ const TTypeAnnotationNode* IOperator::GetIUType(TInfoUnit iu) {
     return structType->FindItemType(iu.GetFullName());
 }
 
+/**
+ * EmptySource operator methods
+ */
+
 TString TOpEmptySource::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx); 
     return "EmptySource"; 
 }
+
+/**
+ * OpRead operator methods
+ */
 
 TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node->Pos()) {
     auto opSource = TKqpOpRead(node);
@@ -440,6 +453,10 @@ TString TOpRead::ToString(TExprContext& ctx) {
     return res;
 }
 
+/**
+ * OpMap operator methods
+ */
+
 TOpMap::TOpMap(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements,
                bool project)
     : IUnaryOperator(EOperator::Map, pos, input), MapElements(mapElements), Project(project) {}
@@ -454,6 +471,16 @@ TVector<TInfoUnit> TOpMap::GetOutputIUs() {
     }
 
     return res;
+}
+
+TVector<TExprNode::TPtr> TOpMap::GetLambdas() {
+    TVector<TExprNode::TPtr> result;
+    for (auto &[_,body] : MapElements) {
+        if (std::holds_alternative<TExprNode::TPtr>(body)) {
+            result.push_back(std::get<TExprNode::TPtr>(body));
+        }
+    }
+    return result;
 }
 
 TVector<TInfoUnit> TOpMap::GetScalarSubplanIUs(TPlanProps& props) {
@@ -524,6 +551,19 @@ void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunc
     MapElements = newMapElements;
 }
 
+void TOpMap::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) {
+    TOptimizeExprSettings settings(&ctx.TypeCtx);
+    for (size_t i=0; i<MapElements.size(); i++) {
+        auto & body = MapElements[i].second;
+        if (std::holds_alternative<TExprNode::TPtr>(body)) {
+            auto bodyLambda = std::get<TExprNode::TPtr>(body);
+            RemapExpr(bodyLambda, bodyLambda, map, ctx.ExprCtx, settings);
+            MapElements[i].second = std::variant<TInfoUnit,TExprNode::TPtr>(bodyLambda);
+        }
+    }
+}
+
+
 TString TOpMap::ToString(TExprContext& ctx) {
     auto res = TStringBuilder();
     res << "Map [";
@@ -546,6 +586,10 @@ TString TOpMap::ToString(TExprContext& ctx) {
     }
     return res;
 }
+
+/**
+ * OpProject methods
+ */
 
 TOpProject::TOpProject(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TInfoUnit> projectList)
     : IUnaryOperator(EOperator::Project, pos, input), ProjectList(projectList) {}
@@ -584,6 +628,10 @@ TString TOpProject::ToString(TExprContext& ctx) {
     return res;
 }
 
+/**
+ * OpFilter operator methods
+ */
+
 TOpFilter::TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda)
     : IUnaryOperator(EOperator::Filter, pos, input), FilterLambda(filterLambda) {}
 
@@ -591,6 +639,15 @@ TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs()
 
 void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx) {
     FilterLambda = RenameMembers(FilterLambda, renameMap, ctx);
+}
+
+TVector<TExprNode::TPtr> TOpFilter::GetLambdas() {
+    return {FilterLambda};
+}
+
+void TOpFilter::ApplyReplaceMap(TNodeOnNodeOwnedMap map, TRBOContext & ctx) {
+    TOptimizeExprSettings settings(&ctx.TypeCtx);
+    RemapExpr(FilterLambda, FilterLambda, map, ctx.ExprCtx, settings);
 }
 
 TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
@@ -666,6 +723,10 @@ TString TOpFilter::ToString(TExprContext& ctx) {
     return TStringBuilder() << "Filter :" << PrintRBOExpression(FilterLambda, ctx);
 }
 
+/**
+ * OpJoin operator methods
+ */
+
 TOpJoin::TOpJoin(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput, TPositionHandle pos, TString joinKind,
                  TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys)
     : IBinaryOperator(EOperator::Join, pos, leftInput, rightInput), JoinKind(joinKind), JoinKeys(joinKeys) {}
@@ -706,6 +767,10 @@ TString TOpJoin::ToString(TExprContext& ctx) {
     return res;
 }
 
+/**
+ * OpUnionAll operator methods
+ */
+
 TOpUnionAll::TOpUnionAll(std::shared_ptr<IOperator> leftInput, std::shared_ptr<IOperator> rightInput, TPositionHandle pos, bool ordered)
     : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
 
@@ -717,6 +782,10 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx); 
     return "UnionAll"; 
 }
+
+/**
+ * OpLimit operator methods
+ */
 
 TOpLimit::TOpLimit(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr limitCond)
     : IUnaryOperator(EOperator::Limit, pos, input), LimitCond(limitCond) {}
@@ -730,6 +799,10 @@ void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFu
 TString TOpLimit::ToString(TExprContext& ctx) {
     return TStringBuilder() << "Limit: " << PrintRBOExpression(LimitCond, ctx); 
 }
+
+/**
+ * OpAggregate operator methods
+ */
 
 TOpAggregate::TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggTraitsList, TVector<TInfoUnit>& keyColumns,
                            EAggregationPhase aggPhase, TPositionHandle pos)
@@ -772,6 +845,10 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
     strBuilder << ")";
     return strBuilder;
 }
+
+/**
+ * OpRoot operator methods
+ */
 
 TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos, TVector<TString> columnOrder) : 
     IUnaryOperator(EOperator::Root, pos, input), 

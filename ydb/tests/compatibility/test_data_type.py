@@ -62,7 +62,7 @@ class TestDataType(RestartToAnotherVersionFixture):
             "enable_table_datetime64": True,
         }
 
-        if min(self.versions) >= (26, 1):
+        if min(self.versions) >= (25, 4):
             extra_feature_flags["enable_columnshard_bool"] = True
 
         yield from self.setup_cluster(

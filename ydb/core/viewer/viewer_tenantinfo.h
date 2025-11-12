@@ -151,9 +151,6 @@ public:
             ListTenantsResponse = MakeRequestConsoleListTenants();
             NavigateKeySetResult[DomainPath] = MakeRequestSchemeCacheNavigate(DomainPath);
         } else {
-            if (Database != DomainPath) {
-                TenantStatusResponses[Database] = MakeRequestConsoleGetTenantStatus(Database);
-            }
             NavigateKeySetResult[Database] = MakeRequestSchemeCacheNavigate(Database);
         }
 

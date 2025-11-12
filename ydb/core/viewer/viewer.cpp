@@ -300,6 +300,7 @@ public:
             }
             if (was_groups >= max_groups) {
                 result << "...";
+                break;
             }
             if (IsStaticGroup(group)) {
                 result << "static ";
@@ -311,15 +312,14 @@ public:
         return result;
     }
 
-    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) override {
+    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, TString& bscError, bool& forceRetryPossible) override {
         forceRetryPossible = false;
-        if (response.GroupsGetDisintegratedByExpectedStatusSize()) {
-            bscError = TStringBuilder() << "Calling this operation could cause " << GetGroupList(response.GetGroupsGetDisintegratedByExpectedStatus()) << " to go into a dead state";
-        } else if (response.GroupsGetDisintegratedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to go into a dead state";
+        if (response.GroupsGetDisintegratedSize()) {
+            bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to become unavailable";
+            forceRetryPossible = CheckAccessAdministration(request);
         } else if (response.GroupsGetDegradedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to go into a degraded state";
-            forceRetryPossible = true;
+            bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to enter a critical state, one step away from becoming unavailable";
+            forceRetryPossible = CheckAccessMonitoring(request);
         } else if (response.StatusSize()) {
             const auto& lastStatus = response.GetStatus(response.StatusSize() - 1);
             TVector<ui32> groups;
@@ -329,10 +329,11 @@ public:
                 }
             }
             if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded) {
-                bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(groups) << " to go into a degraded state";
-                forceRetryPossible = true;
+                bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(groups) << " to enter a critical state, one step away from becoming unavailable";
+                forceRetryPossible = CheckAccessMonitoring(request);
             } else if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayLoseData) {
-                bscError = TStringBuilder() << "Calling this operation may result in data loss for " << GetGroupList(groups);
+                bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(groups) << " to become unavailable";
+                forceRetryPossible = CheckAccessAdministration(request);
             } else if (lastStatus.GetErrorDescription().find("failed to allocate group: no group options") != TString::npos) {
                 bscError = "Failed to allocate group";
             }

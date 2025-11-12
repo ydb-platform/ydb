@@ -558,14 +558,16 @@ struct TAsyncCATestFixture: public NUnitTest::TBaseFixture {
         TDqSerializedBatch sbatch;
         auto& channelData = *ev->Get()->Record.MutableChannelData();
         sbatch.Proto = std::move(*channelData.MutableData());
-        dqInputChannel->Push(std::move(sbatch));
+        dqInputChannel->Push(std::move(sbatch), Nothing());
         bool finished = channelData.GetFinished();
         if (finished) {
             dqInputChannel->Finish();
         }
         TUnboxedValueBatch batch;
+        TMaybe<TInstant> watermark;
         const auto columns = IsWide ? static_cast<TMultiType*>(dqInputChannel->GetInputType())->GetElementsCount() : static_cast<TStructType*>(dqInputChannel->GetInputType())->GetMembersCount();
-        while (dqInputChannel->Pop(batch)) {
+        while (dqInputChannel->Pop(batch, watermark)) {
+            UNIT_ASSERT(watermark.Empty());
             if (IsWide) {
                 if (!batch.ForEachRowWide([this, cb, columns](const NUdf::TUnboxedValue row[], ui32 width) {
                     LOG_D("WideRow:");

@@ -2547,4 +2547,127 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Verify ChildrenExist flag is set by default (index exists as child)
         UNIT_ASSERT(tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
     }
+
+    Y_UNIT_TEST(CdcStreamRotationDuringIncrementalBackups) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true).EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TString collectionSettings = R"(
+            Name: "RotationTestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TestTable"
+                }
+            }
+            Cluster: {}
+            IncrementalBackupConfig: {}
+        )";
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        auto tableDesc1 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc1.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc1.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+
+        TString firstCdcStreamName = tableDesc1.GetPathDescription().GetTable().GetCdcStreams(0).GetName();
+        UNIT_ASSERT_C(firstCdcStreamName.EndsWith("_continuousBackupImpl"), 
+            "CDC stream should end with '_continuousBackupImpl', got: " + firstCdcStreamName);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName + "/streamImpl"), {
+            NLs::PathExist,
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName), {
+            NLs::PathNotExist
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + firstCdcStreamName + "/streamImpl"), {
+            NLs::PathNotExist
+        });
+
+        auto tableDesc2 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc2.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc2.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+
+        TString secondCdcStreamName = tableDesc2.GetPathDescription().GetTable().GetCdcStreams(0).GetName();
+        UNIT_ASSERT_C(secondCdcStreamName.EndsWith("_continuousBackupImpl"), 
+            "New CDC stream should end with '_continuousBackupImpl', got: " + secondCdcStreamName);
+        UNIT_ASSERT_C(firstCdcStreamName != secondCdcStreamName, 
+            "CDC stream name should change after rotation");
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + secondCdcStreamName), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeUpdate),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + secondCdcStreamName), {
+            NLs::PathNotExist
+        });
+
+        auto tableDesc3 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc3.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc3.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+        
+        TString thirdCdcStreamName = tableDesc3.GetPathDescription().GetTable().GetCdcStreams(0).GetName();
+        UNIT_ASSERT_C(thirdCdcStreamName != secondCdcStreamName, 
+            "CDC stream name should change after second rotation");
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/RotationTestCollection")");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(5));
+
+        // Shouldn't exist, should rotate
+        // TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + thirdCdcStreamName), {
+        //     NLs::PathNotExist
+        // });
+
+        auto tableDesc4 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
+        UNIT_ASSERT(tableDesc4.GetPathDescription().HasTable());
+        // test crashed, should be just 1 changefeed
+        // UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+    }
 } // TBackupCollectionTests

@@ -172,7 +172,7 @@ private:
     }
 
     void CheckFinished(TColumnShard& owner) {
-        if (WaitShardsResultAck.empty()) {
+        if (!IsInProgress()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished");
             owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         }
@@ -255,7 +255,7 @@ private:
     }
 
     virtual bool DoIsInProgress() const override {
-        return WaitShardsResultAck.size();
+        return WaitShardsBrokenFlags.size() || WaitShardsResultAck.size();
     }
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);

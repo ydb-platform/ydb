@@ -544,7 +544,7 @@ private:
                 TAllocationAnalyzer analyzer(std::move(profile));
                 TAllocationStats allocationStats;
                 analyzer.Prepare(&allocationStats);
-                analyzer.Dump(*Out_, 256, 1024, true, true);
+                analyzer.Dump(*Out_, 256, 3, true, true);
             } catch (...) {
                 kill(getppid(), SIGCONT);
                 throw;
@@ -670,7 +670,7 @@ private:
     }
 
     void DumpCurrent(IOutputStream& out, tcmalloc::ProfileType type,
-        size_t stackCountLimit = 256, size_t sampleCountLimit = 1024, bool forLog = false)
+        size_t stackCountLimit = 256, size_t sampleCountLimit = 3, bool forLog = false)
     {
         auto start = TInstant::Now();
         auto profile = tcmalloc::MallocExtension::SnapshotCurrent(type);
@@ -861,7 +861,7 @@ public:
         out << stats << Endl;
 
         out << "======== TCMALLOC HEAP" << Endl;
-        DumpCurrent(out, tcmalloc::ProfileType::kHeap, limit, 128, true);
+        DumpCurrent(out, tcmalloc::ProfileType::kHeap, limit, 3, true);
     }
 };
 
@@ -885,7 +885,7 @@ public:
         const char* sep = forLog ? " | " : "\n";
         allocationStats.DumpSizeStats(out, marker, sep);
         allocationStats.DumpTagStats(out, marker, sep);
-        analyzer.Dump(out, countLimit, 1024, false, forLog);
+        analyzer.Dump(out, countLimit, 3, false, forLog);
     }
 };
 

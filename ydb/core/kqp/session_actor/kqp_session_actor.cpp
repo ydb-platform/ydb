@@ -2381,9 +2381,7 @@ public:
         }
 
         if (QueryState->Commit) {
-            if (QueryState->TxCtx) {
-                QueryState->TxCtx->BufferActorId = {};
-            }
+            TerminateBufferActor(QueryState->TxCtx);
             ResetTxState();
             Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             QueryState->TxId.Reset();

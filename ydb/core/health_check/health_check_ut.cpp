@@ -3090,7 +3090,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
         Ctest << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 2, TLocationFilter().Pile("pile0"));
     }
 }
 }

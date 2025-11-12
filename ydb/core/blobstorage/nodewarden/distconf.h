@@ -273,7 +273,7 @@ namespace NKikimr::NStorage {
         std::vector<ui32> NodeIdsForOutgoingBinding;
         std::vector<ui32> NodeIdsForIncomingBinding;
         std::vector<ui32> NodeIdsForPrimaryPileOutgoingBinding;
-        THashSet<ui32> AllNodeIds;
+        THashMap<ui32, TNodeIdentifier> AllNodeIds;
         THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
         std::optional<TString> SelfNodeBridgePileName;
@@ -364,7 +364,7 @@ namespace NKikimr::NStorage {
         void Bootstrap();
         void PassAway() override;
         void Halt(); // cease any distconf activity, unbind and reject any bindings
-        bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config, bool fromBinding = false);
+        bool ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config);
         void HandleConfigConfirm(STATEFN_SIG);
         void ReportStorageConfigToNodeWarden();
 
@@ -406,7 +406,7 @@ namespace NKikimr::NStorage {
         void AbortBinding(const char *reason, bool sendUnbindMessage = true, bool sendUpdate = true);
         void HandleWakeup();
         void Handle(TEvNodeConfigReversePush::TPtr ev);
-        void FanOutReversePush();
+        void FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig);
         void UnbindNodesFromOtherPiles(const char *reason);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

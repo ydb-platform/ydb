@@ -69,7 +69,7 @@ DO BEGIN
 
     $number_errors =
         SELECT COUNT(*) AS error_count, CAST(HOP_START() as String) as ts FROM $filtered
-        GROUP BY HOP(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'), host;
+        GROUP BY HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'), host;
     
     $json = SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $number_errors;
     INSERT INTO `source_name`.`output_topic_name` SELECT * FROM $json;

@@ -564,6 +564,20 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             GetMessage(FIRST_OFFSET + 2, R"({"a2": "102"})")
         });
     }
+
+    Y_UNIT_TEST_F(SkipErrors1JsonIn2Messages, TJsonParserFixtureSkipErrors) {
+        ExpectedBatches = 1;
+        CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> /*result*/) {
+            UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
+        }, false));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET,     R"({"a1": "hel)"),
+            GetMessage(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),
+            GetMessage(FIRST_OFFSET + 2, R"({"a1": "hello0", "a2": "100"})"),
+            GetMessage(FIRST_OFFSET + 3, R"({"a2": "hello2", "a2": "102"})"),
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TestRawParser) {

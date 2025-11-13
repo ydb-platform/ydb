@@ -74,7 +74,7 @@ on:
           - release-tsan
         default: relwithdebinfo
       pull_number:
-        description: 'Pull request number, ex: 12345'
+        description: 'Pull request number with pull/* prefix, ex: pull/12345'
         required: false
         default: ''
 
@@ -95,7 +95,7 @@ jobs:
         env:
           CALLED_BRANCHES: '${{ inputs.branches }}'
           BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
-          PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
+          PREFIXED_PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
           GITHUB_TOKEN: '${{ github.token }}'
         run: |
           # Проверяем, был ли передан параметр branches из вызывающего workflow
@@ -140,7 +140,8 @@ jobs:
             echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
-          elif [[ -n "$PULL_REQUEST_NUMBER" ]]; then
+          elif [[ $PREFIXED_PULL_REQUEST_NUMBER =~ ^pull/([0-9]+)$ ]] then
+            PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
             MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                   "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
                   jq -r '.merge_commit_sha')

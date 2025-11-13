@@ -10,7 +10,7 @@
 namespace NYdb::NTPCC {
 
 struct TCustomer {
-    int c_id;
+    int c_id = 0;
     TString c_first;
     TString c_middle;
     TString c_last;
@@ -22,11 +22,11 @@ struct TCustomer {
     TString c_phone;
     TString c_credit;
     TString c_data;
-    double c_credit_lim;
-    double c_discount;
-    double c_balance;
-    double c_ytd_payment;
-    int c_payment_cnt;
+    double c_credit_lim = 0;
+    double c_discount = 0;
+    double c_balance = 0;
+    double c_ytd_payment = 0;
+    int c_payment_cnt = 0;
     TInstant c_since;
 };
 

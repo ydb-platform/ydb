@@ -36,7 +36,7 @@ bool TSchedulableTask::TryIncreaseUsage() {
     ui64 fairShare = 0;
     NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
-    if (const auto snapshot = Query->GetSnapshot()) {
+    if (const auto snapshot = Query->GetSnapshot()) { // TODO: got segfault here on ~shared_ptr - need to investigate.
         fairShare = snapshot->GetParent()->FairShare;
         poolOrQuery = Query->GetParent();
     } else {
@@ -87,11 +87,9 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedRes
 }
 
 size_t TSchedulableTask::GetSpareUsage() const {
-    const auto snapshot = Query->GetSnapshot();
-    const auto* parent = Query->GetParent();
-    if (snapshot && parent) {
+    if (const auto snapshot = Query->GetSnapshot()) {
         // TODO: check this code when the pool removal will be implemented, since the `parent` may be gone.
-        auto usage = parent->Usage.load();
+        auto usage = Query->GetParent()->Usage.load();
         auto fairShare = snapshot->GetParent()->FairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }

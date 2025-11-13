@@ -249,8 +249,9 @@ Y_UNIT_TEST(AddIndexSnowball) {
     UpsertTexts(db);
     AddIndexSnowball(db);
     const auto index = ReadIndex(db);
+    Cerr << index.RowsCount() << Endl;
     CompareYson(R"([
-        [[[100u];"anim"];
+        [[100u];"anim"];
         [[100u];"cat"];
         [[200u];"cat"];
         [[300u];"cat"];

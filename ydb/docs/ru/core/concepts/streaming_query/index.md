@@ -43,7 +43,7 @@
 
 ```sql
 CREATE EXTERNAL DATA SOURCE `source_name` WITH (
-    SOURCE_TYPE = "YDB",
+    SOURCE_TYPE = "Ydb",
     LOCATION="localhost:2135",
     DATABASE_NAME="/Root",
     AUTH_METHOD = "NONE"

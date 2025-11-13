@@ -123,6 +123,11 @@ struct TIntTUnitPairHash {
 /**
  * Global stage that removed unnecessary renames and unused columns
  */
+
+TRenameStage::TRenameStage() {
+    Props = ERuleProperties::RequireParents;
+}
+
 void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     YQL_CLOG(TRACE, CoreDq) << "Before compute parents";

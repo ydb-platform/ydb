@@ -61,7 +61,7 @@ namespace NActors {
         };
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
-            Proxy->Common->Settings.MaxSerializedEventSize, Params);
+            Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
@@ -95,6 +95,11 @@ namespace NActors {
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
         LOG_INFO_IC_SESSION("ICS01", "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
 
+        // Move RdmaQp to the error state to prevent read our memory from the peer side after possible desctuction events
+        if (RdmaQp) {
+            RdmaQp->ToErrorState();
+        }
+
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
@@ -125,6 +130,7 @@ namespace NActors {
 
         Proxy->Metrics->SubOutputBuffersTotalSize(TotalOutputQueueSize);
         Proxy->Metrics->SubInflightDataAmount(InflightDataAmount);
+        Proxy->Metrics->SubInflightRdmaDataAmount(RdmaInflightDataAmount);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session destroyed", Proxy->PeerNodeId);
 
@@ -450,7 +456,7 @@ namespace NActors {
             bool canProducePackets;
             bool canWriteData;
 
-            canProducePackets = NumEventsInQueue && InflightDataAmount < GetTotalInflightAmountOfData() &&
+            canProducePackets = NumEventsInQueue && (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() &&
                 GetUnsentSize() < GetUnsentLimit();
 
             canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
@@ -487,8 +493,12 @@ namespace NActors {
         // we exit cycle
         static constexpr ui32 maxBytesToProduce = 64 * 1024;
         ui32 bytesProduced = 0;
-        while (NumEventsInQueue && InflightDataAmount < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
-            if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce) {
+        // Give more chanse to send XDC command via regular channel after RDMA region preparation.
+        // It reduces rdma memory usage and latency but in theory may also decrease effecincy of regular tcp channel in case of mixed RDMA + TCP traffic
+        // TODO (dcherednik): recheck impact on the huge clusters
+        const ui64 rdmaBytesToProduce = RdmaInflightDataAmount; 
+        while (NumEventsInQueue &&  (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
+            if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce || RdmaInflightDataAmount > rdmaBytesToProduce) {
                 break;
             }
             try {
@@ -891,8 +901,10 @@ namespace NActors {
             Y_ABORT_UNLESS(!packet.IsEmpty());
 
             InflightDataAmount += packet.GetDataSize();
+            RdmaInflightDataAmount += packet.GetRdmaPayloadSize();
             Proxy->Metrics->AddInflightDataAmount(packet.GetDataSize());
-            if (InflightDataAmount > GetTotalInflightAmountOfData()) {
+            Proxy->Metrics->AddInflightRdmaDataAmount(packet.GetRdmaPayloadSize());
+            if ((InflightDataAmount + RdmaInflightDataAmount) > GetTotalInflightAmountOfData()) {
                 Proxy->Metrics->IncInflyLimitReach();
             }
 
@@ -930,12 +942,14 @@ namespace NActors {
         if (data) {
             SendQueue.push_back(TOutgoingPacket{
                 static_cast<ui32>(packetSize),
-                static_cast<ui32>(packet.GetExternalSize())
+                static_cast<ui32>(packet.GetExternalSize()),
+                packet.GetRdmaPayloadSize()
             });
         }
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %" PRIu32
-            " InflightDataAmount# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(), InflightDataAmount);
+            " RdmaPayload# %" PRIu32 " InflightDataAmount# %" PRIu64 " RdmaInflightDataAmount# %" PRIu64, serial, lastInputSerial,
+            packet.GetDataSize(), packet.GetRdmaPayloadSize(), InflightDataAmount, RdmaInflightDataAmount);
 
         // reset forced packet sending timestamp as we have confirmed all received data
         ResetFlushLogic();
@@ -960,6 +974,7 @@ namespace NActors {
         // making Serial <= confirm true
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
+        size_t bytesDroppedFromRdma = 0;
         ui64 frontPacketSerial = OutputCounter - SendQueue.size() + 1;
         Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
             "OutgoingIndex# %zu SendQueue.size# %zu OutgoingOffset# %zu Unsent# %zu Total# %zu",
@@ -971,6 +986,7 @@ namespace NActors {
             XdcOffset -= front.ExternalSize;
             bytesDropped += front.PacketSize;
             bytesDroppedFromXdc += front.ExternalSize;
+            bytesDroppedFromRdma += front.RdmaPayloadSize;
             ++numDropped;
 
             ++frontPacketSerial;
@@ -993,11 +1009,13 @@ namespace NActors {
 
         PacketsConfirmed += numDropped;
         InflightDataAmount -= droppedDataAmount;
+        RdmaInflightDataAmount -= bytesDroppedFromRdma;
         Proxy->Metrics->SubInflightDataAmount(droppedDataAmount);
+        Proxy->Metrics->SubInflightRdmaDataAmount(bytesDroppedFromRdma);
         LWPROBE(DropConfirmed, Proxy->PeerNodeId, droppedDataAmount, InflightDataAmount);
 
-        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
-            " dropped %" PRIu32 " packets", InflightDataAmount, droppedDataAmount, numDropped);
+        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes RdmaInflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
+            " dropped %" PRIu32 " rdma bytes dropped %" PRIu32 " packets", InflightDataAmount, RdmaInflightDataAmount, droppedDataAmount, bytesDroppedFromRdma, numDropped);
 
         Pool->Trim(); // send any unsent free requests
 
@@ -1015,7 +1033,7 @@ namespace NActors {
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
             const ui32 grossBefore = task.GetDataSize();
-            const bool eventDone = channel->FeedBuf(task, serial);
+            const bool eventDone = channel->FeedBuf(task, serial, RdmaQp ? RdmaQp->GetDeviceIndex() : -1);
             const ui32 grossAfter = task.GetDataSize();
             Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
             const ui32 gross = grossAfter - grossBefore;
@@ -1375,6 +1393,7 @@ namespace NActors {
                             MON_VAR(NumEventsInQueue)
                             MON_VAR(TotalOutputQueueSize)
                             MON_VAR(InflightDataAmount)
+                            MON_VAR(RdmaInflightDataAmount)
                             MON_VAR(unsentQueueSize)
                             MON_VAR(SendBufferSize)
                             MON_VAR(now - LastInputActivityTimestamp)

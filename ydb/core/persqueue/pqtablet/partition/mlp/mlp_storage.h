@@ -179,6 +179,7 @@ public:
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
     bool MarkDLQMoved(TDLQMessage message);
+    bool WakeUpDLQ();
 
     size_t ProccessDeadlines();
     size_t Compact();

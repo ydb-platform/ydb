@@ -748,7 +748,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     }
 
     auto& moved = ev->Get()->MovedMessages;
-    //LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
+    LOG_D("Moved to the DLQ: " << JoinRange(", ", moved.begin(), moved.end()));
 
     DLQMoverActorId = {};
     for (auto [offset, seqNo] : moved) {
@@ -757,6 +757,10 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
             .SeqNo = seqNo
         });
         AFL_ENSURE(result)("o", offset)("s", seqNo);
+    }
+
+    if (ev->Get()->Status == Ydb::StatusIds::NOT_FOUND) {
+        Storage->WakeUpDLQ();
     }
 
     if (CurrentStateFunc() == &TConsumerActor::StateWork) {

@@ -82,6 +82,11 @@ inline void Out<std::pair<ui64 const, ui64>>(IOutputStream& o, const std::pair<u
 }
 
 template<>
+inline void Out<std::pair<ui64, ui64>>(IOutputStream& o, const std::pair<ui64, ui64>& p) {
+    o << "(" << p.first << ", " << p.second << ")";
+}
+
+template<>
 inline void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
     o << "(" << p.Offset << ", " << p.SeqNo << ")";
 }

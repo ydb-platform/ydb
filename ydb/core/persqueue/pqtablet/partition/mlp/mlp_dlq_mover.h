@@ -42,7 +42,7 @@ private:
     STFUNC(StateWrite);
 
     void ReplySuccess();
-    void ReplyError(TString&& error);
+    void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
 
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
@@ -52,6 +52,7 @@ private:
     TString ProducerId;
     std::deque<TDLQMessage> Queue;
 
+    Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TString Error;
     std::vector<std::pair<ui64, ui64>> Processed;
 

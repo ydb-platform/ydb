@@ -41,33 +41,21 @@ void TStorage::SetRetentionPeriod(std::optional<TDuration> retentionPeriod) {
 void TStorage::SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy) {
     DeadLetterPolicy = deadLetterPolicy;
 
-    if (DeadLetterPolicy && DeadLetterPolicy.value() == NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE) {
-        return;
-    }
-
     auto policy = DeadLetterPolicy.value_or(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED);
-    for (auto [offset, seqNo] : std::exchange(DLQMessages, {})) {
-        switch (policy) {
-            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
-                // unreachable
-                break;
-            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+    switch (policy) {
+        case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+            break;
+        case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+            for (auto [offset, _] : std::exchange(DLQMessages, {})) {
                 Commit(offset);
-                break;
-            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED: {
-                auto [message, _] = GetMessageInt(offset);
-                message->Status = EMessageStatus::Unprocessed;
-                Batch.AddChange(offset);
-
-                --Metrics.DLQMessageCount;
-                ++Metrics.UnprocessedMessageCount;
-
-                break;
             }
-        }
+            DLQQueue = {};
+            break;
+        case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+            WakeUpDLQ();
+            break;
     }
 
-    DLQQueue = {};
 }
 
 std::optional<ui32> TStorage::GetRetentionDeadlineDelta() const {
@@ -382,6 +370,25 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
     }
 
     return false;
+}
+
+bool TStorage::WakeUpDLQ() {
+    for (auto [offset, _] : DLQMessages) {
+        auto [message, __] = GetMessageInt(offset, EMessageStatus::DLQ);
+        if (message) {
+            message->Status = EMessageStatus::Unprocessed;
+
+            Batch.AddChange(offset);
+
+            --Metrics.DLQMessageCount;
+            ++Metrics.UnprocessedMessageCount;
+        }
+    }
+
+    DLQMessages.clear();
+    DLQQueue.clear();
+
+    return true;
 }
 
 std::pair<const TStorage::TMessage*, bool> TStorage::GetMessageInt(ui64 offset) const {

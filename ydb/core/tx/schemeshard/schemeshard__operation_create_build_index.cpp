@@ -199,10 +199,17 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             }
+            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
+                .get_layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
-            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription());
+            auto implTableDesc = CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription(), withRelevance);
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
+            if (withRelevance) {
+                result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextTokensImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc, indexDesc.GetFulltextIndexDescription())));
+            }
             break;
         }
         default:

@@ -86,6 +86,17 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 
 namespace NFulltext {
     inline constexpr const char* TokenColumn = "__ydb_token";
+    inline constexpr const char* FreqColumn = "__ydb_freq";
+    inline constexpr const char* IdColumn = "__ydb_id";
+
+    inline constexpr const char* DocsTable = "indexImplDocsTable";
+    inline constexpr const char* DocLengthColumn = "__ydb_length";
+
+    inline constexpr const char* TokensTable = "indexImplTokensTable";
+
+    inline constexpr const char* StatsTable = "indexImplStatsTable";
+    inline constexpr const char* DocCountColumn = "__ydb_doc_count";
+    inline constexpr const char* TotalDocLengthColumn = "__ydb_total_length";
 }
 
 TString ToShortDebugString(const NKikimrTxDataShard::TEvReshuffleKMeansRequest& record);

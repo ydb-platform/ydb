@@ -301,6 +301,7 @@ public:
     enum class ELayout {
         Unspecified = 0,
         Flat,
+        FlatRelevance,
     };
 
     enum class ETokenizer {

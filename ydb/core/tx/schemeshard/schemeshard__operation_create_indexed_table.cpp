@@ -357,8 +357,15 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     // This description provided by user to override partition policy
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
+                bool withRelevance = indexDescription.GetFulltextIndexDescription().GetSettings()
+                    .get_layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
                 const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription())));
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), withRelevance)));
+                if (withRelevance) {
+                    result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextTokensImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc, indexDescription.GetFulltextIndexDescription())));
+                }
                 break;
             }
             default:

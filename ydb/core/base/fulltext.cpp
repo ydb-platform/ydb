@@ -20,9 +20,11 @@ namespace {
 
     Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout_, TString& error) {
         const TString layout = to_lower(layout_);
-        if (layout == "flat")
+        if (layout == "flat") {
             return Ydb::Table::FulltextIndexSettings::FLAT;
-        else {
+        } else if (layout == "flat_relevance") {
+            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
+        } else {
             error = TStringBuilder() << "Invalid layout: " << layout_;
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }

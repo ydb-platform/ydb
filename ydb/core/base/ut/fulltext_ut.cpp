@@ -111,6 +111,10 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT);
 
+        UNIT_ASSERT_C(FillSetting(settings, "layout", "flat_relevance", error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+        UNIT_ASSERT_EQUAL(settings.layout(), Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE);
+
         UNIT_ASSERT_C(FillSetting(settings, "tokenizer", "standard", error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         UNIT_ASSERT_EQUAL(settings.columns().at(0).analyzers().tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);

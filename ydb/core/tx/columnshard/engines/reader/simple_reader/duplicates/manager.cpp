@@ -116,9 +116,8 @@ TIntervalsInterator TDuplicateManager::StartIntervalProcessing(
                 Counters->OnFilterCacheHit();
                 return true;
             }
-            auto [inFlight, emplaced] = IntervalsInFlight.emplace(intervalView, THashMap<ui64, std::vector<TIntervalFilterCallback>>());
-            AFL_VERIFY(!inFlight->second.contains(mainPortion->GetPortionId()));
-            inFlight->second[mainPortion->GetPortionId()].emplace_back(TIntervalFilterCallback(nextIntervalIdx - 1, constructor));
+            auto [inFlight, emplaced] = IntervalsInFlight.emplace(intervalView, TIntervalInFlightInfo());
+            inFlight->second.AddSubscriber(mainPortion->GetPortionId(), TIntervalFilterCallback(nextIntervalIdx - 1, constructor));
             if (emplaced) {
                 intervalsToBuild.emplace_back(nextIntervalIdx - 1);
                 Counters->OnFilterCacheMiss();
@@ -168,13 +167,22 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         }
 
         AFL_VERIFY(!constructor->IsDone());
-        TBuildFilterContext columnFetchingRequest(SelfId(), constructor, std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema,
+        TBuildFilterContext columnFetchingRequest(SelfId(), constructor->GetRequest()->Get()->GetAbortionFlag(),
+            constructor->GetRequest()->Get()->GetMaxVersion(), std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema,
             ColumnDataManager, DataAccessorsManager, Counters, std::move(requestGuard), memoryGuard);
         memoryGuard->Update(columnFetchingRequest.GetDataSize());
+
+        for (const auto& interval : intervalsIterator.GetIntervals()) {
+            auto findInFlight = IntervalsInFlight.FindPtr(interval.MakeView());
+            AFL_VERIFY(findInFlight);
+            findInFlight->SetJob(columnFetchingRequest.GetStatus());
+        }
 
         std::shared_ptr<TBuildFilterTaskExecutor> executor = std::make_shared<TBuildFilterTaskExecutor>(std::move(intervalsIterator));
         AFL_VERIFY(executor->ScheduleNext(std::move(columnFetchingRequest)));
     }
+
+    ValidateInFlightProgress();
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr& ev) {
@@ -187,19 +195,16 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterConstructionResult::TPtr
     AFL_VERIFY(ev->Get()->GetConclusion().GetResult().size());
     for (auto&& [mapInfo, filter] : ev->Get()->ExtractResult()) {
         if (auto findInterval = IntervalsInFlight.find(mapInfo.GetInterval()); findInterval != IntervalsInFlight.end()) {
-            if (auto findPortion = findInterval->second.find(mapInfo.GetSourceId()); findPortion != findInterval->second.end()) {
-                for (auto& callback : findPortion->second) {
-                    callback.OnFilterReady(filter);
-                }
-                findInterval->second.erase(findPortion);
-            }
-            if (findInterval->second.empty()) {
+            findInterval->second.OnFilterReady(mapInfo.GetSourceId(), filter);
+            if (findInterval->second.IsDone()) {
                 IntervalsInFlight.erase(findInterval);
             }
         }
         FiltersCache.Insert(mapInfo, filter);
         LOCAL_LOG_TRACE("event", "extract_constructed_filter")("range", mapInfo.DebugString());
     }
+
+    ValidateInFlightProgress();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

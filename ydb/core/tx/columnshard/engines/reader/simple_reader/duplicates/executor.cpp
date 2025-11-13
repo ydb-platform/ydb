@@ -19,7 +19,8 @@ private:
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-                new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
+                new NPrivate::TEvFilterConstructionResult(
+                    TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
 
@@ -30,8 +31,7 @@ private:
     }
 
     virtual bool DoIsAborted() const override {
-        return Request.GetGlobalContext().GetContext()->GetRequest()->Get()->GetAbortionFlag() &&
-               Request.GetGlobalContext().GetContext()->GetRequest()->Get()->GetAbortionFlag()->Val();
+        return Request.GetGlobalContext().GetAbortionFlag() && Request.GetGlobalContext().GetAbortionFlag()->Val();
     }
 
 public:
@@ -45,7 +45,8 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetGlobalContext().GetOwner());
         TActorContext::AsActorContext().Send(
-            Request.GetGlobalContext().GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage)));
+            Request.GetGlobalContext().GetOwner(), new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(errorMessage),
+                                                       Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
 };
 
@@ -55,7 +56,9 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        Request.GetGlobalContext().GetContext()->Abort(TStringBuilder() << "cannot allocate memory: " << errorMessage);
+        TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+                Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
@@ -86,7 +89,9 @@ private:
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         if (result.HasErrors()) {
-            Request.GetGlobalContext().GetContext()->Abort(result.GetErrorMessage());
+            TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+                new NPrivate::TEvFilterConstructionResult(
+                    TConclusionStatus::Fail(result.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
             return;
         }
 
@@ -101,7 +106,7 @@ private:
             { std::make_shared<TColumnDataAllocation>(std::move(Request), mem) }, (ui64)TFilterAccumulator::EFetchingStage::COLUMN_DATA);
     }
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
-        return Request.GetGlobalContext().GetContext()->GetRequest()->Get()->GetAbortionFlag();
+        return Request.GetGlobalContext().GetAbortionFlag();
     }
 
 public:
@@ -127,7 +132,9 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        Request.GetGlobalContext().GetContext()->Abort(TStringBuilder() << "cannot allocate memory: " << errorMessage);
+        TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+            new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
+                Request.GetGlobalContext().MakeResultInFlightGuard()));
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
@@ -168,9 +175,6 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
         return false;
     }
 
-    AFL_VERIFY(!context.GetContext()->IsDone());
-    AFL_VERIFY(portionIds.contains(context.GetContext()->GetRequest()->Get()->GetSourceId()))(
-        "main_portion", context.GetContext()->GetRequest()->Get()->GetSourceId())("required_portions", JoinSeq(',', portionIds));
     const ui64 mem = TColumnDataAccessorFetching::GetRequiredMemory(portionIds, context);
     const ui64 processId = context.GetRequestGuard()->GetMemoryProcessId();
     const ui64 scopeId = context.GetRequestGuard()->GetMemoryScopeId();

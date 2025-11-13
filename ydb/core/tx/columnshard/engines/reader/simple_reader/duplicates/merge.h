@@ -111,11 +111,12 @@ private:
 
 public:
     TBuildDuplicateFilters(TBuildFilterTaskContext&& context,
-        THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
+        THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns,
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
         : Context(std::move(context))
         , ColumnData(std::move(columns))
         , AllocationGuard(allocationGuard)
-        , ScanSnapshotBatch(GetVersionBatch(Context.GetGlobalContext().GetContext()->GetRequest()->Get()->GetMaxVersion(), std::numeric_limits<ui64>::max()))
+        , ScanSnapshotBatch(GetVersionBatch(Context.GetGlobalContext().GetMaxVersion(), std::numeric_limits<ui64>::max()))
         , MinUncommittedSnapshotBatch(GetVersionBatch(TSnapshot::Max(), 0))
     {
     }

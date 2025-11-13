@@ -110,7 +110,7 @@ private:
     };
 
 private:
-    std::vector<TIntervalInfo> Intervals;
+    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
     std::set<TPortionSpan, TIntervalsInterator::TPortionSpan::TComparatorByLeftBorder> Portions;
     std::set<TPortionSpan, TIntervalsInterator::TPortionSpan::TComparatorByRightBorder> CurrentPortions;
     ui64 NextInterval = 0;
@@ -186,7 +186,7 @@ public:
                                                                                           "last", Intervals.front().GetEnd().DebugString())(
                                                                                           "new", begin.DebugString());
         const ui64 currentIntervalIdx = Intervals.size();
-        Intervals.emplace_back(begin, end, portions.size());
+        Intervals.emplace_back(begin, end, portions);
 
         std::vector<ui64> completedPortions;
         for (const auto& [portion, firstInterval] : FirstIntervalByTrailingPortionId) {
@@ -226,6 +226,7 @@ public:
 
             if (currentInterval != *intervalIt) {
                 AFL_VERIFY(currentInterval < *intervalIt);
+                ++currentInterval;
                 return true;
             }
 
@@ -237,7 +238,13 @@ public:
         };
 
         splitter.ForEachIntersectingInterval(callback, basePortionId);
+        AFL_VERIFY(builder.NumIntervals() == intervalIdxs.size())("builder", builder.NumIntervals())(
+                                               "intervals", TStringBuilder() << '[' << JoinSeq(',', intervalIdxs) << ']');
         return builder.Build();
+    }
+
+    ui64 NumIntervals() const {
+        return Intervals.size();
     }
 };
 

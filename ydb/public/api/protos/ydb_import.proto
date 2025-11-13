@@ -283,15 +283,14 @@ message ListObjectsInFsExportSettings {
         string path = 1;
     }
 
-    string endpoint = 1 [(required) = true];
-    string base_path = 2 [(required) = true];
-    repeated Item items = 3;
-    uint32 number_of_retries = 4;
+    string base_path = 1 [(required) = true];
+    repeated Item items = 2;
+    uint32 number_of_retries = 3;
 
     // Settings how data is encrypted.
     // If encryption_settings field is not specified,
     // the resulting data is considered not encrypted.
-    Ydb.Export.EncryptionSettings encryption_settings = 5;
+    Ydb.Export.EncryptionSettings encryption_settings = 4;
 }
 
 message ListObjectsInFsExportResult {

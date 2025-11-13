@@ -108,7 +108,6 @@ public:
         void AddNewMessage(ui64 offset);
         void AddChange(ui64 offset);
         void AddToDLQ(ui64 offset, ui64 seqNo);
-        void DeleteFromDLQ(ui64 offset);
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
 

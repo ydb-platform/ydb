@@ -54,6 +54,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             return CreateWriter();
 
         default:
+            LOG_D(NDescriber::Description(Settings.DestinationTopic, topic.Status));
             return ReplyError(NDescriber::Convert(topic.Status), NDescriber::Description(Settings.DestinationTopic, topic.Status));
     }
 }

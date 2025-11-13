@@ -374,9 +374,12 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
 
 bool TStorage::WakeUpDLQ() {
     for (auto [offset, _] : DLQMessages) {
-        auto [message, __] = GetMessageInt(offset, EMessageStatus::DLQ);
+        auto [message, slowZone] = GetMessageInt(offset, EMessageStatus::DLQ);
         if (message) {
             message->Status = EMessageStatus::Unprocessed;
+            if (!slowZone) {
+                FirstUnlockedOffset = std::min(FirstUnlockedOffset, offset);
+            }
 
             Batch.AddChange(offset);
 

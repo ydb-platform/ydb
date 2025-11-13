@@ -20,9 +20,16 @@ message TNodeInfo {
     optional NKikimrWhiteboard.TEvNodeStateResponse NodeStateInfo = 11;
     repeated string CountersInfo = 12;
 }
+
+message TClusterStateQueryInfo {
+    optional string TableName = 1;
+    optional string Query = 2;
+    optional NKikimrKqp.TQueryResponse Response = 3;
+}
+
 message TClusterStateInfo {
     optional Ydb.Monitoring.SelfCheckResult SelfCheck = 1;
     repeated TNodeInfo NodeInfos = 2;
     optional NKikimrBlobStorage.TBaseConfig BaseConfig = 3;
-    repeated NKikimrKqp.TQueryResponse Queries = 4;
+    repeated TClusterStateQueryInfo Queries = 4;
 }

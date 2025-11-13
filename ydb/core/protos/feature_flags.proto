@@ -196,7 +196,7 @@ message TFeatureFlags {
     optional bool EnableChangefeedsImport = 170 [default = true];
     optional bool EnablePermissionsExport = 171 [default = true];
     optional bool EnableDataErasure = 172 [default = false];
-    optional bool EnableShowCreate = 173 [default = false];
+    optional bool EnableShowCreate = 173 [default = true];
     optional bool EnableChangefeedsExport = 174 [default = true];
     optional bool EnableKafkaNativeBalancing = 175 [default = true];
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];

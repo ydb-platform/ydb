@@ -93,7 +93,7 @@ TViewQuerySplit SplitViewQuery(TStringInput query) {
         (line.StartsWith("--") || line.StartsWith("PRAGMA ")
             ? split.ContextRecreation
             : split.Select
-        ) += line;
+        ) += '\n' + line;
     }
 
     return split;

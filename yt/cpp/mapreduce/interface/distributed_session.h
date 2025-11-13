@@ -11,6 +11,8 @@
 
 #include <library/cpp/yt/misc/strong_typedef.h>
 
+#include <util/datetime/base.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,7 +66,16 @@ struct TDistributedWriteTableSessionWithCookies
 
 struct TStartDistributedWriteTableOptions
 {
+    /// @cond Doxygen_Suppress
     using TSelf = TStartDistributedWriteTableOptions;
+    /// @endcond
+
+    ///
+    /// @brief How long session lives after last ping.
+    ///
+    /// If server doesn't receive any pings for session transaction for this time
+    /// session will be aborted. By default timeout is 15 seconds.
+    FLUENT_FIELD_OPTION(TDuration, Timeout);
 };
 
 struct TPingDistributedWriteTableOptions
@@ -90,7 +101,16 @@ struct TDistributedWriteFileSessionWithCookies
 
 struct TStartDistributedWriteFileOptions
 {
+    /// @cond Doxygen_Suppress
     using TSelf = TStartDistributedWriteFileOptions;
+    /// @endcond
+
+    ///
+    /// @brief How long session lives after last ping.
+    ///
+    /// If server doesn't receive any pings for session transaction for this time
+    /// session will be aborted. By default timeout is 15 seconds.
+    FLUENT_FIELD_OPTION(TDuration, Timeout);
 };
 
 struct TPingDistributedWriteFileOptions

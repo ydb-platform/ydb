@@ -90,7 +90,6 @@ private:
     ui64 FetchCookie = 0;
     ui64 LastCommittedOffset = 0;
 
-    ui64 DLQMovedMessageCount = 0;
     TActorId DLQMoverActorId;
 
     std::unique_ptr<TStorage> Storage;

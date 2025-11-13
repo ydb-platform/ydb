@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mlp.h"
+#include "mlp_common.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
 
@@ -10,6 +11,7 @@
 
 #include <deque>
 #include <map>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
@@ -105,8 +107,7 @@ public:
     protected:
         void AddNewMessage(ui64 offset);
         void AddChange(ui64 offset);
-        void AddDLQ(ui64 offset);
-        void DeleteFromDLQ(ui64 offset);
+        void AddToDLQ(ui64 offset, ui64 seqNo);
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
 
@@ -119,8 +120,7 @@ public:
         std::vector<ui64> ChangedMessages;
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
-        std::vector<ui64> DLQ;
-        size_t DeletedFromDLQ = 0;
+        std::vector<TDLQMessage> AddedToDLQ;
         std::vector<ui64> MovedToSlowZone;
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
@@ -137,6 +137,8 @@ public:
         size_t CommittedMessageCount = 0;
         size_t DeadlineExpiredMessageCount = 0;
         size_t DLQMessageCount = 0;
+
+        size_t TotalScheduledToDLQMessageCount = 0;
     };
 
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
@@ -155,7 +157,7 @@ public:
     TInstant GetBaseWriteTimestamp() const;
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
-    const std::deque<ui64>& GetDLQMessages() const;
+    std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
 
 
@@ -174,7 +176,8 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp);
-    bool MarkDLQMoved(ui64 offset);
+    bool MarkDLQMoved(TDLQMessage message);
+    bool WakeUpDLQ();
 
     size_t ProccessDeadlines();
     size_t Compact();
@@ -209,7 +212,7 @@ private:
 
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
-    void RemoveMessage(const TMessage& message);
+    void RemoveMessage(ui64 offset, const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 
@@ -233,10 +236,11 @@ private:
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;
     std::unordered_set<ui32> LockedMessageGroupsId;
-    std::deque<ui64> DLQQueue;
+    std::deque<TDLQMessage> DLQQueue;
+    // offset->seqNo
+    std::unordered_map<ui64, ui64> DLQMessages;
 
     TBatch Batch;
-
     TMetrics Metrics;
 };
 

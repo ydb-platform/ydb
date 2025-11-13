@@ -5,6 +5,11 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+struct TDLQMessage {
+    ui64 Offset;
+    ui64 SeqNo;
+};
+
 struct TResult {
     TResult(const NActors::TActorId& sender, ui64 cookie)
         : Sender(sender)
@@ -64,10 +69,24 @@ struct TDLQMoverSettings {
     TString ConsumerName;
     ui64 ConsumerGeneration;
     TString DestinationTopic;
-    ui64 FirstMessageSeqNo;
-    std::deque<ui64> Messages;
+    std::deque<TDLQMessage> Messages;
 };
 
 NActors::IActor* CreateDLQMover(TDLQMoverSettings&& settings);
 
 } // namespace NKikimr::NPQ::NMLP
+
+template<>
+inline void Out<std::pair<ui64 const, ui64>>(IOutputStream& o, const std::pair<ui64 const, ui64>& p) {
+    o << "(" << p.first << ", " << p.second << ")";
+}
+
+template<>
+inline void Out<std::pair<ui64, ui64>>(IOutputStream& o, const std::pair<ui64, ui64>& p) {
+    o << "(" << p.first << ", " << p.second << ")";
+}
+
+template<>
+inline void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
+    o << "(" << p.Offset << ", " << p.SeqNo << ")";
+}

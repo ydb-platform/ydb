@@ -87,11 +87,11 @@ LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предос
 | `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`      | Точность до микросекунд, расширенный диапазон. Укажите DbType = "Timestamp64". [Пример](#пример-кастомного-decimal)             |
 | `TimeSpan`                    | `Interval`                                | `Interval64`       | Более широкий диапазон интервалов. Укажите DbType = "Interval64". [Пример](#пример-кастомного-decimal)                          |
 
-{% note tip "Точность Decimal" %}
+{% note tip %}
 Точное `Precision`/`Scale` задаётся атрибутами: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`.
 {% endnote %}
 
-{% note info "Временные типы: по умолчанию и включение расширенных" %}
+{% note info %}
 По умолчанию (если на колонке не задан `DbType`) применяются базовые типы YDB: `Date`, `Datetime`, `Timestamp`, `Interval`.
 Чтобы точечно включить расширенные типы, укажи `DbType`, например: `[Column(DbType = "Date32")]`. Обе семьи типов могут сосуществовать в одной таблице.
 {% endnote %}
@@ -198,7 +198,7 @@ ALTER TABLE Groups
    ADD COLUMN Department Utf8;
 ```
 
-{% note info "Миграции" %}
+{% note info %}
 LinqToDB не управляет миграциями. DDL ниже — иллюстративный; применяйте его через Liquibase/Flyway (рекомендуется). Для быстрых локальных изменений можно выполнить его напрямую через db.Execute(...) или YDB CLI.
 {% endnote %}
 
@@ -214,10 +214,12 @@ ALTER TABLE Groups
 
 
 ### Индексы YDB: как задать параметры
+
 Через атрибут [Index] вы задаёте имя, колонки и уникальность индекса. Провайдер создаёт вторичный индекс как GLOBAL.
 Параметры ASYNC/SYNC и COVER(...) через атрибут не задаются — их добавляют отдельной DDL-командой после создания таблицы.
 
-**Вариант A — через атрибут (имя + Unique)**
+#### Вариант A — через атрибут (имя + Unique)
+
 ```csharp
 [Table(Name = "Groups", IsColumnAttributeRequired = false)]
 [Index("GroupName", Name = "group_name_index", Unique = true)]
@@ -233,7 +235,7 @@ public class Group
 // При db.CreateTable<Group>() будет создан GLOBAL UNIQUE индекс по GroupName.
 ```
 
-**Сгенерированный DDL будет эквивалентен**
+Сгенерированный DDL будет эквивалентен
 
 ```yql
 CREATE TABLE Groups (
@@ -248,7 +250,7 @@ ALTER TABLE Groups
        ON (GroupName);
 ```
 
-**Вариант B — расширенные параметры (ASYNC, COVER) отдельной командой**
+#### Вариант B — расширенные параметры (ASYNC, COVER) отдельной командой
 
 ```csharp
 [Table(Name = "Groups", IsColumnAttributeRequired = false)]
@@ -421,6 +423,7 @@ CREATE TABLE Students (
 ### Пример «прикладной» сущности и генерируемого DDL
 
 Этот раздел показывает практическую сущность. Он демонстрирует:
+
 - реалистичный набор колонок (ФИО, e-mail, дата найма, зарплата, флаги, целочисленные значения);
 - точные типы (например, Decimal(22,9) для денежных значений, Date для дат, Utf8/Bool/Int32/Int64);
 - GLOBAL вторичный индекс по full_name для быстрых поисков и сортировки;
@@ -553,7 +556,7 @@ db.GetTable<Employee>()
   WHERE Id = ?;
   ```
 
-{% note info "Особенность YQL UPDATE" %}
+{% note info %}
 Провайдер выводит параметры (?), потому что значения и типы привязываются драйвером, а не объявляются в тексте запроса. Когда YQL требует типизированные параметры, провайдер автоматически добавляет соответствующие DECLARE. Для “нестандартных” паттернов вроде upsert-записей используйте UPSERT с параметризацией — провайдер генерирует такие выражения? как обычный YQL с параметрами.
 {% endnote %}
 

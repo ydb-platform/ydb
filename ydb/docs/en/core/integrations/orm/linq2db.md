@@ -85,11 +85,11 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 | `DateTime` / `DateTimeOffset` | `DateTime2`                               | `Timestamp64`            | Microseconds, wider range. `DbType = "Timestamp64"`. [Example](#dbtype-override-example)                                 |
 | `TimeSpan`                    | `Interval`                                | `Interval64`             | Wider interval range. `DbType = "Interval64"`. [Example](#dbtype-override-example)                                       |
 
-{% note tip "Decimal precision/scale" %}
+{% note tip %}
 You can set exact `Precision`/`Scale` with attributes: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`.
 {% endnote %}
 
-{% note info "Temporal types: defaults vs. opt-in" %}
+{% note info %}
 By default (when `DbType` is not specified), the provider uses legacy YDB temporal types: `Date`, `Datetime`, `Timestamp`, `Interval`. To opt in per column to extended types, set `DbType`, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
 {% endnote %}
 
@@ -193,7 +193,7 @@ ALTER TABLE Groups
    ADD COLUMN Department Utf8;
 ```
 
-{% note info "Migrations" %}
+{% note info %}
 Linq To DB doesn’t manage migrations. The DDL below is illustrative—apply it with Liquibase/Flyway (recommended). For quick local changes you can also run it directly with db.Execute(...) or the YDB CLI.
 {% endnote %}
 
@@ -206,10 +206,11 @@ db.Execute(@"ALTER TABLE Groups
 ```
 
 ### YDB Indexes how to set parameters
+
 With the [Index] attribute you can set name, columns, and uniqueness. The provider creates a GLOBAL secondary index.
 Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; add them using a separate DDL statement after table creation.
 
-**Option A — attribute (name + Unique)**
+#### Option A — attribute (name + Unique)
 
 ```csharp
 [Table(Name = "Groups", IsColumnAttributeRequired = false)]
@@ -226,7 +227,8 @@ public class Group
 // When you call db.CreateTable<Group>(), a GLOBAL UNIQUE index on GroupName is created.
 ```
 
-**The generated DDL is effectively**
+The generated DDL is effectively
+
 ```yql
 CREATE TABLE Groups (
     GroupId Int32 NOT NULL,
@@ -240,7 +242,7 @@ ALTER TABLE Groups
        ON (GroupName);
 ```
 
-**Option B — extended parameters (ASYNC, COVER) via separate DDL**
+#### Option B — extended parameters (ASYNC, COVER) via separate DDL
 
 ```csharp
 [Table(Name = "Groups", IsColumnAttributeRequired = false)]
@@ -418,6 +420,7 @@ This section shows a practical, production-style entity from a typical domain. I
 - end-to-end flow: mapping → table creation → CRUD with generated YQL/DDL.
 
 When you call `db.CreateTable<Employee>()`, Linq To DB creates the table and applies the [Index] attribute as a YDB GLOBAL index.
+
 {% list tabs group=lang %}
 
 - C#
@@ -543,7 +546,7 @@ db.GetTable<Employee>()
   WHERE Id = ?;
   ```
 
-{% note info "SQL optimizer" %}
+{% note info %}
 The provider emits parameters (?) because values and types are bound via the driver, not declared in the query text. When YQL requires typed parameters, the provider adds the necessary DECLARE statements automatically. For non-standard patterns such as upsert-style writes, use YDB’s UPSERT with parameter binding—the provider generates these statements as regular YQL with parameters.
 {% endnote %}
 

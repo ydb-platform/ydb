@@ -19,18 +19,15 @@ bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
 
 TRuleBasedStage::TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {
     for (auto & r : Rules) {
-        Props.RequireCosts |= r->Props.RequireCosts;
-        Props.RequireParents |= r->Props.RequireParents;
-        Props.RequireTableMeta |= r->Props.RequireTableMeta;
-        Props.RequireTypes |= r->Props.RequireTypes;
+        Props |= r->Props;
     }
 }
 
-void ComputeRequiredProps(TOpRoot &root, TRuleProperties &props, TRBOContext &ctx) {
-    if (props.RequireParents) {
+void ComputeRequiredProps(TOpRoot &root, ui32 props, TRBOContext &ctx) {
+    if (props & ERuleProperties::RequireParents) {
         root.ComputeParents();
     }
-    if (props.RequireTypes) {
+    if (props & ERuleProperties::RequireTypes) {
         if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
             Y_ENSURE(false, "RBO type annotation failed");
         }
@@ -101,10 +98,7 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
-    TRuleProperties convertStageProps;
-    convertStageProps.RequireParents = true;
-    convertStageProps.RequireTypes = true;
-    ComputeRequiredProps(root, convertStageProps, context);
+    ComputeRequiredProps(root, ERuleProperties::RequireParents | ERuleProperties::RequireTypes, context);
 
     return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }

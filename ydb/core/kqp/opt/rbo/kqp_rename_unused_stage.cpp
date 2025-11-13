@@ -125,7 +125,7 @@ struct TIntTUnitPairHash {
  */
 
 TRenameStage::TRenameStage() {
-    Props.RequireParents = true;
+    Props = ERuleProperties::RequireParents;
 }
 
 void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {

@@ -9,16 +9,11 @@ namespace NKqp {
 
 using namespace NOpt;
 
-/**
- * Plan properties required for rules and stages
- */
-struct TRuleProperties {
-
-  // Properties that are required
-  bool RequireParents = false;
-  bool RequireTypes = false;
-  bool RequireTableMeta = false;
-  bool RequireCosts = false;
+enum ERuleProperties: ui32 {
+    RequireParents = 0x01,
+    RequireTypes = 0x02,
+    RequireTableMeta = 0x04,
+    RequireCosts = 0x08,
 };
 
 /**
@@ -31,14 +26,14 @@ struct TRuleProperties {
 class IRule {
   public:
     IRule(TString name) : RuleName(name) {}
-    IRule(TString name, TRuleProperties props) : RuleName(name), Props(props) {}
+    IRule(TString name, ui32 props) : RuleName(name), Props(props) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
     TString RuleName;
-    TRuleProperties Props;
+    ui32 Props;
 };
 
 /**
@@ -48,7 +43,7 @@ class IRule {
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
-    ISimplifiedRule(TString name, TRuleProperties props) : IRule(name, props) {}
+    ISimplifiedRule(TString name, ui32 props) : IRule(name, props) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
@@ -65,7 +60,7 @@ class IRBOStage {
   public:
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
     virtual ~IRBOStage() = default;
-    TRuleProperties Props;
+    ui32 Props;
 };
 
 /**

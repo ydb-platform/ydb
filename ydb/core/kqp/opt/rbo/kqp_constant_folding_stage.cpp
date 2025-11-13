@@ -75,8 +75,7 @@ namespace NKikimr {
 namespace NKqp {
 
 TConstantFoldingStage::TConstantFoldingStage() {
-    Props.RequireParents = true;
-    Props.RequireTypes = true;
+    Props = ERuleProperties::RequireParents |  ERuleProperties::RequireTypes;
 }
 
 void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {

@@ -17,7 +17,7 @@ namespace NKqp {
  */
 class TExtractJoinExpressionsRule : public IRule {
   public:
-    TExtractJoinExpressionsRule() : IRule("Extract join expressions") { }
+    TExtractJoinExpressionsRule() : IRule("Extract join expressions") {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -27,9 +27,7 @@ class TExtractJoinExpressionsRule : public IRule {
  */
 class TInlineScalarSubplanRule : public IRule {
   public:
-    TInlineScalarSubplanRule() : IRule("Inline scalar subplan") {
-      Props.RequireTypes = true;
-    }
+    TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -40,9 +38,7 @@ class TInlineScalarSubplanRule : public IRule {
  */
 class TPushMapRule : public ISimplifiedRule {
   public:
-    TPushMapRule() : ISimplifiedRule("Push map operator") {
-      Props.RequireParents = true;
-    }
+    TPushMapRule() : ISimplifiedRule("Push map operator", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -53,9 +49,7 @@ class TPushMapRule : public ISimplifiedRule {
  */
 class TPushFilterRule : public ISimplifiedRule {
   public:
-    TPushFilterRule() : ISimplifiedRule("Push filter") {
-      Props.RequireParents = true;
-    }
+    TPushFilterRule() : ISimplifiedRule("Push filter", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -65,9 +59,7 @@ class TPushFilterRule : public ISimplifiedRule {
  */
 class TAssignStagesRule : public IRule {
   public:
-    TAssignStagesRule() : IRule("Assign stages") {
-      Props.RequireParents = true;
-    }
+    TAssignStagesRule() : IRule("Assign stages", ERuleProperties::RequireParents) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };

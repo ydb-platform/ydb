@@ -40,6 +40,10 @@ on:
 
   workflow_dispatch:
     inputs:
+      pull_number:
+        description: 'Pull request number with pull/* prefix, ex: pull/12345'
+        required: false
+        default: ''
       test_targets:
         description: 'Paths to tests for run ,example : ydb/ ydb/tests/func/suite'
         required: true
@@ -73,10 +77,6 @@ on:
           - release-msan
           - release-tsan
         default: relwithdebinfo
-      pull_number:
-        description: 'Pull request number with pull/* prefix, ex: pull/12345'
-        required: false
-        default: ''
 
 jobs:
   prepare:
@@ -98,27 +98,27 @@ jobs:
           PREFIXED_PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
           GITHUB_TOKEN: '${{ github.token }}'
         run: |
-          # Проверяем, был ли передан параметр branches из вызывающего workflow
+          # Check if branches parameter was passed from calling workflow
           if [[ -n "$CALLED_BRANCHES" ]]; then
             echo "Branches parameter provided from calling workflow: $CALLED_BRANCHES"
             
-            # Проверяем, является ли вход уже JSON-массивом
+            # Check if input is already a JSON array
             if [[ $CALLED_BRANCHES == \[* ]]; then
-              # Это JSON-массив - парсим его
+              # This is a JSON array - parse it
               branches=($(echo "$CALLED_BRANCHES" | jq -r '.[]'))
             else
-              # Если это одна ветка, создаем массив с одним элементом
+              # If it's a single branch, create array with one element
               branches=("$CALLED_BRANCHES")
             fi
 
             processed_branches=()
             for branch in "${branches[@]}"; do
-              # Проверяем, начинается ли ветка с pull/ и содержит цифры
+              # Check if branch starts with pull/ and contains numbers
               if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
                 PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
                 echo "Processing pull request: $PULL_REQUEST_NUMBER"
                 
-                # Получаем merge_commit_sha из GitHub API
+                # Get merge_commit_sha from GitHub API
                 MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                   "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
                   jq -r '.merge_commit_sha')
@@ -130,24 +130,29 @@ jobs:
                   echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
                 fi
               else
-                # Просто добавляем ветку как есть
+                # Just add the branch as-is
                 processed_branches+=("\"$branch\"")
               fi
             done
 
-            # Собираем обратно в JSON-массив
+            # Reassemble into JSON array
             branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
             echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
-          elif [[ $PREFIXED_PULL_REQUEST_NUMBER =~ ^pull/([0-9]+)$ ]] then
+          elif [[ $PREFIXED_PULL_REQUEST_NUMBER =~ ^pull/([0-9]+)$ ]]; then
             PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
             MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                   "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
                   jq -r '.merge_commit_sha')
-            echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
+            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
+            else
+              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              exit 1
+            fi
           else
-            # Если ветки не переданы, значит это прямой запуск workflow_dispatch
+            # If no branches specified, this is a direct workflow_dispatch run
             echo "No branches specified, using current branch: ${{ github.ref_name }}"
             echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
           fi

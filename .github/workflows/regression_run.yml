@@ -6,15 +6,15 @@ on:
   #   - cron: "55 23 * * *"  # At 23:55 every day
   workflow_dispatch:
     inputs:
+      pull_request_input:
+        description: 'Overrides default branches, use with pull/* prefix, ex. pull/12345'
+        required: false
+        default: ''
       use_default_branches:
         description: 'If true, start main and all current stable branches. If false, start only the selected branch.'
         type: boolean
         required: false
         default: true
-      pull_request_input:
-        description: 'Overrides default branches, use with pull/* prefix, ex. pull/12345'
-        required: false
-        default: ''
 jobs:
   main:
     name: Regression-run
@@ -26,6 +26,6 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/
-      branches: ${{ startsWith(inputs.use_default_branches, 'false') && (inputs.pull_request_input || github.ref_name) || inputs.pull_request_input }}
+      branches: ${{ inputs.pull_request_input || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '') }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

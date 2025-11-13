@@ -163,7 +163,6 @@ private:
 
     void InitializeRequests(TColumnShard& owner) {
         if (WaitShardsBrokenFlags.empty()) {
-            WaitShardsResultAck.erase(owner.TabletID());
             if (WaitShardsResultAck.size()) {
                 SendResult(owner);
             } else {
@@ -173,7 +172,7 @@ private:
     }
 
     void CheckFinished(TColumnShard& owner) {
-        if (WaitShardsResultAck.empty()) {
+        if (!IsInProgress()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished");
             owner.EnqueueProgressTx(NActors::TActivationContext::AsActorContext(), GetTxId());
         }
@@ -226,20 +225,21 @@ private:
             auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId);
             if (op->WaitShardsBrokenFlags.contains(Self->TabletID())) {
-                op->TxBroken = lock.IsBroken();
+                // TxStartPreparation may be executed AFTER all the ReadSets from secondary.
+                // So, TxBroken may already be set, we must not ignore that.
+                op->TxBroken = op->TxBroken.value_or(false) || lock.IsBroken();
                 AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
-                if (op->WaitShardsBrokenFlags.empty()) {
-                    AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
-                }
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait", JoinSeq(",", op->WaitShardsBrokenFlags))(
-                    "receive", Self->TabletID());
+                AFL_VERIFY(op->WaitShardsResultAck.erase(Self->TabletID()));
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "remove_tablet_id")("wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))("receive", Self->TabletID());
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
             }
             return true;
         }
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
+            // the tx may already be finished and the operator deleted,
+            // and that is good, we improve the latency!
             if (auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true)) {
-                op->CheckFinished(*Self);
+                op->InitializeRequests(*Self);
             }
         }
 
@@ -255,7 +255,7 @@ private:
     }
 
     virtual bool DoIsInProgress() const override {
-        return WaitShardsResultAck.size();
+        return WaitShardsBrokenFlags.size() || WaitShardsResultAck.size();
     }
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);

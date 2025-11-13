@@ -69,6 +69,7 @@ void AddIndexNGram(NQuery::TQueryClient& db, const size_t nGramMinLength = 3, co
             WITH (
                 layout=flat,
                 tokenizer=standard,
+                use_filter_lowercase=true,
                 use_filter_ngram=%d,
                 use_filter_edge_ngram=%d,
                 filter_ngram_min_length=%d,
@@ -158,11 +159,8 @@ Y_UNIT_TEST(AddIndexNGram) {
     AddIndexNGram(db);
 
     const auto index = ReadIndex(db);
+
     CompareYson(R"([
-        [[100u];"Cat"];
-        [[300u];"Cat"];
-        [[200u];"Dog"];
-        [[400u];"Fox"];
         [[100u];"all"];
         [[200u];"all"];
         [[100u];"als"];
@@ -172,11 +170,14 @@ Y_UNIT_TEST(AddIndexNGram) {
         [[100u];"ats"];
         [[200u];"ats"];
         [[300u];"ats"];
+        [[100u];"cat"];
         [[200u];"cat"];
         [[300u];"cat"];
         [[100u];"cha"];
         [[200u];"cha"];
+        [[200u];"dog"];
         [[400u];"dog"];
+        [[400u];"fox"];
         [[100u];"has"];
         [[200u];"has"];
         [[100u];"ima"];
@@ -207,16 +208,15 @@ Y_UNIT_TEST(AddIndexEdgeNGram) {
     const auto index = ReadIndex(db);
     Cerr << NYdb::FormatResultSetYson(index) << Endl;
     CompareYson(R"([
-        [[100u];"Cat"];
-        [[300u];"Cat"];
-        [[200u];"Dog"];
-        [[400u];"Fox"];
         [[100u];"ani"];
+        [[100u];"cat"];
         [[200u];"cat"];
         [[300u];"cat"];
         [[100u];"cha"];
         [[200u];"cha"];
+        [[200u];"dog"];
         [[400u];"dog"];
+        [[400u];"fox"];
         [[300u];"lov"];
         [[400u];"lov"];
         [[100u];"sma"];

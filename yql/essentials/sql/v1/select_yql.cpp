@@ -108,10 +108,9 @@ public:
             return true;
         }
 
-        if (columns.size() != Width_) {
-            ctx.Error() << "VALUES statement width is " << Width_
-                        << ", but got " << columns.size()
-                        << " column aliases";
+        if (Width_ < columns.size()) {
+            ctx.Error() << "Derived column list size "
+                        << "exceeds column count in VALUES";
             return false;
         }
 
@@ -124,7 +123,7 @@ private:
         TNodePtr columns = Y();
         for (size_t i = 0; i < Width_; ++i) {
             TString name;
-            if (!Columns_) {
+            if (!Columns_ || Columns_->size() <= i) {
                 name = TStringBuilder() << "column" << i;
             } else {
                 name = Columns_->at(i);
@@ -263,6 +262,10 @@ public:
         return new TYqlSelectNode(*this);
     }
 
+    bool IsOrdered() const {
+        return OrderBy.Defined();
+    }
+
 private:
     bool InitProjection(TContext& ctx, ISource* src) const {
         return std::visit(
@@ -277,9 +280,15 @@ private:
     }
 
     bool InitTerms(TContext& ctx, ISource* src, const TVector<TNodePtr>& terms) const {
+        THashSet<TString> used = UsedLables(terms);
+
         for (size_t i = 0; i < terms.size(); ++i) {
             const TNodePtr& term = terms[i];
-            term->SetLabel(TermAlias(term, i));
+
+            TString label = TermAlias(term, i, used);
+            used.emplace(label);
+
+            term->SetLabel(std::move(label));
         }
 
         return ::NSQLTranslationV1::Init(ctx, src, terms);
@@ -319,15 +328,30 @@ private:
         return true;
     }
 
-    TString TermAlias(const TNodePtr& term, size_t i) const {
+    THashSet<TString> UsedLables(const TVector<TNodePtr>& terms) const {
+        THashSet<TString> used(terms.size());
+        for (const TNodePtr& term : terms) {
+            used.emplace(term->GetLabel());
+        }
+        return used;
+    }
+
+    TString TermAlias(const TNodePtr& term, size_t i, const THashSet<TString>& used) const {
         const TString& label = term->GetLabel();
         if (!label.empty()) {
             return label;
         }
+
         if (const TString* column = term->GetColumnName()) {
             return *column;
         }
-        return TStringBuilder() << "column" << i;
+
+        for (;; ++i) {
+            TString alias = TStringBuilder() << "column" << i;
+            if (!used.contains(alias)) {
+                return alias;
+            }
+        }
     }
 
     TNodePtr BuildYqlResultItems(const TProjection& projection) const {
@@ -448,12 +472,23 @@ public:
         {
             block->Add(Y("let", "output", Source_));
 
+            if (!IsOrdered()) {
+                block->Add(Y("let", "output", Y("Unordered", "output")));
+            }
+
             block->Add(Y("let", "result_sink",
                          Y("DataSink", Q("result"))));
 
+            TNodePtr options = Y();
+            options->Add(Q(Y(Q("type"))));
+            options->Add(Q(Y(Q("autoref"))));
+
+            if (!IsOrdered()) {
+                options->Add(Q(Y(Q("unordered"))));
+            }
+
             block->Add(Y("let", "world",
-                         Y("Write!", "world", "result_sink", Y("Key"), "output",
-                           Q(Y(Q(Y(Q("type"))), Q(Y(Q("autoref"))))))));
+                         Y("Write!", "world", "result_sink", Y("Key"), "output", Q(options))));
 
             block->Add(Y("return", Y("Commit!", "world", "result_sink")));
         }
@@ -472,6 +507,13 @@ public:
     }
 
 private:
+    bool IsOrdered() const {
+        if (const auto* select = dynamic_cast<const TYqlSelectNode*>(Source_.Get())) {
+            return select->IsOrdered();
+        }
+        return false;
+    }
+
     TNodePtr Source_;
     TNodePtr Node_;
 };

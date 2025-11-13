@@ -266,19 +266,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (Ctx_.YqlSelectMode != EYqlSelectMode::Disable) {
-                if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-                    Error() << "YqlSelect is not available before 2025.04";
-                    return false;
-                }
-
+            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
                 const auto stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
                 if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
                     blocks.emplace_back(std::move(*result));
                     break;
                 } else if (
                     result.error() == EYqlSelectError::Unsupported &&
-                    Ctx_.YqlSelectMode == EYqlSelectMode::Force)
+                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
                 {
                     Error() << "Translation of the statement "
                             << "to YqlSelect was forced, but unsupported";
@@ -3541,6 +3536,14 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
+        if (!IsBackwardCompatibleFeatureAvailable(
+                ctx.Settings.LangVer,
+                MakeLangVersion(2025, 04),
+                ctx.Settings.BackportMode))
+        {
+            query.Error() << "YqlSelect is not available before 2025.04";
+            return Nothing();
+        }
 
         const TString* literal = values.size() == 1 ? values[0].GetLiteral() : nullptr;
         if (!literal) {
@@ -3549,18 +3552,16 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         if (*literal == "disable") {
-            ctx.YqlSelectMode = EYqlSelectMode::Disable;
+            ctx.SetYqlSelectMode(EYqlSelectMode::Disable);
         } else if (*literal == "auto") {
-            ctx.YqlSelectMode = EYqlSelectMode::Auto;
+            ctx.SetYqlSelectMode(EYqlSelectMode::Auto);
         } else if (*literal == "force") {
-            ctx.YqlSelectMode = EYqlSelectMode::Force;
+            ctx.SetYqlSelectMode(EYqlSelectMode::Force);
         } else {
             query.Error() << "Unexpected literal '" << *literal << "' for: " << pragma
                           << ", expected 'disable', 'auto' or 'force'";
             return Nothing();
         }
-
-        ctx.DeriveColumnOrder = true;
 
         return TNodePtr();
     }),

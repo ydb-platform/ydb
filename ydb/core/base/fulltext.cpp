@@ -304,6 +304,7 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
             const size_t resultLength = sb_stemmer_length(stemmer);
             token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
         }
+        sb_stemmer_delete(stemmer);
     }
 
     if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {

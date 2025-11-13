@@ -3,12 +3,12 @@
 Выражение `DROP BACKUP COLLECTION` удаляет [коллекцию резервных копий](../../../concepts/backup-collections.md) и все содержащиеся в ней резервные копии.
 
 ```yql
-DROP BACKUP COLLECTION `имя_коллекции`;
+DROP BACKUP COLLECTION collection_name;
 ```
 
 ## Параметры
 
-* `имя_коллекции`: Имя удаляемой коллекции резервных копий.
+* `collection_name` — имя удаляемой коллекции резервных копий.
 
 {% note warning %}
 
@@ -21,12 +21,12 @@ DROP BACKUP COLLECTION `имя_коллекции`;
 Удаление коллекции резервных копий:
 
 ```yql
-DROP BACKUP COLLECTION `old_backups`;
+DROP BACKUP COLLECTION old_backups;
 ```
 
 ## См. также
 
-* [Концепции коллекций резервных копий](../../../concepts/backup-collections.md)
-* [CREATE BACKUP COLLECTION](create-backup-collection.md)
-* [BACKUP](backup.md)
-* [RESTORE](restore-backup-collection.md)
+* [Коллекции резервных копий](../../../concepts/backup-collections.md).
+* [CREATE BACKUP COLLECTION](create-backup-collection.md).
+* [BACKUP](backup.md).
+* [RESTORE](restore-backup-collection.md).

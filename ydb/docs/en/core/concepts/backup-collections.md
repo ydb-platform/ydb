@@ -6,24 +6,20 @@ Backup collections provide an advanced backup solution for {{ ydb-short-name }} 
 
 A backup collection is a named set of coordinated backups for selected database objects. Collections organize related backups and ensure they can be restored together consistently, providing:
 
+- **Organization** — related backups are grouped into logical collections.
+- **Recovery flexibility** — enables recovery to any point in time when one of the backups in the collection was made.
+
 {% note info %}
 
-Currently only tables are supported. Support for other objects is planned for future releases.
+Currently only row-oriented tables are supported.
 
 {% endnote %}
 
-- **Organization**: Related backups are grouped into logical collections.
-- **Recovery flexibility**: Enables recovery to any point in time when one of the backups in the collection was made.
-
 ## Core concepts {#core-concepts}
-
-### Backup collection {#backup-collection}
-
-A named container that groups backups for a specific set of database objects. Collections ensure consistent backup of all included objects.
 
 ### Full backup {#full-backup}
 
-A complete snapshot of all selected objects at a specific point in time. Serves as the foundation for subsequent incremental backups and contains all data necessary for independent restoration.
+A snapshot at a specific point in time. Serves as the foundation for subsequent incremental backups and contains all data necessary for independent restoration.
 
 ### Incremental backup {#incremental-backup}
 
@@ -103,6 +99,10 @@ Captures only data that changed since the previous backup, significantly reducin
 
 [See operations guide](../maintenance/manual/backup-collections.md#create-backup)
 
+### Export/dump (optional) {#export-dump}
+
+If your backups are stored in external storage, export them there before dropping the collection. This ensures long-term retention and recovery capabilities outside of {{ ydb-short-name }}.
+
 ### Drop collection {#backup-collection-cleanup}
 
 When a backup collection is no longer needed, delete it to remove all associated metadata and free up resources. This permanently deletes the collection and all its backups. Delete the collection only after you're sure the backups are no longer needed and/or they've been exported to external storage.
@@ -137,7 +137,7 @@ block-beta
 
 ### Import from filesystem {#restore-import}
 
-If your backups are stored in external storage (filesystem or object storage), import them back into the cluster using {{ ydb-short-name }} CLI import operations. Import all backups in the chain in the correct order, starting from the full backup followed by incremental backups. This step is only needed if you're restoring from external storage.
+If your backups are stored in external storage (filesystem or object storage), import them back into the cluster using {{ ydb-short-name }} CLI import operations. You need all backups in the chain: the full backup and all incremental backups up to the desired restore point. This step is only needed if you're restoring from external storage.
 
 [See {{ ydb-short-name }} CLI export/import](../reference/ydb-cli/export-import/index.md)
 

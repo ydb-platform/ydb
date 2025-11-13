@@ -1,22 +1,21 @@
 # CREATE BACKUP COLLECTION
 
-Выражение `CREATE BACKUP COLLECTION` создает [коллекцию резервных копий](../../../concepts/backup-collections.md) - именованный набор скоординированных резервных копий для выбранных объектов базы данных.
+Выражение `CREATE BACKUP COLLECTION` создает [коллекцию резервных копий](../../../concepts/backup-collections.md).
 
 ```yql
-CREATE BACKUP COLLECTION `имя_коллекции` (
-    TABLE `путь_к_таблице` [, TABLE `путь_к_таблице` ...]
-) WITH (
-    STORAGE = 'cluster',
-    INCREMENTAL_BACKUP_ENABLED = 'true'
-);
+CREATE BACKUP COLLECTION collection_name (
+    TABLE table_name [, TABLE another_table_name ...]
+) WITH (option = value [, ...]);
 ```
 
 ## Параметры
 
-* `имя_коллекции`: Имя создаваемой коллекции резервных копий.
-* `путь_к_таблице`: Полный путь к таблице для включения в коллекцию. Можно указать несколько таблиц.
-* `STORAGE`: Бэкенд хранения для резервных копий. В настоящее время поддерживается только `'cluster'`.
-* `INCREMENTAL_BACKUP_ENABLED`: Включить поддержку инкрементальных резервных копий. Установите в `'true'` для включения инкрементальных резервных копий, `'false'` только для полных резервных копий.
+* `collection_name` — имя создаваемой коллекции резервных копий.
+* `table_name` — полный путь к таблице для включения в коллекцию. Можно указать несколько таблиц.
+* Опции:
+
+  * `STORAGE` — бэкенд хранения для резервных копий. В настоящее время поддерживается только `'cluster'`.
+  * `INCREMENTAL_BACKUP_ENABLED` — включение-выключение поддержки инкрементальных резервных копий. Установите в `'true'` для включения инкрементальных резервных копий, `'false'` — только для полных резервных копий.
 
 {% note info %}
 
@@ -29,8 +28,8 @@ CREATE BACKUP COLLECTION `имя_коллекции` (
 Создание коллекции резервных копий с одной таблицей:
 
 ```yql
-CREATE BACKUP COLLECTION `daily_backups` (
-    TABLE `/Root/shop/orders`
+CREATE BACKUP COLLECTION daily_backups (
+    TABLE orders
 ) WITH (
     STORAGE = 'cluster',
     INCREMENTAL_BACKUP_ENABLED = 'true'
@@ -40,10 +39,10 @@ CREATE BACKUP COLLECTION `daily_backups` (
 Создание коллекции резервных копий с несколькими таблицами:
 
 ```yql
-CREATE BACKUP COLLECTION `production_backups` (
-    TABLE `/Root/shop/orders`,
-    TABLE `/Root/shop/products`,
-    TABLE `/Root/shop/customers`
+CREATE BACKUP COLLECTION production_backups (
+    TABLE orders,
+    TABLE products,
+    TABLE customers
 ) WITH (
     STORAGE = 'cluster',
     INCREMENTAL_BACKUP_ENABLED = 'true'
@@ -52,7 +51,7 @@ CREATE BACKUP COLLECTION `production_backups` (
 
 ## См. также
 
-* [Концепции коллекций резервных копий](../../../concepts/backup-collections.md)
-* [BACKUP](backup.md)
-* [RESTORE](restore-backup-collection.md)
-* [DROP BACKUP COLLECTION](drop-backup-collection.md)
+* [Коллекции резервных копий](../../../concepts/backup-collections.md).
+* [BACKUP](backup.md).
+* [RESTORE](restore-backup-collection.md).
+* [DROP BACKUP COLLECTION](drop-backup-collection.md).

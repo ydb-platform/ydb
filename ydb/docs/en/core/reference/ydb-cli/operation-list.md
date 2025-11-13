@@ -14,8 +14,8 @@ General format of the command:
 
   * `buildindex`: The build index operations.
   * `export/yt`: The export to YT operations.
-  * `export/s3`: The export to S3 operations.
   * `scriptexec`: The script execution operations.
+  * `export/s3`: The export to S3 operations.
   * `import/s3`: The import from S3 operations.
   * `incbackup`: The incremental backup operations.
   * `restore`: The restore operations.

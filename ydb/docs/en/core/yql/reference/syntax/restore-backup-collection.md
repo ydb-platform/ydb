@@ -3,12 +3,12 @@
 The `RESTORE` statement restores tables from a [backup collection](../../../concepts/backup-collections.md).
 
 ```yql
-RESTORE `collection_name`;
+RESTORE collection_name;
 ```
 
 ## Parameters
 
-* `collection_name`: Name of the backup collection to restore from.
+* `collection_name` — name of the backup collection to restore from.
 
 ## Restore behavior
 
@@ -31,7 +31,7 @@ Restoring from a backup collection:
 
 ```yql
 -- Restore all tables from the collection
-RESTORE `production_backups`;
+RESTORE production_backups;
 ```
 
 ## Monitoring restore operations

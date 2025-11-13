@@ -3,12 +3,12 @@
 The `DROP BACKUP COLLECTION` statement deletes a [backup collection](../../../concepts/backup-collections.md) and all its backups.
 
 ```yql
-DROP BACKUP COLLECTION `collection_name`;
+DROP BACKUP COLLECTION collection_name;
 ```
 
 ## Parameters
 
-* `collection_name`: Name of the backup collection to drop.
+* `collection_name` — name of the backup collection to drop.
 
 {% note warning %}
 
@@ -21,12 +21,12 @@ This operation permanently deletes the backup collection and all backups it cont
 Dropping a backup collection:
 
 ```yql
-DROP BACKUP COLLECTION `old_backups`;
+DROP BACKUP COLLECTION old_backups;
 ```
 
 ## See also
 
-* [Backup collections concepts](../../../concepts/backup-collections.md)
-* [CREATE BACKUP COLLECTION](create-backup-collection.md)
-* [BACKUP](backup.md)
-* [RESTORE](restore-backup-collection.md)
+* [Backup collections](../../../concepts/backup-collections.md).
+* [CREATE BACKUP COLLECTION](create-backup-collection.md).
+* [BACKUP](backup.md).
+* [RESTORE](restore-backup-collection.md).

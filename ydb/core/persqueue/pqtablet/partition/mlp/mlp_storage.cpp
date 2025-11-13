@@ -353,9 +353,26 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 }
 
 bool TStorage::MarkDLQMoved(TDLQMessage message) {
+    if (DLQQueue.empty()) {
+        // DLQ policy chaged for example
+        return true;
+    }
+
+    if (message.SeqNo < DLQQueue.front().SeqNo) {
+        // The message was deleted by retention policy
+        return true;
+    }
+
+    if (message.SeqNo != DLQQueue.front().SeqNo || message.Offset != DLQQueue.front().Offset) {
+        // the unexpected moved message
+        return false;
+    }
+
+    DLQQueue.pop_front();
+
     auto it = DLQMessages.find(message.Offset);
     if (it == DLQMessages.end() || it->second < message.SeqNo) {
-        // message removed or message queued second time
+        // message removed or message queued second time after changed dead letter policy
         return true;
     }
 
@@ -364,7 +381,6 @@ bool TStorage::MarkDLQMoved(TDLQMessage message) {
         return true;
     }
 
-    // TODO check order in DLQQueue
     return false;
 }
 

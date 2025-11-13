@@ -37,35 +37,60 @@ ALTER STREAMING QUERY `my_queries/query_name` SET (
 
 -- Change query text
 ALTER STREAMING QUERY `my_queries/query_name` SET (
-    FORCE = TRUE   -- Allow to drop checkpoint in case of incompatible changes in query.
-) AS
-DO BEGIN
-    PRAGMA FeatureR010="prototype";
+    FORCE = TRUE -- Allow to drop checkpoint in case of incompatible changes in query.
+) AS DO BEGIN
+PRAGMA FeatureR010 = 'prototype';
 
-    $input = SELECT * FROM `source_name`.`input_topic_name` WITH (
-        FORMAT = "json_each_row",
-        SCHEMA (
-            time String NOT NULL,
-            event_class String NOT NULL,
-            host String NOT NULL,
-            message String NOT NULL));
-    $filtered = SELECT * FROM $input WHERE event_class = "login";
+$input = (
+    SELECT
+        *
+    FROM
+        `source_name`.`input_topic_name` WITH (
+            FORMAT = 'json_each_row',
+            SCHEMA (time String NOT NULL, event_class String NOT NULL, host String NOT NULL, message String NOT NULL)
+        )
+);
 
-    $matches = SELECT * FROM $filtered 
-        MATCH_RECOGNIZE(
+$filtered = (
+    SELECT
+        *
+    FROM
+        $input
+    WHERE
+        event_class == 'login'
+);
+
+$matches = (
+    SELECT
+        *
+    FROM
+        $filtered MATCH_RECOGNIZE (
             MEASURES
                 FIRST(F1.time) AS time,
                 FIRST(F1.host) AS host
             ONE ROW PER MATCH
             PATTERN (F1 F2)
-            DEFINE 
-                F1 as F1.message = "login failed",
-                F2 as F2.message = "login failed" AND F2.host = FIRST(F1.host)
-        );
+            DEFINE
+                F1 AS F1.message == 'login failed',
+                F2 AS F2.message == 'login failed' AND F2.host == FIRST(F1.host)
+        )
+);
 
-    $json = SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $matches;
-    INSERT INTO `source_name`.`output_topic_name` SELECT * FROM $json;
+$json = (
+    SELECT
+        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    FROM
+        $matches
+);
+
+INSERT INTO `source_name`.`output_topic_name`
+SELECT
+    *
+FROM
+    $json
+;
 END DO;
+
 
 -- Change and start query
 ALTER STREAMING QUERY `my_queries/query_name` SET (

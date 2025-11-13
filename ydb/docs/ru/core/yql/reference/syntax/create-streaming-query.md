@@ -77,7 +77,7 @@ DO BEGIN
         SELECT COUNT(*) AS error_count, CAST(HOP_START() as String) as ts FROM $filtered
         GROUP BY HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'), host;
     
-    $json = SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $number_errors;
+    $json = SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM $number_errors;
     INSERT INTO `source_name`.`output_topic_name` SELECT * FROM $json;
 END DO;
 ```
@@ -92,6 +92,6 @@ DO BEGIN
         FORMAT="raw",
         SCHEMA=(data String));
     $parsed = SELECT JSON_VALUE(json, "$.field1") as field1, JSON_VALUE(json, "$.field2") as field2 FROM $input;
-    INSERT INTO `source_name`.`output_topic_name` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
+    INSERT INTO `source_name`.`output_topic_name` SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
 END DO;'''
 ```

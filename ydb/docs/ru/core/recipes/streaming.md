@@ -30,11 +30,11 @@ CREATE TOPIC `streaming_recipe/output_topic`;
 После создания топиков и таблицы нужно создать внешний источник данных. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE EXTERNAL DATA SOURCE `source_name` WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION="localhost:2136",
-    DATABASE_NAME="/local",
-    AUTH_METHOD = "NONE"
+CREATE EXTERNAL DATA SOURCE source_name WITH (
+    SOURCE_TYPE = 'Ydb',
+    LOCATION = 'localhost:2136',
+    DATABASE_NAME = '/local',
+    AUTH_METHOD = 'NONE'
 );
 ```
 
@@ -43,23 +43,51 @@ CREATE EXTERNAL DATA SOURCE `source_name` WITH (
 Далее необходимо запустить стриминговый запрос, который будет обрабатывать сообщения. Это можно сделать с помощью SQL-запроса:
 
 ```yql
-CREATE STREAMING QUERY `my_queries/query_name` AS
-DO BEGIN
-    $input = SELECT * FROM `source_name`.`streaming_recipe/input_topic`
-    WITH (
-        FORMAT = "json_each_row",
-        SCHEMA (
-            time String NOT NULL,
-            level String NOT NULL,
-            host String NOT NULL));
-    $filtered = SELECT * FROM $input WHERE level = "error";
+CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+$input = (
+    SELECT
+        *
+    FROM
+        source_name.`streaming_recipe/input_topic` WITH (
+            FORMAT = 'json_each_row',
+            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+        )
+);
 
-    $number_errors =
-        SELECT host, COUNT(*) AS error_count, CAST(HOP_START() as String) as ts FROM $filtered
-        GROUP BY HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S'), host;
-    
-    $json = SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $number_errors;
-    INSERT INTO `source_name`.`streaming_recipe/output_topic` SELECT * FROM $json;
+$filtered = (
+    SELECT
+        *
+    FROM
+        $input
+    WHERE
+        level == 'error'
+);
+
+$number_errors = (
+    SELECT
+        host,
+        COUNT(*) AS error_count,
+        CAST(HOP_START() AS String) AS ts
+    FROM
+        $filtered
+    GROUP BY
+        HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S'),
+        host
+);
+
+$json = (
+    SELECT
+        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+    FROM
+        $number_errors
+);
+
+INSERT INTO source_name.`streaming_recipe/output_topic`
+SELECT
+    *
+FROM
+    $json
+;
 END DO;
 ```
 
@@ -69,7 +97,15 @@ END DO;
 Это можно сделать с помощью SQL-запроса:
 
 ```yql
-SELECT Path, Status, Issues, Text, Run FROM `.sys/streaming_queries`
+SELECT
+    Path,
+    Status,
+    Issues,
+    Text,
+    Run
+FROM
+    `.sys/streaming_queries`
+;
 ```
 
 Убедитесь что в поле `Status` значение RUNNING. В противном случае проверьте поле `Issues`.

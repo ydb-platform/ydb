@@ -483,6 +483,7 @@ public:
     const THashSet<ui64>& StartRollback() override {
         AFL_ENSURE(State != ETransactionState::ROLLINGBACK);
         State = ETransactionState::ROLLINGBACK;
+        ShardsToWait.clear();
         for (auto& [shardId, shardInfo] : ShardsInfo) {
             if (shardInfo.State != EShardState::ERROR) {
                 shardInfo.State = EShardState::FINISHED;

@@ -1018,7 +1018,7 @@ void FillPartitioningSettingsImpl(TYdbProto& out,
         const NKikimrSchemeOp::TColumnTableDescription& in) {
 
     auto& outPartSettings = *out.mutable_partitioning_settings();
-    
+
     if (in.HasColumnShardCount()) {
         outPartSettings.set_min_partitions_count(in.GetColumnShardCount());
     }
@@ -1111,7 +1111,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             break;
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
- 
+
             break;
         };
 
@@ -1181,7 +1181,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
-            
+
         case Ydb::Table::TableIndex::kGlobalFulltextIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_index().fulltext_settings();

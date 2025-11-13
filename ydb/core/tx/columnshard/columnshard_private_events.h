@@ -81,7 +81,7 @@ struct TEvPrivate {
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
-        
+
         EvReportScanDiagnostics,
         EvReportScanIteratorDiagnostics,
 
@@ -359,8 +359,8 @@ struct TEvPrivate {
             return WritesBuffer;
         }
     };
-    
-struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
+
+    struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
         TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
             : RequestMessage(std::move(requestMessage))
             , DotGraph(std::move(dotGraph))
@@ -395,7 +395,7 @@ struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, Ev
         }
 
         std::shared_ptr<arrow::RecordBatch> Data;
-        bool IsLast;;
+        bool IsLast;
     };
 
     struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {

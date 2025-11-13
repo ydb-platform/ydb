@@ -65,7 +65,7 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(const TMap<ui32,
         return Nothing();
     }
 
-    return scheme;                                                
+    return scheme;
 }
 
 static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(const TMap<ui32, TUserTable::TUserColumn>& columns,
@@ -91,7 +91,7 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(const TMap<ui
     FillAttributes(scheme, pathDesc);
     FillPartitioningSettings(scheme, tableDesc);
 
-    return scheme;                                                
+    return scheme;
 }
 
 TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
@@ -101,7 +101,10 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     if (pathDesc.HasTable()) {
         return GenRowTableScheme(columns, pathDesc);
     }
-    return GenColumnTableScheme(columns, pathDesc);
+    if (pathDesc.HasColumnTableDescription()) {
+        return GenColumnTableScheme(columns, pathDesc);
+    }
+    return Nothing();
 }
 
 TMaybe<Ydb::Scheme::ModifyPermissionsRequest> GenYdbPermissions(const NKikimrSchemeOp::TPathDescription& pathDesc) {

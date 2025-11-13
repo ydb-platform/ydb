@@ -23,4 +23,5 @@ NKikimr::NDataShard::IExport* TDataShardExportFactory::CreateExportToS3(
 }
 
 void TDataShardExportFactory::Shutdown() {
+    // No cleanup required for TDataShardExportFactory.
 }

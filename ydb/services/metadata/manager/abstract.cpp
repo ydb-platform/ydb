@@ -93,6 +93,9 @@ IOperationsManager::TYqlConclusionStatus IOperationsManager::PrepareCreateObject
     if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return TYqlConclusionStatus::Fail("metadata provider service is disabled");
     }
+    if (AppData()->FeatureFlags.GetEnableSchemaSecrets() && to_lower(settings.GetTypeId()) == "secret") {
+        return TYqlConclusionStatus::Fail("Old secrets creation syntax is disabled now. Please use the new one");
+    }
     TInternalModificationContext internalContext(context);
     internalContext.SetActivityType(EActivityType::Create);
     return DoPrepare(schemeOperation, settings, manager, internalContext);

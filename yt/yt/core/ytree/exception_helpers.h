@@ -28,6 +28,7 @@ void ValidateNodeType(
 [[noreturn]] void ThrowMethodNotSupported(
     TStringBuf method,
     const std::optional<TString>& resolveType = {});
+[[noreturn]] void ThrowMethodNotSupportedForAttributes(TStringBuf method);
 [[noreturn]] void ThrowCannotHaveChildren(const IConstNodePtr& node);
 [[noreturn]] void ThrowAlreadyExists(const IConstNodePtr& node);
 [[noreturn]] void ThrowCannotRemoveNode(const IConstNodePtr& node);

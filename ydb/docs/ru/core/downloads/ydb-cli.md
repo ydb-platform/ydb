@@ -1,6 +1,6 @@
 # Загрузка {{ ydb-short-name }} CLI
 
-[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) (`ydb`) — утилита командной строки для работы с базами данных {{ ydb-short-name }}.
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) (`ydb`) — утилита командной строки для работы с базами данных {{ ydb-short-name }}. Распространяется под [лицензией Apache 2.0](https://github.com/ydb-platform/ydb/blob/main/LICENSE).
 
 ## Linux (amd64)
 

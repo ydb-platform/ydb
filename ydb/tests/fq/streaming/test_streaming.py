@@ -164,22 +164,14 @@ class TestStreamingInYdb(TestYdsBase):
                 WHERE time like "%lunch%";
                 INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
             END DO;'''
-<<<<<<< HEAD
-=======
 
->>>>>>> upstream/main
         query_name1 = "test_read_topic_shared_reading_insert_to_topic1"
         query_name2 = "test_read_topic_shared_reading_insert_to_topic2"
         kikimr.YdbClient.query(sql.format(query_name=query_name1, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         kikimr.YdbClient.query(sql.format(query_name=query_name2, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-<<<<<<< HEAD
 
-        query_id = "query_id"  # TODO
-        self.wait_completed_checkpoints(kikimr, query_id)
-=======
         path1 = f"/Root/{query_name1}"
         self.wait_completed_checkpoints(kikimr, path1)
->>>>>>> upstream/main
 
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
@@ -281,13 +273,9 @@ class TestStreamingInYdb(TestYdsBase):
 
         query_name = "test_read_topic_restore_state"
         kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-<<<<<<< HEAD
-        query_id = "query_id"  # TODO
-        self.wait_completed_checkpoints(kikimr, query_id)
-=======
+
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
->>>>>>> upstream/main
 
         data = [
             '{"dt": 1696849942000001, "str": "A" }',

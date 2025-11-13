@@ -45,7 +45,8 @@
 CREATE EXTERNAL DATA SOURCE `source_name` WITH (
     SOURCE_TYPE = "YDB",
     LOCATION="localhost:2135",
-    DATABASE_NAME="/Root"
+    DATABASE_NAME="/Root",
+    AUTH_METHOD = "NONE"
 );
 ```
 

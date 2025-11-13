@@ -43,13 +43,13 @@ END DO;
 |Тип                                  |json_each_row|raw|
 |-------------------------------------|-------------|---|
 |`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓||
-|`Bool`                               |             |   |
+|`Bool`                               |✓            |   |
 |`DyNumber`                           |             |   |
 |`String`, `Utf8`                     |✓            |✓  |
 |`Json`                               |             |✓  |
 |`JsonDocument`                       |             |   |
 |`Yson`                               |             |   |
-|`Uuid`                               |             |   |
+|`Uuid`                               |✓            |   |
 |`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|    |  |
 |`Interval`                           |            |   |
 |`Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDateTime64`, `TzTimestamp64`|     |    |

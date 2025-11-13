@@ -274,17 +274,22 @@ Y_UNIT_TEST_SUITE(NFulltext) {
     Y_UNIT_TEST(AnalyzeFilterSnowball) {
         Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
-        const TString russianText = "машины ездят по дорогам исправно";
 
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машины", "ездят", "по", "дорогам", "исправно"}));
+        {
+            const TString text = "машины ездят по дорогам исправно";
+            analyzers.set_use_filter_snowball(true);
+            analyzers.set_language("russian");
+            TStemmerPtr stemmer(sb_stemmer_new(analyzers.language().c_str(), nullptr));
+            UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers, stemmer.get()), (TVector<TString>{"машин", "езд", "по", "дорог", "исправн"}));
+        }
 
-        analyzers.set_use_filter_snowball(true);
-        analyzers.set_language("russian");
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машин", "езд", "по", "дорог", "исправн"}));
-
-        const TString englishText = "cars are driving properly on the roads";
-        analyzers.set_language("english");
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(englishText, analyzers), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
+        {
+            const TString text = "cars are driving properly on the roads";
+            analyzers.set_use_filter_snowball(true);
+            analyzers.set_language("english");
+            TStemmerPtr stemmer(sb_stemmer_new(analyzers.language().c_str(), nullptr));
+            UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers, stemmer.get()), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
+        }
     }
 }
 

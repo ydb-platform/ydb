@@ -50,7 +50,6 @@ private:
     };
 
     struct TShardState {
-        ui64 RetryAttempts = 0;
         bool HasPipe = false;
     };
 
@@ -61,6 +60,8 @@ private:
         const bool UniqueCheck;
         const bool FailOnUniqueCheck;
         bool Blocked = false;
+
+        ui64 RetryAttempts = 0;
     };
 
 public:
@@ -458,16 +459,30 @@ public:
                     getIssues());
             }
             case Ydb::StatusIds::OVERLOADED: {
-                // TODO: limit retries
                 CA_LOG_D("OVERLOADED was received from tablet: " << shardId << "."
                     << getIssues().ToOneLineString());
-                return RetryTableRead(record.GetReadId(), false);
+                if (!RetryTableRead(record.GetReadId(), false)) {
+                    return RuntimeError(
+                        NYql::NDqProto::StatusIds::OVERLOADED,
+                        NYql::TIssuesIds::KIKIMR_OVERLOADED,
+                        TStringBuilder() << "Table: `"
+                            << lookupState.Worker->GetTablePath() << "` retry limit exceeded.",
+                        getIssues());
+                }
+                return;
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                // TODO: limit retries
                 CA_LOG_D("INTERNAL_ERROR was received from tablet: " << shardId << "."
                     << getIssues().ToOneLineString());
-                return RetryTableRead(record.GetReadId(), true);
+                if (!RetryTableRead(record.GetReadId(), true)) {
+                    return RuntimeError(
+                        NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                        NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                        TStringBuilder() << "Table: `"
+                            << lookupState.Worker->GetTablePath() << "` retry limit exceeded.",
+                        getIssues());
+                }
+                return;
             }
             default: {
                 return RuntimeError(
@@ -482,7 +497,6 @@ public:
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             Settings.Counters->DataShardIteratorFails->Inc();
         }
-        shardState.RetryAttempts = 0;
 
         AFL_ENSURE(read.LastSeqNo < record.GetSeqNo());
         read.LastSeqNo = record.GetSeqNo();
@@ -555,7 +569,16 @@ public:
         }
 
         for (const auto& readId : toRetry) {
-            RetryTableRead(readId, true);
+            if (!RetryTableRead(readId, true)) {
+                const auto& failedRead = ReadIdToState.at(readId);
+                const auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
+                return RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder() << "Table: `"
+                        << lookupState.Worker->GetTablePath() << "` retry limit exceeded.",
+                    {});
+            }
         }
     }
 
@@ -575,15 +598,18 @@ public:
         }
     }
 
-    void RetryTableRead(const ui64 failedReadId, bool allowInstantRetry) {
+    bool RetryTableRead(const ui64 failedReadId, bool allowInstantRetry) {
         auto& failedRead = ReadIdToState.at(failedReadId);
         auto& lookupState = CookieToLookupState.at(failedRead.LookupCookie);
-        auto& shardState = ShardToState.at(failedRead.ShardId);
         CA_LOG_D("Retry reading of table: " << lookupState.Worker->GetTablePath() << ", failedReadId: " << failedReadId
             << ", shardId: " << failedRead.ShardId);
-
         failedRead.Blocked = true;
-        auto delay = CalcDelay(shardState.RetryAttempts, allowInstantRetry);
+
+        if (failedRead.RetryAttempts >= MaxShardRetries()) {
+            return false;
+        }
+
+        auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
         } else {
@@ -591,15 +617,20 @@ public:
                 delay, new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryRead(failedReadId, failedRead.LastSeqNo))
             );
         }
+
+        return true;
     }
 
     void DoRetryTableRead(const ui64 failedReadId, TLookupState& lookupState, TReadState& failedRead) {
+        AFL_ENSURE(failedRead.Blocked);
         --lookupState.ReadsInflight;
         const auto guard = Settings.TypeEnv.BindAllocator();
         auto requests = lookupState.Worker->RebuildRequest(failedReadId, ReadId);
         for (auto& request : requests) {
+            const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.UniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
+            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
         }
         ReadIdToState.erase(failedReadId);
     }

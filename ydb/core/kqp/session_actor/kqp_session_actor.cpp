@@ -1312,9 +1312,21 @@ public:
         }
 
         const auto& txCtx = *QueryState->TxCtx;
-        if (txCtx.HasTableRead || txCtx.HasTableWrite || txCtx.TopicOperations.GetSize() != 0) {
-            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table and topic operations");
+        if (txCtx.HasTableRead || txCtx.TopicOperations.GetSize() != 0) {
+            ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for table reads and topic operations");
             return false;
+        }
+
+        if (txCtx.HasTableWrite) {
+            if (txCtx.HasOlapTable && !txCtx.EnableOlapSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for column table writes without enabled olap sink");
+                return false;
+            }
+
+            if (txCtx.HasOltpTable && !txCtx.EnableOltpSink.value_or(false)) {
+                ReplyQueryError(Ydb::StatusIds::UNSUPPORTED, "Save state of query is not supported for row table writes without enabled oltp sink");
+                return false;
+            }
         }
 
         if (!tx) {
@@ -2405,7 +2417,10 @@ public:
             }
         }
 
-        LOG_W("ReplyQueryCompileError, status " << QueryState->CompileResult->Status << " remove tx with tx_id: " << txId.GetHumanStr());
+        LOG_W("ReplyQueryCompileError, status: " << QueryState->CompileResult->Status
+            << ", issues: " << Join(", ", QueryResponse->Record.GetResponse().GetQueryIssues())
+            << ", remove tx with tx_id: " << txId.GetHumanStr());
+
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
             if (!ctx->BufferActorId) {
@@ -2840,7 +2855,8 @@ public:
     void ReplyQueryError(Ydb::StatusIds::StatusCode ydbStatus,
         const TString& message, std::optional<google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>> issues = {})
     {
-        LOG_W("Create QueryResponse for error on request, msg: " << message);
+        LOG_W("Create QueryResponse for error on request, msg: " << message << ", status: " << ydbStatus
+            << (issues ? TStringBuilder() << ", issues: " << Join(", ", *issues) : TStringBuilder()));
 
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         QueryResponse->Record.SetYdbStatus(ydbStatus);

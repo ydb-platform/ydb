@@ -62,24 +62,51 @@ namespace NYql::NConnector::NTest {
             static_cast<TBuilder*>(this));                                          \
     }
 
+    template <typename TProto>
+    bool MatchProtos(const TProto& expected, const TProto& actual) {
+        Cerr << "GENERIC-CONNECTOR-MOCK Expected: " << expected.DebugString() << Endl;
+        Cerr << "GENERIC-CONNECTOR-MOCK Actual: " << actual.DebugString() << Endl;
+
+        google::protobuf::util::MessageDifferencer differencer;
+        TString differences;
+        differencer.ReportDifferencesToString(&differences);
+
+        bool result = differencer.Compare(actual, expected);
+
+        if (!result) {
+            Cerr << "GENERIC-CONNECTOR-MOCK Differences:" << Endl << differences << Endl;
+        }
+
+        return result;
+    }
+
     MATCHER_P(ProtobufRequestMatcher, expected, "request does not match") {
-        Cerr << "CRAB Expected: " << expected.DebugString() << Endl;
-        Cerr << "CRAB Actual: " << arg.DebugString() << Endl;
-        return google::protobuf::util::MessageDifferencer::Equals(arg, expected);
+        return MatchProtos(expected, arg);
     }
 
-    MATCHER_P(RequestRelaxedMatcher, expected, "") {
-        Y_UNUSED(arg);
-        return true;
+    MATCHER_P(RequestRelaxedMatcher, checker, "request does not match") {
+        return checker(arg);
     }
 
-#define MATCH_RESULT_WITH_INPUT(INPUT, RESULT_SET, GETTER)                      \
-    {                                                                           \
-        for (const auto& val : INPUT) {                                         \
-            UNIT_ASSERT(RESULT_SET.TryNextRow());                               \
-            UNIT_ASSERT_VALUES_EQUAL(RESULT_SET.ColumnParser(0).GETTER(), val); \
-        }                                                                       \
+#define MATCH_OPT_RESULT_WITH_VAL_IDX(VAL, RESULT_SET, GETTER, INDEX)               \
+    {                                                                               \
+            auto r = RESULT_SET.ColumnParser(INDEX).GETTER();                       \
+            UNIT_ASSERT_VALUES_EQUAL(r.has_value(), VAL.has_value());               \
+            if (r.has_value()) {                                                    \
+                UNIT_ASSERT_VALUES_EQUAL(*r, *VAL);                                 \
+            }                                                                       \
     }
+
+#define MATCH_RESULT_WITH_INPUT_IDX(INPUT, RESULT_SET, GETTER, INDEX)               \
+    {                                                                               \
+        for (const auto& val : INPUT) {                                             \
+            UNIT_ASSERT(RESULT_SET.TryNextRow());                                   \
+            UNIT_ASSERT_VALUES_EQUAL(RESULT_SET.ColumnParser(INDEX).GETTER(), val); \
+        }                                                                           \
+    }
+
+#define MATCH_RESULT_WITH_INPUT(INPUT, RESULT_SET, GETTER)\
+    MATCH_RESULT_WITH_INPUT_IDX(INPUT, RESULT_SET, GETTER, 0)
 
     // Make arrow array for one column.
     // Returns field for schema and array with data.
@@ -128,6 +155,10 @@ namespace NYql::NConnector::NTest {
 
     template <class T>
     void SetSimpleValue(const T& value, Ydb::TypedValue* proto, bool optional = false);
+
+    template <class T>
+    void SetValue(const T& value, Ydb::TypedValue* proto,
+        const ::Ydb::Type::PrimitiveTypeId& typeId, bool optional = false);
 
     template <class TParent>
     struct TWithParentBuilder {
@@ -231,6 +262,12 @@ namespace NYql::NConnector::NTest {
         //
         // Expectation helpers
         //
+
+        enum class EArgsValidation {
+            Strict,
+            DataSourceInstance,
+            Off,
+        };
 
         template <class TDerived, class TParent = void /* no parent by default */>
         struct TBaseDataSourceInstanceBuilder: public TProtoBuilder<TParent, NYql::TGenericDataSourceInstance> {
@@ -426,8 +463,20 @@ namespace NYql::NConnector::NTest {
             }
 
             template <class T>
+            TBuilder& Value(const T& value, const ::Ydb::Type::PrimitiveTypeId& typeId) {
+                SetValue(value, this->Result_->mutable_typed_value(), typeId);
+                return *this;
+            }
+
+            template <class T>
             TBuilder& OptionalValue(const T& value) {
                 SetSimpleValue(value, this->Result_->mutable_typed_value(), true);
+                return *this;
+            }
+
+            template <class T>
+            TBuilder& OptionalValue(const T& value, const ::Ydb::Type::PrimitiveTypeId& typeId) {
+                SetValue(value, this->Result_->mutable_typed_value(), typeId, true);
                 return *this;
             }
 
@@ -481,8 +530,16 @@ namespace NYql::NConnector::NTest {
                 return Arg().Value(value).Done();
             }
 
+            TBuilder& Value(const auto& value, const ::Ydb::Type::PrimitiveTypeId& typeId) {
+                return Arg().Value(value, typeId).Done();
+            }
+
             TBuilder& OptionalValue(const auto& value) {
                 return Arg().OptionalValue(value).Done();
+            }
+
+            TBuilder& OptionalValue(const auto& value, const ::Ydb::Type::PrimitiveTypeId& typeId) {
+                return Arg().OptionalValue(value, typeId).Done();
             }
 
             void FillWithDefaults() {
@@ -694,8 +751,8 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
-            auto& ValidateArgs(bool validate) {
-                ValidateArgs_ = validate;
+            auto& ValidateArgs(EArgsValidation validateCase) {
+                ValidateArgs_ = validateCase;
                 return *this;
             }
 
@@ -705,12 +762,31 @@ namespace NYql::NConnector::NTest {
                     Result();
                 }
 
-                auto& expectBuilder = ValidateArgs_
-                    ? EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    : EXPECT_CALL(*Mock_, ListSplitsImpl(RequestRelaxedMatcher(*Result_)));
+                const auto setupResponse = [&](auto& expectBuilder) {
+                    for (auto response : ResponseResults_) {
+                        expectBuilder.WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{ResponseStatus_, response}));
+                    }
+                };
 
-                for (auto response : ResponseResults_) {
-                    expectBuilder.WillOnce(Return(TIteratorResult<IListSplitsStreamIterator>{ResponseStatus_, response}));
+                switch (ValidateArgs_) {
+                    case EArgsValidation::Strict:
+                        setupResponse(EXPECT_CALL(*Mock_, ListSplitsImpl(ProtobufRequestMatcher(*Result_))));
+                        break;
+                    case EArgsValidation::DataSourceInstance:
+                        if (!Result_->selects().empty()) {
+                            setupResponse(EXPECT_CALL(*Mock_, ListSplitsImpl(RequestRelaxedMatcher([expected = Result_->selects(0).data_source_instance()](const NConnector::NApi::TListSplitsRequest& actual) {
+                                for (const auto& select : actual.selects()) {
+                                    if (!MatchProtos(expected, select.data_source_instance())) {
+                                        return false;
+                                    }
+                                }
+                                return true;
+                            }))));
+                            break;
+                        }
+                    case EArgsValidation::Off:
+                        setupResponse(EXPECT_CALL(*Mock_, ListSplitsImpl(RequestRelaxedMatcher([](const auto&) { return true; }))));
+                        break;
                 }
             }
 
@@ -718,7 +794,7 @@ namespace NYql::NConnector::NTest {
             TConnectorClientMock* Mock_ = nullptr;
             std::vector<TListSplitsStreamIteratorMock::TPtr> ResponseResults_;
             NYdbGrpc::TGrpcStatus ResponseStatus_ {};
-            bool ValidateArgs_ = true;
+            EArgsValidation ValidateArgs_ = EArgsValidation::Strict;
         };
 
         template <class TParent = void /* no parent by default */>
@@ -781,8 +857,8 @@ namespace NYql::NConnector::NTest {
                 return *this;
             }
 
-            auto& ValidateArgs(bool validate) {
-                ValidateArgs_ = validate;
+            auto& ValidateArgs(EArgsValidation validateCase) {
+                ValidateArgs_ = validateCase;
                 return *this;
             }
 
@@ -796,12 +872,31 @@ namespace NYql::NConnector::NTest {
                     Result();
                 }
 
-                auto& expectBuilder = ValidateArgs_
-                    ? EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_)))
-                    : EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher(*Result_)));
+                const auto setupResponse = [&](auto& expectBuilder) {
+                    for (auto response : ResponseResults_) {
+                        expectBuilder.WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{ResponseStatus_, response}));
+                    }
+                };
 
-                for (auto response : ResponseResults_) {
-                    expectBuilder.WillOnce(Return(TIteratorResult<IReadSplitsStreamIterator>{ResponseStatus_, response}));
+                switch (ValidateArgs_) {
+                    case EArgsValidation::Strict:
+                        setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(ProtobufRequestMatcher(*Result_))));
+                        break;
+                    case EArgsValidation::DataSourceInstance:
+                        if (!Result_->splits().empty()) {
+                            setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher([expected = Result_->splits(0).select().data_source_instance()](const NConnector::NApi::TReadSplitsRequest& actual) {
+                                for (const auto& split : actual.splits()) {
+                                    if (!MatchProtos(expected, split.select().data_source_instance())) {
+                                        return false;
+                                    }
+                                }
+                                return true;
+                            }))));
+                            break;
+                        }
+                    case EArgsValidation::Off:
+                        setupResponse(EXPECT_CALL(*Mock_, ReadSplitsImpl(RequestRelaxedMatcher([](const auto&) { return true; }))));
+                        break;
                 }
             }
 
@@ -809,7 +904,7 @@ namespace NYql::NConnector::NTest {
             TConnectorClientMock* Mock_ = nullptr;
             std::vector<TReadSplitsStreamIteratorMock::TPtr> ResponseResults_;
             NYdbGrpc::TGrpcStatus ResponseStatus_ {};
-            bool ValidateArgs_ = true;
+            EArgsValidation ValidateArgs_ = EArgsValidation::Strict;
         };
 
         TDescribeTableExpectationBuilder ExpectDescribeTable() {

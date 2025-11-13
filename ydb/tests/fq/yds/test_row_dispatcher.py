@@ -19,6 +19,7 @@ from ydb.tests.tools.datastreams_helpers.control_plane import create_stream, cre
 from ydb.tests.tools.datastreams_helpers.data_plane import read_stream, write_stream
 from ydb.tests.tools.fq_runner.fq_client import StreamingDisposition
 
+import ydb.public.api.protos.ydb_value_pb2 as ydb_value
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 YDS_CONNECTION = "yds"
@@ -33,6 +34,8 @@ def kikimr(request):
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.compute_plane.fq_config['row_dispatcher']['enabled'] = True
     kikimr.compute_plane.fq_config['row_dispatcher']['without_consumer'] = True
+    kikimr.compute_plane.fq_config['row_dispatcher']['json_parser'] = {}
+
     kikimr.start_mvp_mock_server()
     kikimr.start()
     yield kikimr
@@ -1175,3 +1178,58 @@ class TestPqRowDispatcher(TestYdsBase):
         assert "Failed to parse json message for offset" not in issues, "Incorrect Issues: " + issues
 
         assert received == expected
+
+    @yq_v1
+    @pytest.mark.parametrize("use_binding", [False, True], ids=["with_option", "bindings"])
+    def test_json_errors(self, kikimr, client, use_binding):
+        connection_response = client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
+        self.init_topics("test_json_errors", create_input=True, create_output=True, partitions_count=1)
+
+        time_type = ydb_value.Column(name="time", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.INT32))
+        data_type = ydb_value.Column(name="data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))
+
+        if use_binding:
+            client.create_yds_binding(
+                name="my_binding",
+                stream=self.input_topic,
+                format="json_each_row",
+                connection_id=connection_response.result.connection_id,
+                columns=[time_type, data_type],
+                format_setting={"skip.json.errors": "true"},
+            )
+
+        if use_binding:
+            sql = Rf'''
+                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                SELECT data FROM bindings.`my_binding`;'''
+        else:
+            sql = Rf'''
+                INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+                SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
+                    WITH (format=json_each_row, `skip.json.errors` = "true", SCHEMA (time Int32 NOT NULL, data String NOT NULL));'''
+
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        data = [
+            '{"time": 101, "data": "hello1"}',
+            '{"time": 102, "data": 7777}',
+            '{"time": 103, "data": "hello2"}'
+        ]
+
+        self.write_stream(data, partition_key="key")
+        expected = ['hello1', 'hello2']
+        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
+
+        deadline = time.time() + 30
+        while True:
+            count = 0
+            for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
+                value = kikimr.compute_plane.get_sensors(node_index, "yq").find_sensor(
+                    {"subsystem": "row_dispatcher", "partition": "0", "format": "json_each_row", "sensor": "ParsingErrors"})
+                count += value if value is not None else 0
+            if count > 0:
+                break
+            assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
+            time.sleep(1)
+        stop_yds_query(client, query_id)

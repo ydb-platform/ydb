@@ -1932,11 +1932,6 @@ private:
                 const auto& stage = tx.Body->GetStages(stageIdx);
                 const auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
 
-                if (graphRestored && (stageInfo.Meta.ShardOperations || stageInfo.Meta.ShardKind != NSchemeCache::ETableKind::KindUnknown)) {
-                    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, YqlIssue({}, NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Restore is not supported for table operations"));
-                    return;
-                }
-
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
 
@@ -1966,9 +1961,14 @@ private:
             }
         }
 
-        size_t sourceScanPartitionsCount = TasksGraph.BuildAllTasks(false, TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
-            Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(),
-            std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), &ShardsWithEffects);
+        size_t sourceScanPartitionsCount = 0;
+
+        if (!graphRestored) {
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks(false, TasksGraph.GetMeta().StreamResult || EnableReadsMerge, {},
+                Request.Transactions, ResourcesSnapshot, CollectProfileStats(Request.StatsMode), Stats.get(),
+                std::max<ui32>(ShardsOnNode.size(), ResourcesSnapshot.size()), &ShardsWithEffects);
+        }
+
         OnEmptyResult();
 
         TIssue validateIssue;
@@ -2860,8 +2860,7 @@ private:
 
     void StartCheckpointCoordinator() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        bool enableCheckpointCoordinator = QueryServiceConfig.HasStreamingQueries()
-            && QueryServiceConfig.GetStreamingQueries().HasExternalStorage()
+        bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
             && (Request.SaveQueryPhysicalGraph || Request.QueryPhysicalGraph != nullptr)
             && context && context->CheckpointId;
         if (!enableCheckpointCoordinator) {

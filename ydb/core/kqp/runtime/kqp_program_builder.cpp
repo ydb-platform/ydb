@@ -337,7 +337,7 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     const TString& leftLabel, const TString& rightLabel) {
 
     auto inputRowItems = AS_TYPE(TTupleType, AS_TYPE(TStreamType, input.GetStaticType())->GetItemType());
-    MKQL_ENSURE(inputRowItems->GetElementsCount() == 2, "Expected 2 elements");
+    MKQL_ENSURE(inputRowItems->GetElementsCount() == 3, "Expected 3 elements");
 
     auto leftRowType = AS_TYPE(TStructType, inputRowItems->GetElementType(0));
     auto rightRowType = AS_TYPE(TStructType, AS_TYPE(TOptionalType, inputRowItems->GetElementType(1))->GetItemType());

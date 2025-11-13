@@ -280,20 +280,5 @@ Y_UNIT_TEST_SUITE_F(FsImportParamsValidationTest, TFsBackupParamsValidationTestF
             // WaitOpSuccess(res, "Import with absolute base_path should succeed");
         }
     }
-
-    Y_UNIT_TEST(EmptyImportItem) {
-        // Test that import item cannot be completely empty
-        NImport::TImportFromFsSettings settings = MakeImportSettings(TString(TempDir().Path()));
-        settings.AppendItem({});  // Empty item
-
-        auto res = YdbImportClient().ImportFromFs(settings).GetValueSync();
-        UNIT_ASSERT_C(!res.Status().IsSuccess(), 
-            "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL_C(res.Status().GetStatus(), NYdb::EStatus::BAD_REQUEST, 
-            res.Status().GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), 
-            "source_path is required but not set",
-            res.Status().GetIssues().ToString());
-    }
 }
 

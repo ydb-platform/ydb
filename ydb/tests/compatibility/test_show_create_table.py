@@ -7,6 +7,8 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 class TestShowCreateTable(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        if min(self.versions) < (25, 3, 1):
+            pytest.skip("compatibility for show create table is not supported in < 25.3.1")
         self.table_name = "test_show_create_table"
         yield from self.setup_cluster(
             extra_feature_flags={

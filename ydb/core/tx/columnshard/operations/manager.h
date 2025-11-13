@@ -57,7 +57,7 @@ private:
     YDB_READONLY_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
     std::shared_ptr<TLockSharingInfo> SharingInfo;
 
-    YDB_READONLY_DEF(THashSet<ui64>, BrokeOnCommit);
+    YDB_READONLY_DEF(THashSet<ui64>, BreakOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, NotifyOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
 
@@ -100,16 +100,18 @@ public:
         return Committed.contains(lockId);
     }
 
-    void AddNotifyCommit(const ui64 lockId) {
-        AFL_VERIFY(NotifyOnCommit.erase(lockId));
+    /*
+    Let the given `TLockFeatures` know that the transaction with `lockId` has committed
+    */
+    void NotifyAboutCommit(const ui64 lockId) {
         Committed.emplace(lockId);
     }
 
-    void AddBrokeOnCommit(const THashSet<ui64>& lockIds) {
-        BrokeOnCommit.insert(lockIds.begin(), lockIds.end());
+    void AddBreakOnCommit(const THashSet<ui64>& lockIds) {
+        BreakOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
-    void AddNotificationsOnCommit(const THashSet<ui64>& lockIds) {
+    void AddNotifyOnCommit(const THashSet<ui64>& lockIds) {
         NotifyOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
@@ -124,16 +126,7 @@ public:
     }
 };
 
-class IResolveWriteIdToLockId {
-protected:
-    virtual ~IResolveWriteIdToLockId() {
-    }
-
-public:
-    virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const = 0;
-};
-
-class TOperationsManager: public IResolveWriteIdToLockId {
+class TOperationsManager {
     NOlap::NTxInteractions::TInteractionsContext InteractionsContext;
 
     THashMap<ui64, ui64> Tx2Lock;
@@ -141,16 +134,6 @@ class TOperationsManager: public IResolveWriteIdToLockId {
     THashMap<ui64, TLockFeatures> LockFeatures;
     THashMap<TOperationWriteId, TWriteOperation::TPtr> Operations;
     TOperationWriteId LastWriteId = TOperationWriteId(0);
-
-public:   //IResolveWriteIdToLockId
-    virtual std::optional<ui64> ResolveWriteIdToLockId(const TInsertWriteId& writeId) const override {
-        if (const auto operationWriteId = InsertWriteIdToOpWriteId.FindPtr(writeId)) {
-            if (const auto* operation = Operations.FindPtr(*operationWriteId)) {
-                return (*operation)->GetLockId();
-            }
-        }
-        return std::nullopt;
-    }
 
 public:
 
@@ -203,6 +186,9 @@ public:
     void LinkTransactionOnComplete(const ui64 lockId, const ui64 txId);
     void AbortTransactionOnExecute(TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
+
+    void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakConflictingTxs(const ui64 txId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

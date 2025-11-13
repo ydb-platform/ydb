@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -26,8 +27,20 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         }
         return false;
     }();
+
     const auto* source = sourceExt->GetAs<IDataSource>();
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
+
+    NCommon::TPortionStateAtScanStart portionState = NCommon::TPortionStateAtScanStart{
+        .Committed = true,
+        .Conflicting = false,
+        .MaxRecordSnapshot = source->GetRecordSnapshotMax()
+    };
+    if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
+        const auto* portion = static_cast<const TPortionDataSource*>(source);
+        portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
+    }
+
+    const bool needConflictDetector = portionState.Conflicting;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -38,15 +51,16 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = NeedDuplicateFiltering();
+
+    const bool preventDuplicates = NeedDuplicateFiltering() && !portionState.Conflicting;
     {
-        auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+        auto& result = CacheFetchingScripts[needConflictDetector ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
                 gInit->InitializationFinished(BuildColumnsFetchingPlan(
-                    needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
+                    needConflictDetector, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }
@@ -54,7 +68,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
     }
 }
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
+std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needConflictDetector, const bool partialUsageByPredicateExt,
     const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates,
     const bool isFinalSyncPoint) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
@@ -76,9 +90,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (partialUsageByPredicate) {
             acc.AddFetchingStep(*GetPredicateColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
         }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddFetchingStep(*GetSpecColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
-        }
         if (needFilterDeletion) {
             acc.AddAssembleStep(*GetDeletionColumns(), "SPEC_DELETION", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TDeletionFilter>());
@@ -87,9 +98,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetPredicateColumns(), "PREDICATE", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TPredicateFilter>());
         }
-        if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
-            acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
-            acc.AddStep(std::make_shared<TSnapshotFilter>());
+        if (needConflictDetector) {
+            acc.AddStep(std::make_shared<TConflictDetector>());
         }
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());
@@ -110,9 +120,18 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
-        const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
-        AFL_VERIFY(portions);
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portions->GetConstructors()));
+        const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        AFL_VERIFY(casted_sources);
+        // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
+        std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
+        for (auto&& constructor : casted_sources->GetConstructors()) {
+            const auto info = constructor.GetPortion();
+            auto state = GetPortionStateAtScanStart(*info);
+            if (!state.Conflicting) {
+                portionsToDuplicateFilter.emplace_back(std::move(info));
+            }
+        }
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }
 

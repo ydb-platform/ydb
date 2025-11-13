@@ -27,6 +27,6 @@ jobs:
     with:
       test_targets: ydb/
       test_size: small,medium
-      branches: ${{ startsWith(inputs.use_default_branches, 'false') && (inputs.pull_request_input || github.ref_name) || '' }}
+      branches: ${{ startsWith(inputs.use_default_branches, 'false') && (inputs.pull_request_input || github.ref_name) || inputs.pull_request_input }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

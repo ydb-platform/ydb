@@ -1845,8 +1845,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                tableInfo->IsExternalBlobsEnabled = PartitionConfigHasExternalBlobsEnabled(tableInfo->PartitionConfig());
-
                 TString alterTabletFull = std::get<4>(rec);
                 TString alterTabletDiff = std::get<5>(rec);
                 if (alterTabletFull) {
@@ -2386,7 +2384,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             TPathId prevTableId;
 
-            TInstant now = AppData()->TimeProvider->Now();
             while (!rowSet.EndOfSet()) {
                 const TPathId tableId = TPathId(
                     rowSet.GetValue<Schema::TablePartitionStats::TableOwnerId>(),
@@ -2463,6 +2460,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.RangeReads = rowSet.GetValue<Schema::TablePartitionStats::RangeReads>();
                 stats.RangeReadRows = rowSet.GetValue<Schema::TablePartitionStats::RangeReadRows>();
 
+                TInstant now = AppData(ctx)->TimeProvider->Now();
                 stats.SetCurrentRawCpuUsage(rowSet.GetValue<Schema::TablePartitionStats::CPU>(), now);
                 stats.Memory = rowSet.GetValue<Schema::TablePartitionStats::Memory>();
                 stats.Network = rowSet.GetValue<Schema::TablePartitionStats::Network>();
@@ -2480,8 +2478,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.LocksWholeShard = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksWholeShard>();
                 stats.LocksBroken = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksBroken>();
 
-                TDiskSpaceUsageDelta unusedDelta;
-                tableInfo->UpdateShardStats(&unusedDelta, shardIdx, stats, now);
+                tableInfo->UpdateShardStats(shardIdx, stats);
 
                 // note that we don't update shard metrics here, because we will always update
                 // the shard metrics in TSchemeShard::SetPartitioning

@@ -82,6 +82,7 @@ namespace NActors {
         ~TCoroutineChunkSerializer();
 
         void SetSerializingEvent(const IEventBase *event);
+        void DiscardEvent() { Event = nullptr; };
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size);
         bool IsComplete() const {
@@ -150,6 +151,8 @@ namespace NActors {
 
     void ParseExtendedFormatPayload(TRope::TConstIterator &iter, size_t &size, TVector<TRope> &payload, size_t &totalPayloadSize);
     bool SerializeToArcadiaStreamImpl(TChunkSerializer* chunker, const TVector<TRope> &payload);
+    ui32 CalculateSerializedHeaderSizeImpl(const TVector<TRope> &payload);
+    std::optional<TRope> SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload);
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize);
 
@@ -202,8 +205,25 @@ namespace NActors {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
         }
 
-        static IEventBase* Load(TEventSerializedData *input) {
-            THolder<TEventPBBase> ev(new TEv());
+        std::optional<TRope> SerializeToRope(std::function<TRcBuf(ui32 size)> alloc) const override {
+            std::optional<TRope> result = SerializeToRopeImpl(alloc, Payload);
+            if (!result) {
+                return {};
+            }
+            ui32 size = Record.ByteSizeLong();
+            TRcBuf recordsSerializedBuf = alloc(size);
+            if (!recordsSerializedBuf) {
+                return {};
+            }
+            bool serializationDone = Record.SerializePartialToArray(recordsSerializedBuf.GetDataMut(), size);
+            Y_ABORT_UNLESS(serializationDone);
+            result->Insert(result->End(), std::move(recordsSerializedBuf));
+            return result;
+        }
+
+        static TEv* Load(const TEventSerializedData *input) {
+            THolder<TEv> holder(new TEv());
+            TEventPBBase* ev = holder.Get();
             if (!input->GetSize()) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
             } else {
@@ -221,7 +241,7 @@ namespace NActors {
                 }
             }
             ev->CachedByteSize = input->GetSize();
-            return ev.Release();
+            return holder.Release();
         }
 
         size_t GetCachedByteSize() const {

@@ -10,7 +10,10 @@ on:
         type: boolean
         required: false
         default: true
-
+      pull_request_input:
+        description: 'Overrides default branches, use with pull/* prefix, ex. pull/12345'
+        required: false
+        default: ''
 jobs:
   main:
     name: Whitelist-run
@@ -22,6 +25,6 @@ jobs:
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
-      branches: ${{ startsWith(inputs.use_default_branches, 'false') && github.ref_name || '' }}
+      branches: ${{ startsWith(inputs.use_default_branches, 'false') && (inputs.pull_request_input || github.ref_name) || inputs.pull_request_input }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

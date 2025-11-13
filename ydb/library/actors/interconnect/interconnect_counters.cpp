@@ -134,8 +134,16 @@ namespace {
             *InflightDataAmount += value;
         }
 
+        void AddInflightRdmaDataAmount(ui64 value) override {
+            *InflightRdmaDataAmount += value;
+        }
+
         void SubInflightDataAmount(ui64 value) override {
             *InflightDataAmount -= value;
+        }
+
+        void SubInflightRdmaDataAmount(ui64 value) override {
+            *InflightRdmaDataAmount -= value;
         }
 
         void AddTotalBytesWritten(ui64 value) override {
@@ -240,6 +248,10 @@ namespace {
             InterconnectQueueTimeHistogram->Collect(value);
         }
 
+        void UpdateRdmaReadTimeHistogram(ui64 value) override {
+            RdmaReadTimeHistogram->Collect(value);
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -318,11 +330,14 @@ namespace {
                 HandshakeFails = AdaptiveCounters->GetCounter("Handshake_Fails", true);
                 InflyLimitReach = AdaptiveCounters->GetCounter("InflyLimitReach", true);
                 InflightDataAmount = AdaptiveCounters->GetCounter("Inflight_Data");
+                InflightRdmaDataAmount = AdaptiveCounters->GetCounter("InflightRdma_Data");
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
                 InterconnectQueueTimeHistogram = AdaptiveCounters->GetHistogram(
                     "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
+                RdmaReadTimeHistogram = AdaptiveCounters->GetHistogram(
++                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
             }
 
             if (updateGlobal) {
@@ -371,6 +386,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr Connected;
         NMonitoring::TDynamicCounters::TCounterPtr Disconnections;
         NMonitoring::TDynamicCounters::TCounterPtr InflightDataAmount;
+        NMonitoring::TDynamicCounters::TCounterPtr InflightRdmaDataAmount;
         NMonitoring::TDynamicCounters::TCounterPtr InflyLimitReach;
         NMonitoring::TDynamicCounters::TCounterPtr OutputBuffersTotalSize;
         NMonitoring::TDynamicCounters::TCounterPtr QueueUtilization;
@@ -386,6 +402,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
         NMonitoring::THistogramPtr PingTimeHistogram;
         NMonitoring::THistogramPtr InterconnectQueueTimeHistogram;
+        NMonitoring::THistogramPtr RdmaReadTimeHistogram;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
@@ -487,8 +504,16 @@ namespace {
             InflightDataAmount_->Add(value);
         }
 
+        void AddInflightRdmaDataAmount(ui64 value) override {
+            InflightRdmaDataAmount_->Add(value);
+        }
+
         void SubInflightDataAmount(ui64 value) override {
             InflightDataAmount_->Add(-value);
+        }
+
+        void SubInflightRdmaDataAmount(ui64 value) override {
+            InflightRdmaDataAmount_->Add(-value);
         }
 
         void AddTotalBytesWritten(ui64 value) override {
@@ -591,6 +616,10 @@ namespace {
             InterconnectQueueTimeHistogram_->Record(value);
         }
 
+        void UpdateRdmaReadTimeHistogram(ui64 value) override {
+            RdmaReadTimeHistogram_->Record(value);
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -681,10 +710,13 @@ namespace {
                 HandshakeFails_ = createRate(AdaptiveMetrics_, "interconnect.handshake_fails");
                 InflyLimitReach_ = createRate(AdaptiveMetrics_, "interconnect.infly_limit_reach");
                 InflightDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_data");
+                InflightRdmaDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_rdma_data");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
                 InterconnectQueueTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
+                RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.rdma_read_time_us"}}), NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
             }
 
             if (updateGlobal) {
@@ -758,6 +790,7 @@ namespace {
         NMonitoring::IRate* HandshakeFails_;
         NMonitoring::IRate* InflyLimitReach_;
         NMonitoring::IRate* InflightDataAmount_;
+        NMonitoring::IRate* InflightRdmaDataAmount_;
         NMonitoring::IRate* OutputBuffersTotalSize_;
         NMonitoring::IIntGauge* SubscribersCount_;
         NMonitoring::IRate* SendSyscalls_;
@@ -770,6 +803,7 @@ namespace {
 
         NMonitoring::IHistogram* PingTimeHistogram_;
         NMonitoring::IHistogram* InterconnectQueueTimeHistogram_;
+        NMonitoring::IHistogram* RdmaReadTimeHistogram_;
 
         THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;

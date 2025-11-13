@@ -39,6 +39,9 @@ namespace NActors {
         }
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
+        virtual std::optional<TRope> SerializeToRope(std::function<TRcBuf(ui32 size)>) const {
+            return std::nullopt;
+        }
         virtual bool IsSerializable() const = 0;
         virtual ui32 CalculateSerializedSizeCached() const {
             return CalculateSerializedSize();

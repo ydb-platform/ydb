@@ -419,7 +419,7 @@ class TestStreamingInYdb(TestYdsBase):
         # test_type(self, kikimr, type="Json", input='{"name": "value"}', expected_output='{"name": "value"}')
         # test_type(self, kikimr, type="JsonDocument", input='{"name": "value"}', expected_output='lunch time')
         # test_type(self, kikimr, type="Bool", input='True', expected_output='True')
-        
+
     def test_raw_format(self, kikimr):
         sourceName = "test_restart_query" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=10)

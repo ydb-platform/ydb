@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
         // TODO: implement
     }
 
-    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config, bool fromBinding) {
+    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             // extract the main config from newly applied section
@@ -152,20 +152,6 @@ namespace NKikimr::NStorage {
 
             if (BridgeInfo && !BridgeInfo->SelfNodePile->IsPrimary) {
                 UnbindNodesFromOtherPiles("not primary pile anymore");
-            }
-
-            // update configuration to the root
-            if (IsSelfStatic && !fromBinding) {
-                auto ev = std::make_unique<TEvNodeConfigPush>();
-                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, ev.get());
-                if (Binding && Binding->SessionId) {
-                    SendEvent(*Binding, std::move(ev));
-                }
-            }
-
-            // update configuration to bound nodes
-            if (IsSelfStatic) {
-                FanOutReversePush();
             }
 
             return true;

@@ -371,41 +371,9 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig *proposedConfig = nullptr;
 
-        /*
-        TODO(alexvru): check if this logic is valid at all VVV
-
-        // let's try to find possibly proposed config, but without a quorum, and try to reconstruct it
-        bool noSingleProposedConfig = false;
-        for (const TEvGather::TCollectConfigs::TPersistentConfig& item : res->GetProposedConfigs()) {
-            if (const NKikimrBlobStorage::TStorageConfig& config = item.GetConfig(); CheckFingerprint(config)) {
-                if (persistedConfig) {
-                    if (config.GetGeneration() <= persistedConfig->GetGeneration()) {
-                        continue; // some obsolete record
-                    } else if (persistedConfig->GetGeneration() + 1 < config.GetGeneration()) {
-                        STLOG(PRI_CRIT, BS_NODE, NWDC62, "persistently proposed config has too big generation",
-                            (PersistentConfig, *persistedConfig), (ProposedConfig, config));
-                        Y_DEBUG_ABORT("persistently proposed config has too big generation");
-                        Halt();
-                        return {.ErrorReason = "Persistently proposed config has too big generation"};
-                    }
-                }
-                if (proposedConfig && (proposedConfig->GetGeneration() != config.GetGeneration() ||
-                        proposedConfig->GetFingerprint() != config.GetFingerprint())) {
-                    noSingleProposedConfig = true;
-                } else {
-                    proposedConfig = &config;
-                }
-            }
-        }
-        if (noSingleProposedConfig) {
-            proposedConfig = nullptr;
-        } else if (proposedConfig && persistedConfig) {
-            Y_ABORT_UNLESS(persistedConfig->GetGeneration() + 1 == proposedConfig->GetGeneration());
-        }
-        */
-
         if (persistedConfig) { // we have a committed config, apply and spread it
             ApplyStorageConfig(*persistedConfig);
+            FanOutReversePush(persistedConfig); // notify all nodes about this config
         }
 
         NKikimrBlobStorage::TStorageConfig tempConfig;
@@ -490,6 +458,7 @@ namespace NKikimr::NStorage {
                 *Cfg, proposition.MindPrev, &err)) {
             // apply configuration and spread it
             ApplyStorageConfig(proposition.StorageConfig);
+            FanOutReversePush(&proposition.StorageConfig);
 
             // this proposition came from actor -- we notify that actor and finish operation
             Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::nullopt));
@@ -549,7 +518,7 @@ namespace NKikimr::NStorage {
                         (StorageConfig, StorageConfig.get()), (Request, task.Request), (RootNodeId, GetRootNodeId()));
                     Y_DEBUG_ABORT();
                 } else if (proposed.HasClusterState() && (!BridgeInfo || !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {
-                    // won't persist propsed config when this node is not part of the quorum
+                    // won't persist proposed config when this node is not part of the quorum
                 } else {
                     ProposedStorageConfigCookie.emplace(cookie);
                     ProposedStorageConfig.emplace(proposed);
@@ -702,26 +671,11 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::FanOutReversePush() {
-        Y_ABORT_UNLESS(StorageConfig);
-        THashSet<ui32> nodeIdsToUpdate;
-        if (StorageConfig) {
-            for (auto& [nodeId, node] : AllBoundNodes) { // assume this gets to all bound nodes
-                for (auto& meta : node.Configs) {
-                    if (meta.GetGeneration() < StorageConfig->GetGeneration()) {
-                        // this node has a chance of holding obsolete configuration: update it
-                        nodeIdsToUpdate.insert(nodeId.NodeId());
-                        meta = *StorageConfig;
-                    }
-                }
-            }
-        }
+    void TDistributedConfigKeeper::FanOutReversePush(const NKikimrBlobStorage::TStorageConfig *committedStorageConfig) {
         const ui32 rootNodeId = GetRootNodeId();
         for (auto& [nodeId, info] : DirectBoundNodes) {
-            const bool needToUpdateConfig = nodeIdsToUpdate.contains(nodeId);
-            if (needToUpdateConfig || info.LastReportedRootNodeId != rootNodeId) {
-                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(rootNodeId,
-                    needToUpdateConfig ? StorageConfig.get() : nullptr, std::nullopt));
+            if (committedStorageConfig || info.LastReportedRootNodeId != rootNodeId) {
+                SendEvent(nodeId, info, std::make_unique<TEvNodeConfigReversePush>(rootNodeId, committedStorageConfig));
                 info.LastReportedRootNodeId = GetRootNodeId();
             }
         }

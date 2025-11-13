@@ -141,12 +141,14 @@ namespace NKikimr {
         }
 
         virtual ui32 ProcessPhantomFlags(TString* data) = 0;
+        virtual NKikimrBlobStorage::EFullSyncProtocol GetProtocol() = 0;
 
         bool RunStages() {
             if (!Result) {
                 Result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId,
                         SyncState, CurrentEvent->Get()->Record.GetCookie(), TActivationContext::Now(),
-                        IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel());
+                        IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel(),
+                        GetProtocol());
                 LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
             }
 
@@ -184,6 +186,7 @@ namespace NKikimr {
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::PhantomFlags:
+                    Stage = NKikimrBlobStorage::PhantomFlags;
                     pres = ProcessPhantomFlags(data);
                     if (pres & LongProcessing) {
                         return false;
@@ -273,6 +276,10 @@ namespace NKikimr {
 
         ui32 ProcessPhantomFlags(TString*) override {
             return EmptyFlag;
+        }
+
+        NKikimrBlobStorage::EFullSyncProtocol GetProtocol() override {
+            return NKikimrBlobStorage::EFullSyncProtocol::Legacy;
         }
     
         STRICT_STFUNC(StateFunc,
@@ -376,6 +383,10 @@ namespace NKikimr {
             }
 
             return result;
+        }
+
+        NKikimrBlobStorage::EFullSyncProtocol GetProtocol() override {
+            return NKikimrBlobStorage::EFullSyncProtocol::UnorderedData;
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {

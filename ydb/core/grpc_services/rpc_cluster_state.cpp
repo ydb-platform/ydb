@@ -65,7 +65,7 @@ public:
 
             TString ToSelect() const {
                 if (Sensitive) {
-                    return TStringBuilder() << "SUBSTRING(" << Name << ", 0, 15) + '...' AS " << Name;
+                    return TStringBuilder() << "Unicode::ReplaceLast(Unicode::SplitToList(`" << Name << "`, ' ')[0], '', '...') AS `" << Name << '`';
                 }
                 return TStringBuilder() << '`' << Name << '`';
             }

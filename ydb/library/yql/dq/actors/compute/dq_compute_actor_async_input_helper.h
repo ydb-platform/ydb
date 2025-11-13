@@ -82,6 +82,7 @@ public:
 
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
+            // async ca only
             if (watermarksTracker && watermark && !finished) {
                 const auto inputWatermarkChanged = watermarksTracker->NotifyAsyncInputWatermarkReceived(
                     Index,
@@ -91,7 +92,11 @@ public:
                     CA_LOG_T("Pause async input " << Index << " because of watermark " << *watermark);
                     Pause(*watermark);
                 }
+
+                // do not push watermark to sync ca
+                watermark.Clear();
             }
+
             const bool emptyBatch = batch.empty();
             AsyncInputPush(std::move(batch), watermark, space, finished);
             if (!emptyBatch) {

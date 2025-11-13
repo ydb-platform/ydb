@@ -172,6 +172,7 @@ public:
 
     void PushWatermark(TInstant watermark) {
         Batches.emplace_back(watermark);
+        AddBatchCounts();
     }
 
     [[nodiscard]]
@@ -190,36 +191,37 @@ public:
         popStats.Resume(); //save timing before processing
 
         PopReadyCounts();
+        Y_ABORT_UNLESS(BeforeBarrier.BatchesCount > 0);
         Y_ABORT_UNLESS(BeforeBarrier.BatchesCount <= Batches.size());
 
         ui64 popBytes = 0;
         ui64 popRows = 0;
 
-        while (!Batches.empty()) {
-            if (auto* part = std::get_if<TBatch>(&Batches.front())) {
-                if (BeforeBarrier.BatchesCount == 0) {
-                    break;
-                }
+        while (!Batches.empty() && BeforeBarrier.BatchesCount--) {
+            const auto end = std::visit(TOverloaded {
+                [&batch, &popBytes, &popRows](TBatch& part) -> bool {
+                    if (batch.IsWide()) {
+                        part.Batch.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
+                            batch.PushRow(values, width);
+                        });
+                    } else {
+                        part.Batch.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
+                            batch.emplace_back(std::move(value));
+                        });
+                    }
+                    popBytes += part.Bytes;
+                    popRows += part.Rows;
+                    return false;
+                },
+                [&watermark](TInstant newWatermark) -> bool {
+                    watermark = newWatermark;
+                    return true;
+                },
+            }, Batches.front());
+            Batches.pop_front();
 
-                if (batch.IsWide()) {
-                    part->Batch.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
-                        batch.PushRow(values, width);
-                    });
-                } else {
-                    part->Batch.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
-                        batch.emplace_back(std::move(value));
-                    });
-                }
-                popBytes += part->Bytes;
-                popRows += part->Rows;
-                BeforeBarrier.BatchesCount --;
-                Batches.pop_front();
-            } else if (auto* newWatermark = std::get_if<TInstant>(&Batches.front())) {
-                watermark = *newWatermark;
-                Batches.pop_front();
+            if (end) {
                 break;
-            } else {
-                Y_DEBUG_ABORT();
             }
         }
 

@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)

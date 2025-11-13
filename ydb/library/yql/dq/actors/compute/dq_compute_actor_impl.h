@@ -1738,8 +1738,6 @@ protected:
 
 private:
     void InitializeWatermarks() {
-        Cout << (TStringBuilder() << TInstant::Now() << " [TODO][SelfId=" << this->SelfId() << "][TxId=" << TxId << "][TaskId=" << Task.GetId() << "] InitializeWatermarks(): " << SourcesMap.size() << " sources, " << InputChannelsMap.size() << " input channels\n");
-
         TInstant now = TInstant::Now();
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {

@@ -86,11 +86,15 @@ Use the provider like any other Linq To DB provider: map your entity classes to 
 | `TimeSpan`                    | `Interval`                                | `Interval64`             | Wider interval range. `DbType = "Interval64"`. [Example](#dbtype-override-example)                                       |
 
 {% note tip %}
+
 You can set exact `Precision`/`Scale` with attributes: `[Column(DataType = DataType.Decimal, Precision = 22, Scale = 9)]`.
+
 {% endnote %}
 
 {% note info %}
+
 By default (when `DbType` is not specified), the provider uses legacy YDB temporal types: `Date`, `Datetime`, `Timestamp`, `Interval`. To opt in per column to extended types, set `DbType`, e.g. `[Column(DbType = "Date32")]`. Both families can coexist in the same table.
+
 {% endnote %}
 
 ### Custom precision scale example
@@ -194,7 +198,9 @@ ALTER TABLE Groups
 ```
 
 {% note info %}
+
 Linq To DB doesn’t manage migrations. The DDL below is illustrative—apply it with Liquibase/Flyway (recommended). For quick local changes you can also run it directly with db.Execute(...) or the YDB CLI.
+
 {% endnote %}
 
 ```csharp
@@ -414,6 +420,7 @@ CREATE TABLE Students (
 ### “Business” entity example and generated DDL
 
 This section shows a practical, production-style entity from a typical domain. It demonstrates:
+
 - a realistic column set (name, email, hire date, salary, flags, ints);
 - precise types (e.g., Decimal(22,9) for money-like values, Date for dates, Utf8/Bool/Int32/Int64);
 - a GLOBAL secondary index on full_name for lookups and ordering;
@@ -547,7 +554,9 @@ db.GetTable<Employee>()
   ```
 
 {% note info %}
+
 The provider emits parameters (?) because values and types are bound via the driver, not declared in the query text. When YQL requires typed parameters, the provider adds the necessary DECLARE statements automatically. For non-standard patterns such as upsert-style writes, use YDB’s UPSERT with parameter binding—the provider generates these statements as regular YQL with parameters.
+
 {% endnote %}
 
 

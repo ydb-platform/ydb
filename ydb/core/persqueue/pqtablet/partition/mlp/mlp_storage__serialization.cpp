@@ -433,7 +433,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
         auto& message = Messages.front();
         if (!SlowMessages.contains(FirstOffset)) {
-            RemoveMessage(FirstOffset, message);
+            RemoveMessage(message);
         }
         Messages.pop_front();
         ++FirstOffset;
@@ -476,7 +476,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
 
             auto statusChanged = message->Status != msg.Common.Fields.Status;
             if (statusChanged) {
-                RemoveMessage(offset, *message);
+                RemoveMessage(*message);
                 ++Metrics.InflyMessageCount;
             }
 
@@ -514,7 +514,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             auto it = SlowMessages.find(offset);
             AFL_ENSURE(it != SlowMessages.end())("o", offset);
             auto& message = it->second;
-            RemoveMessage(offset, message);
+            RemoveMessage(message);
             SlowMessages.erase(it);
         }
     }
@@ -525,7 +525,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             break;
         }
 
-        RemoveMessage(it->first, it->second);
+        RemoveMessage(it->second);
         it = SlowMessages.erase(it);
     }
 
@@ -538,14 +538,6 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
                 .SeqNo = message.SeqNo
             });
         }
-
-        /*
-        ui64 lastOffset = 0;
-        for (auto offset : wal.GetDeletedFromDLQMessages()) {
-            lastOffset += offset;
-            DLQQueue.erase(lastOffset);
-        }
-        */
     }
 
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
@@ -677,23 +669,6 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         }
         wal.SetAddedToDLQMessages(std::move(serializer.Buffer));
     }
-
-    /*
-    {
-        std::sort(DeletedFromDLQ.begin(), DeletedFromDLQ.end());
-        ui64 lastOffset = 0;
-        for (auto offset : DeletedFromDLQ) {
-            if (!offset && lastOffset == offset) {
-                continue;
-            }
-            if (!Storage->DLQQueue.contains(offset)) {
-                wal.AddDeletedFromDLQMessages(offset - lastOffset);
-                lastOffset = offset;
-            }
-        }
-    }
-        */
-
     {
         ui64 lastOffset = 0;
         for (auto offset : MovedToSlowZone) {

@@ -1411,6 +1411,5 @@ message TMLPStorageWAL {
     repeated uint64 DeletedFromSlowZone = 13;
 
     optional bytes AddedToDLQMessages = 14;
-    repeated uint64 DeletedFromDLQMessages = 15;
 }
 

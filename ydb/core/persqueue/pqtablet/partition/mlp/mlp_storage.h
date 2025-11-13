@@ -122,7 +122,6 @@ public:
         std::optional<ui64> FirstNewMessage;
         size_t NewMessageCount = 0;
         std::vector<TDLQMessage> AddedToDLQ;
-        std::vector<ui64> DeletedFromDLQ;
         std::vector<ui64> MovedToSlowZone;
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
@@ -214,7 +213,7 @@ private:
 
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
-    void RemoveMessage(ui64 offset, const TMessage& message);
+    void RemoveMessage(const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 

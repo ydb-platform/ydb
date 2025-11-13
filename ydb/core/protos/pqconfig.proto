@@ -1361,7 +1361,7 @@ message TEvMLPChangeMessageDeadlineResponse {
 }
 
 message TMLPMetrics {
-    optional uint64 TotalMovedToDLQMessageCount = 1;
+    optional uint64 TotalScheduledToDLQMessageCount = 1;
 }
 
 message TMLPStorageSnapshot {

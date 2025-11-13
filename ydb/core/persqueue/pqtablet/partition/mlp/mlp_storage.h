@@ -8,10 +8,10 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash.h>
 
 #include <deque>
 #include <map>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
@@ -138,7 +138,7 @@ public:
         size_t DeadlineExpiredMessageCount = 0;
         size_t DLQMessageCount = 0;
 
-        size_t TotalMovedToDLQMessageCount = 0;
+        size_t TotalScheduledToDLQMessageCount = 0;
     };
 
     TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
@@ -157,7 +157,6 @@ public:
     TInstant GetBaseWriteTimestamp() const;
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
-    // offset->seqNo
     std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
 

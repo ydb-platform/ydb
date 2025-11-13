@@ -270,11 +270,11 @@ struct TDeserializerWithOffset {
 };
 
 void SerializeMetrics(const TStorage::TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
-    storedMetrics.SetTotalMovedToDLQMessageCount(metrics.TotalMovedToDLQMessageCount);
+    storedMetrics.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
 }
 
 void DeserializeMetrics(TStorage::TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
-    metrics.TotalMovedToDLQMessageCount = storedMetrics.GetTotalMovedToDLQMessageCount();
+    metrics.TotalScheduledToDLQMessageCount = storedMetrics.GetTotalScheduledToDLQMessageCount();
 }
 
 }
@@ -676,7 +676,6 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         TSerializer<TDLQMessageV1> serializer;
         for (auto [offset, seqNo] : AddedToDLQ) {
             if (seqNo < firstSeqNo) {
-                Cerr << "seqNo=" << seqNo << " firstSeqNo=" << firstSeqNo << Endl;
                 continue;
             }
             auto it = Storage->DLQMessages.find(offset);

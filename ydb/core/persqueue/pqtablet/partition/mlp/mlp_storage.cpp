@@ -342,7 +342,7 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
 bool TStorage::MarkDLQMoved(TDLQMessage message) {
     if (DLQQueue.empty()) {
-        // DLQ policy chaged for example
+        // DLQ policy changed for example
         return true;
     }
 
@@ -620,7 +620,7 @@ void TStorage::DoUnlock(ui64 offset, TMessage& message) {
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE: {
                     message.Status = EMessageStatus::DLQ;
 
-                    auto seqNo = ++Metrics.TotalMovedToDLQMessageCount;
+                    auto seqNo = ++Metrics.TotalScheduledToDLQMessageCount;
                     DLQMessages[offset] = seqNo;
                     DLQQueue.push_back({
                         .Offset = offset,

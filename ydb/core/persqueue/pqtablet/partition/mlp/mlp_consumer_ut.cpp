@@ -24,7 +24,7 @@ Y_UNIT_TEST(ReloadPQTablet) {
                 .EndDeadLetterPolicy()
             .EndAddConsumer());
 
-    // Write many messaes because small snapshot do not write wal
+    // Write many messages because small snapshot do not write wal
     WriteMany(setup, "/Root/topic1", 0, 16, 113);
 
     {
@@ -164,8 +164,7 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
 
-    // Write many messaes because small snapshot do not write wal
-    WriteMany(setup, "/Root/topic1", 0, 16, 17);
+    WriteMany(setup, "/Root/topic1", 0, 16, 113);
 
     Sleep(TDuration::Seconds(1));
 

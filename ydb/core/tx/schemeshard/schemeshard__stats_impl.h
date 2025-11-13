@@ -118,14 +118,13 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
         return true;
     }
 
-    TInstant now = AppData(ctx)->TimeProvider->Now();
     TMonotonic start = TMonotonic::Now();
     const ui32 maxBatchSize = Queue.MaxBatchSize();
     ui32 batchSize = 0;
     for (; batchSize < maxBatchSize && !Queue.Empty(); ++batchSize) {
         auto item = Queue.Next();
         Queue.WriteLatencyMetric(item);
-        if (!PersistSingleStats(item.PathId(), item, now, txc, ctx)) {
+        if (!PersistSingleStats(item.PathId(), item, txc, ctx)) {
             break;
         }
 

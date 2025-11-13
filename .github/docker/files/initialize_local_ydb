@@ -1,8 +1,6 @@
 #!/bin/bash
 set -x
 
-INIT_YDB_SCRIPT=/init_ydb
-
 export YDB_GRPC_ENABLE_TLS="true"
 export GRPC_TLS_PORT=${GRPC_TLS_PORT:-2135}
 export GRPC_PORT=${GRPC_PORT:-2136}
@@ -13,8 +11,56 @@ export YDB_TINY_MODE="true"
 # Start local_ydb tool. Pass additional arguments for local_ydb
 /local_ydb deploy --ydb-working-dir /ydb_data --ydb-binary-path /ydbd --fixed-ports --dont-use-log-files "$@";
 
-if [ -f "$INIT_YDB_SCRIPT" ]; then
-  sh "$INIT_YDB_SCRIPT";
-fi
+export YBD_INITSCRIPTS_DIR=${YBD_INITSCRIPTS_DIR:-/initdb.d}
+export YBD_PREINITSCRIPTS_DIR=${YBD_PREINITSCRIPTS_DIR:-/preinitdb.d}
 
-tail -f /dev/null
+ydb_custom_pre_init_scripts() {
+  echo "Loading custom pre-init scripts..."
+  if [[ -d "$YBD_PREINITSCRIPTS_DIR" ]] && [[ -n $(find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh") ]]; then
+    echo "Loading user's custom files from $YBD_PREINITSCRIPTS_DIR ..."
+    find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort | while read -r f; do
+      if [[ -x "$f" ]]; then
+        echo "Executing $f"
+        "$f"
+      else
+        echo "Sourcing $f"
+        . "$f"
+      fi
+    done
+  fi
+}
+
+ydb_custom_init_scripts() {
+  echo "Loading custom scripts..."
+  if [[ -d "$YBD_INITSCRIPTS_DIR" ]] && [[ -n $(find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql.gz\)") ]] && [[ ! -f "/ydb_data/.user_scripts_initialized" ]]; then
+    echo "Loading user's custom files from $YBD_INITSCRIPTS_DIR ..."
+    find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql.gz\)" | sort | while read -r f; do
+      case "$f" in
+      *.sh)
+        if [[ -x "$f" ]]; then
+          echo "Executing $f"
+          "$f"
+        else
+          echo "Sourcing $f"
+          . "$f"
+        fi
+        ;;
+      *.sql)
+        echo "Executing $f"
+        ydb -e grpc://localhost:${GRPC_PORT} -d /local scripting yql -f "$f"
+        ;;
+      *.sql.gz)
+        echo "Executing $f"
+        gunzip -c "$f" | ydb -e grpc://localhost:${GRPC_PORT} -d /local scripting yql -s -
+        ;;
+      *) echo "Ignoring $f" ;;
+      esac
+    done
+    touch /ydb_data/.user_scripts_initialized
+  fi
+}
+
+ydb_custom_pre_init_scripts
+ydb_custom_init_scripts
+
+sleep infinity

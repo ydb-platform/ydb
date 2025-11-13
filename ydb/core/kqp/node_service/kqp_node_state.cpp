@@ -91,15 +91,16 @@ void TNodeState::OnTaskFinished(ui64 txId, ui64 taskId, bool success) {
 }
 
 std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const {
-    const auto& bucket = GetBucketByTxId(txId);
-
-    TReadGuard guard(bucket.Mutex);
     std::vector<TNodeRequest::TTaskInfo> tasks;
-    auto requestIt = bucket.Requests.find(txId);
-    YQL_ENSURE(requestIt != bucket.Requests.end());
-    for(const auto& [taskId, actorId] : requestIt->second.Tasks) {
-        if (actorId) {
-            tasks.push_back({taskId, *actorId});
+
+    const auto& bucket = GetBucketByTxId(txId);
+    TReadGuard guard(bucket.Mutex);
+
+    if (auto requestIt = bucket.Requests.find(txId); requestIt != bucket.Requests.end()) {
+        for(const auto& [taskId, actorId] : requestIt->second.Tasks) {
+            if (actorId) {
+                tasks.push_back({taskId, *actorId});
+            }
         }
     }
 

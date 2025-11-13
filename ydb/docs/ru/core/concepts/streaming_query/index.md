@@ -24,7 +24,7 @@
 ## Использование [читателя](../glossary.md#consumer)
 
 По умолчанию чтение из топика происходит [без использования читателя](../../reference/ydb-sdk/topic.md#no-consumer)).
-Чтобы использовать читателя необходимо вручную его создать и указать его имя в тексте запроса через `PRAGMA pq.Consumer = ...` (см. пример в [CREATE STREAMING QUERY](../../../yql/reference/syntax/create-streaming-query),). 
+Чтобы использовать читателя необходимо вручную его создать и указать его имя в тексте запроса через `PRAGMA pq.Consumer = ...` (см. пример в [CREATE STREAMING QUERY](../../../yql/reference/syntax/create-streaming-query),).
 
 ## Состояние запроса
 
@@ -59,4 +59,4 @@ CREATE EXTERNAL DATA SOURCE `source_name` WITH (
 ## См. также
 
 - [Чекпойнты](checkpoints.md)
-* [Рецепты работы со стриминговыми запросами](../../recipes/streaming.md)
+- [Рецепты работы со стриминговыми запросами](../../recipes/streaming.md)

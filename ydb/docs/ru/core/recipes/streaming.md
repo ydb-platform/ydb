@@ -60,7 +60,7 @@ SELECT Path, Status, Issues, Text, Run FROM `.sys/streaming_queries`
 
 Убедитесь что в поле `Status` значение RUNNING. В противном случае проверьте поле Issues.
 
-## Шаг 4 Заполнение входного топика данными(#step4);
+## Шаг 4 Заполнение входного топика данными (#step4)
 
 Записать в топик сообщения можно , например, с помощью [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md).
 
@@ -73,7 +73,7 @@ echo '{"time": "2025-01-01T00:16:00.000000Z", "level": "error", "host": "host-1"
 echo '{"time": "2025-01-01T00:20:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
 ```
 
-## Шаг 5 Проверка содержимого выходного топика(#step5);
+## Шаг 5 Проверка содержимого выходного топика (#step5)
 
 Прочитать данных из выходного топика можно через cli:
 

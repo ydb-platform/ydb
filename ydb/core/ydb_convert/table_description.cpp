@@ -1013,6 +1013,17 @@ void FillPartitioningSettingsImpl(TYdbProto& out,
     FillPartitioningSettings(outPartSettings, partConfig.GetPartitioningPolicy());
 }
 
+template <typename TYdbProto>
+void FillPartitioningSettingsImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+
+    auto& outPartSettings = *out.mutable_partitioning_settings();
+    
+    if (in.HasColumnShardCount()) {
+        outPartSettings.set_min_partitions_count(in.GetColumnShardCount());
+    }
+}
+
 void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     const NKikimrSchemeOp::TTableDescription& indexImplTableDescription
 ) {
@@ -1602,6 +1613,11 @@ void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,
 
 void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillPartitioningSettingsImpl(out, in);
+}
+
+void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
     FillPartitioningSettingsImpl(out, in);
 }
 

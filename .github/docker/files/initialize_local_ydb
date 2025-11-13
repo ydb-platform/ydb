@@ -14,49 +14,116 @@ export YDB_TINY_MODE="true"
 export YBD_INITSCRIPTS_DIR=${YBD_INITSCRIPTS_DIR:-/initdb.d}
 export YBD_PREINITSCRIPTS_DIR=${YBD_PREINITSCRIPTS_DIR:-/preinitdb.d}
 
+ydb_wait_ready() {
+  local max_tries=60
+  local wait_seconds=1
+  local try=0
+
+  echo "Waiting for YDB to be ready..."
+  while [ $try -lt $max_tries ]; do
+    if /ydb -e grpcs://localhost:${GRPC_TLS_PORT} --ca-file /ydb_certs/ca.pem -d /local --no-discovery monitoring healthcheck 2>/dev/null | grep -q GOOD; then
+      echo "YDB is ready!"
+      return 0
+    fi
+
+    try=$((try + 1))
+    echo "Waiting for YDB... ($try/$max_tries)"
+    sleep $wait_seconds
+  done
+
+  echo "ERROR: YDB did not become ready in time"
+  return 1
+}
+
 ydb_custom_pre_init_scripts() {
   echo "Loading custom pre-init scripts..."
   if [[ -d "$YBD_PREINITSCRIPTS_DIR" ]] && [[ -n $(find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh") ]]; then
     echo "Loading user's custom files from $YBD_PREINITSCRIPTS_DIR ..."
-    find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort | while read -r f; do
+    local failed=0
+    while read -r f; do
+      local status
       if [[ -x "$f" ]]; then
         echo "Executing $f"
         "$f"
+        status=$?
       else
         echo "Sourcing $f"
         . "$f"
+        status=$?
       fi
-    done
+
+      if [[ $status -ne 0 ]]; then
+        echo "ERROR: Pre-init script $f failed with exit code $status"
+        failed=1
+        break
+      fi
+    done < <(find "$YBD_PREINITSCRIPTS_DIR/" -type f -name "*.sh" | sort)
+
+    if [ $failed -eq 1 ]; then
+      echo "ERROR: Pre-init scripts failed"
+      exit 1
+    fi
+
+    echo "All pre-init scripts executed successfully"
   fi
 }
 
 ydb_custom_init_scripts() {
   echo "Loading custom scripts..."
-  if [[ -d "$YBD_INITSCRIPTS_DIR" ]] && [[ -n $(find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql.gz\)") ]] && [[ ! -f "/ydb_data/.user_scripts_initialized" ]]; then
+  if [[ -d "$YBD_INITSCRIPTS_DIR" ]] && [[ -n $(find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)") ]] && [[ ! -f "/ydb_data/.user_scripts_initialized" ]]; then
+    # Wait for YDB to be ready before running SQL scripts
+    if ! ydb_wait_ready; then
+      echo "ERROR: Cannot run init scripts, YDB is not ready"
+      exit 1
+    fi
+
     echo "Loading user's custom files from $YBD_INITSCRIPTS_DIR ..."
-    find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql.gz\)" | sort | while read -r f; do
+
+    local failed=0
+    while read -r f; do
+      local status
       case "$f" in
       *.sh)
         if [[ -x "$f" ]]; then
           echo "Executing $f"
           "$f"
+          status=$?
         else
           echo "Sourcing $f"
           . "$f"
+          status=$?
         fi
         ;;
       *.sql)
         echo "Executing $f"
-        ydb -e grpc://localhost:${GRPC_PORT} -d /local scripting yql -f "$f"
+        ydb -e grpcs://localhost:${GRPC_TLS_PORT} --ca-file /ydb_certs/ca.pem -d /local scripting yql -f "$f"
+        status=$?
         ;;
       *.sql.gz)
         echo "Executing $f"
-        gunzip -c "$f" | ydb -e grpc://localhost:${GRPC_PORT} -d /local scripting yql -s -
+        gunzip -c "$f" | ydb -e grpcs://localhost:${GRPC_TLS_PORT} --ca-file /ydb_certs/ca.pem -d /local scripting yql -s -
+        status=$?
         ;;
-      *) echo "Ignoring $f" ;;
+      *)
+        echo "Ignoring $f"
+        continue
+        ;;
       esac
-    done
+
+      if [[ $status -ne 0 ]]; then
+        echo "ERROR: Script $f failed with exit code $status"
+        failed=1
+        break
+      fi
+    done < <(find "$YBD_INITSCRIPTS_DIR/" -type f -regex ".*\.\(sh\|sql\|sql\.gz\)" | sort)
+
+    if [ $failed -eq 1 ]; then
+      echo "ERROR: Init scripts failed, marker file not created"
+      exit 1
+    fi
+
     touch /ydb_data/.user_scripts_initialized
+    echo "All init scripts executed successfully"
   fi
 }
 

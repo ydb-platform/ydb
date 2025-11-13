@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
         auto callback = [](THolder<IEventBase>) {};
         TEventHolderPool pool(common, callback);
         TSessionParams p;
-        TChannelScheduler scheduler(1, {}, ctr, 64 << 20, p);
+        TChannelScheduler scheduler(1, {}, ctr, 64 << 20, p, nullptr);
 
         ui32 numEvents = 0;
 

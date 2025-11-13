@@ -213,6 +213,11 @@ size_t TQueuePair::GetDeviceIndex() const noexcept {
     return Ctx->GetDeviceIndex();
 }
 
+bool TQueuePair::IsRtsState(TQpS state) {
+     enum ibv_qp_state qpState = static_cast<enum ibv_qp_state>(state.State);
+     return qpState == IBV_QPS_RTS;
+}
+
 THandshakeData TQueuePair::GetHandshakeData() const noexcept {
     return THandshakeData {
         .QpNum = GetQpNum(),

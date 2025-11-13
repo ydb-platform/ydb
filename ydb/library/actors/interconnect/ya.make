@@ -90,6 +90,10 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    ut_rdma
+)
+
+RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_huge_cluster

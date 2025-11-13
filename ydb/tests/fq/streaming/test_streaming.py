@@ -169,7 +169,6 @@ class TestStreamingInYdb(TestYdsBase):
         query_name2 = "test_read_topic_shared_reading_insert_to_topic2"
         kikimr.YdbClient.query(sql.format(query_name=query_name1, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         kikimr.YdbClient.query(sql.format(query_name=query_name2, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-
         path1 = f"/Root/{query_name1}"
         self.wait_completed_checkpoints(kikimr, path1)
 
@@ -273,7 +272,6 @@ class TestStreamingInYdb(TestYdsBase):
 
         query_name = "test_read_topic_restore_state"
         kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-
         path = f"/Root/{query_name}"
         self.wait_completed_checkpoints(kikimr, path)
 
@@ -389,7 +387,7 @@ class TestStreamingInYdb(TestYdsBase):
             self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))))
         assert self.read_stream(message_count, topic_path=self.output_topic) == ["time to lunch" for i in range(message_count)]
 
-        kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")\
+        kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
 
     def test_pragma(self, kikimr):
         sourceName = "test_pragma"
@@ -397,7 +395,7 @@ class TestStreamingInYdb(TestYdsBase):
         self.create_source(kikimr, sourceName)
         create_read_rule(self.input_topic, self.consumer_name)
 
-        query_name="test_pragma1"
+        query_name = "test_pragma1"
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
@@ -411,8 +409,7 @@ class TestStreamingInYdb(TestYdsBase):
                 INSERT INTO {source_name}.`{output_topic}` SELECT time FROM $in;
             END DO;'''
 
-        kikimr.YdbClient.query(sql.format(query_name=query_name, consumer_name = self.consumer_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-
+        kikimr.YdbClient.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         self.write_stream(['{"time": "lunch time"}'])
         assert self.read_stream(1, topic_path=self.output_topic) == ['lunch time']
 

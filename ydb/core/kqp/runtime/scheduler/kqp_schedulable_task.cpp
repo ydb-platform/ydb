@@ -32,25 +32,37 @@ void TSchedulableTask::Resume() {
 
 // TODO: referring to the pool's fair-share and usage - query's fair-share is ignored.
 bool TSchedulableTask::TryIncreaseUsage() {
-    const auto snapshot = Query->GetSnapshot();
-    auto pool = Query->GetParent();
-    ui64 newUsage = pool->Usage.load();
     bool increased = false;
+    ui64 fairShare = 0;
+    NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
-    while (!increased && newUsage < snapshot->GetParent()->FairShare) {
-        increased = pool->Usage.compare_exchange_weak(newUsage, newUsage + 1);
+    if (const auto snapshot = Query->GetSnapshot()) {
+        fairShare = snapshot->GetParent()->FairShare;
+        poolOrQuery = Query->GetParent();
+    } else {
+        // TODO: check directly for pool snapshot - even if there is no query snapshot yet.
+        // TODO: check if each query is allowed minimum fair-share?
+        fairShare = 1;
+        poolOrQuery = Query.get();
+    }
+
+    ui64 newUsage = poolOrQuery->Usage.load();
+
+    while (!increased && newUsage < fairShare) {
+        increased = poolOrQuery->Usage.compare_exchange_weak(newUsage, newUsage + 1);
     }
 
     if (!increased) {
         return false;
     }
 
-    Query->UpdateActualDemand();
-
-    ++Query->Usage;
-    for (TTreeElement* parent = pool->GetParent(); parent; parent = parent->GetParent()) {
-        ++parent->Usage;
+    for (TTreeElement* parent = poolOrQuery; parent; parent = parent->GetParent()) {
+        if (parent != poolOrQuery) {
+            ++parent->Usage;
+        }
     }
+
+    Query->UpdateActualDemand();
 
     return true;
 }

@@ -9,6 +9,8 @@ PY3TEST()
 
     TEST_SRCS (
         test_workload_parallel.py
+        test_per_workload.py
+        all_workloads.py
     )
 
     PEERDIR (

@@ -620,9 +620,9 @@
     ],
     "test.test[compute_range-repeated_keyranges_in_and-default.txt-Debug]": [
         {
-            "checksum": "d08392fca6dba206b37f2dac105ecf34",
-            "size": 980,
-            "uri": "https://{canondata_backend}/1942525/ba8ad8c1da4bf920ccf460436ddcc1cc7df77125/resource.tar.gz#test.test_compute_range-repeated_keyranges_in_and-default.txt-Debug_/opt.yql"
+            "checksum": "cfed21adbafd3c4b9a277bcc6a5dce61",
+            "size": 1116,
+            "uri": "https://{canondata_backend}/1903885/423abf1b880262a3a99f68045450daccef8c964c/resource.tar.gz#test.test_compute_range-repeated_keyranges_in_and-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[compute_range-repeated_keyranges_in_and-default.txt-Results]": [

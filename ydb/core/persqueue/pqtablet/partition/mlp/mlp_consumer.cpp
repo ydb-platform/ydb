@@ -321,6 +321,7 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
     ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
 
+    MoveToDLQIfPossible();
     ProcessEventQueue();
     FetchMessagesIfNeeded();
 }
@@ -717,7 +718,6 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr&) {
     FetchMessagesIfNeeded();
     ProcessEventQueue();
-    MoveToDLQIfPossible();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 
@@ -759,12 +759,13 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
         AFL_ENSURE(result)("o", offset)("s", seqNo);
     }
 
-    MoveToDLQIfPossible();
+    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
+        ProcessEventQueue();
+    }
 }
 
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("Handle TEvents::TEvWakeup");
-    MoveToDLQIfPossible();
     Schedule(WakeupInterval, new TEvents::TEvWakeup());
 }
 

@@ -67,8 +67,11 @@ void TDLQMoverActor::CreateWriter() {
     LOG_D("Writer creating");
     Become(&TDLQMoverActor::StateInit);
 
-    ProducerId = TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << Settings.PartitionId << "/" << Settings.ConsumerGeneration << "/" << Settings.ConsumerName;
-    TString sessionId = TStringBuilder() << "DLQMover/" << SelfId();
+    ProducerId = TStringBuilder() << "DLQMover/" << Settings.TabletId
+        << "/" << Settings.PartitionId
+        << "/" << Settings.ConsumerGeneration
+        << "/" << Settings.ConsumerName;
+    TString sessionId = TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << SelfId();
 
     auto& chooser = TopicInfo.Info->PartitionChooser;
     TargetPartition = chooser->GetPartition(ProducerId);

@@ -357,6 +357,10 @@ namespace NYdb::NConsoleClient {
         LastMessageReceivedTs_ = TInstant::Now();
 
         bool waitForever = (ReaderParams_.Wait()) && IsStreamingFormat(ReaderParams_.MessagingFormat());
+        if (ReaderParams_.Wait() && !IsStreamingFormat(ReaderParams_.MessagingFormat())) {
+            Cerr << "Option --wait is ignored because messaging format is not streaming." << Endl;
+        }
+
         TInstant runStartTime = TInstant::Now();
         while ((MessagesLeft_ > 0 || MessagesLeft_ == -1) && !IsInterrupted()) {
             TInstant messageReceiveDeadline = LastMessageReceivedTs_ + TDuration::MilliSeconds(100);

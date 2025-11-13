@@ -59,4 +59,4 @@ CREATE EXTERNAL DATA SOURCE `source_name` WITH (
 ## См. также
 
 - [Чекпойнты](checkpoints.md)
-* [Рецепты работы со стриминговыми запросами](../recipes/streaming.md)
+* [Рецепты работы со стриминговыми запросами](../../recipes/streaming.md)

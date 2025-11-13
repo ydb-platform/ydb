@@ -56,7 +56,6 @@ Real number with variable precision, 8 bytes in size |
     ||
 || `Decimal(precision, scale)` |
 Real number with fixed precision, 16 bytes in size. Precision is the maximum total number of decimal digits stored, takes values from 1 to 35. Scale is the maximum number of decimal digits stored to the right of the decimal point, takes values from 0 to the precision value. |
-{% if feature_map_tables %}Accept as a primary key in row-oriented tables{% endif %}
     ||
 {% if feature_map_tables %}
 || `DyNumber` |
@@ -208,7 +207,7 @@ from -136 years to +136 years
 |
 8
 |
-{% if feature_map_tables %}Accept as a primary key in row-oriented tables{% else %}—{% endif %} Not available for column-oriented tables
+Not available for column-oriented tables
 ||
 
 ||

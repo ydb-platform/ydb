@@ -213,7 +213,7 @@ private:
 
     void MoveBaseDeadline(TInstant newBaseDeadline, TInstant newBaseWriteTimestamp);
 
-    void RemoveMessage(const TMessage& message);
+    void RemoveMessage(ui64 offset, const TMessage& message);
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 
@@ -237,9 +237,9 @@ private:
     std::deque<TMessage> Messages;
     std::map<ui64, TMessage> SlowMessages;
     std::unordered_set<ui32> LockedMessageGroupsId;
-    // offset->seqNo
-    // This map implementation has an iterator with the order in which the element is added.
     std::deque<TDLQMessage> DLQQueue;
+    // offset->seqNo
+    std::unordered_map<ui64, ui64> DLQMessages;
 
     TBatch Batch;
     TMetrics Metrics;

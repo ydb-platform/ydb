@@ -1411,5 +1411,6 @@ message TMLPStorageWAL {
     repeated uint64 DeletedFromSlowZone = 13;
 
     optional bytes AddedToDLQMessages = 14;
+    optional uint64 FirstDLQSeqNo = 15;
 }
 

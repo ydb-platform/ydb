@@ -369,6 +369,7 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         TDeserializer<TDLQMessageV1> deserializer(snapshot.GetDLQMessages());
         TDLQMessageV1 message;
         while(deserializer.Next(message)) {
+            DLQMessages[message.Offset] = message.SeqNo;
             DLQQueue.push_back({
                 .Offset = message.Offset,
                 .SeqNo = message.SeqNo
@@ -433,7 +434,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
         auto& message = Messages.front();
         if (!SlowMessages.contains(FirstOffset)) {
-            RemoveMessage(message);
+            RemoveMessage(FirstOffset, message);
         }
         Messages.pop_front();
         ++FirstOffset;
@@ -476,7 +477,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
 
             auto statusChanged = message->Status != msg.Common.Fields.Status;
             if (statusChanged) {
-                RemoveMessage(*message);
+                RemoveMessage(offset, *message);
                 ++Metrics.InflyMessageCount;
             }
 
@@ -514,7 +515,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             auto it = SlowMessages.find(offset);
             AFL_ENSURE(it != SlowMessages.end())("o", offset);
             auto& message = it->second;
-            RemoveMessage(message);
+            RemoveMessage(offset, message);
             SlowMessages.erase(it);
         }
     }
@@ -525,14 +526,24 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             break;
         }
 
-        RemoveMessage(it->second);
+        RemoveMessage(it->first,it->second);
         it = SlowMessages.erase(it);
     }
 
     {
+        if (wal.HasFirstDLQSeqNo()) {
+            auto firstSeqNo = wal.GetFirstDLQSeqNo();
+            while(!DLQQueue.empty() && DLQQueue.front().SeqNo < firstSeqNo) {
+                DLQQueue.pop_front();
+            }
+        } else {
+            DLQQueue.clear();
+        }
+
         TDeserializer<TDLQMessageV1> deserializer(wal.GetAddedToDLQMessages());
         TDLQMessageV1 message;
         while(deserializer.Next(message)) {
+            DLQMessages[message.Offset] = message.SeqNo;
             DLQQueue.push_back({
                 .Offset = message.Offset,
                 .SeqNo = message.SeqNo
@@ -577,9 +588,17 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         snapshot.SetSlowMessages(std::move(serializer.Buffer));
     }
     {
+        // offset -> seqNo
+        std::vector<std::pair<ui64, ui64>> messages;
+        messages.insert(messages.end(), DLQMessages.begin(), DLQMessages.end());
+        // sorting by seqNo
+        std::sort(messages.begin(), messages.end(), [](const auto& a, const auto& b) {
+            return a.second < b.second;
+        });
+
         TSerializer<TDLQMessageV1> serializer;
-        serializer.Reserve(DLQQueue.size());
-        for (auto [offset, seqNo] : DLQQueue) {
+        serializer.Reserve(messages.size());
+        for (auto [offset, seqNo] : messages) {
             serializer.Add({
                 .Offset = offset,
                 .SeqNo = seqNo
@@ -652,14 +671,16 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
 
     if (!Storage->DLQQueue.empty()) {
         auto firstSeqNo = Storage->DLQQueue.begin()->SeqNo;
+        wal.SetFirstDLQSeqNo(firstSeqNo);
 
         TSerializer<TDLQMessageV1> serializer;
         for (auto [offset, seqNo] : AddedToDLQ) {
             if (seqNo < firstSeqNo) {
+                Cerr << "seqNo=" << seqNo << " firstSeqNo=" << firstSeqNo << Endl;
                 continue;
             }
-            auto [message, _] = Storage->GetMessageInt(offset, EMessageStatus::DLQ);
-            if (!message) {
+            auto it = Storage->DLQMessages.find(offset);
+            if (it == Storage->DLQMessages.end() || it->second != seqNo) {
                 continue;
             }
             serializer.Add({

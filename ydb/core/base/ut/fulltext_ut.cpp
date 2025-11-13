@@ -270,6 +270,22 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_filter_ngram_max_length(3);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "это", "те", "тек"}));
     }
+
+    Y_UNIT_TEST(AnalyzeFilterSnowball) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        const TString russianText = "машины ездят по дорогам исправно";
+
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машины", "ездят", "по", "дорогам", "исправно"}));
+
+        analyzers.set_use_filter_snowball(true);
+        analyzers.set_language("russian");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(russianText, analyzers), (TVector<TString>{"машин", "езд", "по", "дорог", "исправн"}));
+
+        const TString englishText = "cars are driving properly on the roads";
+        analyzers.set_language("english");
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(englishText, analyzers), (TVector<TString>{"car", "are", "drive", "proper", "on", "the", "road"}));
+    }
 }
 
 }

@@ -46,13 +46,89 @@ public:
     ui32 Requested = 0;
     ui32 Received = 0;
     TString SessionId;
-    std::deque<TString> Queries = {
-        "SELECT * FROM `/Root/.sys/partition_stats` LIMIT 100",
-        "SELECT * FROM `/Root/.sys/nodes` LIMIT 100",
-        "SELECT * FROM `/Root/.sys/query_sessions` LIMIT 100",
 
+    struct TQuery {
+        struct TColumn {
+            TString Name;
+            bool Sensitive = false;
+
+            TColumn() {}
+
+            TColumn(const char* name)
+            : Name(name)
+            {}
+
+            TColumn(const char* name, bool sensitive)
+            : Name(name)
+            , Sensitive(sensitive)
+            {}
+
+            TString ToSelect() const {
+                if (Sensitive) {
+                    return TStringBuilder() << "Unicode::ReplaceLast(Unicode::SplitToList(`" << Name << "`, ' ')[0], '', '...') AS `" << Name << '`';
+                }
+                return TStringBuilder() << '`' << Name << '`';
+            }
+        };
+
+        TVector<TColumn> Columns;
+        TString TableName;
+        bool Sensitive = false;
+
+        TString ToSelect() {
+            TStringBuilder sb;
+            sb << "SELECT ";
+            ui32 cnt = 0;
+            for (auto& c : Columns) {
+                if (cnt++) {
+                    sb << ',';
+                }
+                sb << c.ToSelect();
+            }
+            sb << " FROM `" << TableName << '`';
+            return sb;
+        }
     };
 
+    TVector<TQuery::TColumn> TopQueryColumns = { "RequestUnits", "IntervalEnd", "Rank", {"QueryText", true}, "Duration", "EndTime", "ReadRows", "ReadBytes", "UpdateRows", "UpdateBytes", "DeleteRows", "DeleteBytes", "Partitions", "UserSID", "ParametersSize", "CompileDuration", "FromQueryCache", "CPUTime", "ShardCount", "SumShardCPUTime", "MinShardCPUTime", "MaxShardCPUTime", "ComputeNodesCount", "SumComputeCPUTime", "MinComputeCPUTime", "MaxComputeCPUTime", "CompileCPUTime", "ProcessCPUTime", "Type" };
+    TVector<TQuery> Queries = {
+        {{ "Path", "Sid", "Permission" }, ".sys/auth_effective_permissions", true },
+        {{ "GroupSid", "MemberSid" }, ".sys/auth_group_members", true },
+        {{ "Sid" }, ".sys/auth_groups", true },
+        {{ "Path", "Sid" }, ".sys/auth_owners", true },
+        {{ "Path", "Sid", "Permission" }, ".sys/auth_permissions", true },
+        {{ "Sid", "IsEnabled", "IsLockedOut", "CreatedAt", "LastSuccessfulAttemptAt", "LastFailedAttemptAt", "FailedAttemptCount", "PasswordHash" }, ".sys/auth_users", true },
+        {{ "NodeId", "QueryId", {"Query", true}, "AccessCount", "CompiledAt", "UserSID", "LastAccessedAt", "CompilationDuration", "Warnings", "Metadata" }, ".sys/compile_cache_queries" },
+        {{ "BridgeSyncRunning", "GroupId", "Generation", "ErasureSpecies", "BoxId", "StoragePoolId", "EncryptionMode", "LifeCyclePhase", "AllocatedSize", "AvailableSize", "SeenOperational", "PutTabletLogLatency", "PutUserDataLatency", "GetFastLatency", "LayoutCorrect", "OperatingStatus", "ExpectedStatus", "ProxyGroupId", "BridgePileId", "GroupSizeInUnits", "BridgeSyncStage", "BridgeDataSyncProgress", "BridgeDataSyncErrors", "BridgeSyncLastError", "BridgeSyncLastErrorTimestamp", "BridgeSyncFirstErrorTimestamp", "BridgeSyncErrorCount" }, ".sys/ds_groups" },
+        {{ "NodeId", "PDiskId", "Type", "Kind", "Path", "Guid", "BoxId", "SharedWithOS", "ReadCentric", "AvailableSize", "TotalSize", "Status", "StatusChangeTimestamp", "ExpectedSlotCount", "NumActiveSlots", "DecommitStatus", "State", "SlotSizeInUnits", "InferPDiskSlotCountFromUnitSize" }, ".sys/ds_pdisks" },
+        {{ "BoxId", "StoragePoolId", "Name", "Generation", "ErasureSpecies", "VDiskKind", "Kind", "NumGroups", "EncryptionMode", "SchemeshardId", "PathId", "DefaultGroupSizeInUnits" }, ".sys/ds_storage_pools" },
+        {{ "AvailableGroupsToCreate", "AvailableSizeToCreate", "PDiskFilter", "ErasureSpecies", "CurrentGroupsCreated", "CurrentAllocatedSize", "CurrentAvailableSize" }, ".sys/ds_storage_stats" },
+        {{ "DiskSpace", "State", "NodeId", "PDiskId", "VSlotId", "GroupId", "GroupGeneration", "FailDomain", "VDisk", "AllocatedSize", "AvailableSize", "Status", "Kind", "FailRealm", "Replicated" }, ".sys/ds_vslots" },
+        {{ "TabletId", "FollowerId", "Type", "State", "VolatileState", "BootState", "Generation", "NodeId", "CPU", "Memory", "Network" }, ".sys/hive_tablets" },
+        {{ "NodeId", "Address", "Host", "Port", "StartTime", "UpTime", "CpuThreads", "CpuUsage", "CpuIdle" }, ".sys/nodes" },
+        {{ "OwnerId", "PathId", "PartIdx", "DataSize", "RowCount", "IndexSize", "CPUCores", "TabletId", "Path", "NodeId", "StartTime", "AccessTime", "UpdateTime", "InFlightTxCount", "RowUpdates", "RowDeletes", "RowReads", "RangeReads", "RangeReadRows", "ImmediateTxCompleted", "CoordinatedTxCompleted", "TxRejectedByOverload", "TxRejectedByOutOfStorage", "LastTtlRunTime", "LastTtlRowsProcessed", "LastTtlRowsErased", "FollowerId", "LocksAcquired", "LocksWholeShard", "LocksBroken", "TxCompleteLag" }, ".sys/partition_stats" },
+        {{ "oid", "relacl", "relallvisible", "relam", "relchecks", "relfilenode", "relforcerowsecurity", "relfrozenxid", "relhasindex", "relhasrules", "relhassubclass", "relhastriggers", "relispartition", "relispopulated", "relisshared", "relkind", "relminmxid", "relname", "relnamespace", "relnatts", "reloftype", "reloptions", "relowner", "relpages", "relpartbound", "relpersistence", "relreplident", "relrewrite", "relrowsecurity", "reltablespace", "reltoastrelid", "reltuples", "reltype" }, ".sys/pg_class" },
+        {{ "hasindexes", "hasrules", "hastriggers", "rowsecurity", "schemaname", "tablename", "tableowner", "tablespace" }, ".sys/pg_tables", true},
+        {{ "IntervalEnd", "Rank", {"QueryText", true}, "Count", "SumCPUTime", "MinCPUTime", "MaxCPUTime", "SumDuration", "MinDuration", "MaxDuration", "MinReadRows", "MaxReadRows", "SumReadRows", "MinReadBytes", "MaxReadBytes", "SumReadBytes", "MinUpdateRows", "MaxUpdateRows", "SumUpdateRows", "MinUpdateBytes", "MaxUpdateBytes", "SumUpdateBytes", "MinDeleteRows", "MaxDeleteRows", "SumDeleteRows", "MinRequestUnits", "MaxRequestUnits", "SumRequestUnits" }, ".sys/query_metrics_one_minute" },
+        {{ "SessionId", "NodeId", "State", {"Query", true}, "QueryCount", "ClientAddress", "ClientPID", "ClientUserAgent", "ClientSdkBuildInfo", "ApplicationName", "SessionStartAt", "QueryStartAt", "StateChangeAt", "UserSID" }, ".sys/query_sessions" },
+        {{ "Name", "Rank", "MemberName", "ResourcePool" }, ".sys/resource_pool_classifiers" },
+        {{ "Name", "ConcurrentQueryLimit", "QueueSize", "DatabaseLoadCpuThreshold", "ResourceWeight", "TotalCpuLimitPercentPerNode", "QueryCpuLimitPercentPerNode", "QueryMemoryLimitPercentPerNode" }, ".sys/resource_pools" },
+        {{ "Path", "Status", "Issues", "Plan", "Ast", "Text", "Run", "ResourcePool", "RetryCount", "LastFailAt", "SuspendedUntil", "LastExecutionId", "PreviousExecutionIds" }, ".sys/streaming_queries" },
+        {{ "commit_action", "is_insertable_into", "is_typed", "reference_generation", "self_referencing_column_name", "table_catalog", "table_name", "table_schema", "table_type", "user_defined_type_catalog", "user_defined_type_name", "user_defined_type_schema" }, ".sys/tables" },
+        {{ "IntervalEnd", "Rank", "TabletId", "Path", "LocksAcquired", "LocksWholeShard", "LocksBroken", "NodeId", "DataSize", "RowCount", "IndexSize", "FollowerId" }, ".sys/top_partitions_by_tli_one_hour" },
+        {{ "IntervalEnd", "Rank", "TabletId", "Path", "LocksAcquired", "LocksWholeShard", "LocksBroken", "NodeId", "DataSize", "RowCount", "IndexSize", "FollowerId" }, ".sys/top_partitions_by_tli_one_minute" },
+        {{ "IntervalEnd", "Rank", "TabletId", "Path", "PeakTime", "CPUCores", "NodeId", "DataSize", "RowCount", "IndexSize", "InFlightTxCount", "FollowerId" }, ".sys/top_partitions_one_hour" },
+        {{ "IntervalEnd", "Rank", "TabletId", "Path", "PeakTime", "CPUCores", "NodeId", "DataSize", "RowCount", "IndexSize", "InFlightTxCount", "FollowerId" }, ".sys/top_partitions_one_minute" },
+        {TopQueryColumns, ".sys/top_queries_by_cpu_time_one_hour" },
+        {TopQueryColumns, ".sys/top_queries_by_cpu_time_one_minute" },
+        {TopQueryColumns, ".sys/top_queries_by_duration_one_hour" },
+        {TopQueryColumns, ".sys/top_queries_by_duration_one_minute" },
+        {TopQueryColumns, ".sys/top_queries_by_read_bytes_one_hour" },
+        {TopQueryColumns, ".sys/top_queries_by_read_bytes_one_minute" },
+        {TopQueryColumns, ".sys/top_queries_by_request_units_one_hour" },
+        {TopQueryColumns, ".sys/top_queries_by_request_units_one_minute" },
+    };
+    ui32 QueryIdx = 0;
     TVector<TVector<TString>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     NKikimrClusterStateInfoProto::TClusterStateInfo State;
@@ -122,7 +198,8 @@ public:
     }
 
     void DoQueryRequest() {
-        if (Queries.empty()) {
+        if (QueryIdx >= Queries.size()) {
+            CheckReply();
             return;
         }
 
@@ -133,8 +210,7 @@ public:
         ActorIdToProto(SelfId(), request->Record.MutableRequestActorId());
         request->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-        request->Record.MutableRequest()->SetQuery(Queries.back());
-        Queries.pop_back();
+        request->Record.MutableRequest()->SetQuery(Queries[QueryIdx].ToSelect());
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
         ++Requested;
@@ -150,10 +226,16 @@ public:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
         auto record = ev->Get()->Record;
         auto* q = State.AddQueries();
-        q->CopyFrom(record.GetResponse());
-        DoQueryRequest();
+        q->SetTableName(Queries[QueryIdx].TableName);
+        q->SetQuery(Queries[QueryIdx].ToSelect());
+        q->MutableResponse()->CopyFrom(record.GetResponse());
         ++Received;
-        CheckReply();
+        ++QueryIdx;
+        while (QueryIdx < Queries.size() && Queries[QueryIdx].Sensitive) {
+            QueryIdx++;
+        }
+        CloseSession();
+        RequestSession();
     }
 
     void RequestBaseConfig() {

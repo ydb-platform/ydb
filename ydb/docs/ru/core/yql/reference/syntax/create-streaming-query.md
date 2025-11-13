@@ -45,9 +45,10 @@ END DO;
 |`Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double`|✓||
 |`Bool`                               |             |   |
 |`DyNumber`                           |             |   |
-|`String`, `Utf8`, `Json`             |✓            |✓?  |
+|`String`, `Utf8`                     |✓            |✓  |
+|`Json`                               |             |✓  |
 |`JsonDocument`                       |             |   |
-|`Yson`                               |             |✓?  |
+|`Yson`                               |             |   |
 |`Uuid`                               |             |   |
 |`Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDateTime`, `TzTimestamp`|    |  |
 |`Interval`                           |            |   |
@@ -60,10 +61,11 @@ END DO;
 Чтение в формате `json_each_row`:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name`
+CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
     PRAGMA pq.Consumer = "ConsumerName";
-    $input = SELECT * FROM `source_name`.`input_topic_name` WITH (
+    $input = SELECT * FROM `source_name`.`input_topic_name`
+    WITH (
         FORMAT = "json_each_row",
         SCHEMA (
             time String NOT NULL,
@@ -83,9 +85,13 @@ END DO;
 Чтение в формате `raw`:
 
 ```sql
-CREATE STREAMING QUERY `my_queries/query_name`
+CREATE STREAMING QUERY `my_queries/query_name` AS
 DO BEGIN
-    PRAGMA pq.Consumer = "ConsumerName";
-    TODO
-END DO;
+    $input = SELECT CAST(data AS Json) AS json FROM `source_name`.`input_topic_name`
+    WITH (
+        FORMAT="raw",
+        SCHEMA=(data String));
+    $parsed = SELECT JSON_VALUE(json, "$.field1") as field1, JSON_VALUE(json, "$.field2") as field2 FROM $input;
+    INSERT INTO `source_name`.`output_topic_name` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
+END DO;'''
 ```

@@ -67,6 +67,7 @@ void TKqpComputeActor::DoBootstrap() {
 
     settings.OptLLVM = (GetTask().HasUseLlvm() && GetTask().GetUseLlvm()) ? "--compile-options=disable-opt" : "OFF";
     settings.UseCacheForLLVM = AppData()->FeatureFlags.GetEnableLLVMCache();
+    settings.EnableWatermarks = AppData()->FeatureFlags.GetEnableWatermarks();
 
     for (const auto& [paramsName, paramsValue] : GetTask().GetTaskParams()) {
         settings.TaskParams[paramsName] = paramsValue;

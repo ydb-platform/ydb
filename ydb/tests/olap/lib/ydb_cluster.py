@@ -67,6 +67,7 @@ class YdbCluster:
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
     ydb_mon_port = 8765
+    ydb_iam_file = get_external_param('ydb-iam-file', os.getenv('YDB_IAM_FILE'))
     _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
     _dyn_nodes_count: Optional[int] = None
@@ -239,7 +240,7 @@ class YdbCluster:
     def get_ydb_driver(cls):
         if cls._ydb_driver is None:
             cls._ydb_driver = cls._create_ydb_driver(
-                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None)
+                cls.ydb_endpoint, cls.ydb_database, oauth=os.getenv('OLAP_YDB_OAUTH', None), iam_file=cls.ydb_iam_file
             )
         return cls._ydb_driver
 

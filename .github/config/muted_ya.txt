@@ -21,24 +21,17 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysVi
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,false,0,0,1000,0.5,BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[false,true,1024,10,0,0.5]
-ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[10,false,0,10,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[10,false,1024,10,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,false,0,10,0,0.5]
-ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,true,1024,0,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,true,0,10,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[2,true,1024,1000,1000000,0]
-ydb/core/kqp/ut/olap KqpOlapJson.RestoreFirstLevelVariants[10,true,1,10,100,0.5]
-ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewColumns
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
-ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
-ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnMultiShardTable
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.ShouldSucceedOnSingleShardTableWithChangefeed
-ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.CdcAndMergeWithReboots[TabletReboots]
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioningUniq
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
@@ -71,6 +64,7 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/restarts test_restarts.py.TestRestartClusterBlock42.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/serializable test.py.test_local
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]

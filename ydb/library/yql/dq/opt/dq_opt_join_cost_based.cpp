@@ -314,14 +314,14 @@ class TOptimizerNativeNew: public IOptimizerNew {
 public:
     TOptimizerNativeNew(
         IProviderContext& ctx,
-        ui32 maxDPhypDPTableSize,
+        const TCBOSettings &optimizerSettings,
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
         TTableAliasMap* tableAliases
     )
         : IOptimizerNew(ctx)
-        , MaxDPHypTableSize_(maxDPhypDPTableSize)
+        , OptimizerSettings_(optimizerSettings)
         , ExprCtx(exprCtx)
         , EnableShuffleElimination(enableShuffleElimination && orderingsFSM != nullptr)
         , OrderingsFSM(orderingsFSM)
@@ -334,7 +334,7 @@ public:
     ) override {
         auto relsCount = joinTree->Labels().size();
 
-        if (EnableShuffleElimination && relsCount <= 14) {
+        if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
             return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
             return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints);
@@ -382,7 +382,7 @@ private:
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
         YQL_CLOG(TRACE, CoreDq) << "Enumeration algorithm chosen: " << solver.Type();
-        if (solver.CountCC(MaxDPHypTableSize_) >= MaxDPHypTableSize_) {
+        if (solver.CountCC(OptimizerSettings_.MaxDPhypDPTableSize) >= OptimizerSettings_.MaxDPhypDPTableSize) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
             ExprCtx.AddWarning(
                 YqlIssue(
@@ -506,7 +506,7 @@ private:
     }
 
 private:
-    ui32 MaxDPHypTableSize_;
+    TCBOSettings OptimizerSettings_;
     TExprContext& ExprCtx;
     bool EnableShuffleElimination;
 
@@ -516,13 +516,13 @@ private:
 
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& pctx,
-    const ui32 maxDPhypDPTableSize,
+    const TCBOSettings &settings,
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
     TTableAliasMap* tableAliases
 ) {
-    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination, orderingsFSM, tableAliases);
+    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases);
 }
 
 void CollectInterestingOrderingsFromJoinTree(

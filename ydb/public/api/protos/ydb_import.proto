@@ -142,6 +142,7 @@ message ImportFromFsSettings {
 
     // Base path on FS where the export is located
     // Path to the mounted directory in the case of NFS
+    // Must be an absolute path
     // Example: /mnt/exports
     string base_path = 1 [(required) = true];
 

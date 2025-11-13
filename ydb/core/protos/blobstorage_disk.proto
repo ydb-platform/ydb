@@ -62,13 +62,15 @@ message TVDiskMetrics {
     //optional uint64 WriteThroughput = 6; // bytes per second
     optional uint32 StatusFlags = 7;
     optional TVSlotId VSlotId = 8;
-    optional double Occupancy = 9;
-    optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 10;
+    optional double NormalizedOccupancy = 9;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 10;
     optional NKikimrWhiteboard.EVDiskState State = 11;
     optional bool Replicated = 12;
     optional NKikimrWhiteboard.EFlag DiskSpace = 13;
     optional bool IsThrottling = 14;
     optional uint32 ThrottlingRate = 15;
+    optional double VDiskSlotUsage = 16;  // 100.0 * Owner.Used / Owner.LightYellowLimit
+    optional double VDiskRawUsage = 17;  // 100.0 * Owner.Used / Owner.HardLimit
 }
 
 message TPDiskMetrics {
@@ -90,4 +92,5 @@ message TPDiskMetrics {
     optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
     optional uint64 SlotCount = 12;
     optional uint32 SlotSizeInUnits = 13;
+    optional double PDiskUsage = 14;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
 }

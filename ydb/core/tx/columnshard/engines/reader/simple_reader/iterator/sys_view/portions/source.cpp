@@ -109,6 +109,7 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             details.InsertValue("snapshot_max", i->RecordSnapshotMax().SerializeToJson());
             details.InsertValue("primary_key_min", i->IndexKeyStart().DebugString());
             details.InsertValue("primary_key_max", i->IndexKeyEnd().DebugString());
+            details.InsertValue("schema_version", i->GetSchemaVersion());
             if ((i->GetProduced() == NPortion::EProduced::COMPACTED) || (i->GetProduced() == NPortion::EProduced::SPLIT_COMPACTED)) {
                 const auto& compactedPortion = static_cast<const NKikimr::NOlap::TCompactedPortionInfo&>(*i);
                 details.InsertValue("appeared", compactedPortion.GetAppeared().SerializeToJson());

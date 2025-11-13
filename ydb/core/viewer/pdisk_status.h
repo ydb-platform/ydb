@@ -28,17 +28,30 @@ public:
 
     void Bootstrap() override {
         if (!PostData.IsDefined()) {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
-        if (!Params.Has("pdisk_id")) {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"));
+        if (!Viewer->CheckAccessMonitoring(GetRequest())) {
+            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
         }
-        DriveStatus.MutableHostKey()->SetNodeId(FromStringWithDefault<ui32>(Params.Get("node_id"), TlsActivationContext->ActorSystem()->NodeId));
-        DriveStatus.SetPDiskId(FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>()));
-        Force = FromStringWithDefault<bool>(Params.Get("force"), false);
-        if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
-            return ReplyAndPassAway(GetHTTPFORBIDDEN());
+        ui32 nodeId = 0;
+        ui32 pDiskId = 0;
+        TVector<TString> parts = StringSplitter(Params.Get("pdisk_id")).Split('-').SkipEmpty();
+        if (parts.size() > 2) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'pdisk_id' parameter"));
         }
+        if (parts.size() == 2) {
+            nodeId = FromStringWithDefault<ui32>(parts[0]);
+            pDiskId = FromStringWithDefault<ui32>(parts[1]);
+        } else {
+            pDiskId = FromStringWithDefault<ui32>(parts[0]);
+            nodeId = FromStringWithDefault<ui32>(Params.Get("node_id"));
+        }
+        if (nodeId == 0 || pDiskId == 0) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'pdisk_id' parameter"));
+        }
+        DriveStatus.MutableHostKey()->SetNodeId(nodeId);
+        DriveStatus.SetPDiskId(pDiskId);
+        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
         if (PostData.IsMap()) {
             if (PostData.Has("decommit_status")) {
                 NKikimrBlobStorage::EDecommitStatus decommitStatus = NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET;
@@ -87,9 +100,9 @@ public:
                 json["result"] = false;
                 TString error;
                 bool forceRetryPossible = false;
-                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), error, forceRetryPossible);
+                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), GetRequest(), error, forceRetryPossible);
                 json["error"] = error;
-                if (forceRetryPossible && Viewer->CheckAccessAdministration(Event->Get())) {
+                if (!Force && forceRetryPossible) {
                     json["forceRetryPossible"] = true;
                 }
             }

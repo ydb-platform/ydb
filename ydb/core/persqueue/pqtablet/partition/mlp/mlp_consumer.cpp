@@ -349,6 +349,11 @@ void TConsumerActor::UpdateStorageConfig() {
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
+    AFL_ENSURE(Config.GetGeneration() == ev->Get()->Config.GetGeneration())
+        ("c", Config.GetName())
+        ("l", Config.GetGeneration())
+        ("r", ev->Get()->Config.GetGeneration());
+
     Config = std::move(ev->Get()->Config);
     RetentionPeriod = ev->Get()->RetentionPeriod;
 

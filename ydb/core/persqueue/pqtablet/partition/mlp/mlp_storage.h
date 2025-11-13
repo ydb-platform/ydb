@@ -159,7 +159,7 @@ public:
     TInstant GetMessageDeadline(ui64 message);
     std::pair<const TMessage*, bool> GetMessage(ui64 message);
     // offset->seqNo
-    const std::deque<TDLQMessage> GetDLQMessages() const;
+    std::deque<TDLQMessage> GetDLQMessages();
     const std::unordered_set<ui32>& GetLockedMessageGroupsId() const;
 
 

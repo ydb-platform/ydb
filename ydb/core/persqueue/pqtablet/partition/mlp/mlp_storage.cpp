@@ -408,23 +408,25 @@ std::pair<const TStorage::TMessage*, bool> TStorage::GetMessage(ui64 message) {
     return GetMessageInt(message);
 }
 
-const std::deque<TDLQMessage> TStorage::GetDLQMessages() const {
+std::deque<TDLQMessage> TStorage::GetDLQMessages() {
     static constexpr size_t MaxBatchSize = 100;
 
     auto retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     std::deque<TDLQMessage> result;
     for (auto& [offset, seqNo] : DLQQueue) {
-        auto [message, _] = GetMessageInt(offset);
-        if (!message || message->Status != EMessageStatus::DLQ) {
+        auto [message, _] = GetMessageInt(offset, EMessageStatus::DLQ);
+        if (!message) {
             continue;
         }
-        if (!retentionDeadlineDelta || message->DeadlineDelta > retentionDeadlineDelta.value()) {
-            result.push_back({
-                .Offset = offset,
-                .SeqNo = seqNo
-            });
+        if (retentionDeadlineDelta && message->DeadlineDelta <= retentionDeadlineDelta.value()) {
+            continue;
         }
+
+        result.push_back({
+            .Offset = offset,
+            .SeqNo = seqNo
+        });
         if (result.size() == MaxBatchSize) {
             break;
         }

@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+bool ISimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     auto output = SimpleTestAndApply(input, ctx, props);
     if (input != output) {
@@ -16,6 +16,27 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
         return false;
     }
 }
+
+TRuleBasedStage::TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {
+    for (auto & r : Rules) {
+        Props.RequireCosts |= r->Props.RequireCosts;
+        Props.RequireParents |= r->Props.RequireParents;
+        Props.RequireTableMeta |= r->Props.RequireTableMeta;
+        Props.RequireTypes |= r->Props.RequireTypes;
+    }
+}
+
+void ComputeRequiredProps(TOpRoot &root, TRuleProperties &props, TRBOContext &ctx) {
+    if (props.RequireParents) {
+        root.ComputeParents();
+    }
+    if (props.RequireTypes) {
+        if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
+            Y_ENSURE(false, "RBO type annotation failed");
+        }
+    }
+}
+
 /**
  * Run a rule-based stage
  *
@@ -30,10 +51,6 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContex
 void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     bool fired = true;
     int nMatches = 0;
-
-    if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
-        Y_ENSURE(false, "RBO type annotation failed");
-    }
 
     while (fired && nMatches < 1000) {
         fired = false;
@@ -53,15 +70,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
                         root.Children[0] = op;
                     }
 
-                    if (rule->RequiresParentRecompute) {
-                        root.ComputeParents();
-                    }
-
-                    YQL_CLOG(TRACE, CoreDq) << "After rule:\n" << root.PlanToString(ctx.ExprCtx);
-
-                    if (root.ComputeTypes(ctx) != IGraphTransformer::TStatus::Ok) {
-                        Y_ENSURE(false, "RBO type annotation failed");
-                    }
+                    ComputeRequiredProps(root, Props, ctx);
 
                     nMatches++;
                     break;
@@ -82,21 +91,20 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) 
 
     auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer, FuncRegistry);
 
-    if (root.ComputeTypes(context) != IGraphTransformer::TStatus::Ok) {
-        Y_ENSURE(false, "RBO type annotation failed");
-    }
-    
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;
         auto stage = Stages[idx];
+        ComputeRequiredProps(root, stage->Props, context);
         stage->RunStage(root, context);
         YQL_CLOG(TRACE, CoreDq) << "After stage:\n" << root.PlanToString(ctx);
-        if (root.ComputeTypes(context) != IGraphTransformer::TStatus::Ok) {
-            Y_ENSURE(false, "RBO type annotation failed");
-        }
     }
 
     YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
+
+    TRuleProperties convertStageProps;
+    convertStageProps.RequireParents = true;
+    convertStageProps.RequireTypes = true;
+    ComputeRequiredProps(root, convertStageProps, context);
 
     return ConvertToPhysical(root, context, TypeAnnTransformer, PeepholeTransformer);
 }

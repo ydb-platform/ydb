@@ -74,6 +74,11 @@ namespace {
 namespace NKikimr {
 namespace NKqp {
 
+TConstantFoldingStage::TConstantFoldingStage() {
+    Props.RequireParents = true;
+    Props.RequireTypes = true;
+}
+
 void TConstantFoldingStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
     TVector<TExprNode::TPtr> lambdasWithConstExpr;
     bool foldUdfs = ctx.KqpCtx.Config->EnableFoldUdfs;

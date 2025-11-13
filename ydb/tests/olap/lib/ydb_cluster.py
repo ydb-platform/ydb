@@ -295,13 +295,13 @@ class YdbCluster:
     @allure.step('Execute scan query')
     def execute_single_result_query(cls, query, timeout=10):
         allure.attach(query, 'query', attachment_type=allure.attachment_type.TEXT)
-        query = ydb.ScanQuery(query, {})
         settings = ydb.BaseRequestSettings()
         settings = settings.with_timeout(timeout)
         try:
-            it = cls.get_ydb_driver().table_client.scan_query(query, settings=settings)
+            session = ydb.query.QueryClientSync(cls.get_ydb_driver()).session().create()
+            it = session.execute(query, settings=settings)
             result = next(it)
-            return result.result_set.rows[0][0]
+            return result.rows[0][0]
         except BaseException:
             LOGGER.error("Cannot connect to YDB")
             raise

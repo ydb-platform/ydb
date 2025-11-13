@@ -73,6 +73,10 @@ on:
           - release-msan
           - release-tsan
         default: relwithdebinfo
+      pull_number:
+        description: 'Pull request number, ex: 12345'
+        required: false
+        default: ''
 
 jobs:
   prepare:
@@ -91,6 +95,8 @@ jobs:
         env:
           CALLED_BRANCHES: '${{ inputs.branches }}'
           BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
+          PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
+          GITHUB_TOKEN: '${{ github.token }}'
         run: |
           # Проверяем, был ли передан параметр branches из вызывающего workflow
           if [[ -n "$CALLED_BRANCHES" ]]; then
@@ -98,13 +104,47 @@ jobs:
             
             # Проверяем, является ли вход уже JSON-массивом
             if [[ $CALLED_BRANCHES == \[* ]]; then
-              echo "branch_array=$CALLED_BRANCHES" >> $GITHUB_OUTPUT
+              # Это JSON-массив - парсим его
+              branches=($(echo "$CALLED_BRANCHES" | jq -r '.[]'))
             else
-              # Если это одна ветка, создаем JSON-массив с одним элементом
-              echo "branch_array=[\"$CALLED_BRANCHES\"]" >> $GITHUB_OUTPUT
+              # Если это одна ветка, создаем массив с одним элементом
+              branches=("$CALLED_BRANCHES")
             fi
+
+            processed_branches=()
+            for branch in "${branches[@]}"; do
+              # Проверяем, начинается ли ветка с pull/ и содержит цифры
+              if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
+                PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
+                echo "Processing pull request: $PULL_REQUEST_NUMBER"
+                
+                # Получаем merge_commit_sha из GitHub API
+                MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
+                  jq -r '.merge_commit_sha')
+                
+                if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+                  echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA"
+                  processed_branches+=("\"$MERGE_SHA\"")
+                else
+                  echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
+                fi
+              else
+                # Просто добавляем ветку как есть
+                processed_branches+=("\"$branch\"")
+              fi
+            done
+
+            # Собираем обратно в JSON-массив
+            branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
+            echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
           elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
             echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
+          elif [[ -n "$PULL_REQUEST_NUMBER" ]]; then
+            MERGE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER" | \
+                  jq -r '.merge_commit_sha')
+            echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
           else
             # Если ветки не переданы, значит это прямой запуск workflow_dispatch
             echo "No branches specified, using current branch: ${{ github.ref_name }}"

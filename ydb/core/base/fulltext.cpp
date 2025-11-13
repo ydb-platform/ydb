@@ -1,5 +1,4 @@
 #include "fulltext.h"
-
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
 

@@ -1162,7 +1162,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_DLQ) {
 
     const auto& dlq = utils.Storage.GetDLQMessages();
     UNIT_ASSERT_VALUES_EQUAL(dlq.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(dlq.front(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(dlq.front().Offset, 3);
 
     utils.TimeProvider->Tick(TDuration::Seconds(5));
 

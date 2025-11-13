@@ -24,14 +24,8 @@ Y_UNIT_TEST(ReloadPQTablet) {
                 .EndDeadLetterPolicy()
             .EndAddConsumer());
 
-    // Write many messaes because small snapshot do not write wal
+    // Write many messages because small snapshot do not write wal
     WriteMany(setup, "/Root/topic1", 0, 16, 113);
-
-    Cerr << ">>>>> BEGIN DESCRIBE" << Endl;
-
-    Sleep(TDuration::Seconds(2));
-    
-    Cerr << ">>>>> BEGIN READ" << Endl;
 
     {
         CreateReaderActor(runtime, {
@@ -113,9 +107,7 @@ Y_UNIT_TEST(AlterConsumer) {
                     .EndCondition()
                     .DeleteAction()
                 .EndDeadLetterPolicy()
-            .EndAddConsumer());
-
-    Sleep(TDuration::Seconds(1));
+            .EndAddConsumer()).GetValueSync();
 
     {
         auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
@@ -138,9 +130,7 @@ Y_UNIT_TEST(AlterConsumer) {
                     .EndCondition()
                     .SetMoveAction("dlq-queue")
                 .EndAlterDeadLetterPolicy()
-            .EndAlterConsumer());
-
-    Sleep(TDuration::Seconds(1));
+            .EndAlterConsumer()).GetValueSync();
 
     {
         auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
@@ -152,6 +142,80 @@ Y_UNIT_TEST(AlterConsumer) {
             ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
     }
 }
+
+Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(17)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    WriteMany(setup, "/Root/topic1", 0, 16, 113);
+
+    Sleep(TDuration::Seconds(1));
+
+    Cerr << ">>>>> BEGIN COMMIT" << Endl;
+    {
+        CreateCommitterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) }
+        });
+
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
+        .SetRetentionPeriod(TDuration::Seconds(103))
+        .BeginAlterConsumer("mlp-consumer")
+            .DefaultProcessingTimeout(TDuration::Seconds(113))
+            .BeginAlterDeadLetterPolicy()
+                .Enable()
+                .BeginCondition()
+                    .MaxProcessingAttempts(117)
+                .EndCondition()
+                .SetMoveAction("dlq-queue")
+            .EndAlterDeadLetterPolicy()
+        .EndAlterConsumer()).GetValueSync();
+
+    Cerr << ">>>>> BEGIN REBOOT " << Endl;
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+    Sleep(TDuration::Seconds(1));
+
+    // Checking that alter consumer do not change consumer generation and snapshot and wal read successfully
+    for (size_t i = 0; i < 10; ++i) {
+        Sleep(TDuration::Seconds(1));
+
+        auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        if (i < 9 && result->Messages.size() != 16) {
+            continue;
+        }
+
+        // Message with offset 0 was committed and deleted
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, TStorage::EMessageStatus::Unprocessed);
+
+        break;
+    }
+}
+
 
 Y_UNIT_TEST(RetentionStorage) {
     auto setup = CreateSetup();

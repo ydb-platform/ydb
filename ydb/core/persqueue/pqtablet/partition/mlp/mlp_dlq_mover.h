@@ -42,7 +42,7 @@ private:
     STFUNC(StateWrite);
 
     void ReplySuccess();
-    void ReplyError(TString&& error);
+    void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
 
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
@@ -50,11 +50,11 @@ private:
     TDLQMoverSettings Settings;
 
     TString ProducerId;
-    ui64 SeqNo;
-    std::deque<ui64> Queue;
+    std::deque<TDLQMessage> Queue;
 
+    Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     TString Error;
-    std::vector<ui64> Processed;
+    std::vector<std::pair<ui64, ui64>> Processed;
 
     NDescriber::TTopicInfo TopicInfo;
     const IPartitionChooser::TPartitionInfo* TargetPartition;

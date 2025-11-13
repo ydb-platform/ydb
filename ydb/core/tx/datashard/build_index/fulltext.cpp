@@ -36,7 +36,6 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
-    TStemmerPtr Stemmer;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
@@ -66,9 +65,6 @@ public:
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
         TextAnalyzers = Request.settings().columns().at(0).analyzers();
-        if (TextAnalyzers.use_filter_snowball()) {
-            Stemmer = TStemmerPtr(sb_stemmer_new(TextAnalyzers.language().c_str(), nullptr));
-        }
 
         auto tags = GetAllTags(table);
         auto types = GetAllTypes(table);
@@ -146,7 +142,7 @@ public:
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
 
         TString text((*row).at(0).AsBuf());
-        auto tokens = Analyze(text, TextAnalyzers, Stemmer.get());
+        auto tokens = Analyze(text, TextAnalyzers);
         for (const auto& token : tokens) {
             uploadKey.clear();
             uploadKey.push_back(TCell(token));

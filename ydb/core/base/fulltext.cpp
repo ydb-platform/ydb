@@ -1,4 +1,7 @@
 #include "fulltext.h"
+
+#include <contrib/libs/snowball/include/libstemmer.h>
+
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
 
@@ -267,7 +270,7 @@ namespace {
     }
 }
 
-TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, struct sb_stemmer* stemmer) {
+TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
     TVector<TString> tokens = Tokenize(text, settings.tokenizer());
 
     if (settings.use_filter_lowercase()) {
@@ -290,7 +293,7 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     }
 
     if (settings.use_filter_snowball()) {
-        Y_ASSERT(stemmer);
+        struct sb_stemmer* stemmer = sb_stemmer_new(settings.language().c_str(), nullptr);
         for (auto& token : tokens) {
             const sb_symbol* stemmed = sb_stemmer_stem(
                 stemmer,
@@ -301,6 +304,7 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
             const size_t resultLength = sb_stemmer_length(stemmer);
             token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
         }
+        sb_stemmer_delete(stemmer);
     }
 
     if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {

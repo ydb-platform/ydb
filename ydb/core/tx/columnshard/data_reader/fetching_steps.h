@@ -328,7 +328,7 @@ private:
             AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
-                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i]).AssembleToGeneralContainer({}).DetachResult();
+                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i]).AssembleToGeneralContainer({}, portion->GetPortionInfo()->GetPortionId(), portion->GetPortionInfo()->GetPathId()).DetachResult();
             result.emplace_back(std::move(*container));
         }
         context.SetAssembledData(std::move(result));

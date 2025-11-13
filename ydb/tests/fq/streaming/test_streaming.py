@@ -414,11 +414,12 @@ class TestStreamingInYdb(TestYdsBase):
         test_type(self, kikimr, type="Uint64", input='777', expected_output='777')
         test_type(self, kikimr, type="Float", input='1024.1024', expected_output='1024.1024')
         test_type(self, kikimr, type="Double", input='-777.777', expected_output='-777.777')
+        test_type(self, kikimr, type="Bool", input='true', expected_output='true')
+        test_type(self, kikimr, type="Uuid", input='"3d6c7233-d082-4b25-83e2-10d271bbc911"', expected_output='3d6c7233-d082-4b25-83e2-10d271bbc911')
         # Unsupported
         # test_type(self, kikimr, type="Timestamp", input='"2025-08-25 10:49:00"', expected_output='2025-08-25T10:49:00Z')
         # test_type(self, kikimr, type="Json", input='{"name": "value"}', expected_output='{"name": "value"}')
         # test_type(self, kikimr, type="JsonDocument", input='{"name": "value"}', expected_output='lunch time')
-        # test_type(self, kikimr, type="Bool", input='True', expected_output='True')
 
     def test_raw_format(self, kikimr):
         sourceName = "test_restart_query" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -432,7 +433,7 @@ class TestStreamingInYdb(TestYdsBase):
                 $input = SELECT CAST(data AS Json) AS json FROM {source_name}.`{input_topic}`
                 WITH (
                     FORMAT="raw",
-                    SCHEMA=(data String NOT NULL));
+                    SCHEMA=(data String));
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {source_name}.`{output_topic}` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
@@ -473,7 +474,7 @@ class TestStreamingInYdb(TestYdsBase):
                 $input = SELECT data AS json FROM {source_name}.`{input_topic}`
                 WITH (
                     FORMAT="raw",
-                    SCHEMA=(data Json NOT NULL));
+                    SCHEMA=(data Json));
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {source_name}.`{output_topic}` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''

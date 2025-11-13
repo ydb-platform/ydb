@@ -37,6 +37,43 @@ namespace {
         return state;
     }
 
+    void FillItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
+        Ydb::Import::ImportItemProgress& itemProgress) {
+
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        const auto& item = importInfo.Items.at(itemIdx);
+
+        const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
+        if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
+            const auto& txState = ss->TxInFlight.at(opId);
+            if (txState.TxType != TTxState::TxBackup) {
+                return;
+            }
+
+            itemProgress.set_parts_total(txState.Shards.size());
+            itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
+            *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
+        } else {
+            auto table = ss->Tables.at(item.DstPathId);
+            auto it = table->RestoreHistory.end();
+            if (item.WaitTxId != InvalidTxId) {
+                it = table->RestoreHistory.find(item.WaitTxId);
+            } else if (table->RestoreHistory.size() == 1) {
+                it = table->RestoreHistory.begin();
+            }
+
+            if (it == table->RestoreHistory.end()) {
+                return;
+            }
+
+            const auto& restoreResult = it->second;
+            itemProgress.set_parts_total(restoreResult.TotalShardCount);
+            itemProgress.set_parts_completed(restoreResult.TotalShardCount);
+            *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(restoreResult.StartDateTime);
+            *itemProgress.mutable_end_time() = SecondsToProtoTimeStamp(restoreResult.CompletionDateTime);
+        }
+    }
+
 } // anonymous
 
 void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportInfo& importInfo) {
@@ -65,16 +102,27 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
-            // TODO(ilnaz): fill items progress
+            for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+                FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+            }
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
             break;
         case TImportInfo::EState::BuildIndexes:
+            for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+                FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+            }
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
             break;
         case TImportInfo::EState::CreateChangefeed:
+            for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+                FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+            }
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS);
             break;
         case TImportInfo::EState::Done:
+            for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+                FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+            }
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
             break;
         default:

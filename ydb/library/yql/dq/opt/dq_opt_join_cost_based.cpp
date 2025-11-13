@@ -314,7 +314,7 @@ class TOptimizerNativeNew: public IOptimizerNew {
 public:
     TOptimizerNativeNew(
         IProviderContext& ctx,
-        const TCBOSettings &optimizerSettings,
+        const TCBOSettings& optimizerSettings,
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
@@ -388,7 +388,7 @@ private:
                 YqlIssue(
                     {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
                     "Cost Based Optimizer could not be applied to this query: "
-                    "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                    "Enumeration is too large, use PRAGMA ydb.MaxDPHypDPTableSize='4294967295' to disable the limitation"
                 )
             );
             ComputeStatistics(joinTree, this->Pctx);
@@ -516,7 +516,7 @@ private:
 
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& pctx,
-    const TCBOSettings &settings,
+    const TCBOSettings& settings,
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,

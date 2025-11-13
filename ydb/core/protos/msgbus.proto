@@ -612,6 +612,7 @@ message TInterconnectDebug {
     optional uint64 RescheduleMax = 205;
 
     optional string SecurityToken = 13 [(Ydb.sensitive) = true];
+    optional uint32 RdmaMode = 14;
 }
 
 message TConsoleRequest {

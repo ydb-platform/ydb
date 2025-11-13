@@ -12,6 +12,7 @@ SRCS(
     math_udf.cpp
     unicode_udf.cpp
     digest_udf.cpp
+    kqp_benches.cpp
 )
 
 PEERDIR(

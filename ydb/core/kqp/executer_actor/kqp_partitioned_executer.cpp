@@ -593,7 +593,7 @@ private:
                 PE_LOG_E("Partition " << partInfo->PartitionIndex << " returned key outside its range");
                 ForgetPartition(partInfo);
                 AbortWithError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssues({NYql::TIssue(TStringBuilder()
-                    << "The next key from KqpReadActor does not belong to the partition with PartitionIndex = "
+                    << "The next key from KqpReadActor does not belong to the partition with partitionIndex = "
                     << partInfo->PartitionIndex)}));
                 return;
             }

@@ -275,7 +275,7 @@ def aggregate_test_data(all_data, period_days):
                         date_obj = base_date + datetime.timedelta(days=date)
                     else:
                         date_obj = date
-                    date_str = date_obj.strftime('%m-%d')
+                    date_str = date_obj.strftime('%Y-%m-%d')
                     state_with_dates.append(f"{state}({date_str})")
                 else:
                     state_with_dates.append(state)

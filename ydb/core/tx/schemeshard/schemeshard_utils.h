@@ -113,15 +113,13 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextTokensImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -138,14 +136,12 @@ NKikimrSchemeOp::TTableDescription CalcFulltextTokensImplTableDesc(
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);

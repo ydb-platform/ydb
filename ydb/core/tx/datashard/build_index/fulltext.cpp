@@ -98,8 +98,14 @@ public:
             for (const auto& column : table.KeyColumnIds) {
                 addType(table.Columns.at(column).Name);
             }
-            for (auto dataColumn : Request.GetDataColumns()) {
-                addType(dataColumn);
+            if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::UINT32);
+                uploadTypes->emplace_back(FreqColumn, type);
+            } else {
+                for (auto dataColumn : Request.GetDataColumns()) {
+                    addType(dataColumn);
+                }
             }
             UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
         }
@@ -143,22 +149,39 @@ public:
 
         TString text((*row).at(0).AsBuf());
         auto tokens = Analyze(text, TextAnalyzers);
-        for (const auto& token : tokens) {
-            uploadKey.clear();
-            uploadKey.push_back(TCell(token));
-            uploadKey.insert(uploadKey.end(), key.begin(), key.end());
-
-            uploadValue.clear();
-            size_t index = 1; // skip text column
-            for (auto dataColumn : Request.GetDataColumns()) {
-                if (dataColumn != TextColumn) {
-                    uploadValue.push_back(row.Get(index++));
-                } else {
-                    uploadValue.push_back(TCell(text));
-                }
+        if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            THashMap<TString, ui32> tokenFreq;
+            for (const auto& token : tokens) {
+                tokenFreq[token]++;
             }
+            for (const auto& [token, freq] : tokenFreq) {
+                uploadKey.clear();
+                uploadKey.push_back(TCell(token));
+                uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
-            UploadBuf->AddRow(uploadKey, uploadValue);
+                uploadValue.clear();
+                uploadValue.push_back(TCell::Make(freq));
+
+                UploadBuf->AddRow(uploadKey, uploadValue);
+            }
+        } else {
+            for (const auto& token : tokens) {
+                uploadKey.clear();
+                uploadKey.push_back(TCell(token));
+                uploadKey.insert(uploadKey.end(), key.begin(), key.end());
+
+                uploadValue.clear();
+                size_t index = 1; // skip text column
+                for (auto dataColumn : Request.GetDataColumns()) {
+                    if (dataColumn != TextColumn) {
+                        uploadValue.push_back(row.Get(index++));
+                    } else {
+                        uploadValue.push_back(TCell(text));
+                    }
+                }
+
+                UploadBuf->AddRow(uploadKey, uploadValue);
+            }
         }
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;

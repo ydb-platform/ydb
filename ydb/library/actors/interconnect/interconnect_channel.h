@@ -2,14 +2,15 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/protos/interconnect.pb.h>
 #include <ydb/library/actors/core/event_load.h>
 #include <ydb/library/actors/util/rope.h>
-#include <ydb/library/actors/interconnect/logging/logging.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 #include <util/stream/walk.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
 
 #include "interconnect_common.h"
 #include "interconnect_counters.h"
@@ -18,6 +19,9 @@
 
 namespace NInterconnect {
     class IZcGuard;
+    namespace NRdma {
+        class IMemPool;
+    }
 }
 
 namespace NActors {
@@ -52,6 +56,8 @@ namespace NActors {
         DECLARE_SECTION = 1,
         PUSH_DATA,
         DECLARE_SECTION_INLINE,
+        DECLARE_SECTION_RDMA,
+        RDMA_READ,
     };
 
     struct TExSerializedEventTooLarge : std::exception {
@@ -65,13 +71,15 @@ namespace NActors {
     class TEventOutputChannel : public TInterconnectLoggingBase {
     public:
         TEventOutputChannel(ui16 id, ui32 peerNodeId, ui32 maxSerializedEventSize,
-                std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params)
+                std::shared_ptr<IInterconnectMetrics> metrics, TSessionParams params,
+                std::shared_ptr<NInterconnect::NRdma::IMemPool> rdmaMemPool)
             : TInterconnectLoggingBase(Sprintf("OutputChannel %" PRIu16 " [node %" PRIu32 "]", id, peerNodeId))
             , PeerNodeId(peerNodeId)
             , ChannelId(id)
             , Metrics(std::move(metrics))
             , Params(std::move(params))
             , MaxSerializedEventSize(maxSerializedEventSize)
+            , RdmaMemPool(std::move(rdmaMemPool))
         {}
 
         ~TEventOutputChannel() {
@@ -91,7 +99,7 @@ namespace NActors {
 
         void DropConfirmed(ui64 confirm, TEventHolderPool& pool);
 
-        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial);
+        bool FeedBuf(TTcpPacketOutTask& task, ui64 serial, ssize_t rdmaDeviceIndex = -1);
 
         bool IsEmpty() const {
             return Queue.empty();
@@ -141,13 +149,21 @@ namespace NActors {
         size_t PartLenRemain = 0;
         size_t SectionIndex = 0;
         std::vector<char> XdcData;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
+        struct TRdmaSerializationArtifacts {
+            NActorsInterconnect::TRdmaCreds RdmaCreds;
+            ui32 CheckSum = 0;
+        };
+        std::optional<TRdmaSerializationArtifacts> SendViaRdma;
 
         template<bool External>
         bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
+        bool SerializeEventRdma(TEventHolder& event, NActorsInterconnect::TRdmaCreds& rdmaCreds, ui32* checkSum, ssize_t rdmaDeviceIndex);
 
-        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);
         std::optional<bool> FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event);
         std::optional<bool> FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event);
+        std::optional<bool> FeedRdmaPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);
 
         bool FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event);
 

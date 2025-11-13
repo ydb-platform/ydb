@@ -123,10 +123,70 @@ TExprNode::TPtr BuildAggregate(TExprNode::TPtr resultExpr, const TVector<TInfoUn
     // clang-format on
 }
 
-TExprNode::TPtr BuildRenameMap(TExprNode::TPtr resultExpr, const TVector<std::pair<TInfoUnit, TInfoUnit>>& aggRenamesMap, TExprContext& ctx,
-                               TPositionHandle pos) {
+void BuildSimpleMapElementLambda(TExprNode::TPtr resultExpr, const TVector<std::pair<TInfoUnit, TInfoUnit>>& renamesMap, TVector<TExprNode::TPtr>& mapElements,
+                                 TExprContext& ctx, TPositionHandle pos) {
+    for (const auto& [colName, rename] : renamesMap) {
+        // clang-format off
+        // Just wrap by member
+        auto lambda = ctx.Builder(pos)
+            .Lambda()
+                .Param("arg")
+                .Callable("Member")
+                    .Arg(0, "arg")
+                    .Atom(1, colName.GetFullName())
+                .Seal()
+        .Seal().Build();
+
+        mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
+            .Input(resultExpr)
+            .Variable()
+                .Value(colName.GetFullName())
+            .Build()
+            .Lambda(lambda)
+        .Done().Ptr());
+        // clang-format on
+    }
+}
+
+TExprNode::TPtr BuildExpressionMap(TExprNode::TPtr resultExpr,
+                                   const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& aggFieldsExpressionsMap,
+                                   const TVector<std::pair<TInfoUnit, TInfoUnit>>& aggFieldsRenamesMap,
+                                   const TVector<std::pair<TInfoUnit, TInfoUnit>>& groupByKeysRenamesMap, TExprContext& ctx,
+                                   TPositionHandle pos) {
+    // Add expressions
     TVector<TExprNode::TPtr> mapElements;
-    for (const auto& [colName, newColName] : aggRenamesMap) {
+    for (const auto& [colName, expr] : aggFieldsExpressionsMap) {
+        // clang-format off
+        mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
+            .Input(resultExpr)
+            .Variable()
+                .Value(colName.GetFullName())
+            .Build()
+            .Lambda(expr)
+        .Done().Ptr());
+        // clang-format on
+    }
+
+    // Add other columns and wrap them with member.
+    BuildSimpleMapElementLambda(resultExpr, aggFieldsRenamesMap, mapElements, ctx, pos);
+    BuildSimpleMapElementLambda(resultExpr, groupByKeysRenamesMap, mapElements, ctx, pos);
+
+    // clang-format off
+    return Build<TKqpOpMap>(ctx, pos)
+        .Input(resultExpr)
+        .MapElements()
+            .Add(mapElements)
+        .Build()
+        .Project()
+            .Value("true")
+        .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+void BuildMapElementRename(TExprNode::TPtr resultExpr, const TVector<std::pair<TInfoUnit, TInfoUnit>>& renamesMap, TVector<TExprNode::TPtr>& mapElements,
+                           TExprContext& ctx, TPositionHandle pos) {
+    for (const auto& [colName, newColName] : renamesMap) {
         // clang-format off
         mapElements.push_back(Build<TKqpOpMapElementRename>(ctx, pos)
             .Input(resultExpr)
@@ -139,6 +199,13 @@ TExprNode::TPtr BuildRenameMap(TExprNode::TPtr resultExpr, const TVector<std::pa
         .Done().Ptr());
         // clang-format on
     }
+}
+
+TExprNode::TPtr BuildRenameMap(TExprNode::TPtr resultExpr, const TVector<std::pair<TInfoUnit, TInfoUnit>>& aggFieldsRenamesMap,
+                               const TVector<std::pair<TInfoUnit, TInfoUnit>>& groupByKeysRenamesMap, TExprContext& ctx, TPositionHandle pos) {
+    TVector<TExprNode::TPtr> mapElements;
+    BuildMapElementRename(resultExpr, aggFieldsRenamesMap, mapElements, ctx, pos);
+    BuildMapElementRename(resultExpr, groupByKeysRenamesMap, mapElements, ctx, pos);
 
     // clang-format off
     return Build<TKqpOpMap>(ctx, pos)
@@ -486,7 +553,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         }
 
         // FIXME: Group by key can be an expression, we need to handle this case
-        TVector<std::pair<TInfoUnit, TInfoUnit>> aggRenamesMap;
+        TVector<std::pair<TInfoUnit, TInfoUnit>> groupByKeysRenamesMap;
         TVector<TInfoUnit> groupByKeys;
         auto groupOps = GetSetting(setItem->Tail(), "group_exprs");
         if (groupOps) {
@@ -498,7 +565,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 GetAllMembers(body, keys);
                 groupByKeys.insert(groupByKeys.end(), keys.begin(), keys.end());
                 for (const auto &infoUnit : keys) {
-                    aggRenamesMap.push_back({infoUnit, infoUnit});
+                    groupByKeysRenamesMap.push_back({infoUnit, infoUnit});
                 }
             }
         }
@@ -511,11 +578,13 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         // This is a hack to enable convertion for aggregation columns.
         THashSet<TString> aggregationColumns;
         THashSet<TString> columnNames;
-        bool needToRenameAggFields = false;
         // Collect PgAgg for each result item at first pass.
         TVector<TExprNode::TPtr> aggTraitsList;
         TVector<TExprNode::TPtr> distinctAggTraitsList;
         TVector<TInfoUnit> distinctAggKeyColumns;
+        TVector<std::pair<TInfoUnit, TInfoUnit>> aggFieldsRenamesMap;
+        TVector<std::pair<TInfoUnit, TExprNode::TPtr>> aggFieldsExpressionsMap;
+        bool needRenameMap = false;
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
             const auto resultItem = result->Child(1)->ChildPtr(i);
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
@@ -528,16 +597,29 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 // Collect original column names processing `PgAgg` callable.
                 TVector<TInfoUnit> originalColNames;
                 GetAllMembers(pgAgg, originalColNames);
-                Y_ENSURE(originalColNames.size() == 1, "Invalid column size for aggregation columns.");
-                const auto& originalColName = originalColNames.front();
+                auto pgResolvedOp = GetPgCallable(lambda.Body().Ptr(), "PgResolvedOp");
+                //Y_ENSURE(originalColNames.size() > 1 && pgResolvedOp, "Invalid column size for aggregation columns.");
+
+                auto originalColName = originalColNames.front();
                 auto renamedColName = originalColName;
 
-                // Rename agg column we will add a map to map same column to different renames.
-                if (columnNames.count(originalColName.GetFullName())) {
-                    renamedColName = TInfoUnit(originalColName.Alias, GenerateUniqueColumnName(originalColName.ColumnName));
-                    needToRenameAggFields = true;
+                if (pgResolvedOp) {
+                    auto fromPg = ctx.NewCallable(node->Pos(), "FromPg", {pgResolvedOp});
+                    auto exprLambda = Build<TCoLambda>(ctx, node->Pos()).Args(lambda.Args()).Body(fromPg).Done().Ptr();
+
+                    // Just any unique name for expression result, physical plan should be AsSturct(`unique_name (expression))
+                    originalColName = TInfoUnit(GenerateUniqueColumnName("_expr_"));
+                    renamedColName = originalColName;
+                    aggFieldsExpressionsMap.push_back({originalColName, exprLambda});
+                } else {
+                    // Rename agg column we will add a map to map same column to different renames.
+                    if (columnNames.count(originalColName.GetFullName())) {
+                        renamedColName = TInfoUnit(originalColName.Alias, GenerateUniqueColumnName(originalColName.ColumnName));
+                        needRenameMap = true;
+                    }
+                    aggFieldsRenamesMap.push_back({originalColName, renamedColName});
                 }
-                aggRenamesMap.push_back({originalColName, renamedColName});
+
                 columnNames.insert(renamedColName.GetFullName());
                 Y_ENSURE(!GetAtom(pgAgg->ChildPtr(1), "distinct"), "Aggregation on distinct is not supported");
 
@@ -573,8 +655,12 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         // Build aggregate
         if (!aggTraitsList.empty()) {
             // In case we have a multiple consumers for the single column we have to map and rename it.
-            if (needToRenameAggFields) {
-                resultExpr = BuildRenameMap(resultExpr, aggRenamesMap, ctx, node->Pos());
+            if (needRenameMap) {
+                resultExpr = BuildRenameMap(resultExpr, aggFieldsRenamesMap, groupByKeysRenamesMap, ctx, node->Pos());
+            }
+            // In case we have an expression for aggregation - f(a + b ..)
+            if (!aggFieldsExpressionsMap.empty()) {
+                resultExpr = BuildExpressionMap(resultExpr, aggFieldsExpressionsMap, aggFieldsRenamesMap, groupByKeysRenamesMap, ctx, node->Pos());
             }
             resultExpr = BuildAggregate(resultExpr, groupByKeys, aggTraitsList, distinctAll, ctx, node->Pos());
         }
@@ -585,6 +671,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         }
 
         finalColumnOrder.clear();
+        THashMap<TString, TExprNode::TPtr> aggProjectionMap;
 
         for (auto resultItem : result->Child(1)->Children()) {
             auto column = resultItem->Child(0);
@@ -610,6 +697,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
             if (pgAgg) {
                 Y_ENSURE(SupportedAggregationFunctions.count(pgAgg->ChildPtr(0)->Content()),
                          "Aggregation function " + TString(pgAgg->ChildPtr(0)->Content()) + " is not supported ");
+
                 // Build a projection lambda, we do not need `PgAgg` inside.
                 // clang-format off
                 lambda = Build<TCoLambda>(ctx, node->Pos())
@@ -923,8 +1011,9 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
                                                        TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                                                       TAutoPtr<IGraphTransformer> peephole) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole);
+                                                       TAutoPtr<IGraphTransformer> peephole,
+                                                       const NMiniKQL::IFunctionRegistry& funcRegistry) {
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, rboTypeAnnTransformer, typeAnnTransformer, peephole, funcRegistry);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) {

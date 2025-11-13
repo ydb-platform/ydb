@@ -7,6 +7,7 @@ import os
 import posixpath
 import sys
 import pkgutil
+import importlib.resources
 import typing as t
 import weakref
 import zipimport
@@ -207,7 +208,12 @@ class FileSystemLoader(BaseLoader):
             if os.path.isfile(filename):
                 break
         else:
-            raise TemplateNotFound(template)
+            plural = "path" if len(self.searchpath) == 1 else "paths"
+            paths_str = ", ".join(repr(p) for p in self.searchpath)
+            raise TemplateNotFound(
+                template,
+                f"{template!r} not found in search {plural}: {paths_str}",
+            )
 
         with open(filename, encoding=self.encoding) as f:
             contents = f.read()
@@ -239,6 +245,30 @@ class FileSystemLoader(BaseLoader):
                     if template not in found:
                         found.add(template)
         return sorted(found)
+
+
+if sys.version_info >= (3, 13):
+
+    def _get_zipimporter_files(z: t.Any) -> t.Dict[str, object]:
+        try:
+            get_files = z._get_files
+        except AttributeError as e:
+            raise TypeError(
+                "This zip import does not have the required"
+                " metadata to list templates."
+            ) from e
+        return get_files()
+else:
+
+    def _get_zipimporter_files(z: t.Any) -> t.Dict[str, object]:
+        try:
+            files = z._files
+        except AttributeError as e:
+            raise TypeError(
+                "This zip import does not have the required"
+                " metadata to list templates."
+            ) from e
+        return files  # type: ignore[no-any-return]
 
 
 class PackageLoader(BaseLoader):
@@ -280,6 +310,7 @@ class PackageLoader(BaseLoader):
         package_path: "str" = "templates",
         encoding: str = "utf-8",
         skip_unknown_package: bool = False,
+        check_templates: bool = False,
     ) -> None:
         package_path = os.path.normpath(package_path).rstrip(os.path.sep)
 
@@ -310,7 +341,7 @@ class PackageLoader(BaseLoader):
         self._loader = loader
         self._archive = None
         self._package = package
-        template_root = None
+        self._check_templates = check_templates
 
         if isinstance(loader, zipimport.zipimporter):
             self._archive = loader.archive
@@ -318,6 +349,15 @@ class PackageLoader(BaseLoader):
             template_root = os.path.join(pkgdir, package_path).rstrip(os.path.sep)
         elif hasattr(loader, "arcadia_source_finder"):
             template_root = os.path.dirname(package.__file__).rstrip(os.path.sep)
+            try:
+                if package_path:
+                    importlib.resources.files(package_name).joinpath(package_path)
+            except FileNotFoundError:
+                if self._check_templates:
+                    raise ValueError(
+                        f"PackageLoader could not find a {package_path!r} directory"
+                        f" in the {package_name!r} package."
+                    )
         else:
             roots: t.List[str] = []
 
@@ -329,18 +369,23 @@ class PackageLoader(BaseLoader):
             elif spec.origin is not None:
                 roots.append(os.path.dirname(spec.origin))
 
+            if not roots:
+                raise ValueError(
+                    f"The {package_name!r} package was not installed in a"
+                    " way that PackageLoader understands."
+                )
+
             for root in roots:
                 root = os.path.join(root, package_path)
 
                 if os.path.isdir(root):
                     template_root = root
                     break
-
-        if template_root is None:
-            raise ValueError(
-                f"The {package_name!r} package was not installed in a"
-                " way that PackageLoader understands."
-            )
+            else:
+                raise ValueError(
+                    f"PackageLoader could not find a {package_path!r} directory"
+                    f" in the {package_name!r} package."
+                )
 
         self._template_root = template_root
 
@@ -416,11 +461,7 @@ class PackageLoader(BaseLoader):
                     for name in filenames
                 )
         else:
-            if not hasattr(self._loader, "_files"):
-                raise TypeError(
-                    "This zip import does not have the required"
-                    " metadata to list templates."
-                )
+            files = _get_zipimporter_files(self._loader)
 
             # Package is a zip file.
             prefix = (
@@ -429,7 +470,7 @@ class PackageLoader(BaseLoader):
             )
             offset = len(prefix)
 
-            for name in self._loader._files.keys():
+            for name in files:
                 # Find names under the templates directory that aren't directories.
                 if name.startswith(prefix) and name[-1] != os.path.sep:
                     results.append(name[offset:].replace(os.path.sep, "/"))
@@ -444,7 +485,7 @@ class DictLoader(BaseLoader):
 
     >>> loader = DictLoader({'index.html': 'source here'})
 
-    Because auto reloading is rarely useful this is disabled per default.
+    Because auto reloading is rarely useful this is disabled by default.
     """
 
     def __init__(self, mapping: t.Mapping[str, str]) -> None:
@@ -627,10 +668,7 @@ class ModuleLoader(BaseLoader):
 
     Example usage:
 
-    >>> loader = ChoiceLoader([
-    ...     ModuleLoader('/path/to/compiled/templates'),
-    ...     FileSystemLoader('/path/to/templates')
-    ... ])
+    >>> loader = ModuleLoader('/path/to/compiled/templates')
 
     Templates can be precompiled with :meth:`Environment.compile_templates`.
     """

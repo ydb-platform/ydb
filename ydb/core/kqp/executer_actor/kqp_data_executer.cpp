@@ -2888,7 +2888,7 @@ private:
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
             {},
-            Counters->Counters->GetKqpCounters(),
+            Counters->Counters->GetKqpCounters()->GetSubgroup("path", context->StreamingQueryPath),
             graphParams,
             stateLoadMode,
             streamingDisposition).Release());

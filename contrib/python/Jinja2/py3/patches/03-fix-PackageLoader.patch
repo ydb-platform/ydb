@@ -1,10 +1,11 @@
 --- contrib/python/Jinja2/py3/jinja2/loaders.py	(index)
 +++ contrib/python/Jinja2/py3/jinja2/loaders.py	(working tree)
-@@ -5,6 +5,7 @@ sources.
+@@ -5,6 +5,8 @@ sources.
  import os
  import posixpath
  import sys
 +import pkgutil
++import importlib.resources
  import typing as t
  import weakref
  import zipimport
@@ -17,7 +18,7 @@
  
  def split_template_path(template: str) -> t.List[str]:
      """Split a path into segments and perform a sanity check.  If it detects
-@@ -288,19 +291,22 @@ class PackageLoader(BaseLoader):
+@@ -288,18 +291,31 @@ class PackageLoader(BaseLoader):
  
          # Make sure the package exists. This also makes namespace
          # packages work, otherwise get_loader returns None.
@@ -30,7 +31,7 @@
          self._loader = loader
          self._archive = None
 +        self._package = package
-         template_root = None
++        self._check_templates = False
  
          if isinstance(loader, zipimport.zipimporter):
              self._archive = loader.archive
@@ -38,6 +39,15 @@
              template_root = os.path.join(pkgdir, package_path).rstrip(os.path.sep)
 +        elif hasattr(loader, "arcadia_source_finder"):
 +            template_root = os.path.dirname(package.__file__).rstrip(os.path.sep)
++            try:
++                if package_path:
++                    importlib.resources.files(package_name).joinpath(package_path)
++            except FileNotFoundError:
++                if self._check_templates:
++                    raise ValueError(
++                        f"PackageLoader could not find a {package_path!r} directory"
++                        f" in the {package_name!r} package."
++                    )
          else:
              roots: t.List[str] = []
  

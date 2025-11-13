@@ -5,7 +5,7 @@ package Ydb.SqsTopic.V1;
 
 import "ydb/public/api/protos/draft/ymq.proto";
 
-option java_package = "com.yandex.ydb.sqs_topic.V1.";
+option java_package = "com.yandex.ydb.sqs_topic.v1";
 
 service SqsTopicService {
     rpc SqsTopicGetQueueUrl(Ydb.Ymq.V1.GetQueueUrlRequest) returns (Ydb.Ymq.V1.GetQueueUrlResponse);

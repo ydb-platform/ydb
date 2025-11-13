@@ -35,3 +35,22 @@ openssl req -new -x509 -noenc -newkey ec:<(openssl ecparam -name prime256v1) -ke
     -addext "basicConstraints=critical,CA:FALSE" \
     -addext "keyUsage=digitalSignature,keyEncipherment" \
     -addext "extendedKeyUsage=serverAuth,clientAuth"
+
+openssl req -x509 -noenc -newkey rsa:4096 -keyout rpc_ca_key.pem -out rpc_ca.pem \
+    -days 3650 -subj "/C=RU/L=Moscow/O=Yandex/CN=Localhost RPC CA" \
+    -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+    -addext "keyUsage=keyCertSign"
+
+openssl req -new -x509 -noenc -newkey rsa:4096 -keyout rpc_server_key.pem -out rpc_server_cert.pem \
+    -CA rpc_ca.pem -CAkey rpc_ca_key.pem \
+    -days 3650 -subj "/C=RU/L=Moscow/O=Yandex/CN=localhost" \
+    -addext "basicConstraints=critical,CA:FALSE" \
+    -addext "keyUsage=digitalSignature,keyEncipherment" \
+    -addext "extendedKeyUsage=serverAuth"
+
+openssl req -new -x509 -noenc -newkey rsa:4096 -keyout rpc_client_key.pem -out rpc_client_cert.pem \
+    -CA rpc_ca.pem -CAkey rpc_ca_key.pem \
+    -days 3650 -subj "/C=RU/L=Moscow/O=Yandex/CN=localhost" \
+    -addext "basicConstraints=critical,CA:FALSE" \
+    -addext "keyUsage=digitalSignature,keyEncipherment" \
+    -addext "extendedKeyUsage=clientAuth"

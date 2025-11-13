@@ -941,6 +941,7 @@ message TScriptExecutionOperationMeta {
     optional bool SaveQueryPhysicalGraph = 12;
     optional bool DisableDefaultTimeout = 13;
     optional string CheckpointId = 14;
+    optional string StreamingQueryPath = 15;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table

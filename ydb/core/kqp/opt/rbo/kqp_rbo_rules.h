@@ -67,7 +67,18 @@ class TAssignStagesRule : public IRule {
 extern TRuleBasedStage RuleStage1;
 extern TRuleBasedStage RuleStage2;
 
+/**
+ * Separate global stage to remove extra renames and project out unneeded columns
+ */
 class TRenameStage : public ISinglePassStage {
+  public:
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+};
+
+/**
+ * Separate global constant folding stage
+ */
+class TConstantFoldingStage : public ISinglePassStage {
   public:
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 };

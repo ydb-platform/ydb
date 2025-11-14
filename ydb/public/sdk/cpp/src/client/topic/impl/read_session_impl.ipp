@@ -1372,7 +1372,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         // partitionStream->ConfirmDestroy();
         TClientMessage<false> req;
         auto& released = *req.mutable_stop_partition_session_response();
-        released.set_partition_session_id(partitionStream->GetAssignId());
+        released.set_partition_session_id(partitionSessionId);
         WriteToProcessorImpl(std::move(req));
         PartitionStreams.erase(partitionSessionId);
         pushRes = EventsQueue->PushEvent(
@@ -1417,7 +1417,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
         auto& partitionStream = partitionStreamIt->second;
         partitionStream->SetNextDirectReadId(response.direct_read_id() + 1);
 
-        auto stopPartitionSession = [&](){
+        auto stopIfGotLastResponse = [&](){
             // After we get a StopPartitionSessionRequest(graceful=true), LastDirectReadId is defined.
             // In this case we're waiting for the DirectReadResponse(direct_read_id=LastDirectReadId) and then close the subsession.
 
@@ -1429,20 +1429,19 @@ inline void TSingleClusterReadSessionImpl<false>::OnDirectReadDone(
 
         if (!response.has_partition_data() || response.partition_data().batches_size() == 0) {
             // Sometimes the server might send an empty DirectReadResponse with a non-zero bytes_size, that we should take into account.
-            stopPartitionSession();
+            stopIfGotLastResponse();
             ReadSizeBudget += response.bytes_size();
             ReadSizeServerDelta -= response.bytes_size();
             WaitingReadResponse = false;
             ContinueReadingDataImpl();
-            return;
+        } else {
+            Ydb::Topic::StreamReadMessage::ReadResponse r;
+            r.set_bytes_size(response.bytes_size());
+            auto* data = r.add_partition_data();
+            data->Swap(response.mutable_partition_data());
+            OnReadDoneImpl(std::move(r), deferred);
+            stopIfGotLastResponse();
         }
-
-        Ydb::Topic::StreamReadMessage::ReadResponse r;
-        r.set_bytes_size(response.bytes_size());
-        auto* data = r.add_partition_data();
-        data->Swap(response.mutable_partition_data());
-        OnReadDoneImpl(std::move(r), deferred);
-        stopPartitionSession();
     }
 }
 
@@ -1586,18 +1585,18 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 ) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    auto partitionSessionId = msg.partition_session_id();
+    auto partitionStreamIt = PartitionStreams.find(partitionSessionId);
+
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "StopPartitionSessionRequest " << msg.DebugString());
 
-    auto partitionSessionId = msg.partition_session_id();
-
-    auto partitionStreamIt = PartitionStreams.find(partitionSessionId);
     if (partitionStreamIt == PartitionStreams.end()) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Server wants us to stop partition session id=" << partitionSessionId
                                                  << ", but it's not found");
         return;
     }
 
-    TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream = partitionStreamIt->second;
+    auto partitionStream = partitionStreamIt->second;
 
     if (IsDirectRead() && msg.graceful()) {
         // Keep reading DirectReadResponses until we get the one with direct_read_id == last_direct_read_id.
@@ -1610,13 +1609,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             //   1. We have received the last DirectReadResponse.
             //   2. We have received the StopPartitionSessionRequest(graceful=true) after we received a corresponding DirectReadResponse.
             // This is the second case.
-            StopPartitionSessionImpl(partitionStreamIt->second, true, deferred);
+            StopPartitionSessionImpl(partitionStream, true, deferred);
         }
-
-        return;
+    } else {
+        StopPartitionSessionImpl(partitionStream, msg.graceful(), deferred);
     }
-
-    StopPartitionSessionImpl(partitionStreamIt->second, msg.graceful(), deferred);
 }
 
 template <>

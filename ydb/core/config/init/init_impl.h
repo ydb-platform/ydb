@@ -469,9 +469,35 @@ struct TCommonAppOptions {
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().HasCert()) {
-            appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
-            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        if (appConfig.HasGRpcConfig()) {
+            if (appConfig.GetGRpcConfig().HasCert()) {
+                appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+            if (appConfig.GetGRpcConfig().HasXdsBootstrap()) {
+                auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
+                if (xdsBootstrapConfig->GetNode().GetId().empty()) {
+                    xdsBootstrapConfig->MutableNode()->SetId(env.FQDNHostName());
+                }
+                if (xdsBootstrapConfig->GetNode().GetLocality().GetZone().empty()) {
+                    TString dataCenter;
+                    if (DataCenter) {
+                        dataCenter = to_lower(DataCenter.GetRef());
+                    } else if (appConfig.HasNameserviceConfig()) {
+                        for (const auto& node : appConfig.GetNameserviceConfig().GetNode()) {
+                            if (node.GetNodeId() == NodeId) {
+                                if (node.HasLocation()) {
+                                    dataCenter = to_lower(node.GetLocation().GetDataCenter());
+                                } else if (node.HasWalleLocation()) {
+                                    dataCenter = to_lower(node.GetWalleLocation().GetDataCenter());
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    xdsBootstrapConfig->MutableNode()->MutableLocality()->SetZone(dataCenter);
+                }
+            }
         }
 
         if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {

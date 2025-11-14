@@ -22,4 +22,9 @@ TYqlSelectResult BuildYqlSelect(
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule);
 
+TYqlSelectResult BuildYqlSelect(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_values_stmt& rule);
+
 } // namespace NSQLTranslationV1

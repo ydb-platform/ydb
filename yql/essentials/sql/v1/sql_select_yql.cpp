@@ -33,6 +33,29 @@ public:
         return Build(partial);
     }
 
+    TResult<TNodePtr> Build(const TRule_values_stmt& rule) {
+        TYqlValuesArgs values;
+
+        Token(rule.GetToken1());
+        const auto& rows = rule.GetRule_values_source_row_list2();
+
+        if (auto result = Build(rows.GetRule_values_source_row1())) {
+            values.Rows.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& row : rows.GetBlock2()) {
+            if (auto result = Build(row.GetRule_values_source_row2())) {
+                values.Rows.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
+        return BuildYqlValues(Ctx_.Pos(), std::move(values));
+    }
+
 private:
     TResult<TNodePtr> Build(const TRule_select_kind_partial& rule) {
         TYqlSelectArgs select;
@@ -470,29 +493,6 @@ private:
         return BuildYqlTableRef(Ctx_.Pos(), std::move(args));
     }
 
-    TResult<TNodePtr> Build(const TRule_values_stmt& rule) {
-        TYqlValuesArgs values;
-
-        Token(rule.GetToken1());
-        const auto& rows = rule.GetRule_values_source_row_list2();
-
-        if (auto result = Build(rows.GetRule_values_source_row1())) {
-            values.Rows.emplace_back(std::move(*result));
-        } else {
-            return std::unexpected(result.error());
-        }
-
-        for (const auto& row : rows.GetBlock2()) {
-            if (auto result = Build(row.GetRule_values_source_row2())) {
-                values.Rows.emplace_back(std::move(*result));
-            } else {
-                return std::unexpected(result.error());
-            }
-        }
-
-        return BuildYqlValues(Ctx_.Pos(), std::move(values));
-    }
-
     TResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
         TVector<TNodePtr> columns;
 
@@ -637,6 +637,18 @@ TYqlSelectResult BuildYqlSelect(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule)
+{
+    if (auto result = TYqlSelect(ctx, mode).Build(rule)) {
+        return BuildYqlStatement(std::move(*result));
+    } else {
+        return result;
+    }
+}
+
+TYqlSelectResult BuildYqlSelect(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_values_stmt& rule)
 {
     if (auto result = TYqlSelect(ctx, mode).Build(rule)) {
         return BuildYqlStatement(std::move(*result));

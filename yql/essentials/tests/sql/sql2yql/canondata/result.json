@@ -8319,28 +8319,35 @@
         {
             "checksum": "0abd1783d81dffff9794cd0706744b63",
             "size": 769,
-            "uri": "https://{canondata_backend}/1599023/7446b4b63ae17a79c5b32f14593d8d71f5e4a61b/resource.tar.gz#test_sql2yql.test_select_yql-minimal_ordered_columns_/sql.yql"
+            "uri": "https://{canondata_backend}/1942278/e70dd865b4bae863a91e3a3549d79889330fa76c/resource.tar.gz#test_sql2yql.test_select_yql-minimal_ordered_columns_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-projection_alias_collision]": [
         {
             "checksum": "b8c971e51703b03b2a9766c58c11ed98",
             "size": 743,
-            "uri": "https://{canondata_backend}/1903885/6784cc4bfbedc91b4edec9091be622cd7d7aed3d/resource.tar.gz#test_sql2yql.test_select_yql-projection_alias_collision_/sql.yql"
+            "uri": "https://{canondata_backend}/1942278/e70dd865b4bae863a91e3a3549d79889330fa76c/resource.tar.gz#test_sql2yql.test_select_yql-projection_alias_collision_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-projection_alias_conflict]": [
         {
             "checksum": "61db2ac06df83035cf29df1f8570f287",
             "size": 755,
-            "uri": "https://{canondata_backend}/1903885/6784cc4bfbedc91b4edec9091be622cd7d7aed3d/resource.tar.gz#test_sql2yql.test_select_yql-projection_alias_conflict_/sql.yql"
+            "uri": "https://{canondata_backend}/1942278/e70dd865b4bae863a91e3a3549d79889330fa76c/resource.tar.gz#test_sql2yql.test_select_yql-projection_alias_conflict_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-projection_column_order]": [
         {
             "checksum": "9580c4d57fbd9b9ef8e1c8b3ce811e27",
             "size": 743,
-            "uri": "https://{canondata_backend}/1903885/6784cc4bfbedc91b4edec9091be622cd7d7aed3d/resource.tar.gz#test_sql2yql.test_select_yql-projection_column_order_/sql.yql"
+            "uri": "https://{canondata_backend}/1942278/e70dd865b4bae863a91e3a3549d79889330fa76c/resource.tar.gz#test_sql2yql.test_select_yql-projection_column_order_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-values]": [
+        {
+            "checksum": "a37b2ef8e0e81c0b577c820e3e47723c",
+            "size": 766,
+            "uri": "https://{canondata_backend}/1942278/e70dd865b4bae863a91e3a3549d79889330fa76c/resource.tar.gz#test_sql2yql.test_select_yql-values_/sql.yql"
         }
     ],
     "test_sql2yql.test[seq_mode-shared_named_expr]": [
@@ -13546,6 +13553,11 @@
     "test_sql_format.test[select_yql-projection_column_order]": [
         {
             "uri": "file://test_sql_format.test_select_yql-projection_column_order_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-values]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-values_/formatted.sql"
         }
     ],
     "test_sql_format.test[seq_mode-shared_named_expr]": [

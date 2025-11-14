@@ -96,6 +96,10 @@ class YTestReportTrace:
     def has(self, cls, name):
         return (cls, name) in self.traces
 
+    def is_timed_out(self, cls, name):
+        trace = self.traces.get((cls, name))
+        return trace["status"] == "timeout"
+
     def get_logs(self, cls, name):
         trace = self.traces.get((cls, name))
 
@@ -191,7 +195,9 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
             case.set("classname", suite_name)
             test_name = test_classname
 
-            is_fail = is_faulty_testcase(case)
+            test_cls, test_method = test_name.rsplit(".", maxsplit=1)
+
+            is_fail = is_faulty_testcase(case) or traces.is_timed_out(test_cls, test_method)
             has_fail_tests |= is_fail
 
             if mute_check(suite_name, test_name):
@@ -199,7 +205,6 @@ def transform(fp, mute_check: YaMuteCheck, ya_out_dir, save_inplace, log_url_pre
                 mute_target(case)
 
             if is_fail and "." in test_name:
-                test_cls, test_method = test_name.rsplit(".", maxsplit=1)
                 logs = filter_empty_logs(traces.get_logs(test_cls, test_method))
 
                 if logs:

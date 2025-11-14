@@ -229,11 +229,11 @@ class TestOrderBy(object):
         column_types.add_column("uniq", ydb.PrimitiveType.Utf8)
         column_types.add_column("value", ydb.OptionalType(ydb.PrimitiveType.Utf8))
 
-        portions = [[{ "time" : datetime.datetime.fromtimestamp(1234567890)
-                     , "class" : self.random_char()
-                     , "uniq" : self.random_string(20)
-                     , "value" : self.random_char()
-                     }] for _ in range(10000)]
+        portions = [[{"time" : datetime.datetime.fromtimestamp(1234567890),
+                      "class" : self.random_char(),
+                      "uniq" : self.random_string(20),
+                      "value" : self.random_char()
+                      }] for _ in range(10000)]
 
         for portion in portions:
             self.ydb_client.bulk_upsert(table_path, column_types, portion)

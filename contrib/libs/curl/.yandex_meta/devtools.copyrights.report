@@ -101,9 +101,20 @@ BELONGS bin/ya.make ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/inet_ntop.c [2:2]
+        lib/curlx/inet_ntop.c [2:2]
     Belongs difference:
         + bin/ya.make
+
+KEEP     COPYRIGHT_SERVICE_LABEL 29aec767c30e97ea136c9d10e5b07b99
+BELONGS ya.make
+    License text:
+         * Copyright (C) Jan Venekamp, <jan@venekamp.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/cipher_suite.c [8:8]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 38cad413a2ebb8a3334028596a877e60
 BELONGS ya.make
@@ -120,6 +131,18 @@ BELONGS ya.make
         lib/vtls/schannel.h [10:11]
         lib/vtls/schannel_verify.c [8:10]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 4197a3d01f0ba1b0db6df039d59067a7
+BELONGS ya.make
+    License text:
+         * Copyright (C) Evgeny Grin (Karlson2k), <k2k@narod.ru>.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/curl_sha512_256.c [8:8]
+        lib/curl_sha512_256.h [10:10]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 45323df52808e24e39741bd52fa522fb
 BELONGS ya.make
     License text:
@@ -131,6 +154,8 @@ BELONGS ya.make
     Files with this license:
         lib/curl_des.c [8:8]
         lib/curl_des.h [10:10]
+        lib/curlx/version_win32.c [8:8]
+        lib/curlx/version_win32.h [10:10]
         lib/system_win32.c [8:8]
         lib/system_win32.h [10:10]
         lib/vauth/digest_sspi.c [8:9]
@@ -138,8 +163,6 @@ BELONGS ya.make
         lib/vauth/krb5_sspi.c [8:8]
         lib/vauth/vauth.c [8:8]
         lib/vauth/vauth.h [10:10]
-        lib/version_win32.c [8:8]
-        lib/version_win32.h [10:10]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 487047a176f57677c51faf4394df4c7d
 BELONGS bin/ya.make ya.make
@@ -157,35 +180,10 @@ BELONGS bin/ya.make ya.make
     Belongs difference:
         + bin/ya.make
 
-KEEP     COPYRIGHT_SERVICE_LABEL 65fe1442d84fc44effa563d56d07c87b
+KEEP     COPYRIGHT_SERVICE_LABEL 4bed51efe5f7195bd9f509322531651c
 BELONGS ya.make
     License text:
-         * Copyright (C) Michael Forney, <mforney@mforney.org>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/vtls/bearssl.c [8:8]
-        lib/vtls/bearssl.h [10:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6a57d66dba6940e0ed50c447683ae874
-BELONGS ya.make
-    License text:
-         * Copyright (C) Jacob Hoffman-Andrews,
-         * <github@hoffman-andrews.com>
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/vtls/rustls.c [8:9]
-        lib/vtls/rustls.h [8:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6acfa3297df1dc97d507e572a0645cd9
-BELONGS ya.make
-    License text:
-        Copyright (c) 1996 - 2023, Daniel Stenberg, <daniel@haxx.se>, and many
+        Copyright (c) 1996 - 2025, Daniel Stenberg, <daniel@haxx.se>, and many
         contributors, see the THANKS file.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -193,6 +191,35 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6a57d66dba6940e0ed50c447683ae874
+BELONGS ya.make
+    License text:
+         * Copyright (C) Jacob Hoffman-Andrews,
+         * <github@hoffman-andrews.com>
+         * Copyright (C) kpcyrd, <kpcyrd@archlinux.org>
+         * Copyright (C) Daniel McCarney, <daniel@binaryparadox.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/rustls.c [8:11]
+        lib/vtls/rustls.h [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 80b8ee799cd55acab4a0de15cb9d9912
+BELONGS ya.make
+    License text:
+         * Copyright (C) Jacob Hoffman-Andrews,
+         * <github@hoffman-andrews.com>
+         * Copyright (C) kpcyrd, <kpcyrd@archlinux.org>
+         * Copyright (C) Daniel McCarney, <daniel@binaryparadox.net>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/vtls/rustls.c [8:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 84500f86b97af8062c8463ad37fdf711
 BELONGS bin/ya.make ya.make
@@ -203,7 +230,7 @@ BELONGS bin/ya.make ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/curl_path.c [104:104]
+        lib/vssh/curl_path.c [110:110]
     Belongs difference:
         + bin/ya.make
 
@@ -223,14 +250,15 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 998d598c0b2c4665183fefe5ae17d48c
 BELONGS ya.make
     License text:
-         * Copyright (C) Daniel Stenberg, <daniel.se>, et al.
+         * Copyright (c) 1995, 1996, 1997, 1998, 1999 Kungliga Tekniska Högskolan
+         * (Royal Institute of Technology, Stockholm, Sweden).
+         * Copyright (C) Daniel Stenberg
+         * All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/easygetopt.c [8:8]
-        lib/easyoptions.c [8:8]
         lib/krb5.c [3:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9c50cbe37ab155bc81052d66295612bf
@@ -242,7 +270,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/inet_pton.c [3:3]
+        lib/curlx/inet_pton.c [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a399f03f7a309cb97b579c59e0606fd1
 BELONGS ya.make
@@ -253,6 +281,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        CHANGES.md [2:2]
         include/README.md [2:2]
         include/curl/curl.h [10:10]
         include/curl/curlver.h [10:10]
@@ -272,15 +301,13 @@ BELONGS ya.make
         lib/amigaos.h [10:10]
         lib/arpa_telnet.h [10:10]
         lib/asyn-ares.c [8:8]
-        lib/asyn-thread.c [8:8]
+        lib/asyn-base.c [8:8]
+        lib/asyn-thrdd.c [8:8]
         lib/asyn.h [10:10]
-        lib/base64.c [8:8]
         lib/bufq.c [8:8]
         lib/bufq.h [10:10]
         lib/bufref.c [8:8]
         lib/bufref.h [10:10]
-        lib/c-hyper.c [8:8]
-        lib/c-hyper.h [10:10]
         lib/cf-h1-proxy.c [8:8]
         lib/cf-h1-proxy.h [10:10]
         lib/cf-h2-proxy.c [8:8]
@@ -289,6 +316,8 @@ BELONGS ya.make
         lib/cf-haproxy.h [10:10]
         lib/cf-https-connect.c [8:8]
         lib/cf-https-connect.h [10:10]
+        lib/cf-ip-happy.c [8:8]
+        lib/cf-ip-happy.h [10:10]
         lib/cf-socket.c [8:8]
         lib/cf-socket.h [10:10]
         lib/cfilters.c [8:8]
@@ -301,9 +330,10 @@ BELONGS ya.make
         lib/content_encoding.h [10:10]
         lib/cookie.c [8:8]
         lib/cookie.h [10:10]
+        lib/cshutdn.c [8:9]
+        lib/cshutdn.h [10:11]
         lib/curl_addrinfo.c [8:8]
         lib/curl_addrinfo.h [10:10]
-        lib/curl_base64.h [10:10]
         lib/curl_ctype.h [10:10]
         lib/curl_endian.c [8:8]
         lib/curl_endian.h [10:10]
@@ -319,17 +349,12 @@ BELONGS ya.make
         lib/curl_ldap.h [10:10]
         lib/curl_md4.h [10:10]
         lib/curl_md5.h [10:10]
+        lib/curl_mem_undef.h [8:8]
         lib/curl_memory.h [10:10]
         lib/curl_memrchr.c [8:8]
         lib/curl_memrchr.h [10:10]
-        lib/curl_multibyte.c [8:8]
-        lib/curl_multibyte.h [10:10]
         lib/curl_ntlm_core.c [8:8]
         lib/curl_ntlm_core.h [10:10]
-        lib/curl_ntlm_wb.c [8:8]
-        lib/curl_ntlm_wb.h [10:10]
-        lib/curl_path.c [8:8]
-        lib/curl_path.h [10:10]
         lib/curl_printf.h [10:10]
         lib/curl_range.c [8:8]
         lib/curl_range.h [10:10]
@@ -345,21 +370,50 @@ BELONGS ya.make
         lib/curl_threads.h [10:10]
         lib/curl_trc.c [8:8]
         lib/curl_trc.h [10:10]
-        lib/curlx.h [10:10]
+        lib/curlx/base64.c [8:8]
+        lib/curlx/base64.h [10:10]
+        lib/curlx/binmode.h [10:10]
+        lib/curlx/curlx.h [10:10]
+        lib/curlx/dynbuf.c [8:8]
+        lib/curlx/dynbuf.h [10:10]
+        lib/curlx/inet_ntop.h [10:10]
+        lib/curlx/inet_pton.h [10:10]
+        lib/curlx/multibyte.c [8:8]
+        lib/curlx/multibyte.h [10:10]
+        lib/curlx/nonblock.c [8:8]
+        lib/curlx/nonblock.h [10:10]
+        lib/curlx/strparse.c [8:8]
+        lib/curlx/strparse.h [10:10]
+        lib/curlx/timediff.c [8:8]
+        lib/curlx/timediff.h [10:10]
+        lib/curlx/timeval.c [8:8]
+        lib/curlx/timeval.h [10:10]
+        lib/curlx/wait.c [8:8]
+        lib/curlx/wait.h [10:10]
+        lib/curlx/warnless.c [8:8]
+        lib/curlx/warnless.h [10:10]
+        lib/curlx/winapi.c [8:8]
+        lib/curlx/winapi.h [10:10]
+        lib/cw-out.c [8:8]
+        lib/cw-out.h [10:10]
+        lib/cw-pause.c [8:8]
+        lib/cw-pause.h [10:10]
         lib/dict.c [8:8]
         lib/dict.h [10:10]
         lib/doh.c [8:8]
         lib/doh.h [10:10]
-        lib/dynbuf.c [8:8]
-        lib/dynbuf.h [10:10]
         lib/dynhds.c [8:8]
         lib/dynhds.h [10:10]
         lib/easy.c [8:8]
         lib/easy_lock.h [10:10]
+        lib/easygetopt.c [8:8]
         lib/easyif.h [10:10]
+        lib/easyoptions.c [8:8]
         lib/easyoptions.h [10:10]
         lib/escape.c [8:8]
         lib/escape.h [10:10]
+        lib/fake_addrinfo.c [8:8]
+        lib/fake_addrinfo.h [10:10]
         lib/file.c [8:8]
         lib/file.h [10:10]
         lib/fileinfo.c [8:8]
@@ -383,12 +437,10 @@ BELONGS ya.make
         lib/headers.c [8:8]
         lib/headers.h [10:10]
         lib/hmac.c [8:8]
-        lib/hostasyn.c [8:8]
         lib/hostip.c [8:8]
         lib/hostip.h [10:10]
         lib/hostip4.c [8:8]
         lib/hostip6.c [8:8]
-        lib/hostsyn.c [8:8]
         lib/hsts.c [8:8]
         lib/hsts.h [10:10]
         lib/http.c [8:8]
@@ -409,14 +461,14 @@ BELONGS ya.make
         lib/http_ntlm.h [10:10]
         lib/http_proxy.c [8:8]
         lib/http_proxy.h [10:10]
+        lib/httpsrr.c [8:8]
+        lib/httpsrr.h [10:10]
         lib/idn.c [8:8]
         lib/idn.h [10:10]
         lib/if2ip.c [8:8]
         lib/if2ip.h [10:10]
         lib/imap.c [8:8]
         lib/imap.h [10:10]
-        lib/inet_ntop.h [10:10]
-        lib/inet_pton.h [10:10]
         lib/ldap.c [8:8]
         lib/llist.c [8:8]
         lib/llist.h [10:10]
@@ -425,18 +477,18 @@ BELONGS ya.make
         lib/md4.c [8:8]
         lib/md5.c [8:8]
         lib/memdebug.c [8:8]
-        lib/memdebug.h [11:11]
+        lib/memdebug.h [10:10]
         lib/mime.c [8:8]
         lib/mime.h [10:10]
         lib/mprintf.c [8:8]
         lib/mqtt.c [8:9]
         lib/multi.c [8:8]
+        lib/multi_ev.c [8:8]
+        lib/multi_ev.h [10:10]
         lib/multihandle.h [10:10]
         lib/multiif.h [10:10]
         lib/netrc.c [8:8]
         lib/netrc.h [10:10]
-        lib/nonblock.c [8:8]
-        lib/nonblock.h [10:10]
         lib/noproxy.c [8:8]
         lib/noproxy.h [10:10]
         lib/openldap.c [8:9]
@@ -454,6 +506,8 @@ BELONGS ya.make
         lib/rand.h [10:10]
         lib/rename.c [8:8]
         lib/rename.h [10:10]
+        lib/request.c [8:8]
+        lib/request.h [10:10]
         lib/rtsp.c [8:8]
         lib/rtsp.h [10:10]
         lib/select.c [8:8]
@@ -488,22 +542,23 @@ BELONGS ya.make
         lib/strcase.h [10:10]
         lib/strdup.c [8:8]
         lib/strdup.h [10:10]
+        lib/strequal.c [8:8]
         lib/strerror.c [8:8]
         lib/strerror.h [10:10]
-        lib/strtok.c [8:8]
-        lib/strtok.h [10:10]
-        lib/strtoofft.c [8:8]
-        lib/strtoofft.h [10:10]
         lib/telnet.c [8:8]
         lib/telnet.h [10:10]
         lib/tftp.c [8:8]
         lib/tftp.h [10:10]
-        lib/timediff.c [8:8]
-        lib/timediff.h [10:10]
-        lib/timeval.c [8:8]
-        lib/timeval.h [10:10]
         lib/transfer.c [8:8]
         lib/transfer.h [10:10]
+        lib/uint-bset.c [8:8]
+        lib/uint-bset.h [10:10]
+        lib/uint-hash.c [8:8]
+        lib/uint-hash.h [10:10]
+        lib/uint-spbset.c [8:8]
+        lib/uint-spbset.h [10:10]
+        lib/uint-table.c [8:8]
+        lib/uint-table.h [10:10]
         lib/url.c [8:8]
         lib/url.h [10:10]
         lib/urlapi-int.h [10:10]
@@ -516,21 +571,24 @@ BELONGS ya.make
         lib/vauth/digest_sspi.c [8:9]
         lib/vauth/krb5_gssapi.c [8:9]
         lib/vauth/ntlm.c [8:8]
-        lib/vauth/ntlm.h [10:10]
         lib/vauth/ntlm_sspi.c [8:8]
         lib/vauth/oauth2.c [8:8]
         lib/vauth/spnego_gssapi.c [8:8]
         lib/vauth/spnego_sspi.c [8:8]
         lib/version.c [8:8]
-        lib/vquic/curl_msh3.c [8:8]
-        lib/vquic/curl_msh3.h [10:10]
         lib/vquic/curl_ngtcp2.c [8:8]
         lib/vquic/curl_ngtcp2.h [10:10]
+        lib/vquic/curl_osslq.c [8:8]
+        lib/vquic/curl_osslq.h [10:10]
         lib/vquic/curl_quiche.c [8:8]
         lib/vquic/curl_quiche.h [10:10]
+        lib/vquic/vquic-tls.c [8:8]
+        lib/vquic/vquic-tls.h [10:10]
         lib/vquic/vquic.c [8:8]
         lib/vquic/vquic.h [10:10]
         lib/vquic/vquic_int.h [10:10]
+        lib/vssh/curl_path.c [8:8]
+        lib/vssh/curl_path.h [10:10]
         lib/vssh/libssh2.c [8:8]
         lib/vssh/ssh.h [10:10]
         lib/vssh/wolfssh.c [8:8]
@@ -548,23 +606,24 @@ BELONGS ya.make
         lib/vtls/schannel.c [8:10]
         lib/vtls/schannel.h [10:11]
         lib/vtls/schannel_verify.c [8:10]
-        lib/vtls/sectransp.c [8:9]
-        lib/vtls/sectransp.h [10:11]
         lib/vtls/vtls.c [8:8]
         lib/vtls/vtls.h [10:10]
         lib/vtls/vtls_int.h [10:10]
+        lib/vtls/vtls_scache.c [8:8]
+        lib/vtls/vtls_scache.h [10:10]
+        lib/vtls/vtls_spack.c [8:8]
+        lib/vtls/vtls_spack.h [10:10]
         lib/vtls/wolfssl.c [8:8]
         lib/vtls/wolfssl.h [10:10]
         lib/vtls/x509asn1.c [8:8]
-        lib/vtls/x509asn1.h [11:11]
-        lib/warnless.c [8:8]
-        lib/warnless.h [10:10]
         lib/ws.c [8:8]
         lib/ws.h [10:10]
+        src/config2setopts.c [8:8]
+        src/config2setopts.h [10:10]
         src/slist_wc.c [8:8]
         src/slist_wc.h [10:10]
-        src/tool_binmode.c [8:8]
-        src/tool_binmode.h [10:10]
+        src/terminal.c [8:8]
+        src/terminal.h [10:10]
         src/tool_bname.c [8:8]
         src/tool_bname.h [10:10]
         src/tool_cb_dbg.c [8:8]
@@ -577,6 +636,8 @@ BELONGS ya.make
         src/tool_cb_rea.h [10:10]
         src/tool_cb_see.c [8:8]
         src/tool_cb_see.h [10:10]
+        src/tool_cb_soc.c [8:8]
+        src/tool_cb_soc.h [10:10]
         src/tool_cb_wrt.c [8:8]
         src/tool_cb_wrt.h [10:10]
         src/tool_cfgable.c [8:8]
@@ -625,8 +686,8 @@ BELONGS ya.make
         src/tool_setopt.c [8:8]
         src/tool_setopt.h [10:10]
         src/tool_setup.h [10:10]
-        src/tool_sleep.c [8:8]
-        src/tool_sleep.h [10:10]
+        src/tool_ssls.c [8:8]
+        src/tool_ssls.h [10:10]
         src/tool_stderr.c [8:8]
         src/tool_stderr.h [10:10]
         src/tool_strdup.c [8:8]
@@ -659,6 +720,8 @@ BELONGS ya.make
     Files with this license:
         lib/conncache.c [8:9]
         lib/conncache.h [10:11]
+        lib/cshutdn.c [8:9]
+        lib/cshutdn.h [10:11]
 
 KEEP     COPYRIGHT_SERVICE_LABEL c17c68d0f06e908f69598f582aaf7eed
 BELONGS ya.make
@@ -697,17 +760,6 @@ BELONGS ya.make
         lib/mqtt.c [8:9]
         lib/mqtt.h [10:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL f2299b14b67ba9c039302a3767d1a731
-BELONGS ya.make
-    License text:
-        \#define urlchar_needs_escaping(c) (!(ISCNTRL(c) || ISSPACE(c) || ISGRAPH(c)))
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/urlapi.c [132:132]
-
 KEEP     COPYRIGHT_SERVICE_LABEL f38404a02e69976b94505df0c691bed0
 BELONGS bin/ya.make ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -716,8 +768,8 @@ BELONGS bin/ya.make ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        lib/md4.c [232:237]
-        lib/md5.c [257:262]
+        lib/md4.c [237:242]
+        lib/md5.c [272:277]
     Belongs difference:
         + bin/ya.make
 
@@ -734,16 +786,3 @@ BELONGS ya.make
     Files with this license:
         lib/vtls/schannel.c [8:10]
         lib/vtls/schannel_verify.c [8:10]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f67c5520ba1720abe4d2c2a22a78616d
-BELONGS ya.make
-    License text:
-         * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
-         * Copyright (C) Nick Zitzmann, <nickzman@gmail.com>.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/vtls/sectransp.c [8:9]
-        lib/vtls/sectransp.h [10:11]

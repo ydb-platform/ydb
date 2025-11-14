@@ -36,6 +36,7 @@ PY3TEST()
             ydb/tests/stress/show_create/view
             ydb/tests/stress/cdc
             ydb/tests/stress/statistics_workload
+            ydb/tests/stress/viewer
             ydb/tests/tools/nemesis/driver
         )
     ENDIF()

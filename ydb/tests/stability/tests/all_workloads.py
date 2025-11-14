@@ -120,4 +120,11 @@ not_all = {
         ],
         'local_path': 'ydb/tests/stress/transfer/transfer'
     },
+    'workload_viewer': {
+        'args': [
+            # "--database", f"/{YdbCluster.ydb_database}",
+            "--mon_endpoint", "http://{node_host}:8765",
+        ],
+        'local_path': 'ydb/tests/stress/viewer/viewer'
+    },
 }

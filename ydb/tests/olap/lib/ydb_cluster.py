@@ -66,7 +66,7 @@ class YdbCluster:
     _cluster_info = None
     ydb_endpoint = get_external_param('ydb-endpoint', 'grpc://ydb-olap-testing-vla-0002.search.yandex.net:2135')
     ydb_database = get_external_param('ydb-db', 'olap-testing/kikimr/testing/acceptance-2').lstrip('/')
-    ydb_mon_port = 8765
+    ydb_mon_port = int(get_external_param('ydb-mon-port', 8765))
     ydb_iam_file = get_external_param('ydb-iam-file', os.getenv('YDB_IAM_FILE'))
     _tables_path = get_external_param('tables-path', 'olap_yatests').rstrip('/')
     _monitoring_urls: list[YdbCluster.MonitoringUrl] = None
@@ -109,6 +109,8 @@ class YdbCluster:
     def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False,
                           role: Optional[YdbCluster.Node.Role] = None
                           ) -> list[YdbCluster.Node]:
+        if cls.ydb_mon_port == 0:
+            return []
 
         # Получаем таймаут из переменной окружения, как в wait_ydb_alive
         timeout = int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 2 * 60))  # По умолчанию 20 минут

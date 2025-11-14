@@ -14,6 +14,16 @@ from ydb.tests.olap.lib.utils import external_param_is_true
 from ydb.tests.olap.lib.remote_execution import execute_command
 
 
+class NodeResult:
+    node: str = None
+    stress_name: str = None
+    host: str = None
+    successful_runs: str = None
+    total_runs: str = None
+    runs: str = None
+    total_execution_time: str = None
+
+
 class StressRunExecutor:
     def __init__(self):
         self._ignore_stderr_content = external_param_is_true('ignore_stderr_content')

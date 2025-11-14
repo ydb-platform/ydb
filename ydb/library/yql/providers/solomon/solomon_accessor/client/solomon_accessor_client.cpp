@@ -561,13 +561,11 @@ private:
 
         if (EnableSolomonClientPostApi) {
             w.BeginObject()
-                .UnsafeWriteKey("projectId").WriteString(GetProjectId())
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
             .EndObject();
         } else {
-            builder.AddUrlParam("projectId", GetProjectId());
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());
@@ -585,22 +583,20 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
+        builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
+
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
             w.BeginObject()
-                .UnsafeWriteKey("projectId").WriteString(GetProjectId())
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
-                .UnsafeWriteKey("pageSize").WriteLongLong(MaxListingPageSize)
             .EndObject();
         } else {
-            builder.AddUrlParam("projectId", GetProjectId());
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());
-            builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
         }
 
         return { builder.Build(), w.Str() };
@@ -620,14 +616,12 @@ private:
 
         if (EnableSolomonClientPostApi) {
             w.BeginObject()
-                .UnsafeWriteKey("projectId").WriteString(GetProjectId())
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
                 .UnsafeWriteKey("limit").WriteLongLong(100000)
             .EndObject();
         } else {
-            builder.AddUrlParam("projectId", GetProjectId());
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());

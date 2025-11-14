@@ -1,0 +1,7 @@
+{
+    "test.test[count_min_sketch]": [
+        {
+            "uri": "file://test.test_count_min_sketch_/results.txt"
+        }
+    ]
+}

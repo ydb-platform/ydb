@@ -106,6 +106,8 @@ TString CreateDatabase(TTestEnv& env, const TString& databaseName,
 
     if (!env.GetServer().GetSettings().UseRealThreads) {
         runtime.SimulateSleep(TDuration::Seconds(1));
+    } else {
+        Sleep(TDuration::Seconds(1));
     }
 
     return fullDbName;
@@ -286,24 +288,32 @@ void CreateColumnStoreTable(TTestEnv& env, const TString& databaseName, const TS
             AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %d
         );
     )", fullTableName.c_str(), shardCount));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Key']}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_value, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Value']}`);
     )", fullTableName.c_str()));
-    runtime.SimulateSleep(TDuration::Seconds(1));
+    if (!env.GetServer().GetSettings().UseRealThreads) {
+        runtime.SimulateSleep(TDuration::Seconds(1));
+    }
 
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<
         Ydb::Table::BulkUpsertRequest,

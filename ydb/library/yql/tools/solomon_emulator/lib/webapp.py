@@ -119,6 +119,9 @@ class SolomonEmulator(object):
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
 
+        if "projectId" in json:
+            return web.HTTPBadRequest(text="Invalid query params")
+
         project = selectors["project"]
         cluster = selectors["cluster"]
         service = selectors["service"]
@@ -138,6 +141,9 @@ class SolomonEmulator(object):
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
 
+        if "projectId" in json or "pageSize" in json:
+            return web.HTTPBadRequest(text="Invalid query params")
+
         project = selectors["project"]
         cluster = selectors["cluster"]
         service = selectors["service"]
@@ -156,6 +162,9 @@ class SolomonEmulator(object):
 
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
+        
+        if "projectId" in json:
+            return web.HTTPBadRequest(text="Invalid query params")
 
         project = selectors["project"]
         cluster = selectors["cluster"]

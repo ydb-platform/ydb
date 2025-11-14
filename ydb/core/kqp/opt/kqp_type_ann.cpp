@@ -510,6 +510,11 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows
             || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
 
+            if (settings.VectorTopColumn) {
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "VectorTop is not supported in Join mode"));
+                return TStatus::Error;
+            }
+
             if (!EnsureTupleType(node->Pos(), *lookupType, ctx)) {
                 return TStatus::Error;
             }
@@ -550,6 +555,24 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             }
 
             structType = lookupType->Cast<TStructExprType>();
+
+            if (settings.VectorTopColumn || settings.VectorTopIndex || settings.VectorTopTarget || settings.VectorTopLimit) {
+                if (!settings.VectorTopColumn || !settings.VectorTopIndex || !settings.VectorTopTarget || !settings.VectorTopLimit) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "VectorTop requires Column, Index, Target and Limit"));
+                    return TStatus::Error;
+                }
+                bool found = false;
+                for (const auto& item : columns) {
+                    if (item.Value() == settings.VectorTopColumn) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "VectorTopColumn is not in the StreamLookup result column list"));
+                    return TStatus::Error;
+                }
+            }
         }
     } else {
         if (!EnsureStructType(node->Pos(), *lookupType, ctx)) {

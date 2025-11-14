@@ -1842,6 +1842,8 @@ NProto::EQueryEngine ConvertQueryEngineToProto(
             return NProto::EQueryEngine::QE_MOCK;
         case NQueryTrackerClient::EQueryEngine::Spyt:
             return NProto::EQueryEngine::QE_SPYT;
+        case NQueryTrackerClient::EQueryEngine::SpytConnect:
+            return NProto::EQueryEngine::QE_SPYT;
     }
     YT_ABORT();
 }

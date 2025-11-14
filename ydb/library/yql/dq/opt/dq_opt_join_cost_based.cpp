@@ -314,7 +314,7 @@ class TOptimizerNativeNew: public IOptimizerNew {
 public:
     TOptimizerNativeNew(
         IProviderContext& ctx,
-        const TCBOSettings &optimizerSettings,
+        const TCBOSettings& optimizerSettings,
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
@@ -334,7 +334,7 @@ public:
     ) override {
         auto relsCount = joinTree->Labels().size();
 
-        if (EnableShuffleElimination && (relsCount <= 14 || OptimizerSettings_.ForceShuffleElimination)) {
+        if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
             return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
             return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints);
@@ -388,7 +388,7 @@ private:
                 YqlIssue(
                     {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
                     "Cost Based Optimizer could not be applied to this query: "
-                    "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                    "Enumeration is too large, use PRAGMA ydb.MaxDPHypDPTableSize='4294967295' to disable the limitation"
                 )
             );
             ComputeStatistics(joinTree, this->Pctx);
@@ -516,7 +516,7 @@ private:
 
 IOptimizerNew* MakeNativeOptimizerNew(
     IProviderContext& pctx,
-    const TCBOSettings &settings,
+    const TCBOSettings& settings,
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,

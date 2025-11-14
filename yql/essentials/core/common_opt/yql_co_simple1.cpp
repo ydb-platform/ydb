@@ -706,7 +706,7 @@ TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& 
 bool IsPullJustFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
     static const char optName[] = "PullJustFromLogicalOps";
     YQL_ENSURE(optCtx.Types);
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    return !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx, const TOptimizeContext& optCtx) {

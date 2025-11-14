@@ -175,9 +175,9 @@ protected:
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
-        TCBOSettings settings {
+        TCBOSettings settings{
             .MaxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize),
-            .ForceShuffleElimination = Config->ForceShuffleElimination.Get().GetOrElse(TDqSettings::TDefault::ForceShuffleElimination)
+            .ShuffleEliminationJoinNumCutoff = Config->ShuffleEliminationJoinNumCutoff.Get().GetOrElse(TDqSettings::TDefault::ShuffleEliminationJoinNumCutoff)
         };
 
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);

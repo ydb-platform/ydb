@@ -26,6 +26,9 @@ message TEvGetAddressResponse {
     repeated Ydb.Issue.IssueMessage Issues = 2;
 }
 
+message TEvCoordinatorDistributionReset {
+}
+
 message TPartitionOffset {
     uint32 PartitionId = 1;
     uint64 Offset = 2;

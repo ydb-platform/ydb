@@ -24,7 +24,6 @@ struct TSnapshotMessage {
             static_assert(sizeof(Value) == sizeof(Fields));
         } Common;
         ui32 WriteTimestampDelta;
-
 };
 
 struct TAddedMessage {
@@ -40,6 +39,7 @@ struct TAddedMessage {
     ui32 WriteTimestampDelta;
 };
 
+static_assert(sizeof(TAddedMessage) == sizeof(ui32) + sizeof(ui32));
 
 struct TMessageChange {
     union {
@@ -56,6 +56,12 @@ struct TMessageChange {
 };
 
 static_assert(sizeof(TMessageChange) == sizeof(ui32));
+
+struct TDLQMessageV1 {
+    ui64 Offset;
+    ui64 SeqNo;
+};
+
 
 void VarintSerialize(TString& buffer, ui64 value) {
     const auto outValue = static_cast<i64>(value);
@@ -157,6 +163,37 @@ struct TItemDeserializer<TAddedMessage> {
 };
 
 
+template<>
+struct TItemSerializer<TDLQMessageV1> {
+    ui64 LastSeqNo = 0;
+
+    void Serialize(TString& buffer, const TDLQMessageV1& msg) {
+        VarintSerialize(buffer, msg.Offset);
+        VarintSerialize(buffer, static_cast<ui64>(msg.SeqNo - LastSeqNo));
+        LastSeqNo = msg.SeqNo;
+    }
+};
+
+template<>
+struct TItemDeserializer<TDLQMessageV1> {
+    ui64 LastSeqNo = 0;
+
+    bool Deserialize(const char*& data, const char* end, TDLQMessageV1& msg) {
+        if (data + 2 > end) {
+            return false;
+        }
+
+        VarintDeserialize(data, msg.Offset);
+
+        ui64 delta;
+        VarintDeserialize(data, delta);
+        LastSeqNo += delta;
+        msg.SeqNo = LastSeqNo;
+
+        return true;
+    }
+};
+
 template<typename TMsg>
 struct TSerializer {
     TString Buffer;
@@ -232,6 +269,14 @@ struct TDeserializerWithOffset {
     }
 };
 
+void SerializeMetrics(const TStorage::TMetrics& metrics, NKikimrPQ::TMLPMetrics& storedMetrics) {
+    storedMetrics.SetTotalScheduledToDLQMessageCount(metrics.TotalScheduledToDLQMessageCount);
+}
+
+void DeserializeMetrics(TStorage::TMetrics& metrics, const NKikimrPQ::TMLPMetrics& storedMetrics) {
+    metrics.TotalScheduledToDLQMessageCount = storedMetrics.GetTotalScheduledToDLQMessageCount();
+}
+
 }
 
 bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
@@ -248,6 +293,8 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
     bool moveUnlockedOffset = true;
     bool moveUncommittedOffset = true;
+
+    DeserializeMetrics(Metrics, snapshot.GetMetrics());
 
     {
         TDeserializer<TMessage> deserializer(snapshot.GetMessages());
@@ -318,8 +365,16 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
     Metrics.InflyMessageCount = Messages.size() + SlowMessages.size();
 
-    for (auto offset : snapshot.GetDLQ()) {
-        DLQQueue.push_back(offset);
+    {
+        TDeserializer<TDLQMessageV1> deserializer(snapshot.GetDLQMessages());
+        TDLQMessageV1 message;
+        while(deserializer.Next(message)) {
+            DLQMessages[message.Offset] = message.SeqNo;
+            DLQQueue.push_back({
+                .Offset = message.Offset,
+                .SeqNo = message.SeqNo
+            });
+        }
     }
 
     return true;
@@ -327,6 +382,8 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
 bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     AFL_ENSURE(wal.GetFormatVersion() == 1)("v", wal.GetFormatVersion());
+
+    DeserializeMetrics(Metrics, wal.GetMetrics());
 
     if (wal.HasBaseDeadlineSeconds() || wal.HasBaseWriteTimestampSeconds()) {
         auto newBaseDeadline = wal.HasBaseDeadlineSeconds() ? TInstant::Seconds(wal.GetBaseDeadlineSeconds()) : BaseDeadline;
@@ -377,7 +434,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
     while (!Messages.empty() && FirstOffset < wal.GetFirstOffset()) {
         auto& message = Messages.front();
         if (!SlowMessages.contains(FirstOffset)) {
-            RemoveMessage(message);
+            RemoveMessage(FirstOffset, message);
         }
         Messages.pop_front();
         ++FirstOffset;
@@ -420,7 +477,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
 
             auto statusChanged = message->Status != msg.Common.Fields.Status;
             if (statusChanged) {
-                RemoveMessage(*message);
+                RemoveMessage(offset, *message);
                 ++Metrics.InflyMessageCount;
             }
 
@@ -458,7 +515,7 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             auto it = SlowMessages.find(offset);
             AFL_ENSURE(it != SlowMessages.end())("o", offset);
             auto& message = it->second;
-            RemoveMessage(message);
+            RemoveMessage(offset, message);
             SlowMessages.erase(it);
         }
     }
@@ -469,17 +526,28 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
             break;
         }
 
-        RemoveMessage(it->second);
+        RemoveMessage(it->first,it->second);
         it = SlowMessages.erase(it);
     }
 
     {
-        AFL_ENSURE(wal.GetDeletedFromDLQ() <= DLQQueue.size())("d", wal.GetDeletedFromDLQ())("q", DLQQueue.size());
-        for (size_t i = 0; i < wal.GetDeletedFromDLQ(); ++i) {
-            DLQQueue.pop_front();
+        if (wal.HasFirstDLQSeqNo()) {
+            auto firstSeqNo = wal.GetFirstDLQSeqNo();
+            while(!DLQQueue.empty() && DLQQueue.front().SeqNo < firstSeqNo) {
+                DLQQueue.pop_front();
+            }
+        } else {
+            DLQQueue.clear();
         }
-        for (auto offset : wal.GetDLQ()) {
-            DLQQueue.push_back(offset);
+
+        TDeserializer<TDLQMessageV1> deserializer(wal.GetAddedToDLQMessages());
+        TDLQMessageV1 message;
+        while(deserializer.Next(message)) {
+            DLQMessages[message.Offset] = message.SeqNo;
+            DLQQueue.push_back({
+                .Offset = message.Offset,
+                .SeqNo = message.SeqNo
+            });
         }
     }
 
@@ -501,23 +569,43 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
 
     snapshot.SetFormatVersion(1);
 
-    TSerializer<TMessage> serializer;
-    serializer.Reserve(Messages.size());
-    for (auto& message : Messages) {
-        serializer.Add(message);
-    }
-    snapshot.SetMessages(std::move(serializer.Buffer));
+    SerializeMetrics(Metrics, *snapshot.MutableMetrics());
 
-    for (auto offset : DLQQueue) {
-        snapshot.AddDLQ(offset);
+    {
+        TSerializer<TMessage> serializer;
+        serializer.Reserve(Messages.size());
+        for (auto& message : Messages) {
+            serializer.Add(message);
+        }
+        snapshot.SetMessages(std::move(serializer.Buffer));
     }
+    {
+        TSerializerWithOffset<TMessage> serializer;
+        serializer.Reserve(SlowMessages.size());
+        for (auto& message : SlowMessages) {
+            serializer.Add(message.first, message.second);
+        }
+        snapshot.SetSlowMessages(std::move(serializer.Buffer));
+    }
+    {
+        // offset -> seqNo
+        std::vector<std::pair<ui64, ui64>> messages;
+        messages.insert(messages.end(), DLQMessages.begin(), DLQMessages.end());
+        // sorting by seqNo
+        std::sort(messages.begin(), messages.end(), [](const auto& a, const auto& b) {
+            return a.second < b.second;
+        });
 
-    TSerializerWithOffset<TMessage> slowSerializer;
-    slowSerializer.Reserve(SlowMessages.size());
-    for (auto& message : SlowMessages) {
-        slowSerializer.Add(message.first, message.second);
+        TSerializer<TDLQMessageV1> serializer;
+        serializer.Reserve(messages.size());
+        for (auto [offset, seqNo] : messages) {
+            serializer.Add({
+                .Offset = offset,
+                .SeqNo = seqNo
+            });
+        }
+        snapshot.SetDLQMessages(std::move(serializer.Buffer));
     }
-    snapshot.SetSlowMessages(std::move(slowSerializer.Buffer));
 
     return true;
 }
@@ -535,6 +623,8 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
     if (BaseWriteTimestamp) {
         wal.SetBaseWriteTimestampSeconds(BaseWriteTimestamp->Seconds());
     }
+
+    SerializeMetrics(Storage->Metrics, *wal.MutableMetrics());
 
     if (FirstNewMessage) {
         auto lastOffset = Storage->GetLastOffset();
@@ -579,13 +669,26 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         wal.SetChangedMessages(std::move(serializer.Buffer));
     }
 
-    {
-        for (auto offset : DLQ) {
-            wal.AddDLQ(offset);
-        }
-        wal.SetDeletedFromDLQ(DeletedFromDLQ);
-    }
+    if (!Storage->DLQQueue.empty()) {
+        auto firstSeqNo = Storage->DLQQueue.begin()->SeqNo;
+        wal.SetFirstDLQSeqNo(firstSeqNo);
 
+        TSerializer<TDLQMessageV1> serializer;
+        for (auto [offset, seqNo] : AddedToDLQ) {
+            if (seqNo < firstSeqNo) {
+                continue;
+            }
+            auto it = Storage->DLQMessages.find(offset);
+            if (it == Storage->DLQMessages.end() || it->second != seqNo) {
+                continue;
+            }
+            serializer.Add({
+                .Offset = offset,
+                .SeqNo = seqNo
+            });
+        }
+        wal.SetAddedToDLQMessages(std::move(serializer.Buffer));
+    }
     {
         ui64 lastOffset = 0;
         for (auto offset : MovedToSlowZone) {

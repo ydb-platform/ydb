@@ -847,6 +847,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         KqpGroup->GetHistogram("SinkWrites/BufferActorCommitLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
     BufferActorFlushLatencyHistogram =
         KqpGroup->GetHistogram("SinkWrites/BufferActorFlushLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+    BufferActorRollbackLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorRollbackLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
 
     ForwardActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
@@ -896,11 +898,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     /* Statistics batch operations */
     BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
-    BatchOperationUpdateBytes = KqpGroup->GetCounter("BatchOperation/Update/Bytes", true);
-
     BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
-    BatchOperationDeleteBytes = KqpGroup->GetCounter("BatchOperation/Delete/Bytes", true);
-
     BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
 }
 

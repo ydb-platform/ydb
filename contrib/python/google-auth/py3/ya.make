@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.41.1)
+VERSION(2.42.0)
 
 LICENSE(Apache-2.0)
 
@@ -28,6 +28,7 @@ PY_SRCS(
     TOP_LEVEL
     google/auth/__init__.py
     google/auth/_cloud_sdk.py
+    google/auth/_constants.py
     google/auth/_credentials_async.py
     google/auth/_credentials_base.py
     google/auth/_default.py

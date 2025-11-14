@@ -492,6 +492,16 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         settings->SetIsTableImmutable(true);
     }
 
+    if (streamLookup.HasVectorTopK()) {
+        const auto& in = streamLookup.GetVectorTopK();
+        auto& out = *settings->MutableVectorTopK();
+        out.SetColumn(in.GetColumn());
+        *out.MutableSettings() = in.GetSettings();
+        auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        out.SetTargetVector(TString(target.AsStringRef()));
+        out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());
+    }
+
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";
     streamLookupTransform.InputType = streamLookup.GetLookupKeysType();
@@ -1563,7 +1573,6 @@ void TKqpTasksGraph::PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& resu
 
 void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo) {
     GetMeta().IsRestored = true;
-    GetMeta().AllowWithSpilling = false;
 
     const auto restoreDqTransform = [](const auto& protoInfo) -> TMaybe<TTransform> {
         if (!protoInfo.HasTransform()) {
@@ -1759,6 +1768,8 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                 const auto it = scheduledTaskCount.find(stageIdx);
                 BuildReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
             }
+
+            GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
         }
     }
 }
@@ -2655,7 +2666,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             settings->SetItemsLimit(*GetMeta().MaxBatchSize);
             settings->SetIsBatch(true);
         } else {
-            ui64 itemsLimit = ExtractItemsLimit(stageInfo, source.GetItemsLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv);
+            ui64 itemsLimit = ExtractPhyValue(stageInfo, source.GetItemsLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             settings->SetItemsLimit(itemsLimit);
         }
 

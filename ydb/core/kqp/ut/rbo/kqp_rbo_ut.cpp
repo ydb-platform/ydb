@@ -154,6 +154,58 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         }
     }
 
+    Y_UNIT_TEST(ConstantFolding) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,	
+	            name	String,
+                primary key(id)	
+            );
+        )").GetValueSync();
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queries = {
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                SELECT id as "id2" FROM foo WHERE id = 15 - 14 and 18-17 = 1;
+            )"
+        };
+
+        std::vector<std::string> results = {
+            R"([["1"]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
     Y_UNIT_TEST(ScalarSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -552,6 +604,11 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 set TablePathPrefix = "/Root/";
                 select distinct min(t1.a) as min_a, max(t1.a) as max_a from t1 group by t1.b order by min_a;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from t1 group by t1.b order by sumExpr0;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -567,7 +624,8 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["4";"0";"1"]])",
             R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
             R"([["4";"4"];["6";"6"]])",
-            R"([["0";"4"];["1";"3"]])"
+            R"([["0";"4"];["1";"3"]])",
+            R"([["10";"8"];["15";"12"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

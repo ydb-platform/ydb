@@ -56,6 +56,10 @@ enum class EStreamLookupStrategyType {
 struct TKqpStreamLookupSettings {
     static constexpr TStringBuf StrategySettingName = "Strategy";
     static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeysPrefixSize";
+    static constexpr TStringBuf VectorTopColumnSettingName = "VectorTopColumn";
+    static constexpr TStringBuf VectorTopIndexSettingName = "VectorTopIndex";
+    static constexpr TStringBuf VectorTopLimitSettingName = "VectorTopLimit";
+    static constexpr TStringBuf VectorTopTargetSettingName = "VectorTopTarget";
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
@@ -64,6 +68,13 @@ struct TKqpStreamLookupSettings {
 
     TMaybe<ui32> AllowNullKeysPrefixSize;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
+
+    // VectorTopColumn must be a fixed string, but Target and Limit may be calculated in runtime
+    // Vector index settings are not needed here because we know them from the indexImpl table name or index name
+    TString VectorTopColumn;
+    TString VectorTopIndex;
+    TExprNode::TPtr VectorTopTarget;
+    TExprNode::TPtr VectorTopLimit;
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);

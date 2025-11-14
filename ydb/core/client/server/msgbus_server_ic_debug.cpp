@@ -67,6 +67,7 @@ public:
             params.SoftLoad = record.GetSoftLoad();
             params.Duration = TDuration::MicroSeconds(record.GetDuration());
             params.UseProtobufWithPayload = record.GetUseProtobufWithPayload();
+            params.RdmaMode = record.GetRdmaMode();
             Callback = [=](const TActorContext& ctx) {
                 ui32 poolId = 0;
                 if (record.HasServicePool()) {

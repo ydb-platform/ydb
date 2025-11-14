@@ -84,13 +84,20 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const bool preferAdditionalInputColumns,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
-std::vector<ui32> GetKeyIndexes(
+std::vector<ui32> GetIndexes(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     const TConstArrayRef<ui32> inputWriteIndex,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
     const TConstArrayRef<ui32> outputWriteIndex,
     const bool preferAdditionalInputColumns);
+
+bool IsEqual(
+    TConstArrayRef<TCell> firstCells,
+    TConstArrayRef<TCell> secondCells,
+    const std::vector<ui32>& newIndexes,
+    const std::vector<ui32>& oldIndexes,
+    TConstArrayRef<NScheme::TTypeInfo> types);
 
 std::vector<TConstArrayRef<TCell>> GetRows(
     const NKikimr::NKqp::IDataBatchPtr& batch);

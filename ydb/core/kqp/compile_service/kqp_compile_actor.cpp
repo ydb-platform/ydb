@@ -24,8 +24,7 @@
 
 #include <ydb/core/base/cputime.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 static const TString YqlName = "CompileActor";
 
@@ -69,7 +68,6 @@ public:
         , UserToken(userToken)
         , ClientAddress(clientAddress)
         , DbCounters(dbCounters)
-        , Config(MakeIntrusive<TKikimrConfiguration>())
         , KqpSettings(kqpSettings)
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
@@ -82,15 +80,15 @@ public:
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , TriedFallbackSqlVersion(false)
+        , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
     {
-        BuildConfiguration(Config, tableServiceConfig);
-        OriginalSqlVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
-        CurrentSqlVersion = OriginalSqlVersion;
+        Config = BuildConfiguration(tableServiceConfig);
         PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
     }
 
-    void BuildConfiguration(TKikimrConfiguration::TPtr config, const TTableServiceConfig& tableServiceConfig) {
+    TKikimrConfiguration::TPtr BuildConfiguration(const TTableServiceConfig& tableServiceConfig) {
+        NYql::TKikimrConfiguration::TPtr config = MakeIntrusive<TKikimrConfiguration>();
+
         config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
 
         if (!QueryId.Database.empty()) {
@@ -98,6 +96,20 @@ public:
         }
 
         ApplyServiceConfig(*config, tableServiceConfig);
+
+        if (!tableServiceConfig.HasSqlVersion() || tableServiceConfig.GetSqlVersion() != 0) {
+            EnforcedSqlVersion = false;
+        } else if (EnforcedSqlVersion) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
+                "Enforced SQL version 1, "
+                << "current sql version: " << tableServiceConfig.GetSqlVersion()
+                << " queryText: " << EscapeC(QueryId.Text)
+            );
+
+            config->_KqpYqlSyntaxVersion = 1;
+        } else {
+            EnforcedSqlVersion = false;
+        }
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
@@ -109,6 +121,8 @@ public:
         }
 
         config->FreezeDefaults();
+
+        return config;
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -261,14 +275,6 @@ private:
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
 
-        // If database has legacy syntax (SqlVersion = 0), try SqlVersion = 1 first
-        if (OriginalSqlVersion == 0 && !TriedFallbackSqlVersion) {
-            CurrentSqlVersion = 1;
-            TriedFallbackSqlVersion = true;
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Trying compilation with SqlVersion = 1 (fallback from legacy syntax)"
-                << ", self: " << ctx.SelfID);
-        }
-
         auto prepareSettings = PrepareCompilationSettings(ctx);
         StartCompilationWithSettings(prepareSettings);
         Continue(ctx);
@@ -325,31 +331,21 @@ private:
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
         // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
-        TKikimrConfiguration::TPtr configToUse = Config;
-        if (CurrentSqlVersion != OriginalSqlVersion) {
-            // Create a new Config with the current SqlVersion
-            configToUse = MakeIntrusive<TKikimrConfiguration>();
-            // Apply service config with updated SqlVersion
-            TTableServiceConfig modifiedTableServiceConfig = TableServiceConfig;
-            modifiedTableServiceConfig.SetSqlVersion(CurrentSqlVersion);
-            BuildConfiguration(configToUse, modifiedTableServiceConfig);
-        }
-
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), configToUse, true, TempTablesState, FederatedQuerySetup);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
-        configToUse->FeatureFlags = AppData(ctx)->FeatureFlags;
+        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
-        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, configToUse, ModuleResolverState->ModuleResolver,
+        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
             false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext);
 
@@ -563,23 +559,22 @@ private:
         }
 
         // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
-        if (status != Ydb::StatusIds::SUCCESS && TriedFallbackSqlVersion && OriginalSqlVersion == 0) {
+        if (EnforcedSqlVersion && status != Ydb::StatusIds::SUCCESS) {
+            Counters->ReportCompileEnforceConfigFailed(DbCounters);
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0"
                 << ", self: " << ctx.SelfID
-                << ", issues: " << kqpResult.Issues().ToString());
+                << ", database: " << QueryId.Database
+                << ", text: \"" << EscapeC(QueryId.Text) << "\"");
 
-            // Reset to original SqlVersion = 0
-            CurrentSqlVersion = 0;
-            TriedFallbackSqlVersion = false;
-
-            // Recreate KqpHost and Gateway with SqlVersion = 0 to avoid reusing old instances
-            // PrepareCompilationSettings recreates both Gateway and KqpHost with the updated Config
+            EnforcedSqlVersion = false;
+            Config = BuildConfiguration(TableServiceConfig);
             auto prepareSettings = PrepareCompilationSettings(ctx);
 
-            // Start compilation with the new settings (uses freshly created KqpHost)
             StartCompilationWithSettings(prepareSettings);
             Continue(ctx);
             return;
+        } else if (EnforcedSqlVersion && status == Ydb::StatusIds::SUCCESS) {
+            Counters->ReportCompileEnforceConfigSuccess(DbCounters);
         }
 
         auto database = QueryId.Database;
@@ -690,9 +685,7 @@ private:
     bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
-    ui16 OriginalSqlVersion;
-    ui16 CurrentSqlVersion;
-    bool TriedFallbackSqlVersion;
+    bool EnforcedSqlVersion;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
@@ -786,5 +779,4 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 std::move(splitCtx), std::move(splitExpr));
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

@@ -1179,6 +1179,64 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     return result;
 }
 
+NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTableSession(
+    TMutationId& /*mutationId*/,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    NApi::TDistributedWriteSessionStartOptions result;
+
+    result.CookieCount = cookieCount;
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+
+    if (options.Timeout_) {
+        result.Timeout = *options.Timeout_;
+    }
+
+    return result;
+}
+
+NApi::TDistributedWriteSessionFinishOptions SerializeOptionsForFinishDistributedTableSession(
+    TMutationId& /*mutationId*/,
+    const TFinishDistributedWriteTableOptions& /*options*/)
+{
+    NApi::TDistributedWriteSessionFinishOptions result;
+
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+    return result;
+}
+
+NApi::TDistributedWriteFileSessionStartOptions SerializeOptionsForStartDistributedFileSession(
+    TMutationId& /*mutationId*/,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    NApi::TDistributedWriteFileSessionStartOptions result;
+
+    result.CookieCount = cookieCount;
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+
+    if (options.Timeout_) {
+        result.Timeout = *options.Timeout_;
+    }
+
+    return result;
+}
+
+NApi::TDistributedWriteFileSessionFinishOptions SerializeOptionsForFinishDistributedFileSession(
+    TMutationId& /*mutationId*/,
+    const TFinishDistributedWriteFileOptions& /*options*/)
+{
+    NApi::TDistributedWriteFileSessionFinishOptions result;
+
+    // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
+    // SetMutationId(&result, mutationId);
+    return result;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

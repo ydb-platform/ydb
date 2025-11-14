@@ -542,7 +542,7 @@ TExprNode::TPtr OptimizeExistsAndUnwrap(const TExprNode::TPtr& node, TExprContex
 bool IsExtractCommonPredicatesFromLogicalOpsEnabled(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
     static const char optName[] = "ExtractCommonPredicatesFromLogicalOps";
-    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    return !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 size_t GetNodeId(const TExprNode* node, const TNodeMap<size_t>& node2id) {

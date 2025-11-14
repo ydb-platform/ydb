@@ -23,9 +23,7 @@ public:
         for (const auto& channel : channels) {
             request.add_channels(channel);
         }
-        if (count > 1) {
-            request.set_count(count);
-        }
+        request.set_count(count);
         if (!config.empty()) {
             request.set_config(config);
         }
@@ -65,9 +63,7 @@ public:
             const TDeleteTestShardSettings& settings) {
         auto request = MakeOperationRequest<Ydb::TestShard::DeleteTestShardRequest>(settings);
         request.set_owner_idx(ownerIdx);
-        if (count > 1) {
-            request.set_count(count);
-        }
+        request.set_count(count);
         if (!database.empty()) {
             request.set_database(database);
         }

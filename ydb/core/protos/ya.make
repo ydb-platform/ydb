@@ -82,6 +82,7 @@ SRCS(
     flat_scheme_op.proto
     flat_tx_scheme.proto
     follower_group.proto
+    fs_settings.proto
     grpc.proto
     grpc_pq_old.proto
     grpc_status_proxy.proto

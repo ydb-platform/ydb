@@ -8,6 +8,8 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -41,22 +43,24 @@ struct TReadIteratorVectorTop {
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<TReadIteratorVectorTopItem> Rows;
-    ui64 ByteSize = 0;
+    ui64 TotalReadRows = 0;
+    ui64 TotalReadBytes = 0;
 
     void AddRow(TConstArrayRef<TCell> cells) {
-        size_t bytes = EstimateSize(cells);
-        double distance = KMeans->CalcDistance(cells.at(Column).AsBuf(), Target);
+        const auto embedding = cells.at(Column).AsBuf();
+        if (!KMeans->IsExpectedFormat(embedding)) {
+            return;
+        }
+        TotalReadRows++;
+        TotalReadBytes += EstimateSize(cells);
+        double distance = KMeans->CalcDistance(embedding, Target);
         if (Rows.size() < Limit) {
-            ByteSize += bytes;
             Rows.emplace_back(cells, distance);
             std::push_heap(Rows.begin(), Rows.end());
         } else if (distance < Rows.front().Distance) {
-            ByteSize += bytes;
             Rows.emplace_back(cells, distance);
             std::push_heap(Rows.begin(), Rows.end());
             std::pop_heap(Rows.begin(), Rows.end());
-            auto& item = Rows.back();
-            ByteSize -= EstimateSize(item.Row);
             Rows.pop_back();
         }
     }
@@ -71,6 +75,8 @@ struct TReadIteratorVectorTop {
             blockBuilder.AddRow(TDbTupleRef(), TDbTupleRef(columnTypes, item.Row.data(), item.Row.size()));
         }
         Rows.clear();
+        TotalReadRows = 0;
+        TotalReadBytes = 0;
         return n;
     }
 };
@@ -767,6 +773,8 @@ public:
             }
 
             if (State.VectorTopK) {
+                record.MutableStats()->SetRows(State.VectorTopK->TotalReadRows);
+                record.MutableStats()->SetBytes(State.VectorTopK->TotalReadBytes);
                 RowsRead += State.VectorTopK->ToBlockBuilder(BlockBuilder, ColumnTypes.data());
             }
         }
@@ -1447,6 +1455,8 @@ private:
         record.SetSeqNo(Quota.SeqNo + 1);
 
         if (last && VectorTopK) {
+            record.MutableStats()->SetRows(VectorTopK->TotalReadRows);
+            record.MutableStats()->SetBytes(VectorTopK->TotalReadBytes);
             auto topRows = VectorTopK->ToBlockBuilder(*BlockBuilder, ColumnTypes.data());
             BlockRows += topRows;
             TotalRows += topRows;

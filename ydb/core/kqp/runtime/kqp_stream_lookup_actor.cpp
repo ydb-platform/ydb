@@ -40,6 +40,7 @@ public:
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
+        , HasVectorTopK(settings.HasVectorTopK())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -90,10 +91,10 @@ public:
             ui64 rowsReadEstimate = ReadRowsCount;
             ui64 bytesReadEstimate = ReadBytesCount;
 
-            if (mstats) {
+            if (mstats && !HasVectorTopK) {
                 switch(LookupStrategy) {
                     case NKqpProto::EStreamLookupStrategy::LOOKUP: {
-                        // in lookup case we return as result actual data, that we read from the datashard.
+                        // in lookup case without top-K pushdown we return as result actual data, that we read from the datashard.
                         rowsReadEstimate = mstats->Inputs[InputIndex]->RowsConsumed;
                         bytesReadEstimate = mstats->Inputs[InputIndex]->BytesConsumed;
                         break;
@@ -806,6 +807,7 @@ private:
     const bool AllowInconsistentReads;
     const bool UseFollowers;
     const bool IsTableImmutable;
+    const bool HasVectorTopK;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;

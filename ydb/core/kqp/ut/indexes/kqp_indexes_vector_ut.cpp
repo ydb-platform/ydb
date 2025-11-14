@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1046,6 +1047,76 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString dropIndex(Q_("ALTER TABLE `/Root/TestTable` DROP INDEX index"));
             result = session.ExecuteSchemeQuery(dropIndex).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(VectorSearchPushdown, Covered) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, true, Covered); });
+
+        constexpr static int levelType = 1, postingType = 2, mainType = 3;
+        THashMap<TActorId, int> actorTypes;
+        auto resolveActors = [&](const char* tableName, int type) {
+            auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), tableName);
+            for (auto shardId: shards) {
+                auto actorId = ResolveTablet(*runtime, shardId);
+                actorTypes[actorId] = type;
+            }
+        };
+        resolveActors("/Root/TestTable/index1/indexImplLevelTable", levelType);
+        resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
+        resolveActors("/Root/TestTable", mainType);
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                int shardType = actorTypes[ev->GetRecipientRewrite()];
+                auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                if (shardType == (Covered ? mainType : postingType)) {
+                    // Non-covering index does topK on main table, covering does it on posting
+                    UNIT_ASSERT(!read.HasVectorTopK());
+                } else {
+                    UNIT_ASSERT(shardType != 0);
+                    UNIT_ASSERT(read.HasVectorTopK());
+                    auto & topK = read.GetVectorTopK();
+                    // Check that target and limit are pushed down
+                    UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
+                    if (shardType == levelType) {
+                        // Equal to pragma
+                        UNIT_ASSERT(topK.GetLimit() == 2);
+                    } else if (shardType == (Covered ? postingType : mainType)) {
+                        // Equal to LIMIT
+                        UNIT_ASSERT(topK.GetLimit() == 3);
+                    }
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        {
+            TString query1(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "2";
+                $TargetEmbedding = String::HexDecode("677102");
+                SELECT * FROM `/Root/TestTable`
+                VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+                LIMIT 3
+            )"));
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
         }
     }
 

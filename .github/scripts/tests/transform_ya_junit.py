@@ -98,6 +98,8 @@ class YTestReportTrace:
 
     def is_timed_out(self, cls, name):
         trace = self.traces.get((cls, name))
+        if not trace:
+            return False
         return trace["status"] == "timeout"
 
     def get_logs(self, cls, name):

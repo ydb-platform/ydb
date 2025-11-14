@@ -55,6 +55,7 @@ struct TEvTablet {
         EvDropLease,
         EvReady,
         EvFollowerDetached, // from leader to user tablet when a follower is removed
+        EvCompleteRecoveryBoot, // from user tablet to sys tablet
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -953,6 +954,8 @@ struct TEvTablet {
             return ActorIdFromProto(Record.GetUserActorId());
         }
     };
+
+    struct TEvCompleteRecoveryBoot : public TEventLocal<TEvCompleteRecoveryBoot, EvCompleteRecoveryBoot> {};
 };
 
 IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>());

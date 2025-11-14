@@ -764,4 +764,32 @@ TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
     return std::move(serializer).Serialize();
 }
 
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
+
+    switch (value.GetType()) {
+        case NBinaryJson::EEntryType::BoolFalse:
+            callbacks.OnBoolean(false);
+            break;
+        case NBinaryJson::EEntryType::BoolTrue:
+            callbacks.OnBoolean(true);
+            break;
+        case NBinaryJson::EEntryType::Null:
+            callbacks.OnNull();
+            break;
+        case NBinaryJson::EEntryType::String:
+            callbacks.OnString(value.GetString());
+            break;
+        case NBinaryJson::EEntryType::Number:
+            callbacks.OnDouble(value.GetNumber());
+            break;
+        case NBinaryJson::EEntryType::Container:
+            // TODO: Support recursive parsing and returning TBinaryJson
+            return TString("Container type is not a scalar value");
+    }
+
+    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
+    return std::move(serializer).Serialize();
+}
+
 } // namespace NKikimr::NBinaryJson

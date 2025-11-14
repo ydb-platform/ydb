@@ -84,27 +84,31 @@ public:
         , QueryAst(std::move(queryAst))
         , TriedFallbackSqlVersion(false)
     {
-        Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
-
-        if (!QueryId.Database.empty()) {
-            Config->_KqpTablePathPrefix = QueryId.Database;
-        }
-
-        ApplyServiceConfig(*Config, tableServiceConfig);
+        BuildConfiguration(Config, tableServiceConfig);
         OriginalSqlVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
         CurrentSqlVersion = OriginalSqlVersion;
+        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
+    }
+
+    void BuildConfiguration(TKikimrConfiguration::TPtr config, const TTableServiceConfig& tableServiceConfig) {
+        config->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
+
+        if (!QueryId.Database.empty()) {
+            config->_KqpTablePathPrefix = QueryId.Database;
+        }
+
+        ApplyServiceConfig(*config, tableServiceConfig);
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
             if (scriptResultRowsLimit > 0) {
-                Config->_ResultRowsLimit = scriptResultRowsLimit;
+                config->_ResultRowsLimit = scriptResultRowsLimit;
             } else {
-                Config->_ResultRowsLimit.Clear();
+                config->_ResultRowsLimit.Clear();
             }
         }
-        PerStatementResult = perStatementResult && Config->EnablePerStatementQueryExecution;
 
-        Config->FreezeDefaults();
+        config->FreezeDefaults();
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -324,29 +328,11 @@ private:
         TKikimrConfiguration::TPtr configToUse = Config;
         if (CurrentSqlVersion != OriginalSqlVersion) {
             // Create a new Config with the current SqlVersion
-            // Recreate it with all the same settings but with updated SqlVersion
             configToUse = MakeIntrusive<TKikimrConfiguration>();
-            configToUse->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
-
-            if (!QueryId.Database.empty()) {
-                configToUse->_KqpTablePathPrefix = QueryId.Database;
-            }
-
             // Apply service config with updated SqlVersion
             TTableServiceConfig modifiedTableServiceConfig = TableServiceConfig;
             modifiedTableServiceConfig.SetSqlVersion(CurrentSqlVersion);
-            ApplyServiceConfig(*configToUse, modifiedTableServiceConfig);
-
-            if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
-                ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
-                if (scriptResultRowsLimit > 0) {
-                    configToUse->_ResultRowsLimit = scriptResultRowsLimit;
-                } else {
-                    configToUse->_ResultRowsLimit.Clear();
-                }
-            }
-
-            configToUse->FreezeDefaults();
+            BuildConfiguration(configToUse, modifiedTableServiceConfig);
         }
 
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;

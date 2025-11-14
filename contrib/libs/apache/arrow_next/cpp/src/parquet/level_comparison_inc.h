@@ -17,9 +17,9 @@
 // under the License.
 #pragma once
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/endian.h"
-#include "parquet/level_comparison.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/level_comparison.h"
 
 // Used to make sure ODR rule isn't violated.
 #ifndef PARQUET_IMPL_NAMESPACE

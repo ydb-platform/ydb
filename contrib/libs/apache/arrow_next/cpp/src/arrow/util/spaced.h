@@ -22,7 +22,7 @@
 #include <cstdint>
 #include <cstring>
 
-#include "arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
 
 namespace arrow20 {
 namespace util {

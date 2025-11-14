@@ -39,12 +39,12 @@
 /// @{
 /// @}
 
-#include "arrow/array/array_base.h"       // IWYU pragma: keep
-#include "arrow/array/array_binary.h"     // IWYU pragma: keep
-#include "arrow/array/array_decimal.h"    // IWYU pragma: keep
-#include "arrow/array/array_dict.h"       // IWYU pragma: keep
-#include "arrow/array/array_nested.h"     // IWYU pragma: keep
-#include "arrow/array/array_primitive.h"  // IWYU pragma: keep
-#include "arrow/array/array_run_end.h"    // IWYU pragma: keep
-#include "arrow/array/data.h"             // IWYU pragma: keep
-#include "arrow/array/util.h"             // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"       // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h"     // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_decimal.h"    // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_dict.h"       // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_nested.h"     // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_primitive.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_run_end.h"    // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"             // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"             // IWYU pragma: keep

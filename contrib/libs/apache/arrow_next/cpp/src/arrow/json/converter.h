@@ -21,9 +21,9 @@
 #include <memory>
 #include <string>
 
-#include "arrow/status.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

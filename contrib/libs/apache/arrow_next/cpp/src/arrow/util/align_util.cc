@@ -15,16 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/align_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/align_util.h"
 
-#include "arrow/array.h"
-#include "arrow/chunked_array.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include "arrow/type_fwd.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

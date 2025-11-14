@@ -20,29 +20,29 @@
 
 #pragma once
 
-#include "arrow/array.h"                    // IWYU pragma: export
-#include "arrow/array/array_run_end.h"      // IWYU pragma: export
-#include "arrow/array/concatenate.h"        // IWYU pragma: export
-#include "arrow/buffer.h"                   // IWYU pragma: export
-#include "arrow/builder.h"                  // IWYU pragma: export
-#include "arrow/chunked_array.h"            // IWYU pragma: export
-#include "arrow/compare.h"                  // IWYU pragma: export
-#include "arrow/config.h"                   // IWYU pragma: export
-#include "arrow/datum.h"                    // IWYU pragma: export
-#include "arrow/extension_type.h"           // IWYU pragma: export
-#include "arrow/memory_pool.h"              // IWYU pragma: export
-#include "arrow/pretty_print.h"             // IWYU pragma: export
-#include "arrow/record_batch.h"             // IWYU pragma: export
-#include "arrow/result.h"                   // IWYU pragma: export
-#include "arrow/status.h"                   // IWYU pragma: export
-#include "arrow/table.h"                    // IWYU pragma: export
-#include "arrow/table_builder.h"            // IWYU pragma: export
-#include "arrow/tensor.h"                   // IWYU pragma: export
-#include "arrow/type.h"                     // IWYU pragma: export
-#include "arrow/util/key_value_metadata.h"  // IWYU pragma: export
-#include "arrow/visit_array_inline.h"       // IWYU pragma: export
-#include "arrow/visit_scalar_inline.h"      // IWYU pragma: export
-#include "arrow/visitor.h"                  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"                    // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_run_end.h"      // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/concatenate.h"        // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"                   // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h"                  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"            // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compare.h"                  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/config.h"                   // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h"                    // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"           // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"              // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/pretty_print.h"             // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"             // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"                   // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"                   // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"                    // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table_builder.h"            // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/tensor.h"                   // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"                     // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_array_inline.h"       // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_scalar_inline.h"      // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visitor.h"                  // IWYU pragma: export
 
 /// \brief Top-level namespace for Apache Arrow C++ API
 namespace arrow20 {}

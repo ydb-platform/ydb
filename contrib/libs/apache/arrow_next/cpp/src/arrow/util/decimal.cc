@@ -28,16 +28,16 @@
 #include <sstream>
 #include <string>
 
-#include "arrow/status.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/decimal_internal.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/formatting.h"
-#include "arrow/util/int128_internal.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/formatting.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int128_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
 namespace arrow20 {
 

@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "arrow/ipc/dictionary.h"
-#include "arrow/ipc/feather.h"
-#include "arrow/ipc/json_simple.h"
-#include "arrow/ipc/message.h"
-#include "arrow/ipc/reader.h"
-#include "arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/dictionary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/feather.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/json_simple.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/message.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"

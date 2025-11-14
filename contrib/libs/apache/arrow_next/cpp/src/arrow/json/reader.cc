@@ -15,27 +15,27 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/reader.h"
 
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/json/chunked_builder.h"
-#include "arrow/json/chunker.h"
-#include "arrow/json/converter.h"
-#include "arrow/json/parser.h"
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/task_group.h"
-#include "arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/chunked_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/chunker.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/parser.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/task_group.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
 
 namespace arrow20 {
 

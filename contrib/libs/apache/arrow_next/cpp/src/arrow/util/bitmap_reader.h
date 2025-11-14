@@ -22,10 +22,10 @@
 #include <cstdint>
 #include <cstring>
 
-#include "arrow/buffer.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 namespace arrow20 {
 namespace internal {

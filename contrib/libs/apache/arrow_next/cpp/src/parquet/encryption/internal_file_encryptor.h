@@ -23,8 +23,8 @@
 #include <string>
 #include <vector>
 
-#include "parquet/encryption/encryption.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace parquet20 {
 

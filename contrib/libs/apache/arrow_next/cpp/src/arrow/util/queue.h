@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/vendored/ProducerConsumerQueue.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/ProducerConsumerQueue.h"
 
 namespace arrow20 {
 namespace util {

@@ -15,18 +15,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/array_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h"
 
 #include <cstdint>
 #include <memory>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/validate.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/binary_view_util.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/validate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/binary_view_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

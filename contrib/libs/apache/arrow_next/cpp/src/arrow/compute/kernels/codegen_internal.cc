@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
 
 #include <cmath>
 #include <functional>
@@ -23,8 +23,8 @@
 #include <mutex>
 #include <vector>
 
-#include "arrow/compute/api_vector.h"
-#include "arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
 
 namespace arrow20 {
 namespace compute {

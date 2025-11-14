@@ -31,7 +31,7 @@
 #  define __EXTENSIONS__
 #endif
 
-#include "arrow/util/windows_compatibility.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_compatibility.h"  // IWYU pragma: keep
 
 #include <algorithm>
 #include <array>
@@ -91,14 +91,14 @@
 
 #endif
 
-#include "arrow/buffer.h"
-#include "arrow/result.h"
-#include "arrow/util/atfork_internal.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/config.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/mutex.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/atfork_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/mutex.h"
 
 // For filename conversion
 #if defined(_WIN32)

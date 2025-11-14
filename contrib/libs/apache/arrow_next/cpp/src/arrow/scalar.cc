@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
 
 #include <memory>
 #include <ostream>
@@ -23,23 +23,23 @@
 #include <string>
 #include <utility>
 
-#include "arrow/array.h"
-#include "arrow/array/util.h"
-#include "arrow/buffer.h"
-#include "arrow/compare.h"
-#include "arrow/pretty_print.h"
-#include "arrow/type.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/formatting.h"
-#include "arrow/util/hashing.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/time.h"
-#include "arrow/util/unreachable.h"
-#include "arrow/util/utf8.h"
-#include "arrow/util/value_parsing.h"
-#include "arrow/visit_scalar_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compare.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/pretty_print.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/formatting.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/hashing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/time.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/unreachable.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/utf8.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_scalar_inline.h"
 
 namespace arrow20 {
 

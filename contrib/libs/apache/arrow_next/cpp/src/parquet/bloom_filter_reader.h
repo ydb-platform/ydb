@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "arrow/io/interfaces.h"
-#include "parquet/properties.h"
-#include "parquet/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/type_fwd.h"
 
 namespace parquet20 {
 

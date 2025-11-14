@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/task_group.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/task_group.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -23,10 +23,10 @@
 #include <mutex>
 #include <utility>
 
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/config.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
 
 namespace arrow20 {
 namespace internal {

@@ -20,8 +20,8 @@
 
 #include <cstdint>
 
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_reader.h"
 
 namespace arrow20 {
 namespace internal {

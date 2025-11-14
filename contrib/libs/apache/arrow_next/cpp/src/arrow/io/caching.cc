@@ -22,12 +22,12 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/io/caching.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/result.h"
-#include "arrow/util/future.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/caching.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace io {

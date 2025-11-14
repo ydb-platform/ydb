@@ -18,12 +18,12 @@
 #include <sstream>
 #include <utility>
 
-#include "parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
 
-#include "arrow/io/buffered.h"
-#include "arrow/io/memory.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/buffered.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
 
 namespace parquet20 {
 

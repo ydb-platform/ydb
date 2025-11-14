@@ -20,9 +20,9 @@
 
 #include <algorithm>
 
-#include "arrow/memory_pool.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
 
 namespace arrow20 {
 namespace internal {

@@ -18,13 +18,13 @@
 
 #pragma once
 
-#include "arrow/io/buffered.h"
-#include "arrow/io/compressed.h"
-#include "arrow/io/file.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/buffered.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/compressed.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/file.h"
 
 #if USE_HDFS
-#error #include "arrow/io/hdfs.h"
+#error #include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/hdfs.h"
 #endif
 
-#include "arrow/io/interfaces.h"
-#include "arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"

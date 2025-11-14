@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/printer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/printer.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -24,16 +24,16 @@
 #include <string>
 #include <vector>
 
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
 
-#include "parquet/column_scanner.h"
-#include "parquet/exception.h"
-#include "parquet/file_reader.h"
-#include "parquet/metadata.h"
-#include "parquet/schema.h"
-#include "parquet/statistics.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_scanner.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

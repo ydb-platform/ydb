@@ -47,9 +47,9 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL ${ARCADIA_BUILD_ROOT}/contrib/libs/apache/arrow_next/cpp/src
-    GLOBAL contrib/libs/apache/arrow_next/cpp/src
-    GLOBAL contrib/libs/apache/arrow_next/src
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/apache/arrow_next/cpp/src
+    contrib/libs/apache/arrow_next/cpp/src
+    contrib/libs/apache/arrow_next/src
     contrib/libs/apache/arrow_next/cpp/src/generated
     contrib/libs/apache/orc/c++/include
     contrib/libs/flatbuffers/include

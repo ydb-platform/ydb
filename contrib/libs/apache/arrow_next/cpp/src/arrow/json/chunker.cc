@@ -15,19 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/json/chunker.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/chunker.h"
 
 #include <algorithm>
 #include <string_view>
 #include <utility>
 #include <vector>
 
-#include "arrow/json/rapidjson_defs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/rapidjson_defs.h"
 #include "rapidjson/reader.h"
 
-#include "arrow/buffer.h"
-#include "arrow/json/options.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/json/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

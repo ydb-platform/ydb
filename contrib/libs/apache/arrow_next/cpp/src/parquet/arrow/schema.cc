@@ -15,30 +15,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/arrow/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema.h"
 
 #include <functional>
 #include <string>
 #include <vector>
 
-#include "arrow/extension/json.h"
-#include "arrow/extension_type.h"
-#include "arrow/io/memory.h"
-#include "arrow/ipc/api.h"
-#include "arrow/result.h"
-#include "arrow/type.h"
-#include "arrow/util/base64.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/string.h"
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/json.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/api.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/base64.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
-#include "parquet/arrow/schema_internal.h"
-#include "parquet/exception.h"
-#include "parquet/metadata.h"
-#include "parquet/properties.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 using arrow20::DecimalType;
 using arrow20::Field;

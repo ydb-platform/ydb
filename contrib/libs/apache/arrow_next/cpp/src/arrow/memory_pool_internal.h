@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "arrow/memory_pool.h"
-#include "arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
 
 namespace arrow20 {
 

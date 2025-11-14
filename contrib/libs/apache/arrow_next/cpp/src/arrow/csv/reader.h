@@ -20,15 +20,15 @@
 
 #include <memory>
 
-#include "arrow/csv/options.h"  // IWYU pragma: keep
-#include "arrow/io/interfaces.h"
-#include "arrow/record_batch.h"
-#include "arrow/result.h"
-#include "arrow/type.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/future.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 namespace io {

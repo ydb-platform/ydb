@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/pretty_print.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/pretty_print.h"
 
 #include <algorithm>
 #include <chrono>
@@ -30,20 +30,20 @@
 #include <type_traits>
 #include <vector>
 
-#include "arrow/array.h"
-#include "arrow/chunked_array.h"
-#include "arrow/record_batch.h"
-#include "arrow/status.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/formatting.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/string.h"
-#include "arrow/vendored/datetime.h"
-#include "arrow/visit_array_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/formatting.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_array_inline.h"
 
 namespace arrow20 {
 

@@ -20,19 +20,19 @@
 #include <optional>
 #include <utility>
 
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/exec.h"
-#include "arrow/compute/function.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/codegen_internal.h"
-#include "arrow/compute/registry.h"
-#include "arrow/result.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20::compute::internal {
 

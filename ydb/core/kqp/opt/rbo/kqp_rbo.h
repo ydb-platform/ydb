@@ -9,6 +9,13 @@ namespace NKqp {
 
 using namespace NOpt;
 
+enum ERuleProperties: ui32 {
+    RequireParents = 0x01,
+    RequireTypes = 0x02,
+    RequireTableMeta = 0x04,
+    RequireCosts = 0x08,
+};
+
 /**
  * Interface for transformation rule:
  *
@@ -18,30 +25,30 @@ using namespace NOpt;
  */
 class IRule {
   public:
-    IRule(TString name, bool parentRecompute = true) : RuleName(name), RequiresParentRecompute(parentRecompute) {}
+    IRule(TString name) : RuleName(name) {}
+    IRule(TString name, ui32 props) : RuleName(name), Props(props) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
     TString RuleName;
-    bool RequiresParentRecompute = true;
+    ui32 Props;
 };
 
 /**
  * A Simplified rule does not alter the original subplan that it matched, but instead returns a new
  * subplan that replaces the old one
  */
-class TSimplifiedRule : public IRule {
+class ISimplifiedRule : public IRule {
   public:
-    TSimplifiedRule(TString name, bool parentRecompute = true) : IRule(name, parentRecompute) {}
+    ISimplifiedRule(TString name) : IRule(name) {}
+    ISimplifiedRule(TString name, ui32 props) : IRule(name, props) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
-
-class TRuleBasedOptimizer;
 
 /**
  * Stage Interface
@@ -53,6 +60,7 @@ class IRBOStage {
   public:
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) = 0;
     virtual ~IRBOStage() = default;
+    ui32 Props;
 };
 
 /**
@@ -60,18 +68,10 @@ class IRBOStage {
  */
 class TRuleBasedStage : public IRBOStage {
   public:
-    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules) : Rules(rules) {}
+    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules);
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 
     TVector<std::shared_ptr<IRule>> Rules;
-};
-
-/**
- * A Global stage uses its own logic to transform the entire plan
- */
-class ISinglePassStage : public IRBOStage {
-  public:
-    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override = 0;
 };
 
 /**

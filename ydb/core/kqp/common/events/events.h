@@ -140,6 +140,7 @@ struct TEvKqp {
         bool DisableDefaultTimeout = false;
         i64 Generation = 1;
         TString CheckpointId;
+        TString StreamingQueryPath;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

@@ -487,9 +487,7 @@ public:
 
     // Statistics batch operations
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationUpdateBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteRows;
-    ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationDeleteBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BatchOperationRetries;
 };
 

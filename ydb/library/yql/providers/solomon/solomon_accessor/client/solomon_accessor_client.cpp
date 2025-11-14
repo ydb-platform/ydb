@@ -491,17 +491,6 @@ private:
         return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
-    TString GetProjectId() const {
-        switch (Settings.GetClusterType()) {
-            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                return Settings.GetProject();
-            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                return Settings.GetCluster();
-            default:
-                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(Settings.GetClusterType()));
-        }
-    }
-
     template <typename TCallback>
     void DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
         IHTTPGateway::THeaders headers;
@@ -561,13 +550,11 @@ private:
 
         if (EnableSolomonClientPostApi) {
             w.BeginObject()
-                .UnsafeWriteKey("projectId").WriteString(GetProjectId())
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
             .EndObject();
         } else {
-            builder.AddUrlParam("projectId", GetProjectId());
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());
@@ -585,22 +572,20 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
+        builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
+
         NJsonWriter::TBuf w;
 
         if (EnableSolomonClientPostApi) {
             w.BeginObject()
-                .UnsafeWriteKey("projectId").WriteString(GetProjectId())
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
-                .UnsafeWriteKey("pageSize").WriteLongLong(MaxListingPageSize)
             .EndObject();
         } else {
-            builder.AddUrlParam("projectId", GetProjectId());
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());
-            builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
         }
 
         return { builder.Build(), w.Str() };
@@ -620,14 +605,12 @@ private:
 
         if (EnableSolomonClientPostApi) {
             w.BeginObject()
-                .UnsafeWriteKey("projectId").WriteString(GetProjectId())
                 .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
                 .UnsafeWriteKey("from").WriteString(from.ToString())
                 .UnsafeWriteKey("to").WriteString(to.ToString())
                 .UnsafeWriteKey("limit").WriteLongLong(100000)
             .EndObject();
         } else {
-            builder.AddUrlParam("projectId", GetProjectId());
             builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
             builder.AddUrlParam("from", from.ToString());
             builder.AddUrlParam("to", to.ToString());
@@ -646,8 +629,6 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("data");
-
-        builder.AddUrlParam("projectId", GetProjectId());
 
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;

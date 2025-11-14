@@ -309,6 +309,35 @@ public:
         }
     }
 
+    void TestReadTopicBasic() {
+        const TString sourceName = "sourceName";
+        const TString topicName = "topicName";
+        CreateTopic(topicName);
+
+        CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
+
+        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(
+                        key String NOT NULL,
+                        value String NOT NULL
+                    ))
+                LIMIT 1;
+            )",
+            "source"_a=sourceName,
+            "topic"_a=topicName
+        ));
+
+        WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
+
+        CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
+    }
+
     // Table client SDK
 
     void ExecSchemeQuery(const TString& query, EStatus expectedStatus = EStatus::SUCCESS) {
@@ -366,11 +395,12 @@ public:
                 DATABASE_NAME = "{pq_database_name}",
                 AUTH_METHOD = "BASIC",
                 LOGIN = "root",
-                PASSWORD_SECRET_NAME = "secret_local_password"
+                PASSWORD_SECRET_NAME = "{secret_name}"
             );)",
             "pq_source"_a = pqSourceName,
             "pq_location"_a = YDB_ENDPOINT,
-            "pq_database_name"_a = YDB_DATABASE
+            "pq_database_name"_a = YDB_DATABASE,
+            "secret_name"_a = secretName
         ));
     }
 
@@ -1048,36 +1078,12 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         });
     }
 
-    Y_UNIT_TEST_F(ReadTopicBasic, TStreamingWithSchemaSecretsTestFixture) {
-        for (int i = 0; i < 2; ++i) {
-            const bool useSchemaSecrets = static_cast<bool>(i);
-            const TString sourceName = "sourceName" + ToString(i);
-            const TString topicName = "topicName" + ToString(i);
-            CreateTopic(topicName);
+    Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {
+        TestReadTopicBasic();
+    }
 
-            CreatePqSourceBasicAuth(sourceName, useSchemaSecrets);
-
-            const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
-                SELECT * FROM `{source}`.`{topic}`
-                    WITH (
-                        FORMAT="json_each_row",
-                        SCHEMA=(
-                            key String NOT NULL,
-                            value String NOT NULL
-                        ))
-                    LIMIT 1;
-                )",
-                "source"_a=sourceName,
-                "topic"_a=topicName
-            ));
-
-            WriteTopicMessage(topicName, R"({"key": "key1", "value": "value1"})");
-
-            CheckScriptResult(scriptExecutionOperation, 2, 1, [](TResultSetParser& result) {
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
-                UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
-            });
-        }
+    Y_UNIT_TEST_F(ReadTopicBasicOldSecrets, TStreamingTestFixture) {
+        TestReadTopicBasic();
     }
 
     Y_UNIT_TEST_F(ExplainReadTopicBasic, TStreamingTestFixture) {

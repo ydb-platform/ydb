@@ -896,11 +896,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
 
     /* Statistics batch operations */
     BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
-    BatchOperationUpdateBytes = KqpGroup->GetCounter("BatchOperation/Update/Bytes", true);
-
     BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
-    BatchOperationDeleteBytes = KqpGroup->GetCounter("BatchOperation/Delete/Bytes", true);
-
     BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
 }
 

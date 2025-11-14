@@ -1,7 +1,6 @@
 #include "limit.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.h>
-#include <algorithm>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -53,13 +52,13 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         for (auto it : DebugOrder) {
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("DebugOrder", it);
         }
-        if (std::ranges::find(Iterators, source->GetSourceId(), &TSourceIterator::GetSourceId) != Iterators.end()) {
+        if (FindIf(Iterators, [&](const auto& item) { return item.GetSourceId() == source->GetSourceId(); }) != Iterators.end()) {
             AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("issue #28037", "portion is in heap")
                 ("front", Iterators.front().DebugString())
                 ("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())
                 ("source_id", source->GetSourceId());
         }
-        else if (std::ranges::find(DebugOrder, source->GetSourceId()) != DebugOrder.end()) {
+        else if (Find(DebugOrder, source->GetSourceId()) != DebugOrder.end()) {
             AFL_VERIFY(Iterators.front().GetSourceId() == source->GetSourceId())("issue #28037", "known portion, not in heap")
                 ("front", Iterators.front().DebugString())
                 ("source", source->GetAs<TPortionDataSource>()->GetStart().DebugString())

@@ -32,7 +32,8 @@ class TestPDiskSlotSizeInUnits(object):
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
             'BS_CONTROLLER': LogLevels.DEBUG,
-            'BS_SKELETON': LogLevels.INFO,
+            'BS_SKELETON': LogLevels.DEBUG,
+            'BS_PDISK': LogLevels.DEBUG,
         }
 
         configurator = KikimrConfigGenerator(

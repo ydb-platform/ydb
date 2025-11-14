@@ -83,13 +83,14 @@ void AddReadWAL(std::unique_ptr<TEvKeyValue::TEvRequest>& request, ui32 partitio
 
 TConsumerActor::TConsumerActor(const TString& database,ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
     const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    std::optional<TDuration> retentionPeriod)
+    std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PQ_MLP_CONSUMER)
     , Database(database)
     , PartitionId(partitionId)
     , PartitionActorId(partitionActorId)
     , Config(config)
     , RetentionPeriod(retentionPeriod)
+    , PartitionEndOffset(partitionEndOffset)
     , Storage(std::make_unique<TStorage>(CreateDefaultTimeProvider())) {
 }
 
@@ -361,6 +362,17 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr& ev) {
    UpdateStorageConfig();
 }
 
+void TConsumerActor::HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvEndOffsetChanged. Offset: " << ev->Get()->Offset);
+    PartitionEndOffset = ev->Get()->Offset;
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvEndOffsetChanged::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvEndOffsetChanged. Offset: " << ev->Get()->Offset);
+    PartitionEndOffset = ev->Get()->Offset;
+    FetchMessagesIfNeeded();
+}
+
 void TConsumerActor::Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr& ev) {
     auto response = std::make_unique<TEvPQ::TEvGetMLPConsumerStateResponse>();
     response->RetentionPeriod = RetentionPeriod;
@@ -392,6 +404,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
+        hFunc(TEvPQ::TEvEndOffsetChanged, HandleInit);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
@@ -411,10 +424,10 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
+        hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
-        hFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
@@ -433,10 +446,10 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
         hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvPQ::TEvMLPConsumerUpdateConfig, Handle);
+        hFunc(TEvPQ::TEvEndOffsetChanged, Handle);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
-        hFunc(TEvPersQueue::TEvHasDataInfoResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
@@ -624,6 +637,11 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
         return false;
     }
 
+    if (PartitionEndOffset <= Storage->GetLastOffset()) {
+        LOG_D("Skip fetch: partition end offset is reached: " << PartitionEndOffset << " vs " << Storage->GetLastOffset());
+        return false;
+    }
+
     auto& metrics = Storage->GetMetrics();
     if (metrics.InflyMessageCount >= Storage->MaxMessages) {
         LOG_D("Skip fetch: infly limit exceeded");
@@ -666,6 +684,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         return;
     }
 
+    bool allMessagesAdded = false;
     size_t messageCount = 0;
     auto& response = ev->Get()->Response;
     if (response->GetPartitionResponse().HasCmdReadResult()) {
@@ -679,13 +698,13 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            bool r = Storage->AddMessage(
+            allMessagesAdded = Storage->AddMessage(
                 result.GetOffset(),
                 result.HasSourceId() && !result.GetSourceId().empty(),
                 static_cast<ui32>(Hash(result.GetSourceId())),
                 TInstant::MilliSeconds(result.GetWriteTimestampMS())
             );
-            if (!r) {
+            if (!allMessagesAdded) {
                 break;
             }
             ++messageCount;
@@ -693,22 +712,14 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
 
         LOG_D("Fetched " << messageCount << " messages");
 
+        if (allMessagesAdded) {
+            FetchMessagesIfNeeded();
+        }
+
         if (CurrentStateFunc() == &TConsumerActor::StateWork) {
             ProcessEventQueue();
         }
-
-        if (!HasDataInProgress && RequiredToFetchMessageCount()) {
-            HasDataInProgress = true;
-            auto request = MakeEvHasData(SelfId(), PartitionId, Storage->GetLastOffset(), Config);
-            LOG_D("Subscribing to data: " << request->Record.ShortDebugString());
-            SendToPQTablet(std::move(request));
-        }
     }
-}
-
-void TConsumerActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&) {
-    LOG_D("Handle TEvPersQueue::TEvHasDataInfo");
-    FetchMessagesIfNeeded();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
@@ -786,8 +797,9 @@ NActors::IActor* CreateConsumerActor(
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    const std::optional<TDuration> reteintion) {
-    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, reteintion);
+    const std::optional<TDuration> retention,
+    ui64 partitionEndOffset) {
+    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, retention, partitionEndOffset);
 }
 
 }

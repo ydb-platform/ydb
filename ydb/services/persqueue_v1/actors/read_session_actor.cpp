@@ -323,11 +323,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvWrite
         return Die(ctx);
     }
 
-    Y_ABORT_UNLESS(!ActiveWrites.empty());
+    AFL_ENSURE(!ActiveWrites.empty());
     const auto sz = ActiveWrites.front();
     ActiveWrites.pop();
 
-    Y_ABORT_UNLESS(BytesInflight_ >= sz);
+    AFL_ENSURE(BytesInflight_ >= sz);
     BytesInflight_ -= sz;
     if (BytesInflight) {
         (*BytesInflight) -= sz;
@@ -350,7 +350,7 @@ void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
         if (!info.Released) {
             // TODO: counters
             auto it = TopicCounters.find(info.Topic->GetInternalName());
-            Y_ABORT_UNLESS(it != TopicCounters.end());
+            AFL_ENSURE(it != TopicCounters.end());
             it->second.PartitionsInfly.Dec();
             it->second.PartitionsReleased.Inc();
             if (info.Releasing) {
@@ -384,6 +384,18 @@ void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
     ctx.Send(GetPQReadServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
     TRlHelpers::PassAway(TActorBootstrapped<TReadSessionActor>::SelfId());
     TActorBootstrapped<TReadSessionActor>::Die(ctx);
+}
+
+template <bool UseMigrationProtocol>
+bool TReadSessionActor<UseMigrationProtocol>::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    LOG_CRIT_S(ctx, NKikimrServices::PQ_READ_PROXY,
+        TStringBuilder() << PQ_LOG_PREFIX << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    CloseSession(PersQueue::ErrorCode::ErrorCode::ERROR, "Internal error", ctx.AsActorContext());
+
+    return true;
 }
 
 template <bool UseMigrationProtocol>
@@ -582,7 +594,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
             SendReleaseSignal(it->second, true, ctx);
         }
     } else {
-        Y_ABORT_UNLESS(DirectRead);
+        AFL_ENSURE(DirectRead);
         if (!partitionInfo.Stopping) {
             return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TStringBuilder()
                 << "release of partition that is not requested is forbiden for " << partitionInfo.Partition, ctx);
@@ -610,12 +622,12 @@ void TReadSessionActor<UseMigrationProtocol>::DropPartition(TPartitionsMapIterat
     ctx.Send(it->second.Actor, new TEvents::TEvPoisonPill());
 
     bool res = ActualPartitionActors.erase(it->second.Actor);
-    Y_ABORT_UNLESS(res);
+    AFL_ENSURE(res);
 
     if (--NumPartitionsFromTopic[it->second.Topic->GetInternalName()] == 0) {
         // TODO: counters
         res = TopicCounters.erase(it->second.Topic->GetInternalName());
-        Y_ABORT_UNLESS(res);
+        AFL_ENSURE(res);
     }
 
     if (SessionsActive) {
@@ -628,7 +640,7 @@ void TReadSessionActor<UseMigrationProtocol>::DropPartition(TPartitionsMapIterat
             (*BytesInflight) -= dr.ByteSize;
         }
 
-        Y_ABORT_UNLESS((ui64)readId > it->second.MaxProcessedDirectReadId);
+        AFL_ENSURE((ui64)readId > it->second.MaxProcessedDirectReadId);
         ReadSizeBudget += dr.ByteSize; // bring back all not performed reads in budget
     }
 
@@ -645,7 +657,7 @@ void TReadSessionActor<UseMigrationProtocol>::DropPartition(TPartitionsMapIterat
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(!CommitsDisabled);
+    AFL_ENSURE(!CommitsDisabled);
 
     if (!ActualPartitionActors.contains(ev->Sender)) {
         return;
@@ -661,7 +673,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
     }
 
     auto& partition = partitionIt->second;
-    Y_ABORT_UNLESS(partition.Offset < msg->Offset);
+    AFL_ENSURE(partition.Offset < msg->Offset);
     partition.NextRanges.EraseInterval(partition.Offset, msg->Offset);
 
     if (msg->StartCookie == Max<ui64>()) { // means commit at start
@@ -681,7 +693,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitDone::
                 partition.ReadIdCommitted = i;
             }
         } else { // commit on cookies not supported in this case
-            Y_ABORT_UNLESS(false);
+            AFL_ENSURE(false);
         }
     } else {
         if constexpr (UseMigrationProtocol) {
@@ -866,7 +878,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
                 "unauthenticated access is forbidden, please provide credentials", ctx);
         }
     } else {
-        Y_ABORT_UNLESS(Request->GetYdbToken());
+        AFL_ENSURE(Request->GetYdbToken());
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
@@ -1114,7 +1126,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
         }
 
         if (IsQuotaRequired()) {
-            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
         } else  if (!InitSession(ctx)) {
             return;
         }
@@ -1158,7 +1170,7 @@ bool TReadSessionActor<UseMigrationProtocol>::InitSession(const TActorContext& c
             holder->PipeClient = CreatePipeClient(holder->TabletID, ctx);
         }
 
-        Y_ABORT_UNLESS(holder->FullConverter);
+        AFL_ENSURE(holder->FullConverter);
         auto it = TopicGroups.find(holder->FullConverter->GetInternalName());
         if (it != TopicGroups.end()) {
             holder->Groups = it->second;
@@ -1234,8 +1246,8 @@ void TReadSessionActor<UseMigrationProtocol>::RegisterSession(const TString& top
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.GetSession() == Session);
-    Y_ABORT_UNLESS(record.GetClientId() == ClientId);
+    AFL_ENSURE(record.GetSession() == Session);
+    AFL_ENSURE(record.GetClientId() == ClientId);
 
     auto path = record.GetPath();
     if (path.empty()) {
@@ -1285,11 +1297,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
 
     // TODO: counters
     auto it = TopicCounters.find(name);
-    Y_ABORT_UNLESS(it != TopicCounters.end());
+    AFL_ENSURE(it != TopicCounters.end());
 
-    Y_ABORT_UNLESS(record.GetGeneration() > 0);
+    AFL_ENSURE(record.GetGeneration() > 0);
     const ui64 assignId = NextAssignId++;
-    Y_ABORT_UNLESS(converterIter->second != nullptr);
+    AFL_ENSURE(converterIter->second != nullptr);
 
     BalancerGeneration[assignId] = {record.GetGeneration(), record.GetStep()};
     const TPartitionId partitionId{converterIter->second, record.GetPartition(), assignId};
@@ -1319,14 +1331,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     }
 
     bool res = Partitions.emplace(assignId, TPartitionActorInfo(actorId, partitionId, converterIter->second, ctx.Now())).second;
-    Y_ABORT_UNLESS(res);
+    AFL_ENSURE(res);
 
     if (SessionsActive) {
         PartsPerSession.IncFor(Partitions.size(), 1);
     }
 
     res = ActualPartitionActors.insert(actorId).second;
-    Y_ABORT_UNLESS(res);
+    AFL_ENSURE(res);
 
     it->second.PartitionsLocked.Inc();
     it->second.PartitionsInfly.Inc();
@@ -1482,7 +1494,7 @@ bool TReadSessionActor<UseMigrationProtocol>::SendControlMessage(TPartitionId id
     if (it == PartitionToControlMessages.end()) {
         return WriteToStreamOrDie(ctx, std::move(message));
     } else {
-        Y_ABORT_UNLESS(it->second.Infly);
+        AFL_ENSURE(it->second.Infly);
         it->second.ControlMessages.push_back(std::move(message));
     }
 
@@ -1524,7 +1536,7 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorI
         return;
     }
 
-    Y_ABORT_UNLESS(partition.LockSent);
+    AFL_ENSURE(partition.LockSent);
 
     partition.ReleaseSent = true;
 }
@@ -1532,14 +1544,14 @@ void TReadSessionActor<UseMigrationProtocol>::SendReleaseSignal(TPartitionActorI
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.GetSession() == Session);
-    Y_ABORT_UNLESS(record.GetClientId() == ClientId);
+    AFL_ENSURE(record.GetSession() == Session);
+    AFL_ENSURE(record.GetClientId() == ClientId);
 
     auto pathIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(record.GetPath()));
-    Y_ABORT_UNLESS(pathIter != FullPathToConverter.end());
+    AFL_ENSURE(pathIter != FullPathToConverter.end());
 
     auto it = Topics.find(pathIter->second->GetInternalName());
-    Y_ABORT_UNLESS(it != Topics.end());
+    AFL_ENSURE(it != Topics.end());
 
     if (it->second->PipeClient != ActorIdFromProto(record.GetPipeClient())) {
         return;
@@ -1548,11 +1560,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvReleasePar
     auto& converter = it->second->FullConverter;
 
     auto tit = TopicCounters.find(converter->GetInternalName());
-    Y_ABORT_UNLESS(tit != TopicCounters.end());
+    AFL_ENSURE(tit != TopicCounters.end());
     auto& counters = tit->second;
 
     auto doRelease = [&](TPartitionsMap::iterator& it) {
-        Y_ABORT_UNLESS(it != Partitions.end());
+        AFL_ENSURE(it != Partitions.end());
         auto& partitionInfo = it->second;
 
         counters.PartitionsToBeReleased.Inc();
@@ -1623,7 +1635,7 @@ void TReadSessionActor<UseMigrationProtocol>::InformBalancerAboutRelease(typenam
     const auto& converter = partitionInfo.Topic;
 
     auto jt = Topics.find(converter->GetInternalName());
-    Y_ABORT_UNLESS(jt != Topics.end());
+    AFL_ENSURE(jt != Topics.end());
     const auto& topicInfo = jt->second;
 
     auto request = MakeHolder<TEvPersQueue::TEvPartitionReleased>();
@@ -1704,7 +1716,7 @@ void TReadSessionActor<UseMigrationProtocol>::ReleasePartition(TPartitionsMapIte
 
     // TODO: counters
     auto jt = TopicCounters.find(partition.Topic->GetInternalName());
-    Y_ABORT_UNLESS(jt != TopicCounters.end());
+    AFL_ENSURE(jt != TopicCounters.end());
     auto& counters = jt->second;
 
     counters.PartitionsReleased.Inc();
@@ -1714,7 +1726,7 @@ void TReadSessionActor<UseMigrationProtocol>::ReleasePartition(TPartitionsMapIte
         counters.PartitionsToBeReleased.Dec();
     }
 
-    Y_ABORT_UNLESS(couldBeReads || !partition.Reading);
+    AFL_ENSURE(couldBeReads || !partition.Reading);
     typename TFormedReadResponse<TServerMessage>::TPtr response;
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got all from client, actual releasing"
@@ -1724,7 +1736,7 @@ void TReadSessionActor<UseMigrationProtocol>::ReleasePartition(TPartitionsMapIte
     // process reads
     if (partition.Reading) {
         auto readIt = PartitionToReadResponse.find(partition.Actor);
-        Y_ABORT_UNLESS(readIt != PartitionToReadResponse.end());
+        AFL_ENSURE(readIt != PartitionToReadResponse.end());
         if (--readIt->second->RequestsInfly == 0) {
             response = readIt->second;
         }
@@ -1739,7 +1751,7 @@ void TReadSessionActor<UseMigrationProtocol>::ReleasePartition(TPartitionsMapIte
         if (const auto ru = CalcRuConsumption(PrepareResponse(response))) {
             response->RequiredQuota = ru;
             if (MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
-                Y_ABORT_UNLESS(!PendingQuota);
+                AFL_ENSURE(!PendingQuota);
                 PendingQuota = response;
             } else {
                 WaitingQuota.push_back(response);
@@ -1852,10 +1864,10 @@ i64 TFormedReadResponse<TServerMessage>::ApplyResponse(TServerMessage&& resp) {
     constexpr bool UseMigrationProtocol = std::is_same_v<TServerMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
 
     if constexpr (UseMigrationProtocol) {
-        Y_ABORT_UNLESS(resp.data_batch().partition_data_size() == 1);
+        AFL_ENSURE(resp.data_batch().partition_data_size() == 1);
         Response.mutable_data_batch()->add_partition_data()->Swap(resp.mutable_data_batch()->mutable_partition_data(0));
     } else {
-        Y_ABORT_UNLESS(resp.read_response().partition_data_size() == 1);
+        AFL_ENSURE(resp.read_response().partition_data_size() == 1);
         Response.mutable_read_response()->add_partition_data()->Swap(resp.mutable_read_response()->mutable_partition_data(0));
     }
 
@@ -1871,7 +1883,7 @@ template <typename TServerMessage>
 i64 TFormedReadResponse<TServerMessage>::ApplyDirectReadResponse(TEvPQProxy::TEvDirectReadResponse::TPtr& ev) {
 
     constexpr bool UseMigrationProtocol = std::is_same_v<TServerMessage, PersQueue::V1::MigrationStreamingReadServerMessage>;
-    Y_ABORT_UNLESS(!UseMigrationProtocol);
+    AFL_ENSURE(!UseMigrationProtocol);
 
     IsDirectRead = true;
     AssignId = ev->Get()->AssignId;
@@ -1912,7 +1924,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
     typename TFormedReadResponse<TServerMessage>::TPtr formedResponse;
     {
         auto it = PartitionToReadResponse.find(ev->Sender);
-        Y_ABORT_UNLESS(it != PartitionToReadResponse.end());
+        AFL_ENSURE(it != PartitionToReadResponse.end());
         formedResponse = it->second;
     }
 
@@ -1956,7 +1968,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadResponse::T
         if (const auto ru = CalcRuConsumption(PrepareResponse(formedResponse))) {
             formedResponse->RequiredQuota = ru;
             if (MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
-                Y_ABORT_UNLESS(!PendingQuota);
+                AFL_ENSURE(!PendingQuota);
                 PendingQuota = formedResponse;
             } else {
                 WaitingQuota.push_back(formedResponse);
@@ -1982,7 +1994,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadRe
     typename TFormedReadResponse<TServerMessage>::TPtr formedResponse;
     {
         auto it = PartitionToReadResponse.find(ev->Sender);
-        Y_ABORT_UNLESS(it != PartitionToReadResponse.end());
+        AFL_ENSURE(it != PartitionToReadResponse.end());
         formedResponse = it->second;
     }
 
@@ -1992,7 +2004,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadRe
             << "unknown partition_session_id " << assignId << " #06", ctx);
     }
 
-    Y_ABORT_UNLESS(it->second.Reading);
+    AFL_ENSURE(it->second.Reading);
     it->second.Reading = false;
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " direct read preparation done"
@@ -2004,19 +2016,19 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDirectReadRe
     const i64 diff = formedResponse->ApplyDirectReadResponse(ev);
 
     --formedResponse->RequestsInfly;
-    Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
+    AFL_ENSURE(formedResponse->RequestsInfly == 0);
 
     BytesInflight_ += diff;
     if (BytesInflight) {
         (*BytesInflight) += diff;
     }
 
-    Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
+    AFL_ENSURE(formedResponse->RequestsInfly == 0);
 
     if (const auto ru = CalcRuConsumption(PrepareResponse(formedResponse))) {
         formedResponse->RequiredQuota = ru;
         if (MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
-            Y_ABORT_UNLESS(!PendingQuota);
+            AFL_ENSURE(!PendingQuota);
             PendingQuota = formedResponse;
         } else {
             WaitingQuota.push_back(formedResponse);
@@ -2077,7 +2089,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
         }
     }
 
-    Y_ABORT_UNLESS(formedResponse->RequestsInfly == 0);
+    AFL_ENSURE(formedResponse->RequestsInfly == 0);
 
     if constexpr (!UseMigrationProtocol) {
         formedResponse->Response.mutable_read_response()->set_bytes_size(sizeEstimation);
@@ -2094,7 +2106,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
         it->second.DirectReads[formedResponse->DirectReadId] = {formedResponse->DirectReadId, sizeEstimation};
         it->second.LastDirectReadId = formedResponse->DirectReadId;
 
-        Y_ABORT_UNLESS(diff == 0); // diff is zero; sizeEstimation already counted in inflight;
+        AFL_ENSURE(diff == 0); // diff is zero; sizeEstimation already counted in inflight;
 
         ProcessDirectReads(it, ctx);
     } else if (formedResponse->HasMessages) {
@@ -2114,7 +2126,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
 
     for (const auto& id : formedResponse->PartitionsTookPartInControlMessages) {
         auto it = PartitionToControlMessages.find(id);
-        Y_ABORT_UNLESS(it != PartitionToControlMessages.end());
+        AFL_ENSURE(it != PartitionToControlMessages.end());
 
         if (--it->second.Infly == 0) {
             for (auto& r : it->second.ControlMessages) {
@@ -2198,7 +2210,7 @@ std::tuple<TString, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetRead
     ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
 
     auto lagsIt = MaxLagByTopic.find(topic->GetInternalName());
-    Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
+    AFL_ENSURE(lagsIt != MaxLagByTopic.end());
     const ui32 maxLag = lagsIt->second;
 
     return {TString{}, maxLag, readTimestampMs};
@@ -2248,7 +2260,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             }
 
             size -= csize;
-            Y_ABORT_UNLESS(csize < Max<i32>());
+            AFL_ENSURE(csize < Max<i32>());
 
             auto [error, maxLag, readTimestampMs] = GetReadFrom(it->second.Topic, ctx);
             if (error) {
@@ -2265,7 +2277,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
                 << ", partitionsAsked# " << partitionsAsked
                 << ", maxTimeLag# " << maxLag << "ms");
 
-            Y_ABORT_UNLESS(!it->second.Reading);
+            AFL_ENSURE(!it->second.Reading);
             it->second.Reading = true;
 
             formedResponse->PartitionsTookPartInRead.insert(it->second.Actor);
@@ -2274,7 +2286,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             PartitionToControlMessages[id].Infly++;
 
             bool res = formedResponse->PartitionsTookPartInControlMessages.insert(id).second;
-            Y_ABORT_UNLESS(res);
+            AFL_ENSURE(res);
 
             RequestedBytes += csize;
             formedResponse->RequestedBytes += csize;
@@ -2283,7 +2295,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             ctx.Send(it->second.Actor, ev.Release());
             res = PartitionToReadResponse.emplace(it->second.Actor, formedResponse).second;
-            Y_ABORT_UNLESS(res);
+            AFL_ENSURE(res);
 
             // Do not aggregate messages from different partitions together.
             if constexpr (!UseMigrationProtocol) {
@@ -2339,7 +2351,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionRea
         ev->Get()->WTime,
         ev->Get()->SizeLag,
         ev->Get()->EndOffset - ev->Get()->ReadOffset).second;
-    Y_ABORT_UNLESS(res);
+    AFL_ENSURE(res);
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << "TEvPartitionReady. Aval parts: " << AvailablePartitions.size());
 
     ProcessReads(ctx);
@@ -2371,14 +2383,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& e
                 PendingQuota = nullptr;
             }
             if (PendingQuota) {
-                Y_ABORT_UNLESS(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                AFL_ENSURE(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             }
             break;
 
         case EWakeupTag::RlNoResource:
         case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
-                Y_ABORT_UNLESS(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
+                AFL_ENSURE(MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, "throughput limit exceeded", ctx);
             }
@@ -2405,7 +2417,7 @@ void TReadSessionActor<UseMigrationProtocol>::RecheckACL(const TActorContext& ct
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::RunAuthActor(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(!AuthInitActor);
+    AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));

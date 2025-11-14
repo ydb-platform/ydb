@@ -17,6 +17,9 @@ SRCS(
     block_layout_converter.cpp
     layout_converter_common.cpp
     page_hash_table.cpp
+    alloc.cpp
+    spilled_storage.cpp
+    join_defs.cpp
 )
 
 IF (ARCH_X86_64 AND OS_LINUX)
@@ -24,6 +27,7 @@ IF (ARCH_X86_64 AND OS_LINUX)
 CFLAGS(
     -mprfchw
     -mavx2
+    -Wmissing-field-initializers
 )
 
 ENDIF()

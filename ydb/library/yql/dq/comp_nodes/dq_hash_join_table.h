@@ -84,12 +84,8 @@ class TStdJoinTable {
         BuiltTable;
 };
 
-class TNeumannJoinTable : NNonCopyable::TMoveOnly {
+class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
-    struct Tuple {
-        const ui8* PackedData;
-        const ui8* OverflowBegin;
-    };
 
     TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout)
         : Table_(layout)
@@ -101,14 +97,22 @@ class TNeumannJoinTable : NNonCopyable::TMoveOnly {
         Built_ = true;
     }
 
-    bool Empty() {
+    bool Built() const {
+        return Built_;
+    }
+
+    bool Empty() const {
         return Table_.Empty();
     }
 
-    void Lookup(Tuple row, std::invocable<Tuple> auto consume) const {
+    i64 RequiredMemoryForBuild(i64 nTuples) {
+        return Table_.RequiredMemoryForBuild(nTuples);
+    }
+
+    void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) const {
         MKQL_ENSURE(Built_, "table must be built before lookup");
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            consume(Tuple{tuplePackedData, BuildData_.Overflow.data()});
+            consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
         });
     }
 

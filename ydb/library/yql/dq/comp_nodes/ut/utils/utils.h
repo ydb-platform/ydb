@@ -102,7 +102,7 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb, const TVec
     return lists;
 }
 
-template <typename... TVectors> TypeAndValue ConvertVectorsToTuples(TDqSetup<false>& setup, TVectors... vectors) {
+template <typename Setup, typename... TVectors> TypeAndValue ConvertVectorsToTuples(Setup& setup, TVectors... vectors) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto lists = BuildListNodes(pb, std::forward<TVectors>(vectors)...);
     const auto tuplesNode = pb.Zip(lists);
@@ -111,8 +111,8 @@ template <typename... TVectors> TypeAndValue ConvertVectorsToTuples(TDqSetup<fal
     return {tuplesNodeType, tuples};
 }
 
-template <typename... TVectors>
-std::pair<TArrayRef<TType* const>, NUdf::TUnboxedValue> ConvertVectorsToRuntimeTypesAndValue(TDqSetup<false>& setup,
+template <typename Setup, typename... TVectors>
+std::pair<TArrayRef<TType* const>, NUdf::TUnboxedValue> ConvertVectorsToRuntimeTypesAndValue(Setup& setup,
                                                                                              TVectors... vectors) {
     auto p = ConvertVectorsToTuples(setup, vectors...);
     return std::make_pair(AS_TYPE(TTupleType, AS_TYPE(TListType, p.Type)->GetItemType())->GetElements(), p.Value);

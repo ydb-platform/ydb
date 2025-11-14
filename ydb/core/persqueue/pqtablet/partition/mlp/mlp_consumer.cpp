@@ -797,9 +797,9 @@ NActors::IActor* CreateConsumerActor(
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    const std::optional<TDuration> reteintion,
+    const std::optional<TDuration> retention,
     ui64 partitionEndOffset) {
-    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, reteintion, partitionEndOffset);
+    return new TConsumerActor(database, tabletId, tabletActorId, partitionId, partitionActorId, config, retention, partitionEndOffset);
 }
 
 }

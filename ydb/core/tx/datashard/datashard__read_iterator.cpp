@@ -637,8 +637,8 @@ public:
 
             const auto prechargeResult = Precharge(
                 txc.DB,
-                ToRawTypeValue(range.To.GetCells(), TableInfo, false),
                 ToRawTypeValue(range.From.GetCells(), TableInfo, false),
+                ToRawTypeValue(range.To.GetCells(), TableInfo, false),
                 State.Reverse
             );
 

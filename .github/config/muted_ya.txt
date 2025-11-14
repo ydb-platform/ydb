@@ -9,8 +9,6 @@ ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisa
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
-ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
@@ -20,13 +18,11 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskGC.TGCManyVPutsDelTabletTest
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
-ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyJsonClients
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
-ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,1024,10,1000,0,BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,false,1,0,1000,0.5,BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[true,true,0,0,1000,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,true,1024,10,0,0.5]
@@ -36,15 +32,10 @@ ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,false,1,1000,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.BrokenJsonWriting[2,true,1024,1000,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[1,false,1,10,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants[10,true,1,0,100,0.5]
-ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeVariants[10,true,0,0,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst[10,false,1,0,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[10,true,0,1000,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,false,0,10,100,0]
-ydb/core/kqp/ut/olap KqpOlapJson.FilterVariants[2,false,0,1000,100,0]
-ydb/core/kqp/ut/olap KqpOlapJson.OrFilterVariants[2,false,0,1000,1000000,0]
-ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1,0,0,0]
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1,10,100,0]
-ydb/core/kqp/ut/olap KqpOlapJson.RestoreJsonArrayVariants[10,true,1,0,1000000,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants[1,true,1,1000,0,0.5]
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
@@ -53,7 +44,6 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/scheme KqpAcl.AlterDatabasePrivilegesRequiredToChangeSchemeLimits-AsClusterAdmin
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
-ydb/core/kqp/ut/scheme KqpScheme.AddChangefeed
 ydb/core/kqp/ut/service KqpQueryService.AlterTempTable
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
@@ -79,7 +69,6 @@ ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.Interconne
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcIsDisabledByDefault
 ydb/library/yql/dq/actors/compute/ut TAsyncComputeActorTest.InputTransformMultichannel
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestarts
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
@@ -108,12 +97,10 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
-ydb/tests/functional/api test_read_table.py.TestReadTableTruncatedResults.test_truncated_results[async_read_table]
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/config test_distconf.py.TestDistConfWithAuth.test_auth_v2_initialization
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterBlock42.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
-ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror3DC.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_fifo_groups_with_dlq_in_cloud[tables_format_v0]
@@ -134,7 +121,6 @@ ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alte
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
-ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board

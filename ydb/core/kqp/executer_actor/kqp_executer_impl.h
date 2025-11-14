@@ -156,10 +156,7 @@ public:
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId)
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
-
-        if (executerConfig.TableServiceConfig.HasBufferPageAllocSize()) {
-            BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
-        }
+        BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
 
         TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
         TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
@@ -1178,10 +1175,7 @@ protected:
             if (!BatchOperationSettings.Empty() && !Stats->TableStats.empty()) {
                 auto [_, tableStats] = *Stats->TableStats.begin();
                 Counters->Counters->BatchOperationUpdateRows->Add(tableStats->GetWriteRows());
-                Counters->Counters->BatchOperationUpdateBytes->Add(tableStats->GetWriteBytes());
-
                 Counters->Counters->BatchOperationDeleteRows->Add(tableStats->GetEraseRows());
-                Counters->Counters->BatchOperationDeleteBytes->Add(tableStats->GetEraseBytes());
             }
 
             auto finishSize = Stats->EstimateFinishMem();
@@ -1269,7 +1263,7 @@ protected:
 
     bool RestoreTasksGraph() {
         if (Request.QueryPhysicalGraph) {
-            TasksGraph.RestoreTasksGraphInfo(*Request.QueryPhysicalGraph);
+            TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
         }
 
         return TasksGraph.GetMeta().IsRestored;

@@ -1482,7 +1482,7 @@ UuidNotNullValue:   [
 
     /**
      * More tests for different types with correctness and convertations between Arrow and UV :
-     * ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
+     * ydb/core/kqp/common/result_set_format/ut/kqp_formats_arrow_ut.cpp
     */
 
     // Optional<T>
@@ -1565,58 +1565,8 @@ column1:   -- is_valid: all not null
         }
     }
 
-    // Optional<Optional<Optional<Optional<T>>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT Just(Just(Just(Key1))), Just(Just(Just(Name))) FROM Join2
-                WHERE Key1 IN [104, 106, 108]
-                ORDER BY Key1;
-            )", /* assertSize */ false, 1);
-
-            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
-
-            const auto& batch = batches.front();
-
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
-
-            ValidateOptionalColumn(batch->column(0), 3, false);
-            ValidateOptionalColumn(batch->column(1), 3, false);
-
-            const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: uint32 not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: uint32 not null>
-      -- is_valid: all not null
-      -- child 0 type: uint32
-        [
-          104,
-          106,
-          108
-        ]
-column1:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: binary not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: binary not null>
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          4E616D6533,
-          4E616D6533,
-          null
-        ]
-)";
-            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
-        }
-    }
-
     // Optional<Variant<T, F>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1656,7 +1606,7 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Optional<Optional<Variant<T, F, G>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_5) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1676,7 +1626,7 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2> not null>
+  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>>
     -- is_valid: all not null
     -- child 0 type: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>
       -- is_valid: all not null
@@ -1899,29 +1849,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected = 
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: map<binary, int32>
-    [
-      keys:
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
       [
         61,
         63,
         62
       ]
-      values:
+    -- child 1 type: int32
       [
         1,
         3,
         2
       ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
@@ -1944,30 +1889,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: list<item: struct<key: binary, payload: int32 not null>>
-    [
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          61,
-          62,
-          null
-        ]
-      -- child 1 type: int32
-        [
-          1,
-          2,
-          3
-        ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
+      [
+        61,
+        62,
+        null
+      ]
+    -- child 1 type: int32
+      [
+        1,
+        2,
+        3
+      ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);

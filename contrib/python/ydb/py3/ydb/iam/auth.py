@@ -185,7 +185,6 @@ class MetadataUrlCredentials(credentials.AbstractExpiringTokenCredentials):
             "Check that metadata service configured properly since we failed to fetch it from metadata_url."
         )
         self._metadata_url = DEFAULT_METADATA_URL if metadata_url is None else metadata_url
-        self._tp.submit(self._refresh)
 
     @tracing.with_trace()
     def _make_token_request(self):

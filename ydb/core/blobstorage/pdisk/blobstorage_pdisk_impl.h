@@ -495,5 +495,7 @@ void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, u
 bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
         ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset, const TString& logPrefix);
 
+void InitializeKeeperLogParams(TKeeperParams& params, const TIntrusivePtr<TPDiskConfig>& cfg, const TDiskFormat& format);
+
 } // NPDisk
 } // NKikimr

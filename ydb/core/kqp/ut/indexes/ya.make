@@ -16,6 +16,7 @@ SRCS(
     kqp_indexes_prefixed_vector_ut.cpp
     kqp_indexes_ut.cpp
     kqp_indexes_vector_ut.cpp
+    kqp_stream_indexes_ut.cpp
 )
 
 PEERDIR(

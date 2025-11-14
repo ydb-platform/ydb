@@ -879,7 +879,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for new messages. Topic is considered empty if no new messages arrive within this period.")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for the first message. Topic is considered empty if no new messages arrive within this period.")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
@@ -1102,6 +1102,11 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("message-group-id", "Message group identifier. If not set, all messages from input will get the same identifier based on hex string\nrepresentation of 3 random bytes")
             .Optional()
             .StoreResult(&MessageGroupId_);
+        config.Opts->AddLongOption("partition-id", "Write to an exact partition. If not set, server assigns partition automatically by message-group-id")
+            .Hidden()
+            .Optional()
+            .RequiredArgument("INDEX")
+            .StoreResult(&PartitionId_);
         config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
             .Optional()
             .Hidden()
@@ -1130,6 +1135,9 @@ namespace NYdb::NConsoleClient {
         }
         settings.Path(TopicName);
 
+        if (PartitionId_.Defined()) {
+            settings.PartitionId(*PartitionId_);
+        }
         if (!MessageGroupId_.Defined()) {
             const TString rnd = ToString(TInstant::Now().NanoSeconds());
             SHA_CTX ctx;

@@ -38,7 +38,7 @@
 #include "upb/decode.h"
 #include "upb/internal/upb.h"
 #include "upb/msg_internal.h"
-#include "third_party/utf8_range/utf8_range.h"
+#include "utf8_range.h"
 
 /* Must be last. */
 #include "upb/port_def.inc"

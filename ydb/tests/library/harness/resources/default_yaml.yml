@@ -116,7 +116,7 @@ actor_system_config:
     name: "IC"
     time_per_mailbox_micro_secs: 100
   scheduler:
-    resolution: 256
+    resolution: 1024
     spin_threshold: 0
     progress_threshold: 10000
   sys_executor: 0
@@ -194,6 +194,8 @@ pqconfig:
 pqcluster_discovery_config:
   enabled: false
 table_service_config:
+  filter_pushdown_over_join_optional_side: false
+  enable_kqp_data_query_stream_idx_lookup_join: true
   resource_manager:
     mkql_light_program_memory_limit: 65536
     mkql_heavy_program_memory_limit: 1048576

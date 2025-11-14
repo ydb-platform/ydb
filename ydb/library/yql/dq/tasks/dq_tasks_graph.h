@@ -91,6 +91,7 @@ struct TChannel {
     bool InMemory = true;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     TChannel() = default;
 };
@@ -140,6 +141,7 @@ struct TTaskInput {
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;
     NYql::NDqProto::EWatermarksMode WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
     TInputMeta Meta;
     TMaybe<TTransform> Transform;
 
@@ -197,6 +199,7 @@ public:
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
     NDqProto::EWatermarksMode WatermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+    TMaybe<ui64> WatermarksIdleTimeoutUs = Nothing();
 
     // Reason of task creation - for better introspection
     enum ECreateReason {
@@ -384,9 +387,10 @@ public:
         return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
     }
 
-    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
+    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks, TMaybe<ui64> watermarksIdleTimeoutUs = Nothing()) {
         std::stack<TTaskType*> tasksStack;
         std::vector<bool> processedTasks(GetTasks().size());
+        // TODO use toposort instead of Dreadful O(n^2)
         for (TTaskType& task : GetTasks()) {
             if (IsEgressTask(task)) {
                 tasksStack.push(&task);
@@ -447,21 +451,19 @@ public:
                     if (input.SourceType) {
                         if (IsInfiniteSourceType(input.SourceType)) {
                             watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            input.WatermarksIdleTimeoutUs = watermarksIdleTimeoutUs; // TODO extract from source settings
                             input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                            break;
                         }
                     } else {
                         for (ui64 channelId : input.Channels) {
                             const NDq::TChannel& channel = GetChannel(channelId);
-                            if (channel.WatermarksMode != NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            if (channel.WatermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
                                 watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
-                                break;
+                                input.WatermarksIdleTimeoutUs = Max(input.WatermarksIdleTimeoutUs, channel.WatermarksIdleTimeoutUs);
                             }
                         }
-                        if (watermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
-                            break;
-                        }
                     }
+                    task.WatermarksIdleTimeoutUs = Max(task.WatermarksIdleTimeoutUs, input.WatermarksIdleTimeoutUs);
                 }
             }
 
@@ -473,6 +475,7 @@ public:
                     auto& channel = GetChannel(channelId);
                     channel.CheckpointingMode = checkpointingMode;
                     channel.WatermarksMode = watermarksMode;
+                    channel.WatermarksIdleTimeoutUs = task.WatermarksIdleTimeoutUs;
                 }
             }
 

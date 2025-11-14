@@ -64,7 +64,7 @@ private:
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /* ctx */) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
-            if (!op) {
+            if (!op || op->ReceiveAck) {
                 AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "duplication_tablet_ack_flag")("txId", TxId);
             } else {
                 op->ReceiveAck = true;
@@ -80,12 +80,7 @@ private:
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
             if (NeedContinueFlag) {
-                if (TxId && Self->ProgressTxInFlight && TxId != Self->ProgressTxInFlight) {
-                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("issue #23402", "TxId != ProgressTxInFlight")("TxId", TxId)("ProgressTxInFlight", Self->ProgressTxInFlight);
-                }
-                else {
-                    Self->EnqueueProgressTx(ctx, TxId);
-                }
+                Self->EnqueueProgressTx(ctx, TxId);
             }
         }
 
@@ -202,8 +197,9 @@ private:
     };
 
     virtual bool DoIsInProgress() const override {
-        return !TxBroken && (NeedReceiveBroken || !ReceiveAck);
+        return !TxBroken.has_value();
     }
+
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "prepare_for_progress_started")("lock_id", LockId);
         return std::make_unique<TTxStartPreparation>(owner, GetTxId());

@@ -209,6 +209,7 @@ namespace NSc {
 
         inline const TValue& Get(size_t idx) const; // returns child or default
         inline TValue* GetNoAdd(size_t idx); // returns link to existing child or nullptr
+        inline const TValue* GetNoAdd(size_t idx) const; // returns const link to existing child or nullptr
 
         inline TValue& Push(); // returns new child
 
@@ -276,6 +277,7 @@ namespace NSc {
 
         inline const TValue& Get(TStringBuf idx) const;
         inline TValue* GetNoAdd(TStringBuf idx); // returns link to existing child or nullptr
+        inline const TValue* GetNoAdd(TStringBuf idx) const; // returns const link to existing child or nullptr
 
         TValue& Add(TStringBuf idx) {
             return GetOrAdd(idx);

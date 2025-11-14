@@ -535,9 +535,12 @@ class TJsonNodes : public TViewerPipeClient {
                 PingTimeMaxUs = std::max(PingTimeMaxUs, peer.GetPingTimeUs());
             }
             if (!Peers.empty()) {
-                // NetworkUtilization /= Peers.size(); // alexvru suggests to use sum instead of average
+                NetworkUtilization = NetworkUtilization / Peers.size();
                 ClockSkewUs = ClockSkewUs / static_cast<i64>(Peers.size());
                 PingTimeUs = PingTimeUs / Peers.size();
+            }
+            if (SystemState.HasNetworkUtilization()) {
+                NetworkUtilization = SystemState.GetNetworkUtilization();
             }
             int percent5 = Peers.size() / 20;
             for (int i = 0; i < NKikimrWhiteboard::EFlag_ARRAYSIZE; ++i) {
@@ -2194,6 +2197,9 @@ public:
             request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kRealNumberOfCpusFieldNumber);
             if (FieldsRequired.test(+ENodeFields::MemoryDetailed)) {
                 request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+            }
+            if (FieldsRequired.test(+ENodeFields::NetworkUtilization)) {
+                request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
             }
         }
     }

@@ -767,6 +767,10 @@ struct TEvBlobStorage {
         EvBSQueueResetConnection, // for test purposes
         EvYardResize,                                           // 268 636 340
         EvChangeExpectedSlotCount,
+        EvPhantomFlagStorageAddFlagsFromSnapshot,
+        EvPhantomFlagStorageGetSnapshot,
+        EvPhantomFlagStorageGetSnapshotResult,
+        EvSyncLogUpdateNeighbourSyncedLsn,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -1235,6 +1239,8 @@ struct TEvBlobStorage {
                 Y_ABORT_UNLESS(sh < id.BlobSize(),
                     "Please, don't read behind the end of the blob! BlobSize# %" PRIu32 " sh# %" PRIu32,
                     (ui32)id.BlobSize(), (ui32)sh);
+                Y_ABORT_UNLESS(TErasureType::IsCrcModeValid(id.CrcMode()),
+                        "Please, set correct CrcMode for query, CrcMode# %" PRIu32, id.CrcMode());
             }
 
             TString ToString() const {

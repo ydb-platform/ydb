@@ -44,6 +44,7 @@ namespace NInterconnect {
         int Bind(const TAddress& addr) const;
         int Shutdown(int how) const;
         int GetConnectStatus() const;
+        std::variant<TAddress, int> GetSockName() const noexcept;
     };
 
     class TStreamSocket: public TSocket {

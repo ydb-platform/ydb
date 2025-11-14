@@ -5,6 +5,7 @@
 #include <yt/yt/core/actions/invoker_util.h>
 
 #include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/context_switch.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/ref_counted_tracker.h>
@@ -38,7 +39,7 @@ TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));
     EXPECT_TRUE(f.IsSet());
-    auto result =  f.GetUnique();
+    auto result =  f.AsUnique().Get();
     EXPECT_TRUE(result.IsOK());
     EXPECT_EQ(1, *result.Value());
 }
@@ -394,7 +395,7 @@ TEST_F(TFutureTest, GetUnique)
     promise.Set(v);
 
     EXPECT_TRUE(future.IsSet());
-    auto w = future.GetUnique();
+    auto w = future.AsUnique().Get();
     EXPECT_TRUE(w.IsOK());
     EXPECT_EQ(v, w.Value());
     EXPECT_TRUE(future.IsSet());
@@ -406,13 +407,13 @@ TEST_F(TFutureTest, TryGetUnique)
     auto future = promise.ToFuture();
 
     EXPECT_FALSE(future.IsSet());
-    EXPECT_FALSE(future.TryGetUnique());
+    EXPECT_FALSE(future.AsUnique().TryGet());
 
     std::vector v{1, 2, 3};
     promise.Set(v);
 
     EXPECT_TRUE(future.IsSet());
-    auto w = future.TryGetUnique();
+    auto w = future.AsUnique().TryGet();
     EXPECT_TRUE(w);
     EXPECT_TRUE(w->IsOK());
     EXPECT_EQ(v, w->Value());
@@ -427,7 +428,7 @@ TEST_F(TFutureTest, SubscribeUniqueBeforeSet)
     auto future = promise.ToFuture();
 
     std::vector<int> vv;
-    future.SubscribeUnique(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
+    future.AsUnique().Subscribe(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
         EXPECT_TRUE(arg.IsOK());
         vv = std::move(arg.Value());
     }));
@@ -450,7 +451,7 @@ TEST_F(TFutureTest, SubscribeUniqueAfterSet)
     EXPECT_TRUE(future.IsSet());
 
     std::vector<int> vv;
-    future.SubscribeUnique(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
+    future.AsUnique().Subscribe(BIND([&] (TErrorOr<std::vector<int>>&& arg) {
         EXPECT_TRUE(arg.IsOK());
         vv = std::move(arg.Value());
     }));
@@ -1944,6 +1945,74 @@ TEST_F(TFutureTest, ErrorFromException)
         EXPECT_TRUE(error.GetMessage().contains("test_fiber_canceled"));
         EXPECT_EQ(getAttribute(error), "");
     }
+}
+
+class TContextSwitchTracker
+    : public TContextSwitchGuard
+{
+public:
+    TContextSwitchTracker()
+        : TContextSwitchGuard([this] { Switched_ = true; }, nullptr)
+    { }
+
+    bool IsSwitched() const
+    {
+        return Switched_;
+    }
+
+private:
+    bool Switched_ = false;
+};
+
+TEST_W(TFutureTest, WaitForDelayed)
+{
+    auto future = TDelayedExecutor::MakeDelayed(TDuration::MilliSeconds(10))
+        .Apply(BIND([] { return 123; }));
+    TContextSwitchTracker switchTracker;
+    auto result = WaitFor(future);
+    EXPECT_TRUE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForAlreadySet)
+{
+    auto future = MakeFuture<int>(123);
+    TContextSwitchTracker switchTracker;
+    auto result = WaitFor(future);
+    EXPECT_TRUE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForFast)
+{
+    auto future = MakeFuture<int>(123);
+    TContextSwitchTracker switchTracker;
+    auto result = WaitForFast(future);
+    EXPECT_FALSE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForUnique)
+{
+    auto future = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(123));
+    TContextSwitchTracker switchTracker;
+    auto result = WaitFor(future.AsUnique());
+    EXPECT_TRUE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(*result.Value(), 123);
+}
+
+TEST_W(TFutureTest, WaitForUniqueFast)
+{
+    auto future = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(123));
+    TContextSwitchTracker switchTracker;
+    auto result = WaitForFast(future.AsUnique());
+    EXPECT_FALSE(switchTracker.IsSwitched());
+    EXPECT_TRUE(result.IsOK());
+    EXPECT_EQ(*result.Value(), 123);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

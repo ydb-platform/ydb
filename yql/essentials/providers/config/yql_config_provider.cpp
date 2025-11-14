@@ -144,14 +144,16 @@ public:
 
     bool Initialize(TExprContext& ctx) override {
         std::unordered_set<std::string_view> groups;
+        bool isRobot = false;
         if (Types_.Credentials != nullptr) {
             groups.insert(Types_.Credentials->GetGroups().begin(), Types_.Credentials->GetGroups().end());
+            isRobot = Types_.Credentials->IsRobot();
         }
-        auto filter = [this, groups = std::move(groups)](const TCoreAttr& attr) {
+        auto filter = [this, groups = std::move(groups), isRobot](const TCoreAttr& attr) {
             if (!attr.HasActivation() || !Username_) {
                 return true;
             }
-            if (NConfig::Allow(attr.GetActivation(), Username_, groups)) {
+            if (NConfig::Allow(attr.GetActivation(), Username_, isRobot, groups)) {
                 Statistics_.Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                 return true;
             }
@@ -860,6 +862,15 @@ private:
             }
 
             Types_.DebugPositions = (name == "DebugPositions");
+        } else if (name == "UseCanonicalLibrarySuffix" || name == "DisableUseCanonicalLibrarySuffix") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+
+            if (auto modules = dynamic_cast<TModuleResolver*>(Types_.Modules.get())) {
+                modules->SetUseCanonicalLibrarySuffix(name == "UseCanonicalLibrarySuffix");
+            }
         } else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
             if (args.size() != 0) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));

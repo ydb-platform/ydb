@@ -28,7 +28,7 @@
 # FILE_IGNORE - ignore file (do nothing)
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
-IGNORE_FILES icudt77_dat.rodata
+IGNORE_FILES icudt78_dat.rodata
 
 KEEP     Unicode              0285f1da3a441f34fd441c30fe7aa87e
 BELONGS ya.make
@@ -111,7 +111,7 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
     Files with this license:
-        i18n/messageformat2_parser.cpp [585:585]
+        i18n/messageformat2_parser.cpp [599:599]
 
 KEEP     MIT                  399584035c417b91040964779555dfac
 BELONGS ya.make
@@ -136,6 +136,20 @@ BELONGS ya.make
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
         i18n/utmscale.cpp [2:2]
+
+KEEP     MIT-0                4e9e8bd8dca7c8a676cd1e67eceb3291
+BELONGS ya.make
+    License text:
+        The MIT Licence, for code from kryogenix.org
+        Code downloaded from the Browser Experiments section of kryogenix.org is
+        licenced under the so-called MIT licence. The licence is below.
+    Scancode info:
+        Original SPDX id: MIT-0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://github.com/awsdocs/aws-cloud9-user-guide/blob/master/LICENSE-SAMPLECODE, https://spdx.org/licenses/MIT-0
+    Files with this license:
+        LICENSE [548:551]
 
 SKIP     NTP                  506238eb9775d9863634676b046cf513
 BELONGS ya.make
@@ -1217,7 +1231,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
-        APIChangeReport.html [568:568]
+        APIChangeReport.html [1708:1708]
 
 KEEP     BSD-3-Clause         8324f1990c82a65667a0b4767115a5fa
 BELONGS ya.make
@@ -1335,6 +1349,17 @@ BELONGS ya.make
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
         LICENSE [313:333]
+
+KEEP     MIT-0                a6724fe41b7b2af3b4cfd6b896be9afb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-0
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/awsdocs/aws-cloud9-user-guide/blob/master/LICENSE-SAMPLECODE, https://spdx.org/licenses/MIT-0
+    Files with this license:
+        LICENSE [555:568]
 
 KEEP     Public-Domain        b6459f851b20a51ad49d0fa7b53009d4
 BELONGS ya.make

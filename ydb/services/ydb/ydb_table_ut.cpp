@@ -2546,6 +2546,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDriverConfig()
                 .SetEndpoint(
                     TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
         );
 
         {
@@ -2562,7 +2563,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         {
             auto result = session.ExecuteSchemeQuery(R"___(
-                CREATE TABLE `Root/Test` (
+                CREATE TABLE `/Root/Test` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
@@ -2571,7 +2572,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             result = session.ExecuteDataQuery(R"___(
-                UPSERT INTO `Root/Test` (Key, Value) VALUES (1u, "One");
+                UPSERT INTO `/Root/Test` (Key, Value) VALUES (1u, "One");
             )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -2612,8 +2613,9 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 .AppendAddIndexes({TIndexDescription("NewIndex", {"Value"})});
 
             auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
-
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Access denied for# badguy@builtin, path# /Root/Test, access# DescribeSchema|AlterSchema");
         }
 
         {
@@ -2686,7 +2688,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
 
         {
-            TDescribeTableResult describeResult = session.DescribeTable("Root/Test")
+            TDescribeTableResult describeResult = session.DescribeTable("/Root/Test")
                 .GetValueSync();
             UNIT_ASSERT_EQUAL(describeResult.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetIndexDescriptions().size(), 0);
@@ -2700,6 +2702,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDriverConfig()
                 .SetEndpoint(
                     TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
         );
 
         {
@@ -2716,7 +2719,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         {
             auto result = session.ExecuteSchemeQuery(R"___(
-                CREATE TABLE `Root/Test` (
+                CREATE TABLE `/Root/Test` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
@@ -2725,7 +2728,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             result = session.ExecuteDataQuery(R"___(
-                UPSERT INTO `Root/Test` (Key, Value) VALUES (1u, "One");
+                UPSERT INTO `/Root/Test` (Key, Value) VALUES (1u, "One");
             )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -2783,6 +2786,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             TDriverConfig()
                 .SetEndpoint(
                     TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
         );
 
         NYdb::NTable::TTableClient client(driver);
@@ -2792,7 +2796,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
         {
             auto result = session.ExecuteSchemeQuery(R"___(
-                CREATE TABLE `Root/Test` (
+                CREATE TABLE `/Root/Test` (
                     Key Uint64,
                     Fk Uint64,
                     Value String,
@@ -2802,7 +2806,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             result = session.ExecuteDataQuery(R"___(
-                UPSERT INTO `Root/Test` (Key, Fk, Value) VALUES (1u, 111u, "One");
+                UPSERT INTO `/Root/Test` (Key, Fk, Value) VALUES (1u, 111u, "One");
             )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
@@ -2816,7 +2820,7 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
 
         {
-            auto res = session.DescribeTable("Root/Test").ExtractValueSync();
+            auto res = session.DescribeTable("/Root/Test").ExtractValueSync();
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             auto columns = res.GetTableDescription().GetTableColumns();

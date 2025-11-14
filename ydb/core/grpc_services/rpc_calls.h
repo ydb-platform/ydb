@@ -56,6 +56,9 @@ using TEvStreamTopicDirectReadRequest = TGRpcRequestBiStreamWrapper<TRpcServices
 
 using TEvCoordinationSessionRequest = TGRpcRequestBiStreamWrapper<TRpcServices::EvCoordinationSession, Ydb::Coordination::SessionRequest, Ydb::Coordination::SessionResponse>;
 
+//TODO: Change this to runtime dispatching!
+using TEvListFederationDatabasesRequest = TGRpcRequestWrapper<TRpcServices::EvListFederationDatabases, Ydb::FederationDiscovery::ListFederationDatabasesRequest, Ydb::FederationDiscovery::ListFederationDatabasesResponse, true>; // Used in custom builds
+
 
 // Stream{PQ,Topic}Read/Write specifics.
 //

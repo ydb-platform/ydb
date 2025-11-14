@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
+    kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
     kqp_effects.cpp
     kqp_fulltext_analyze.cpp

@@ -58,17 +58,14 @@ jobs:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ inputs.commit_sha }}
           fetch-depth: 0
-
       - name: Configure git
         uses: ./.github/actions/configure_git
-
       - name: Read current version
         id: read-version
         run: |
           CURRENT_VERSION=$(cat ydb/apps/ydb/version.txt)
           echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT_VERSION"
-
       - name: Calculate new version
         id: update-version
         run: |
@@ -77,7 +74,6 @@ jobs:
           MAJOR=${VERSION_PARTS[0]}
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]}
-
           if [ "${{ inputs.version-change }}" = "MAJOR" ]; then
             MAJOR=$((MAJOR+1))
             MINOR=0
@@ -88,11 +84,9 @@ jobs:
           elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
             PATCH=$((PATCH+1))
           fi
-
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
-
       - name: Create release branch
         id: create-branch
         run: |
@@ -100,12 +94,10 @@ jobs:
           git fetch origin main
           git checkout main
           git reset --hard origin/main
-
           BRANCH_NAME="cli-release/${{ steps.update-version.outputs.new-version }}"
           git checkout -b "$BRANCH_NAME"
           echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
           echo "Created branch: $BRANCH_NAME"
-
       - name: Check CHANGELOG.md format
         run: |
           # Check if the file starts with empty line - version - empty line pattern
@@ -113,17 +105,14 @@ jobs:
           FIRST_LINE=$(head -n 1 ydb/apps/ydb/CHANGELOG.md)
           SECOND_LINE=$(head -n 2 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
           THIRD_LINE=$(head -n 3 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
-
           if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
             echo "Error: CHANGELOG has nothing new since last release"
             exit 1
           fi
-
       - name: Update version file
         run: |
           echo "${{ steps.update-version.outputs.new-version }}" > ydb/apps/ydb/version.txt
           git add ydb/apps/ydb/version.txt
-
       - name: Update CHANGELOG
         run: |
           NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
@@ -131,19 +120,15 @@ jobs:
           echo "" > /tmp/changelog_header.md
           echo "## $NEW_VERSION ##" >> /tmp/changelog_header.md
           echo "" >> /tmp/changelog_header.md
-
           # Combine new header with existing changelog
           cat /tmp/changelog_header.md ydb/apps/ydb/CHANGELOG.md > /tmp/new_changelog.md
           mv /tmp/new_changelog.md ydb/apps/ydb/CHANGELOG.md
-
           git add ydb/apps/ydb/CHANGELOG.md
-
       - name: Create CLI version file
         run: |
           NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
           echo "$NEW_VERSION" > cli_version.txt
           echo "Created cli_version.txt with version: $NEW_VERSION"
-
       - name: Upload CLI version artifact
         uses: actions/upload-artifact@v4
         with:
@@ -151,11 +136,9 @@ jobs:
           path: cli_version.txt
           if-no-files-found: error
           retention-days: 1
-
       - name: Commit changes
         run: |
           git commit -m "YDB CLI release ${{ steps.update-version.outputs.new-version }}"
-
       - name: Push branch
         run: |
           git push origin "${{ steps.create-branch.outputs.branch-name }}"
@@ -191,7 +174,6 @@ jobs:
             MATRIX=$(echo $MATRIX | jq -c '.include += [{"os": "windows-amd", "runner": "windows-latest", "shell": "bash", "binary": "ydb.exe", "platform": "DEFAULT-WIN-X86_64"}]')
             echo "Matrix after adding windows-amd: $MATRIX"
           fi
-
           echo "Final output matrix: $MATRIX"
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           MATRIX=$(echo $MATRIX | jq '.')
@@ -212,12 +194,10 @@ jobs:
       uses: actions/checkout@v4
       with:
         ref: ${{ needs.prepare-release.outputs.branch-name }}
-
     - name: Print debug information
       run: |
         uname -a
         echo "YDB CLI version: $(cat ydb/apps/ydb/version.txt) (read from ydb/apps/ydb/version.txt)"
-
     # Turns out it is crucial to prepare VS environment and build in one step due to env variable visibility
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
@@ -234,7 +214,6 @@ jobs:
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ydb/apps/ydb -r -DUSE_SSE4=no --target-platform ${{ matrix.platform }}
-
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v4
       with:
@@ -254,7 +233,6 @@ jobs:
           ref: ${{ needs.prepare-release.outputs.branch-name }}
       - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
         run: echo ${{ needs.prepare-release.outputs.new-version }}
-
       - name: Prepare directory for linux-amd binary
         if: ${{ inputs.build-linux-amd }}
         run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/linux/amd64
@@ -270,7 +248,6 @@ jobs:
       - name: Prepare directory for windows-amd binary
         if: ${{ inputs.build-windows-amd }}
         run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/windows/amd64/unsigned
-
       - name: Copy linux-amd binary
         if: ${{ inputs.build-linux-amd }}
         uses: actions/download-artifact@v4
@@ -301,10 +278,8 @@ jobs:
         with:
           name: windows-amd-binary
           path: ${{ needs.prepare-release.outputs.new-version }}/windows/amd64/unsigned/
-
       - name: Print resulting file hierarchy
         run: find ${{ needs.prepare-release.outputs.new-version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
-
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
       - name: Unzip s3
@@ -314,7 +289,6 @@ jobs:
           cd s3cmd-2.4.0
           sudo python3 setup.py install
           cd ..
-
       - name: Upload to S3
         env:
           S3_HOST: "storage.yandexcloud.net"
@@ -334,10 +308,8 @@ jobs:
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
-
       - name: Configure git
         uses: ./.github/actions/configure_git
-
       - name: Create and auto-merge PR
         id: create-pr
         env:
@@ -354,21 +326,18 @@ jobs:
             '' \
             '### Description for reviewers' \
             "Automated release PR for CLI version ${{ needs.prepare-release.outputs.new-version }}"
-
           PR_URL=$(gh pr create \
             --title "$PR_TITLE" \
             --body "$PR_BODY" \
             --head "${{ needs.prepare-release.outputs.branch-name }}" \
             --base main \
             --repo ${{ github.repository }})
-
           # Extract PR number from URL (e.g., "https://github.com/user/repo/pull/12" -> "12")
           PR_NUMBER=$(basename "$PR_URL")
-
           echo "Created PR #$PR_NUMBER"
           echo "PR URL: $PR_URL"
           echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
-
+          echo "pr-url=$PR_URL" >> $GITHUB_OUTPUT
           if gh pr merge "$PR_NUMBER" --merge --auto; then
             echo "Auto-merge enabled for PR #$PR_NUMBER"
           else
@@ -376,19 +345,27 @@ jobs:
             echo "Please merge PR manually: $PR_URL"
             exit 1
           fi
-
+      - name: Create PR URL file
+        run: |
+          echo "${{ steps.create-pr.outputs.pr-url }}" > pr_url.txt
+          echo "Created pr_url.txt with PR URL: ${{ steps.create-pr.outputs.pr-url }}"
+      - name: Upload PR URL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-url
+          path: pr_url.txt
+          if-no-files-found: error
+          retention-days: 1
       - name: Wait for PR merge
         env:
           GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
           PR_NUMBER="${{ steps.create-pr.outputs.pr-number }}"
           echo "Waiting for PR #$PR_NUMBER to be merged (tests may take 30-60+ minutes)..."
-
           # Wait up to 4 hours, checking every 5 minutes  
           for i in {1..48}; do  # 48 * 5 minutes = 4 hours
             # Check if PR is merged via GitHub API
             PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
-
             if [[ "$PR_STATE" == "MERGED:true" ]]; then
               echo "PR merged successfully"
               break
@@ -399,13 +376,11 @@ jobs:
               echo "PR still pending (attempt $i/24), state: $PR_STATE, waiting 5 minutes..."
               sleep 300  # 5 minutes
             fi
-
             # Log progress every 30 minutes
             if [ $((i % 6)) -eq 0 ]; then
               echo "Still waiting after $((i * 5)) minutes..."
             fi
           done
-
           # Check if we timed out
           PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
           if [[ "$PR_STATE" != "MERGED:true" ]]; then
@@ -414,7 +389,6 @@ jobs:
             echo "PR URL: $(gh pr view "$PR_NUMBER" --json url --jq '.url')"
             exit 1
           fi
-
       - name: Create release tag
         run: |
           # Create tag on release branch (exact state that CLI was built in)
@@ -423,7 +397,6 @@ jobs:
           git tag "CLI_${{ needs.prepare-release.outputs.new-version }}"
           git push origin "CLI_${{ needs.prepare-release.outputs.new-version }}"
           echo "Created and pushed tag CLI_${{ needs.prepare-release.outputs.new-version }} on release branch"
-
 
   cleanup-on-failure:
     name: Cleanup release branch on failure
@@ -436,10 +409,8 @@ jobs:
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
-
       - name: Configure git
         uses: ./.github/actions/configure_git
-
       - name: Delete release branch
         run: |
           # Delete the branch

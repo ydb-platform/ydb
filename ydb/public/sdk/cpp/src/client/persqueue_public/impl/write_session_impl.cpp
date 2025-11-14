@@ -167,7 +167,7 @@ void TWriteSessionImpl::DoCdsRequest(TDuration delay) {
                     INITIAL_DEFERRED_CALL_DELAY,
                     TRpcRequestSettings::Make(settings)); // TODO: make client timeout setting
             };
-            Connections->ScheduleOneTimeTask(std::move(cdsRequestCall), delay);
+            Connections->ScheduleOneTimeTask(std::move(cdsRequestCall), TDeadline::SafeDurationCast(delay));
             return;
         }
     }

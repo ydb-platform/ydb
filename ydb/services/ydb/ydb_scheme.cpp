@@ -4,33 +4,29 @@
 
 #include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Scheme;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_SCHEME_METHOD
+#error SETUP_SCHEME_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB, AUDIT_MODE)                                                                        \
-    MakeIntrusive<TGRpcRequest<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response, TGRpcYdbSchemeService>>  \
-        (this, &Service_, CQ_,                                                                                   \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                 \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                          \
-                    new TGrpcRequestOperationCall<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response>       \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE}));  \
-            }, &Ydb::Scheme::V1::SchemeService::AsyncService::Request ## NAME,                                   \
-            #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
 
-    ADD_REQUEST(MakeDirectory, DoMakeDirectoryRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(RemoveDirectory, DoRemoveDirectoryRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(ListDirectory, DoListDirectoryRequest, TAuditMode::NonModifying())
-    ADD_REQUEST(DescribePath, DoDescribePathRequest, TAuditMode::NonModifying())
-    ADD_REQUEST(ModifyPermissions, DoModifyPermissionsRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Acl))
-#undef ADD_REQUEST
+#define SETUP_SCHEME_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, scheme, auditMode)
+
+    SETUP_SCHEME_METHOD(MakeDirectory, DoMakeDirectoryRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_SCHEME_METHOD(RemoveDirectory, DoRemoveDirectoryRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
+    SETUP_SCHEME_METHOD(ListDirectory, DoListDirectoryRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SCHEME_METHOD(DescribePath, DoDescribePathRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_SCHEME_METHOD(ModifyPermissions, DoModifyPermissionsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Acl));
+
+#undef SETUP_SCHEME_METHOD
 }
 
 } // namespace NGRpcService

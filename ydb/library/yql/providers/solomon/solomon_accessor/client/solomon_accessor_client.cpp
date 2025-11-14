@@ -302,12 +302,12 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
 public:
     TSolomonAccessorClient(
-        const TString& defaultReplica,
+        bool enableSolomonClientPostApi,
         ui64 maxListingPageSize,
         ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
-        : DefaultReplica(defaultReplica)
+        : EnableSolomonClientPostApi(enableSolomonClientPostApi)
         , MaxListingPageSize(maxListingPageSize)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
@@ -327,7 +327,7 @@ public:
 
 public:
     NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const override final {
-        auto url = BuildGetLabelsUrl(selectors, from, to);
+        auto [url, body] = BuildGetLabelsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -337,7 +337,8 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            std::move(url)
+            std::move(url),
+            std::move(body)
         );
 
         return resultPromise.GetFuture();
@@ -546,7 +547,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const TSelectors& selectors, TInstant from, TInstant to) const {
+    std::tuple<TString, TString> BuildGetLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -556,12 +557,21 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
+        NJsonWriter::TBuf w;
 
-        return builder.Build();
+        if (EnableSolomonClientPostApi) {
+            w.BeginObject()
+                .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+                .UnsafeWriteKey("from").WriteString(from.ToString())
+                .UnsafeWriteKey("to").WriteString(to.ToString())
+            .EndObject();
+        } else {
+            builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+            builder.AddUrlParam("from", from.ToString());
+            builder.AddUrlParam("to", to.ToString());
+        }
+
+        return { builder.Build(), w.Str() };
     }
 
     std::tuple<TString, TString> BuildListMetricsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
@@ -573,13 +583,23 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
         builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
 
-        return { builder.Build(), "" };
+        NJsonWriter::TBuf w;
+
+        if (EnableSolomonClientPostApi) {
+            w.BeginObject()
+                .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+                .UnsafeWriteKey("from").WriteString(from.ToString())
+                .UnsafeWriteKey("to").WriteString(to.ToString())
+            .EndObject();
+        } else {
+            builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+            builder.AddUrlParam("from", from.ToString());
+            builder.AddUrlParam("to", to.ToString());
+        }
+
+        return { builder.Build(), w.Str() };
     }
 
     std::tuple<TString, TString> BuildListMetricsLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
@@ -592,13 +612,23 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("labels");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("limit", "100000");
+        NJsonWriter::TBuf w;
 
-        return { builder.Build(), "" };
+        if (EnableSolomonClientPostApi) {
+            w.BeginObject()
+                .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+                .UnsafeWriteKey("from").WriteString(from.ToString())
+                .UnsafeWriteKey("to").WriteString(to.ToString())
+                .UnsafeWriteKey("limit").WriteLongLong(100000)
+            .EndObject();
+        } else {
+            builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+            builder.AddUrlParam("from", from.ToString());
+            builder.AddUrlParam("to", to.ToString());
+            builder.AddUrlParam("limit", "100000");
+        }
+
+        return { builder.Build(), w.Str() };
     }
 
     std::tuple<TString, TString> BuildGetPointsCountHttpParams(const TString& program, TInstant from, TInstant to) const {
@@ -692,7 +722,7 @@ private:
     }
 
 private:
-    const TString DefaultReplica;
+    const bool EnableSolomonClientPostApi;
     const ui64 MaxListingPageSize;
     const ui64 ListSizeLimit = 100 * 1024 * 1024 * 8;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
@@ -713,9 +743,9 @@ ISolomonAccessorClient::Make(
     std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider) {
     const auto& settings = source.settings();
 
-    TString defaultReplica;
-    if (auto it = settings.find("solomonClientDefaultReplica"); it != settings.end()) {
-        defaultReplica = it->second;
+    bool enableSolomonClientPostApi = false;
+    if (auto it = settings.find("enableSolomonClientPostApi"); it != settings.end()) {
+        enableSolomonClientPostApi = FromString<bool>(it->second);
     }
 
     ui64 maxListingPageSize = 20000;
@@ -728,7 +758,7 @@ ISolomonAccessorClient::Make(
         maxApiInflight = FromString<ui64>(it->second);
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxListingPageSize, maxApiInflight, std::move(source), credentialsProvider);
+    return std::make_shared<TSolomonAccessorClient>(enableSolomonClientPostApi, maxListingPageSize, maxApiInflight, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

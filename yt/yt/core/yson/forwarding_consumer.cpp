@@ -19,45 +19,45 @@ void TForwardingYsonConsumer::Forward(
     std::function<void()> onFinished,
     EYsonType type)
 {
-    YT_ASSERT(ForwardingConsumers_.empty());
+    YT_ASSERT(State_.ForwardingConsumers.empty());
     YT_ASSERT(!consumers.empty());
-    YT_ASSERT(ForwardingDepth_ == 0);
+    YT_ASSERT(State_.ForwardingDepth == 0);
 
-    ForwardingConsumers_ = std::move(consumers);
-    OnFinished_ = std::move(onFinished);
-    ForwardingType_ = type;
+    State_.ForwardingConsumers = std::move(consumers);
+    State_.OnFinished = std::move(onFinished);
+    State_.ForwardingType = type;
 }
 
 bool TForwardingYsonConsumer::CheckForwarding(int depthDelta)
 {
-    if (ForwardingDepth_ + depthDelta < 0) {
+    if (State_.ForwardingDepth + depthDelta < 0) {
         FinishForwarding();
     }
-    return !ForwardingConsumers_.empty();
+    return !State_.ForwardingConsumers.empty();
 }
 
 void TForwardingYsonConsumer::UpdateDepth(int depthDelta, bool checkFinish)
 {
-    ForwardingDepth_ += depthDelta;
-    YT_ASSERT(ForwardingDepth_ >= 0);
-    if (checkFinish && ForwardingType_ == EYsonType::Node && ForwardingDepth_ == 0) {
+    State_.ForwardingDepth += depthDelta;
+    YT_ASSERT(State_.ForwardingDepth >= 0);
+    if (checkFinish && State_.ForwardingType == EYsonType::Node && State_.ForwardingDepth == 0) {
         FinishForwarding();
     }
 }
 
 void TForwardingYsonConsumer::FinishForwarding()
 {
-    ForwardingConsumers_.clear();
-    if (OnFinished_) {
-        OnFinished_();
-        OnFinished_ = nullptr;
+    State_.ForwardingConsumers.clear();
+    if (State_.OnFinished) {
+        State_.OnFinished();
+        State_.OnFinished = nullptr;
     }
 }
 
 void TForwardingYsonConsumer::OnStringScalar(TStringBuf value)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnStringScalar(value);
         }
         UpdateDepth(0);
@@ -69,7 +69,7 @@ void TForwardingYsonConsumer::OnStringScalar(TStringBuf value)
 void TForwardingYsonConsumer::OnInt64Scalar(i64 value)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnInt64Scalar(value);
         }
         UpdateDepth(0);
@@ -81,7 +81,7 @@ void TForwardingYsonConsumer::OnInt64Scalar(i64 value)
 void TForwardingYsonConsumer::OnUint64Scalar(ui64 value)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnUint64Scalar(value);
         }
         UpdateDepth(0);
@@ -93,7 +93,7 @@ void TForwardingYsonConsumer::OnUint64Scalar(ui64 value)
 void TForwardingYsonConsumer::OnDoubleScalar(double value)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnDoubleScalar(value);
         }
         UpdateDepth(0);
@@ -105,7 +105,7 @@ void TForwardingYsonConsumer::OnDoubleScalar(double value)
 void TForwardingYsonConsumer::OnBooleanScalar(bool value)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnBooleanScalar(value);
         }
         UpdateDepth(0);
@@ -117,7 +117,7 @@ void TForwardingYsonConsumer::OnBooleanScalar(bool value)
 void TForwardingYsonConsumer::OnEntity()
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnEntity();
         }
         UpdateDepth(0);
@@ -129,7 +129,7 @@ void TForwardingYsonConsumer::OnEntity()
 void TForwardingYsonConsumer::OnBeginList()
 {
     if (CheckForwarding(+1)) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnBeginList();
         }
         UpdateDepth(+1);
@@ -141,7 +141,7 @@ void TForwardingYsonConsumer::OnBeginList()
 void TForwardingYsonConsumer::OnListItem()
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnListItem();
         }
     } else {
@@ -152,7 +152,7 @@ void TForwardingYsonConsumer::OnListItem()
 void TForwardingYsonConsumer::OnEndList()
 {
     if (CheckForwarding(-1)) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnEndList();
         }
         UpdateDepth(-1);
@@ -164,7 +164,7 @@ void TForwardingYsonConsumer::OnEndList()
 void TForwardingYsonConsumer::OnBeginMap()
 {
     if (CheckForwarding(+1)) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnBeginMap();
         }
         UpdateDepth(+1);
@@ -176,7 +176,7 @@ void TForwardingYsonConsumer::OnBeginMap()
 void TForwardingYsonConsumer::OnKeyedItem(TStringBuf name)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnKeyedItem(name);
         }
     } else {
@@ -187,7 +187,7 @@ void TForwardingYsonConsumer::OnKeyedItem(TStringBuf name)
 void TForwardingYsonConsumer::OnEndMap()
 {
     if (CheckForwarding(-1)) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnEndMap();
         }
         UpdateDepth(-1);
@@ -199,7 +199,7 @@ void TForwardingYsonConsumer::OnEndMap()
 void TForwardingYsonConsumer::OnRaw(TStringBuf yson, EYsonType type)
 {
     if (CheckForwarding()) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnRaw(yson, type);
         }
         UpdateDepth(0);
@@ -211,7 +211,7 @@ void TForwardingYsonConsumer::OnRaw(TStringBuf yson, EYsonType type)
 void TForwardingYsonConsumer::OnBeginAttributes()
 {
     if (CheckForwarding(+1)) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnBeginAttributes();
         }
         UpdateDepth(+1);
@@ -223,7 +223,7 @@ void TForwardingYsonConsumer::OnBeginAttributes()
 void TForwardingYsonConsumer::OnEndAttributes()
 {
     if (CheckForwarding(-1)) {
-        for (auto consumer : ForwardingConsumers_) {
+        for (auto consumer : State_.ForwardingConsumers) {
             consumer->OnEndAttributes();
         }
         UpdateDepth(-1, false);

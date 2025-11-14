@@ -1,3 +1,5 @@
+#pragma clang system_header
+
 //
 // ssl/detail/io.hpp
 // ~~~~~~~~~~~~~~~~~

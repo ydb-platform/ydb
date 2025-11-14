@@ -1368,7 +1368,8 @@ public:
             op.SetPrefix(settings.Prefix);
 
             if (settings.Settings.IncrementalBackupEnabled) {
-                op.MutableIncrementalBackupConfig();
+                auto* config = op.MutableIncrementalBackupConfig();
+                config->SetOmitIndexes(settings.Settings.OmitIndexes);
             }
 
             auto errOpt = std::visit(

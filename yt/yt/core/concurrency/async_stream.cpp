@@ -67,6 +67,60 @@ std::unique_ptr<IInputStream> CreateSyncAdapter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TSyncZeroCopyInputStreamAdapter
+    : public IZeroCopyInput
+{
+public:
+    TSyncZeroCopyInputStreamAdapter(
+        IAsyncZeroCopyInputStreamPtr underlyingStream,
+        EWaitForStrategy strategy)
+        : UnderlyingStream_(std::move(underlyingStream))
+        , Strategy_(strategy)
+    { }
+
+private:
+    const IAsyncZeroCopyInputStreamPtr UnderlyingStream_;
+    const EWaitForStrategy Strategy_;
+
+    TSharedRef Buffer_;
+    bool Eos_ = false;
+
+    size_t DoNext(const void** ptr, size_t len) override
+    {
+        if (Buffer_.Empty() && !Eos_) {
+            Buffer_ = WaitForWithStrategy(UnderlyingStream_->Read(), Strategy_)
+                .ValueOrThrow();
+            if (!Buffer_) {
+                Eos_ = true;
+            } else {
+                YT_ASSERT(!Buffer_.Empty());
+            }
+        }
+
+        if (Eos_) {
+            *ptr = nullptr;
+            return 0;
+        }
+
+        auto retLen = std::min(len, Buffer_.Size());
+        *ptr = Buffer_.Begin();
+        Buffer_ = Buffer_.Slice(retLen, Buffer_.size());
+        return retLen;
+    }
+};
+
+std::unique_ptr<IZeroCopyInput> CreateSyncAdapter(
+    IAsyncZeroCopyInputStreamPtr underlyingStream,
+    EWaitForStrategy strategy)
+{
+    YT_VERIFY(underlyingStream);
+    return std::make_unique<TSyncZeroCopyInputStreamAdapter>(
+        std::move(underlyingStream),
+        strategy);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TAsyncInputStreamAdapter
     : public IAsyncInputStream
 {
@@ -792,8 +846,12 @@ private:
     TSharedRef OnPrefetched()
     {
         auto guard = Guard(SpinLock_);
-        YT_ASSERT(PrefetchedSize_ != 0);
-        return CopyPrefetched(&guard);
+        if (PrefetchedSize_ >  0) {
+            return CopyPrefetched(&guard);
+        }
+        Error_.ThrowOnError();
+        YT_ASSERT(EndOfStream_);
+        return TSharedRef();
     }
 
     void AppendPrefetched(TGuard<NThreading::TSpinLock>* guard, const TErrorOr<size_t>& result)
@@ -1025,9 +1083,11 @@ IAsyncZeroCopyInputStreamPtr CreateConcurrentAdapter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void PipeInputToOutput(
-    const IAsyncZeroCopyInputStreamPtr& input,
-    const IAsyncOutputStreamPtr& output)
+namespace {
+
+void DoPipeInputToOutput(
+    const auto& input,
+    const auto& output)
 {
     while (true) {
         auto asyncBlock = input->Read();
@@ -1038,6 +1098,34 @@ void PipeInputToOutput(
         }
         WaitFor(output->Write(block))
             .ThrowOnError();
+    }
+}
+
+} // namespace
+
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncOutputStreamPtr& output)
+{
+    DoPipeInputToOutput(input, output);
+}
+
+void PipeInputToOutput(
+    const IAsyncZeroCopyInputStreamPtr& input,
+    const IAsyncZeroCopyOutputStreamPtr& output)
+{
+    DoPipeInputToOutput(input, output);
+}
+
+void DrainInput(const IAsyncZeroCopyInputStreamPtr& input)
+{
+    while (true) {
+        auto asyncBlock = input->Read();
+        auto block = WaitFor(asyncBlock)
+            .ValueOrThrow();
+        if (!block || block.Empty()) {
+            break;
+        }
     }
 }
 

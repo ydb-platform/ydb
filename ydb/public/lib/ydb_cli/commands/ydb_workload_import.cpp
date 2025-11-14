@@ -236,7 +236,7 @@ int TWorkloadCommandImport::TUploadCommand::DoRun(NYdbWorkload::IWorkloadQueryGe
         pool.Start(UploadParams.Threads);
         const auto start = Now();
         Cout << "Fill table " << dataGen->GetName() << "..."  << Endl;
-        Bar = MakeHolder<TProgressBar>(dataGen->GetSize());
+        Bar = MakeHolder<TProgressBar>(dataGen->GetSize(), 100);
         for (ui32 t = 0; t < UploadParams.Threads; ++t) {
             pool.SafeAddFunc([this, dataGen] () {
                 ProcessDataGenerator(dataGen);

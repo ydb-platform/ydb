@@ -3,37 +3,44 @@
 #include <ydb/core/grpc_services/service_cms.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcCmsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Cms;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-    using namespace Ydb;
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_CMS_METHOD
+#error SETUP_CMS_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB, TCALL, AUDIT_MODE)                                                                \
-    MakeIntrusive<TGRpcRequest<Cms::NAME##Request, Cms::NAME##Response, TGRpcCmsService>>                       \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TCALL<Cms::NAME##Request, Cms::NAME##Response>                                          \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE})); \
-            }, &Cms::V1::CmsService::AsyncService::Request ## NAME,                                             \
-            #NAME, logger, getCounterBlock("cms", #NAME))->Run();
 
-    ADD_REQUEST(CreateDatabase, DoCreateTenantRequest, TGrpcRequestOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(AlterDatabase, DoAlterTenantRequest, TGrpcRequestOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(GetDatabaseStatus, DoGetTenantStatusRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
-    ADD_REQUEST(ListDatabases, DoListTenantsRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
-    ADD_REQUEST(RemoveDatabase, DoRemoveTenantRequest, TGrpcRequestOperationCall, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin))
-    ADD_REQUEST(DescribeDatabaseOptions, DoDescribeTenantOptionsRequest, TGrpcRequestOperationCall, TAuditMode::NonModifying())
-    ADD_REQUEST(GetScaleRecommendation, DoGetScaleRecommendationRequest, TGrpcRequestNoOperationCall, TAuditMode::NonModifying())
+#define SETUP_CMS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, operationCallClass) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                               \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                        \
+        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                       \
+        methodCallback,                                                                                  \
+        rlMode,                                                                                          \
+        requestType,                                                                                     \
+        YDB_API_DEFAULT_COUNTER_BLOCK(cms, methodName),                                                  \
+        auditMode,                                                                                       \
+        COMMON,                                                                                          \
+        operationCallClass,                                                                              \
+        GRpcRequestProxyId_,                                                                             \
+        CQ_,                                                                                             \
+        nullptr,                                                                                         \
+        nullptr)
 
-#undef ADD_REQUEST
+    SETUP_CMS_METHOD(CreateDatabase, DoCreateTenantRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestOperationCall);
+    SETUP_CMS_METHOD(AlterDatabase, DoAlterTenantRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestOperationCall);
+    SETUP_CMS_METHOD(GetDatabaseStatus, DoGetTenantStatusRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_CMS_METHOD(ListDatabases, DoListTenantsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_CMS_METHOD(RemoveDatabase, DoRemoveTenantRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin), TGrpcRequestOperationCall);
+    SETUP_CMS_METHOD(DescribeDatabaseOptions, DoDescribeTenantOptionsRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_CMS_METHOD(GetScaleRecommendation, DoGetScaleRecommendationRequest, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestNoOperationCall);
+
+#undef SETUP_CMS_METHOD
 }
 
 } // namespace NGRpcService

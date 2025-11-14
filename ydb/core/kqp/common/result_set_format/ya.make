@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    kqp_result_set_arrow.cpp
+    kqp_formats_arrow.cpp
     kqp_result_set_builders.cpp
 )
 

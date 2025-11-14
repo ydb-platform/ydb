@@ -22,9 +22,8 @@ class TRateLimiterRequest : public TRpcOperationRequestActor<TDerived, TRequest>
 public:
     using TBase = TRpcOperationRequestActor<TDerived, TRequest>;
 
-    TRateLimiterRequest(IRequestOpCtx* msg, bool trusted = false)
+    TRateLimiterRequest(IRequestOpCtx* msg)
         : TBase(msg)
-        , TrustedZone(trusted)
     {}
 
     static bool ValidateMetric (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
@@ -100,10 +99,9 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        auto databaseName = this->Request_->GetDatabaseName()
-            .GetOrElse(DatabaseFromDomain(AppData()));
+        const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
 
-        if (!TrustedZone && !GetCoordinationNodePath().StartsWith(databaseName)) {
+        if (!GetCoordinationNodePath().StartsWith(databaseName)) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
                 << "Coordination node path: " << GetCoordinationNodePath()
@@ -118,9 +116,6 @@ protected:
     const TString& GetCoordinationNodePath() const {
         return this->GetProtoRequest()->coordination_node_path();
     }
-
-private:
-    const bool TrustedZone;
 };
 
 template <class TEvRequest>
@@ -169,7 +164,7 @@ protected:
         }
 
         auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        req->DatabaseName = this->Request_->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+        req->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
         req->ResultSet.emplace_back();
         req->ResultSet.back().Path.swap(path);
         req->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -574,11 +569,6 @@ public:
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;
 
-        if (!ValidateCoordinationNodePath(status, issues)) {
-            Reply(status, issues, TActivationContext::AsActorContext());
-            return;
-        }
-
         if (!ValidateRequest(status, issues)) {
             Reply(status, issues, TActivationContext::AsActorContext());
             return;
@@ -620,9 +610,8 @@ public:
     }
 
     void SendRequest() {
+        const TString database = Request().GetDatabaseName().GetOrElse("");
         UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
-        const TString database = ""; // to allow access to shared database
-
         if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(
                 TEvQuota::TResourceLeaf(database,
@@ -705,7 +694,7 @@ void DoAcquireRateLimiterResource(std::unique_ptr<IRequestOpCtx> p, const IFacil
 
 template<>
 IActor* TEvAcquireRateLimiterResource::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new TAcquireRateLimiterResourceRPC(msg, true);
+    return new TAcquireRateLimiterResourceRPC(msg);
 }
 
 } // namespace NKikimr::NGRpcService

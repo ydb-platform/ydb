@@ -1261,6 +1261,14 @@ public:
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
+                if (col.Compression) {
+                    auto columnCompression = Y();
+                    for (const auto& [key, value] : col.Compression->Entries) {
+                        columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnCompression"), Q(columnCompression))));
+                }
+
                 auto familiesDesc = Y();
 
                 if (col.Families) {
@@ -1602,6 +1610,23 @@ public:
 
                         break;
                     }
+                    case TColumnSchema::ETypeOfChange::SetCompression: {
+                        auto columnDesc = Y();
+                        columnDesc = L(columnDesc, BuildQuotedAtom(Pos_, col.Name));
+
+                        auto columnCompression = Y();
+
+                        if (col.Compression) {
+                            for (const auto& [key, value] : col.Compression->Entries) {
+                                columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                            }
+                        }
+
+                        columnDesc = L(columnDesc, Q(Y(Q("changeCompression"), Q(columnCompression))));
+                        columns = L(columns, Q(columnDesc));
+
+                        break;
+                    }
                     case TColumnSchema::ETypeOfChange::Nothing: {
                         // do nothing
 
@@ -1901,6 +1926,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -2021,6 +2047,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningUpUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
+            INSERT_TOPIC_SETTING(MetricsLevel)
 
 #undef INSERT_TOPIC_SETTING
 

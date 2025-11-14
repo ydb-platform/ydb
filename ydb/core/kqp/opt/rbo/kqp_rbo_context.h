@@ -12,13 +12,22 @@ using namespace NOpt;
 
 class TRBOContext {
 public:
-    TRBOContext(const TKqpOptimizeContext &kqpCtx, NYql::TExprContext &ctx, NYql::TTypeAnnotationContext &typeCtx, TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer) : KqpCtx(kqpCtx),
-        ExprCtx(ctx), TypeCtx(typeCtx), TypeAnnTransformer(typeAnnTransformer) {}
+    TRBOContext(const TKqpOptimizeContext &kqpCtx, 
+        NYql::TExprContext &ctx, 
+        NYql::TTypeAnnotationContext &typeCtx, 
+        TAutoPtr<NYql::IGraphTransformer> typeAnnTransformer,
+        const NMiniKQL::IFunctionRegistry& funcRegistry) : 
+        KqpCtx(kqpCtx),
+        ExprCtx(ctx), 
+        TypeCtx(typeCtx), 
+        TypeAnnTransformer(typeAnnTransformer),
+        FuncRegistry(funcRegistry) {}
 
     const TKqpOptimizeContext & KqpCtx;
     NYql::TExprContext & ExprCtx;
     NYql::TTypeAnnotationContext & TypeCtx;
     TAutoPtr<NYql::IGraphTransformer> TypeAnnTransformer;
+    const NMiniKQL::IFunctionRegistry& FuncRegistry;
 };
 
 }

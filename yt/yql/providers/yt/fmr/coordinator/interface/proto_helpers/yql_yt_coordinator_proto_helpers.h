@@ -50,4 +50,28 @@ NProto::TDropTablesResponse DropTablesResponseToProto(const TDropTablesResponse&
 
 TDropTablesResponse DropTablesResponseFromProto(const NProto::TDropTablesResponse& protoResponse);
 
+NProto::TOpenSessionRequest OpenSessionRequestToProto(const TOpenSessionRequest& request);
+
+TOpenSessionRequest OpenSessionRequestFromProto(const NProto::TOpenSessionRequest& protoRequest);
+
+NProto::TOpenSessionResponse OpenSessionResponseToProto(const TOpenSessionResponse& response);
+
+TOpenSessionResponse OpenSessionResponseFromProto(const NProto::TOpenSessionResponse& protoResponse);
+
+NProto::TPingSessionRequest PingSessionRequestToProto(const TPingSessionRequest& request);
+
+TPingSessionRequest PingSessionRequestFromProto(const NProto::TPingSessionRequest& protoRequest);
+
+NProto::TPingSessionResponse PingSessionResponseToProto(const TPingSessionResponse& response);
+
+TPingSessionResponse PingSessionResponseFromProto(const NProto::TPingSessionResponse& protoResponse);
+
+NProto::TListSessionsRequest ListSessionsRequestToProto(const TListSessionsRequest& request);
+
+TListSessionsRequest ListSessionsRequestFromProto(const NProto::TListSessionsRequest& protoRequest);
+
+NProto::TListSessionsResponse ListSessionsResponseToProto(const TListSessionsResponse& response);
+
+TListSessionsResponse ListSessionsResponseFromProto(const NProto::TListSessionsResponse& protoResponse);
+
 } // namespace NYql::NFmr

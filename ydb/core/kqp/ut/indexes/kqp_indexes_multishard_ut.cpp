@@ -434,6 +434,8 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         FillTable(session);
 
+        const bool isStreamIndex = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite();
+
         {
             const TString query(Q_(R"(
                 UPDATE `/Root/MultiShardIndexed` ON (key, fk, value) VALUES
@@ -455,24 +457,43 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
 
             auto result = ExecuteDataQuery(session, query);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), isStreamIndex ? NYdb::EStatus::PRECONDITION_FAILED : NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        {
-            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
-            if (dataColumn) {
-                const TString expected = R"([[[1000000000u];[2u];["mod_22"]];[[1000000001u];[1u];["mod_11"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
-                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
-            } else {
-                const TString expected = R"([[[1000000000u];[2u]];[[1000000001u];[1u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+        if (isStreamIndex) {
+            {
+                const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
+                if (dataColumn) {
+                    const TString expected = R"([[[1000000000u];[1u];["v1"]];[[2000000000u];[2u];["v2"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+                    UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+                } else {
+                    const TString expected = R"([[[1000000000u];[1u]];[[2000000000u];[2u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+                    UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+                }
+            }
+
+            {
+                const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed");
+                const TString expected = R"([[[1u];[1000000000u];["v1"]];[[2u];[2000000000u];["v2"]];[[3u];[3000000000u];["v3"]];[[4u];[4294967295u];["v4"]]])";
                 UNIT_ASSERT_VALUES_EQUAL(yson, expected);
             }
-        }
+        } else {
+            {
+                const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed/index/indexImplTable");
+                if (dataColumn) {
+                    const TString expected = R"([[[1000000000u];[2u];["mod_22"]];[[1000000001u];[1u];["mod_11"]];[[3000000000u];[3u];["v3"]];[[4294967295u];[4u];["v4"]]])";
+                    UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+                } else {
+                    const TString expected = R"([[[1000000000u];[2u]];[[1000000001u];[1u]];[[3000000000u];[3u]];[[4294967295u];[4u]]])";
+                    UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+                }
+            }
 
-        {
-            const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed");
-            const TString expected = R"([[[1u];[1000000001u];["mod_11"]];[[2u];[1000000000u];["mod_22"]];[[3u];[3000000000u];["v3"]];[[4u];[4294967295u];["v4"]]])";
-            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            {
+                const auto yson = ReadTableToYson(session, "/Root/MultiShardIndexed");
+                const TString expected = R"([[[1u];[1000000001u];["mod_11"]];[[2u];[1000000000u];["mod_22"]];[[3u];[3000000000u];["v3"]];[[4u];[4294967295u];["v4"]]])";
+                UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+            }
         }
     }
 
@@ -1298,6 +1319,8 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         FillTable(session);
 
+        const bool isStreamIndex = kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite();
+
         {
             const TString query(Q_(R"(
                 REPLACE INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
@@ -1318,7 +1341,7 @@ Y_UNIT_TEST_SUITE(KqpUniqueIndex) {
             )"));
 
             auto result = ExecuteDataQuery(session, query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), isStreamIndex ? NYdb::EStatus::SUCCESS : NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
         }
 
         {

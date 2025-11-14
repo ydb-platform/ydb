@@ -4,48 +4,41 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/service_yql_scripting.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcYdbScriptingService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    using Ydb::Scripting::ExecuteYqlRequest;
-    using Ydb::Scripting::ExecuteYqlResponse;
-    using Ydb::Scripting::ExecuteYqlPartialResponse;
-    using Ydb::Scripting::ExplainYqlRequest;
-    using Ydb::Scripting::ExplainYqlResponse;
-
+    using namespace Ydb::Scripting;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_SCRIPTING_METHOD
+#error SETUP_SCRIPTING_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::Scripting::IN, Ydb::Scripting::OUT, TGRpcYdbScriptingService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::Scripting::V1::ScriptingService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("scripting", #NAME))->Run();
 
-    ADD_REQUEST(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestOperationCall<ExecuteYqlRequest, ExecuteYqlResponse>
-                (ctx, &DoExecuteYqlScript, TRequestAuxSettings{RLSWITCH(Ru), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
-    })
+#define SETUP_SCRIPTING_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode, operationCallClass) \
+    SETUP_RUNTIME_EVENT_METHOD(                               \
+        methodName,                                           \
+        inputType,                                            \
+        outputType,                                           \
+        methodCallback,                                       \
+        rlMode,                                               \
+        requestType,                                          \
+        YDB_API_DEFAULT_COUNTER_BLOCK(scripting, methodName), \
+        auditMode,                                            \
+        COMMON,                                               \
+        operationCallClass,                                   \
+        GRpcRequestProxyId_,                                  \
+        CQ_,                                                  \
+        nullptr,                                              \
+        nullptr)
 
-    ADD_REQUEST(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestNoOperationCall<ExecuteYqlRequest, ExecuteYqlPartialResponse>
-                (ctx, &DoStreamExecuteYqlScript, TRequestAuxSettings{RLSWITCH(Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
-    })
+    SETUP_SCRIPTING_METHOD(ExecuteYql, ExecuteYqlRequest, ExecuteYqlResponse, DoExecuteYqlScript, RLSWITCH(Ru), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TGrpcRequestOperationCall);
+    SETUP_SCRIPTING_METHOD(StreamExecuteYql, ExecuteYqlRequest, ExecuteYqlPartialResponse, DoStreamExecuteYqlScript, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TGrpcRequestNoOperationCall);
+    SETUP_SCRIPTING_METHOD(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, DoExplainYqlScript, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
 
-    ADD_REQUEST(ExplainYql, ExplainYqlRequest, ExplainYqlResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_,
-            new TGrpcRequestOperationCall<ExplainYqlRequest, ExplainYqlResponse>
-                (ctx, &DoExplainYqlScript, TRequestAuxSettings{RLSWITCH(Rps), nullptr, TAuditMode::NonModifying()}));
-    })
-#undef ADD_REQUEST
+#undef SETUP_SCRIPTING_METHOD
 }
 
 } // namespace NGRpcService

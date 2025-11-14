@@ -8,6 +8,8 @@ import time
 import subprocess
 import platform
 
+PY3 = sys.version_info[0] == 3
+
 
 def mkdir_p(path):
     try:
@@ -79,7 +81,8 @@ def main(
                 else:
                     continue
 
-                entry.filename = entry.filename.encode('utf-8')
+                if not PY3:
+                    entry.filename = entry.filename.encode('utf-8')
                 jf.extract(entry, dest)
     timer.step("Jar files extracted")
 

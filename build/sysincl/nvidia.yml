@@ -1,4 +1,4 @@
-# build/platform/cuda (include/ and extras/CUPTI/include/)
+# build/internal/platform/cuda (include/ and extras/CUPTI/include/)
 - includes:
   - cooperative_groups.h
   - cooperative_groups/reduce.h

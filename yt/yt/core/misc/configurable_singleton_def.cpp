@@ -31,11 +31,9 @@ public:
 
     void Configure(const TSingletonsConfigPtr& config)
     {
-        auto guard = Guard(ConfigureLock_);
+        THROW_ERROR_EXCEPTION_UNLESS(config, "Configure cannot be called with null config");
 
-        if (std::exchange(Configured_, true)) {
-            THROW_ERROR_EXCEPTION("Singletons have already been configured");
-        }
+        auto guard = Guard(ConfigureLock_);
 
         Config_ = CloneYsonStruct(config);
 
@@ -47,11 +45,11 @@ public:
 
     void Reconfigure(const TSingletonsDynamicConfigPtr& dynamicConfig)
     {
+        THROW_ERROR_EXCEPTION_UNLESS(dynamicConfig, "Reconfigure cannot be called with null dynamic config");
+
         auto guard = Guard(ConfigureLock_);
 
-        if (!Configured_) {
-            THROW_ERROR_EXCEPTION("Singletons are not configured yet");
-        }
+        THROW_ERROR_EXCEPTION_UNLESS(Config_, "Singletons are not configured yet");
 
         DynamicConfig_ = CloneYsonStruct(dynamicConfig);
 
@@ -94,7 +92,6 @@ private:
     NThreading::TSpinLock ConfigureLock_;
     TSingletonsConfigPtr Config_;
     TSingletonsDynamicConfigPtr DynamicConfig_;
-    bool Configured_ = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -112,7 +112,6 @@ public:
 
     void HandleTimeout() {
         CPP_LOG_W("Quota request timeout. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
-        Counters->InFly->Dec();
         Counters->Error->Inc();
         Counters->Timeout->Inc();
         Send(MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId, true));

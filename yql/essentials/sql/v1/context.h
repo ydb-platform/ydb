@@ -255,6 +255,17 @@ public:
 
     TScopedStatePtr CreateScopedState() const;
 
+    EYqlSelectMode GetYqlSelectMode() const {
+        return YqlSelectMode_;
+    }
+
+    void SetYqlSelectMode(EYqlSelectMode mode) {
+        YqlSelectMode_ = mode;
+        if (YqlSelectMode_ != EYqlSelectMode::Disable) {
+            DeriveColumnOrder = true;
+        }
+    }
+
 private:
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,
@@ -290,6 +301,7 @@ private:
     TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
     TString NoColumnErrorContext_ = "in current scope";
     TVector<TBlocks*> CurrentBlocks_;
+    EYqlSelectMode YqlSelectMode_ = EYqlSelectMode::Disable;
 
 public:
     THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
@@ -401,7 +413,6 @@ public:
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
-    EYqlSelectMode YqlSelectMode = EYqlSelectMode::Disable;
 };
 
 class TColumnRefScope {

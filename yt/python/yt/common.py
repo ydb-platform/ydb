@@ -269,6 +269,10 @@ class YtError(Exception):
         """Rpc unavailable."""
         return self.contains_code(105)
 
+    def is_proxy_banned(self):
+        """Proxy is banned."""
+        return self.contains_code(2100)
+
     def is_rpc_response_memory_pressure(self):
         """Rpc response memory pressure."""
         return self.contains_code(122)
@@ -321,6 +325,10 @@ class YtError(Exception):
         """Tablet is in intermediate state."""
         # TODO(ifsmirnov) migrate to error code, YT-10993
         return self.contains_code(1744) or self._matches_regexp("Tablet .* is in state .*")
+
+    def is_hunk_tablet_store_toggle_conflict(self):
+        """Hunk tablet store toggle conflict."""
+        return self.contains_code(1745)
 
     def is_no_such_tablet(self):
         """No such tablet."""

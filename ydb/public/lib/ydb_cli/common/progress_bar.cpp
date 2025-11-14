@@ -7,21 +7,23 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-TProgressBar::TProgressBar(size_t capacity) : Capacity(capacity) {
-}
+TProgressBar::TProgressBar(size_t capacity, size_t parts)
+     : Capacity(capacity)
+     , Parts(parts)
+{}
 
-void TProgressBar::SetProcess(size_t progress)
+void TProgressBar::SetProgress(size_t progress)
 {
+    const auto partSize = Parts ? Max<size_t>(Capacity / Parts, 1) : Max<size_t>();
+    const auto curPartNum = CurProgress / partSize;
     CurProgress = Min(progress, Capacity);
-    Render();
+    if (Capacity != 0) {
+        Render(Parts && CurProgress / partSize != curPartNum);
+    }
 }
 
 void TProgressBar::AddProgress(size_t value) {
-    CurProgress = Min(CurProgress + value, Capacity);
-    if (Capacity == 0) {
-        return;
-    }
-    Render();
+    SetProgress(CurProgress + value);
 }
 
 TProgressBar::~TProgressBar() {
@@ -30,11 +32,15 @@ TProgressBar::~TProgressBar() {
     }
 }
 
-void TProgressBar::Render()
+void TProgressBar::Render(bool newPart)
 {
-    std::optional<size_t> barLenOpt = GetTerminalWidth();
-    if (!barLenOpt)
+    std::optional<size_t> barLenOpt = GetErrTerminalWidth();
+    if (!barLenOpt) {
+        if (newPart) {
+            Cerr << CurProgress << " / " << Capacity << Endl;
+        }
         return;
+    }
 
     size_t barLen = *barLenOpt;
     TString output = "\r";

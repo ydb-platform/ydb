@@ -1968,7 +1968,8 @@ void TTcpConnection::AbortSslSession()
 
 bool TTcpConnection::CheckSslReadError(ssize_t result)
 {
-    switch (SSL_get_error(Ssl_.get(), result)) {
+    auto sslError = SSL_get_error(Ssl_.get(), result);
+    switch (sslError) {
         case SSL_ERROR_NONE:
             return true;
         case SSL_ERROR_WANT_READ:
@@ -1976,6 +1977,8 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
             // Try again.
             break;
         case SSL_ERROR_SYSCALL:
+        case SSL_ERROR_ZERO_RETURN:
+            return CheckTcpReadError(result);
         case SSL_ERROR_SSL:
             // This check is probably unnecessary in new versions of openssl.
             if (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -1986,6 +1989,7 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
         default:
             UpdateBusCounter(&TBusNetworkBandCounters::ReadErrors, 1);
             Abort(GetLastSslError("TLS/SSL read error")
+                << TErrorAttribute("ssl_error_code", sslError)
                 << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
             break;
     }
@@ -1995,7 +1999,8 @@ bool TTcpConnection::CheckSslReadError(ssize_t result)
 
 bool TTcpConnection::CheckSslWriteError(ssize_t result)
 {
-    switch (SSL_get_error(Ssl_.get(), result)) {
+    auto sslError = SSL_get_error(Ssl_.get(), result);
+    switch (sslError) {
         case SSL_ERROR_NONE:
             return true;
         case SSL_ERROR_WANT_READ:
@@ -2003,6 +2008,7 @@ bool TTcpConnection::CheckSslWriteError(ssize_t result)
             // Try again.
             break;
         case SSL_ERROR_SYSCALL:
+            return CheckTcpWriteError(result);
         case SSL_ERROR_SSL:
             // This check is probably unnecessary in new versions of openssl.
             if (errno == EINTR || errno == EWOULDBLOCK || errno == EAGAIN) {
@@ -2013,6 +2019,7 @@ bool TTcpConnection::CheckSslWriteError(ssize_t result)
         default:
             UpdateBusCounter(&TBusNetworkBandCounters::WriteErrors, 1);
             Abort(GetLastSslError("TLS/SSL write error")
+                << TErrorAttribute("ssl_error_code", sslError)
                 << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
             break;
     }

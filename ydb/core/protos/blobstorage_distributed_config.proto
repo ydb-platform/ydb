@@ -106,6 +106,7 @@ message TEvNodeConfigScatter {
 
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
+    optional bool Targeted = 5; // set when issuing updates to newly added nodes
 
     oneof Request {
         TCollectConfigs CollectConfigs = 2;

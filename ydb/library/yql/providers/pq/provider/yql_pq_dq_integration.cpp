@@ -116,13 +116,32 @@ public:
                 }
             }
 
+            bool skipJsonErrors = false;
+            if (auto settingsList = pqReadTopic.Settings().Maybe<TExprList>()) {
+                for (const TExprNode::TPtr& s : pqReadTopic.Settings().Raw()->Children()) {
+                    if (s->ChildrenSize() >= 2 && s->Child(0)->Content() == "skip.json.errors"sv) {
+                        if (!TryFromString<bool>(s->Child(1)->Content(), skipJsonErrors)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"("skip.json.errors" must be boolean type))"));
+                            return {};
+                        }
+                    }
+                }
+            }
+
+            if (skipJsonErrors) {
+                auto clusterConfiguration = GetClusterConfiguration(clusterName);
+                if (!UseSharedReading(clusterConfiguration, format) ) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), R"("skip.json.errors" is supported only in shared reading mode))"));
+                    return {};
+                }
+            }
 
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
                     .Topic(pqReadTopic.Topic())
                     .Columns(std::move(columnNames))
-                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, pos, format, ctx))
+                    .Settings(BuildTopicReadSettings(clusterName, wrSettings, pos, format, skipJsonErrors, ctx))
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
@@ -218,6 +237,7 @@ public:
                 }
 
                 bool sharedReading = false;
+                bool skipErrors = false;
                 TString format;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
@@ -245,8 +265,12 @@ public:
                         srcDesc.MutableWatermarks()->SetGranularityUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksLateArrivalDelayUsSetting) {
                         srcDesc.MutableWatermarks()->SetLateArrivalDelayUs(FromString<ui64>(Value(setting)));
+                    } else if (name == WatermarksIdleTimeoutUsSetting) {
+                        srcDesc.MutableWatermarks()->SetIdleTimeoutUs(FromString<ui64>(Value(setting)));
                     } else if (name == WatermarksIdlePartitionsSetting) {
                         srcDesc.MutableWatermarks()->SetIdlePartitionsEnabled(true);
+                    } else if (name == SkipJsonErrors) {
+                        skipErrors = FromString<bool>(Value(setting));
                     }
                 }
 
@@ -296,6 +320,8 @@ public:
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
                 }
+                srcDesc.SetSkipJsonErrors(skipErrors);
+
                 *srcDesc.MutableDisposition() = State_->Disposition;
 
                 for (const auto& [label, value] : State_->TaskSensorLabels) {
@@ -390,6 +416,7 @@ public:
         const IDqIntegration::TWrapReadSettings& wrSettings,
         TPositionHandle pos,
         std::string_view format,
+        bool skipJsonErrors,
         TExprContext& ctx) const
     {
         TVector<TCoNameValueTuple> props;
@@ -408,6 +435,9 @@ public:
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
+        if (skipJsonErrors) {
+            Add(props, SkipJsonErrors, ToString(skipJsonErrors), pos, ctx);
+        }
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);
@@ -429,10 +459,15 @@ public:
                 .WatermarksLateArrivalDelayMs
                 .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
             Add(props, WatermarksLateArrivalDelayUsSetting, ToString(lateArrivalDelay.MicroSeconds()), pos, ctx);
+
         }
 
         if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(false)) {
             Add(props, WatermarksIdlePartitionsSetting, ToString(true), pos, ctx);
+            const auto idleTimeout = TDuration::MilliSeconds(wrSettings
+                .WatermarksIdleTimeoutMs
+                .GetOrElse(TDqSettings::TDefault::WatermarksIdleTimeoutMs));
+            Add(props, WatermarksIdleTimeoutUsSetting, ToString(idleTimeout.MicroSeconds()), pos, ctx);
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)

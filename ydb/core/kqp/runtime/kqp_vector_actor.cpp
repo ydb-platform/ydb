@@ -269,6 +269,7 @@ private:
         auto range = ParentRange(parent);
         auto arena = MakeIntrusive<NActors::TProtoArenaHolder>();
         auto src = arena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
+        src->SetDatabase(Settings.GetDatabase());
         *src->MutableTable() = Settings.GetLevelTable();
         range.Serialize(*src->MutableFullRange());
         src->SetDataFormat(NKikimrDataEvents::FORMAT_CELLVEC);

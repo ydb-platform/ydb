@@ -327,6 +327,49 @@ public:
         const TYPath& path,
         const TUnfreezeTableOptions& options = {}) override;
 
+    // Distributed API
+
+    TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) override;
+
+    void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) override;
+
+    void FinishDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) override;
+
+    std::unique_ptr<IOutputStreamWithResponse> WriteTableFragment(
+        const TDistributedWriteTableCookie& cookie,
+        const TMaybe<TFormat>& format,
+        const TTableFragmentWriterOptions& options = {}) override;
+
+    TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) override;
+
+    void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) override;
+
+    void FinishDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) override;
+
+    std::unique_ptr<IOutputStreamWithResponse> WriteFileFragment(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = {}) override;
+
     // Misc
 
     TCheckPermissionResponse CheckPermission(

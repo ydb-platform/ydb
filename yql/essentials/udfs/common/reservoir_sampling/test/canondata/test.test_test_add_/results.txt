@@ -1,0 +1,51 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TupleType";
+                                    [
+                                        [
+                                            "ListType";
+                                            [
+                                                "DataType";
+                                                "String"
+                                            ]
+                                        ];
+                                        [
+                                            "DataType";
+                                            "Uint64"
+                                        ];
+                                        [
+                                            "DataType";
+                                            "Uint64"
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "123";
+                                "abc"
+                            ];
+                            "2";
+                            "123"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

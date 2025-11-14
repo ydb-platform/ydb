@@ -24,7 +24,7 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 {%-            endfor -%}
 {%-        endif -%}
 
-{%-        set run_args = run.args|reject('startsWith', '-D')|reject('startsWith', '-X') %}
+{%-        set run_args = run.args|reject('startsWith', '-D')|reject('startsWith', '-XX:') %}
 {%-        set run_jvm_args = run.args|reject('in', run_args) -%}
 {%-        if run_jvm_args|length %}
 

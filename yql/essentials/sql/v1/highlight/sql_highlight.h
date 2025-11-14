@@ -26,6 +26,9 @@ enum class EUnitKind {
 };
 
 struct TRangePattern {
+    static constexpr const char* EmbeddedPythonBegin = "@@#py";
+    static constexpr const char* EmbeddedJavaScriptBegin = "@@//js";
+
     TString BeginPlain;
     TString EndPlain;
     TMaybe<TString> EscapeRegex;

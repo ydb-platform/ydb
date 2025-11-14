@@ -27,6 +27,7 @@
 #include "viewer_nodes.h"
 #include "viewer_plan2svg.h"
 #include "viewer_pqconsumerinfo.h"
+#include "viewer_put_record.h"
 #include "viewer_query.h"
 #include "viewer_render.h"
 #include "viewer_storage.h"
@@ -220,6 +221,10 @@ void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/pqconsumerinfo", new TJsonHandler<TJsonPQConsumerInfo>(TJsonPQConsumerInfo::GetSwagger()));
 }
 
+void InitViewerPutRecordsJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/put_record", new TJsonHandler<TPutRecord>(TPutRecord::GetSwagger()));
+}
+
 void InitViewerTabletCountersJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/tabletcounters", new TJsonHandler<TJsonTabletCounters>(TJsonTabletCounters::GetSwagger()));
 }
@@ -273,7 +278,7 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 18);
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 19);
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -344,6 +349,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerTopicInfoJsonHandler(jsonHandlers);
     InitViewerTopicDataJsonHandler(jsonHandlers);
     InitViewerPQConsumerInfoJsonHandler(jsonHandlers);
+    InitViewerPutRecordsJsonHandler(jsonHandlers);
     InitViewerTabletCountersJsonHandler(jsonHandlers);
     InitViewerStorageJsonHandler(jsonHandlers);
     InitViewerStorageUsageJsonHandler(jsonHandlers);

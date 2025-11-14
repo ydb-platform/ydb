@@ -14,7 +14,6 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
     ui64 Generation = 0;
     const TInstant Deadline;
     ui64 Requests = 0;
-    ui64 Responses = 0;
     TGroupQuorumTracker QuorumTracker;
 
     void Handle(TEvBlobStorage::TEvVGetBlockResult::TPtr &ev) {
@@ -36,13 +35,10 @@ class TBlobStorageGroupGetBlockRequest : public TBlobStorageGroupRequestActor {
         if (status == NKikimrProto::NODATA) {
             status = NKikimrProto::OK;  // assume OK for quorum tracker
         }
-        ++Responses;
 
         switch (QuorumTracker.ProcessReply(vdisk, status)) {
             case NKikimrProto::OK:
-                if (Responses == Requests) {
-                    ReplyAndDie(NKikimrProto::OK);
-                }
+                ReplyAndDie(NKikimrProto::OK);
                 break;
 
             case NKikimrProto::ERROR:

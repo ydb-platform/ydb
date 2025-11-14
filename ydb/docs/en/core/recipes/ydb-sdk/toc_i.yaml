@@ -63,3 +63,5 @@ items:
     href: debug-prometheus.md
   - name: Enable tracing in Jaeger
     href: debug-jaeger.md
+  - name: Enable tracing in OpenTelemetry
+    href: debug-otel.md

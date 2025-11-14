@@ -859,7 +859,9 @@ public:
 
     static TRcBuf Copy(TContiguousSpan data, size_t headroom = 0, size_t tailroom = 0) {
         TRcBuf res = Uninitialized(data.size(), headroom, tailroom);
-        std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        if (data.GetSize()) {
+            std::memcpy(res.UnsafeGetDataMut(), data.GetData(), data.GetSize());
+        }
         return res;
     }
 

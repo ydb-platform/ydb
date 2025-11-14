@@ -10,6 +10,8 @@
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
@@ -189,6 +191,10 @@ namespace NKikimr {
                     // cut the log (according to confirmed old synced state)
                     CutLog(ctx, sourceVDisk, oldSyncState.SyncedLsn);
                 }
+
+                ui32 orderNumber = SlCtx->VCtx->Top->GetOrderNumber(TVDiskIdShort(sourceVDisk));
+                ctx.Send(KeeperId, new TEvSyncLogUpdateNeighbourSyncedLsn(orderNumber, oldSyncState.SyncedLsn));
+
                 // process the request further asyncronously
                 NeighborsPtr->Lock(sourceVDisk, oldSyncState.SyncedLsn);
                 auto aid = ctx.Register(CreateSyncLogReaderActor(SlCtx, VDiskIncarnationGuid, ev, ctx.SelfID, KeeperId,
@@ -290,6 +296,14 @@ namespace NKikimr {
                 ctx.Send(ev->Forward(KeeperId));
             }
 
+            void Handle(TEvPhantomFlagStorageGetSnapshot::TPtr ev) {
+                Send(ev->Forward(KeeperId));
+            }
+
+            void Handle(const TEvLocalSyncData::TPtr& ev) {
+                Send(ev->Forward(KeeperId));
+            }
+
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvSyncLogPut, Handle)
                 HFunc(TEvSyncLogPutSst, Handle)
@@ -304,6 +318,8 @@ namespace NKikimr {
                 HFunc(TEvents::TEvCompleted, HandleActorCompletion)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
                 HFunc(TEvListChunks, Handle)
+                hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvLocalSyncData, Handle);
             )
 
         public:

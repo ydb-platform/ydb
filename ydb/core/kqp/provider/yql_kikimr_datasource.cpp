@@ -116,9 +116,9 @@ private:
         TExprBase currentNode(node);
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
-            for (auto setting : readTable.Settings()) {
-                auto name = setting.Name().Value();
-                if (name == "sysViewRewritten") {
+            for (auto setting : readTable.Settings().Ref().ChildrenList()) {
+                auto maybeTuple = TMaybeNode<TCoNameValueTuple>(setting);
+                if (maybeTuple && maybeTuple.Cast().Name().Value() == "sysViewRewritten"sv) {
                     sysViewRewritten = true;
                 }
             }

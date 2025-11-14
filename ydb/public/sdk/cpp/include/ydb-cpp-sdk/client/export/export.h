@@ -126,6 +126,40 @@ private:
     TMetadata Metadata_;
 };
 
+/// FS
+struct TExportToFsSettings : public TOperationRequestSettings<TExportToFsSettings> {
+    using TSelf = TExportToFsSettings;
+
+    struct TItem {
+        std::string Src;
+        std::string Dst;
+    };
+
+    FLUENT_SETTING(std::string, BasePath);
+    FLUENT_SETTING_VECTOR(TItem, Item);
+    FLUENT_SETTING_OPTIONAL(std::string, Description);
+    FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL(std::string, Compression);
+};
+
+class TExportToFsResponse : public TOperation {
+public:
+    struct TMetadata {
+        TExportToFsSettings Settings;
+        EExportProgress Progress;
+        std::vector<TExportItemProgress> ItemsProgress;
+    };
+
+public:
+    using TOperation::TOperation;
+    TExportToFsResponse(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    const TMetadata& Metadata() const;
+
+private:
+    TMetadata Metadata_;
+};
+
 class TExportClient {
     class TImpl;
 
@@ -134,6 +168,7 @@ public:
 
     NThreading::TFuture<TExportToYtResponse> ExportToYt(const TExportToYtSettings& settings);
     NThreading::TFuture<TExportToS3Response> ExportToS3(const TExportToS3Settings& settings);
+    NThreading::TFuture<TExportToFsResponse> ExportToFs(const TExportToFsSettings& settings);
 
 private:
     std::shared_ptr<TImpl> Impl_;

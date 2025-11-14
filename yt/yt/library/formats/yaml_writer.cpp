@@ -150,7 +150,7 @@ public:
         OnNodeLeave();
     }
 
-    virtual void OnEntity() override
+    void OnEntity() override
     {
         OnNodeEnter();
         static const std::string_view nullLiteral = "null";
@@ -166,7 +166,7 @@ public:
         OnNodeLeave();
     }
 
-    virtual void OnBeginList() override
+    void OnBeginList() override
     {
         OnNodeEnter();
         EmitEvent(
@@ -177,16 +177,16 @@ public:
             YAML_ANY_SEQUENCE_STYLE);
     }
 
-    virtual void OnListItem() override
+    void OnListItem() override
     { }
 
-    virtual void OnEndList() override
+    void OnEndList() override
     {
         EmitEvent(yaml_sequence_end_event_initialize);
         OnNodeLeave();
     }
 
-    virtual void OnBeginMap() override
+    void OnBeginMap() override
     {
         OnNodeEnter();
         EmitEvent(
@@ -197,18 +197,18 @@ public:
             YAML_ANY_MAPPING_STYLE);
     }
 
-    virtual void OnKeyedItem(TStringBuf key) override
+    void OnKeyedItem(TStringBuf key) override
     {
         OnStringScalar(key);
     }
 
-    virtual void OnEndMap() override
+    void OnEndMap() override
     {
         EmitEvent(yaml_mapping_end_event_initialize);
         OnNodeLeave();
     }
 
-    virtual void OnBeginAttributes() override
+    void OnBeginAttributes() override
     {
         // NB: Node with attributes in YAML is represented as a yt/attrnode-tagged 2-item sequence.
         OnNodeEnter();
@@ -226,7 +226,7 @@ public:
             YAML_ANY_MAPPING_STYLE);
     }
 
-    virtual void OnEndAttributes() override
+    void OnEndAttributes() override
     {
         EmitEvent(yaml_mapping_end_event_initialize);
         ImmediatelyAfterAttributes_ = true;

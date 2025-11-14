@@ -152,8 +152,10 @@ public:
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 
 private:
-    void FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
+    void FillBlobsMetaData(const TActorContext& ctx);
     void FormHeadAndProceed();
+
+    TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> Ranges;
 };
 
 class TInitDataStep: public TBaseKVStep {

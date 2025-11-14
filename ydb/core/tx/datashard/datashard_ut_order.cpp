@@ -942,7 +942,7 @@ public:
         }
 
         Ranges.reserve(numRanges);
-        for (ui32 i = 0; i < numPoints; ++i) {
+        for (ui32 i = 0; i < numRanges; ++i) {
             ui32 from = RandomNumber<ui32>(max);
             Ranges.emplace_back(TSimpleRange(from, from + 1 + RandomNumber<ui32>(maxRange-1)));
         }

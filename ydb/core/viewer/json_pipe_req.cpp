@@ -616,18 +616,29 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerSelectGroupsRes
     return MakeRequestToPipe<TEvBlobStorage::TEvControllerSelectGroupsResult>(pipeClient, request.Release(), cookie);
 }
 
+void TViewerPipeClient::ApplyForceMode(TEvBlobStorage::TEvControllerConfigRequest& request) {
+    bool monitoring = Viewer->CheckAccessMonitoring(GetRequest());
+    bool admin = Viewer->CheckAccessAdministration(GetRequest());
+    if (monitoring) {
+        request.Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+    }
+    if (admin) {
+        request.Record.MutableRequest()->SetIgnoreDisintegratedGroupsChecks(true);
+        request.Record.MutableRequest()->SetIgnoreGroupFailModelChecks(true);
+    }
+}
+
 TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse> TViewerPipeClient::RequestBSControllerPDiskRestart(ui32 nodeId, ui32 pdiskId, bool force) {
     THolder<TEvBlobStorage::TEvControllerConfigRequest> request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
     auto* restartPDisk = request->Record.MutableRequest()->AddCommand()->MutableRestartPDisk();
     restartPDisk->MutableTargetPDiskId()->SetNodeId(nodeId);
     restartPDisk->MutableTargetPDiskId()->SetPDiskId(pdiskId);
     if (force) {
-        request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        ApplyForceMode(*request);
     }
     auto response = MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
     if (response.Span) {
-        response.Span.Attribute("node_id", nodeId);
-        response.Span.Attribute("pdisk_id", pdiskId);
+        response.Span.Attribute("pdisk_id", TStringBuilder() << nodeId << '-' << pdiskId);
         response.Span.Attribute("force", force);
     }
     return response;
@@ -642,11 +653,12 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse>
     evictVDisk->SetFailDomainIdx(failDomainIdx);
     evictVDisk->SetVDiskIdx(vdiskIdx);
     if (force) {
-        request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        ApplyForceMode(*request);
     }
     auto response = MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
     if (response.Span) {
         response.Span.Attribute("vdisk_id", TStringBuilder() << groupId << '-' << groupGeneration << '-' << failRealmIdx << '-' << failDomainIdx << '-' << vdiskIdx);
+        response.Span.Attribute("force", force);
     }
     return response;
 }
@@ -781,7 +793,7 @@ TViewerPipeClient::TRequestResponse<TEvBlobStorage::TEvControllerConfigResponse>
     auto* updateDriveStatus = request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
     updateDriveStatus->CopyFrom(driveStatus);
     if (force) {
-        request->Record.MutableRequest()->SetIgnoreDegradedGroupsChecks(true);
+        ApplyForceMode(*request);
     }
     return MakeRequestToTablet<TEvBlobStorage::TEvControllerConfigResponse>(GetBSControllerId(), request.Release());
 }

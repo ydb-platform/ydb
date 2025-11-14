@@ -106,7 +106,8 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     YQL_ENSURE(indexes);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
         && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSync;
+            return index.second->Type == TIndexDescription::EType::GlobalSync
+                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
         });
 
     const bool needPrecompute = !(isSink && abortOnError && canUseStreamIndex);

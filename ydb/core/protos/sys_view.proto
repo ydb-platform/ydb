@@ -42,7 +42,8 @@ message TPartitionStats {
     optional uint64 PlannedTxCompleted = 17;
     optional uint64 TxRejectedByOverload = 18;
     optional uint64 TxRejectedBySpace = 19;
-
+    optional uint64 TxCompleteLagMsec = 26;
+    
     optional TTtlStats TtlStats = 20;
 
     optional uint64 ByKeyFilterSize = 21;

@@ -3,8 +3,10 @@ LIBRARY()
 SRCS(
     mlp_common.cpp
     mlp_consumer.cpp
+    mlp_dlq_mover.cpp
     mlp_message_enricher.cpp
     mlp_storage.cpp
+    mlp_storage__serialization.cpp
 )
 
 
@@ -16,7 +18,6 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/public/write_meta
 )
-
 
 GENERATE_ENUM_SERIALIZATION(mlp_storage.h)
 

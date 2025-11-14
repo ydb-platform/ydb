@@ -416,9 +416,9 @@ simdjson_inline void string_builder::append(number_type v) noexcept {
         pv = 0 - pv; // the 0 is for Microsoft
       }
       size_t dc = internal::digit_count(pv);
-      if (negative) {
-        buffer.get()[position++] = '-';
-      }
+      // by always writing the minus sign, we avoid the branch.
+      buffer.get()[position] = '-';
+      position += negative ? 1 : 0;
       char *write_pointer = buffer.get() + position + dc - 1;
       while (pv >= 100) {
         memcpy(write_pointer - 1, &internal::decimal_table[(pv % 100) * 2], 2);
@@ -538,7 +538,7 @@ template <std::ranges::range R>
 simdjson_inline void string_builder::append(const R &range) noexcept {
   auto it = std::ranges::begin(range);
   auto end = std::ranges::end(range);
-  if constexpr (concepts::is_pair<typename R::value_type>) {
+  if constexpr (concepts::is_pair<std::ranges::range_value_t<R>>) {
     start_object();
 
     if (it == end) {

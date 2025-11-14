@@ -469,7 +469,9 @@ class TConfigResultWrapper
     : public IStorageConfigResult
 {
 public:
-    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result) {
+    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString()) 
+        : SourceAddress(sourceAddress)
+    {
         TString clusterConfig;
         TString storageConfig;
         for (const auto& entry : result.GetConfigs()) {
@@ -492,9 +494,14 @@ public:
         return StorageYamlConfig;
     }
 
+    const TString& GetSourceAddress() const override {
+        return SourceAddress;
+    }
+
 private:
     TString MainYamlConfig;
     TString StorageYamlConfig;
+    TString SourceAddress;
 };
 
 class TDefaultConfigClient
@@ -517,13 +524,19 @@ private:
         return result;
     }
 
-    static NYdb::NConfig::TFetchConfigResult FetchConfigImpl(
+    struct TFetchConfigImplResult {
+        NYdb::NConfig::TFetchConfigResult Result;
+        TString SourceAddress;
+    };
+
+    static TFetchConfigImplResult FetchConfigImpl(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const IEnv& env,
         IInitLogger& logger)
     {
         std::optional<NYdb::NConfig::TFetchConfigResult> result;
+        TString sourceAddress;
         SetRandomSeed(TInstant::Now().MicroSeconds());
 
         auto attempt = [&](const TString& addr) {
@@ -531,6 +544,7 @@ private:
             result = TryToFetchConfig(grpcSettings, addr, env);
             if (result->IsSuccess()) {
                 logger.Out() << "Success. Fetched config from " << addr << Endl;
+                sourceAddress = addr;
                 return true;
             }
             logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(*result) << Endl;
@@ -544,7 +558,7 @@ private:
                         << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds 
                         << " rounds. Last error: " << static_cast<NYdb::TStatus>(*result) << Endl;
         }
-        return *result;
+        return {*result, sourceAddress};
     }
 
 public:
@@ -554,11 +568,11 @@ public:
         const IEnv& env,
         IInitLogger& logger) const override
     {
-        auto result = FetchConfigImpl(grpcSettings, addrs, env, logger);
-        if (!result.IsSuccess()) {
+        auto fetchResult = FetchConfigImpl(grpcSettings, addrs, env, logger);
+        if (!fetchResult.Result.IsSuccess()) {
             return nullptr;
         }
-        return std::make_shared<TConfigResultWrapper>(std::move(result));
+        return std::make_shared<TConfigResultWrapper>(std::move(fetchResult.Result), std::move(fetchResult.SourceAddress));
     }
 };
 
@@ -898,9 +912,9 @@ NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& re
     return appConfig;
 }
 
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
     if (yamlConfig.GetYamlConfigEnabled()) {
@@ -920,6 +934,14 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     }
 
     return regularConfig;
+}
+
+void UpdateConfigUpdateTracer(
+    IConfigUpdateTracer& ConfigUpdateTracer)
+{
+    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
+        ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithSeedNodes);
+    }
 }
 
 NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::optional<TString>& authToken) {

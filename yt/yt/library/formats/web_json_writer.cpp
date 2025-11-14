@@ -781,6 +781,7 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
                 CreateWebJsonColumnFilter(config),
                 schemas,
                 std::move(config));
+
         case EWebJsonValueFormat::Yql:
             return New<TWriterForWebJson<TYqlValueWriter>>(
                 std::move(nameTable),
@@ -789,8 +790,9 @@ ISchemalessFormatWriterPtr CreateWriterForWebJson(
                 schemas,
                 std::move(config));
 
+        default:
+            YT_ABORT();
     }
-    YT_ABORT();
 }
 
 ISchemalessFormatWriterPtr CreateWriterForWebJson(

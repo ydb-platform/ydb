@@ -33,6 +33,7 @@ struct TDqState: public TThrRefBase {
     const TString VanillaJobMd5;
     TDqConfiguration::TPtr Settings = MakeIntrusive<TDqConfiguration>();
     bool ExternalUser;
+    bool IsFullCaptureReady = true;
 
     TMutex Mutex;
     THashMap<ui32, TOperationStatistics> Statistics;

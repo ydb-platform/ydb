@@ -246,6 +246,12 @@ message ClusterStateResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ClusterStateResultBlock {
+    string name = 1;
+    string content = 2;
+}
+
 message ClusterStateResult {
-    string result = 1;
+    string result = 1; // deprecated
+    repeated ClusterStateResultBlock blocks = 2;
 }

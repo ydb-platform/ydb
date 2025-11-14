@@ -23,10 +23,13 @@ using namespace Ydb;
 
 using TEvImportFromS3Request = TGrpcRequestOperationCall<Ydb::Import::ImportFromS3Request,
     Ydb::Import::ImportFromS3Response>;
+using TEvImportFromFsRequest = TGrpcRequestOperationCall<Ydb::Import::ImportFromFsRequest,
+    Ydb::Import::ImportFromFsResponse>;
 
 template <typename TDerived, typename TEvRequest>
 class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TImportConv {
     static constexpr bool IsS3Import = std::is_same_v<TEvRequest, TEvImportFromS3Request>;
+    static constexpr bool IsFsImport = std::is_same_v<TEvRequest, TEvImportFromFsRequest>;
 
     TStringBuf GetLogPrefix() const override {
         return "[CreateImport]";
@@ -48,6 +51,9 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
         if constexpr (IsS3Import) {
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
+        }
+        if constexpr (IsFsImport) {
+            createImport.MutableImportFromFsSettings()->CopyFrom(request.settings());
         }
 
         return ev.Release();
@@ -120,6 +126,13 @@ public:
             }
         }
 
+        if constexpr (IsFsImport) {
+            if (!settings.base_path().StartsWith("/")) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                    "base_path must be an absolute path");
+            }
+        }
+
         this->AllocateTxId();
         this->Become(&TDerived::StateWait);
     }
@@ -139,9 +152,17 @@ public:
     using TImportRPC::TImportRPC;
 };
 
+class TImportFromFsRPC: public TImportRPC<TImportFromFsRPC, TEvImportFromFsRequest> {
+public:
+    using TImportRPC::TImportRPC;
+};
+
 void DoImportFromS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TImportFromS3RPC(p.release()));
 }
 
+void DoImportFromFsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TImportFromFsRPC(p.release()));
+}
 } // namespace NGRpcService
 } // namespace NKikimr

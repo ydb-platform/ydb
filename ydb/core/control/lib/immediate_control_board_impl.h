@@ -1,18 +1,15 @@
 #pragma once
 
 #include "immediate_control_board_wrapper.h"
-#include "immediate_control_board_html_renderer.h"
 
 #include <ydb/core/control/lib/generated/control_board_proto.h>
 
 #include <library/cpp/threading/hot_swap/hot_swap.h>
 
-#include <util/generic/serialized_enum.h>
-
-
 namespace NKikimr {
 
 class TImmediateControlActor;
+class TControlBoardTableHtmlRenderer;
 
 class TControlBoard: public TControlBoardBase {
     friend class TImmediateControlActor;

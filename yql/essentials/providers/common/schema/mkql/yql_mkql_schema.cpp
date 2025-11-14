@@ -298,6 +298,12 @@ struct TRuntimeTypeLoader {
     TMaybe<TType> LoadVariantType(TType underlyingType, ui32 /*level*/) {
         return Builder.NewVariantType(underlyingType);
     }
+    TMaybe<TType> LoadBlockType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Block";
+    }
+    TMaybe<TType> LoadScalarType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: Scalar";
+    }
     void Error(const TString& info) {
         Err << info;
     }

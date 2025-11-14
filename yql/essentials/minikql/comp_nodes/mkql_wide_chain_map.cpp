@@ -63,7 +63,7 @@ public:
 
         block = good;
         for (auto i = 0U; i < Inputs.size(); ++i) {
-            if (Inputs[i]->GetDependencesCount() > 0U || !InputsOnInit[i] || !InputsOnUpdate[i]) {
+            if (Inputs[i]->GetDependentsCount() > 0U || !InputsOnInit[i] || !InputsOnUpdate[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Inputs[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
             }
         }
@@ -77,7 +77,7 @@ public:
 
         block = init;
         for (auto i = 0U; i < Outputs.size(); ++i) {
-            if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
+            if (Outputs[i]->GetDependentsCount() > 0U || OutputsOnUpdate[i]) {
                 const auto& map = InitOnInputs[i];
                 const auto value = map ? getres.second[*map](ctx, block) : GetNodeValue(InitItems[i], ctx, block);
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Outputs[i])->CreateSetValue(ctx, block, value);
@@ -91,7 +91,7 @@ public:
 
         std::vector<Value*> outputs(Outputs.size(), nullptr);
         for (auto i = 0U; i < outputs.size(); ++i) {
-            if (const auto& dep = OutputsOnUpdate[i]; Outputs[i]->GetDependencesCount() > 0U || (dep && *dep != i)) {
+            if (const auto& dep = OutputsOnUpdate[i]; Outputs[i]->GetDependentsCount() > 0U || (dep && *dep != i)) {
                 const auto& map = UpdateOnInputs[i];
                 outputs[i] = map ? getres.second[*map](ctx, block) : GetNodeValue(UpdateItems[i], ctx, block);
             }
@@ -112,7 +112,7 @@ public:
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (const auto &one = InitOnInputs[i], two = UpdateOnInputs[i]; one && two && *one == *two) {
                 result.emplace_back(getres.second[*two]);
-            } else if (Outputs[i]->GetDependencesCount() > 0 || OutputsOnUpdate[i]) {
+            } else if (Outputs[i]->GetDependentsCount() > 0 || OutputsOnUpdate[i]) {
                 result.emplace_back([output = Outputs[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(output, ctx, block); });
             } else {
                 result.emplace_back([this, i, source = getres.second, flagPtr, flagType](const TCodegenContext& ctx, BasicBlock*& block) {
@@ -156,7 +156,7 @@ private:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
-            if (const auto& map = InputsOnInit[i]; map && !Inputs[i]->GetDependencesCount()) {
+            if (const auto& map = InputsOnInit[i]; map && !Inputs[i]->GetDependentsCount()) {
                 if (const auto& to = UpdateOnOutputs[*map]) {
                     fields[i] = &Outputs[*to]->RefValue(ctx);
                     continue;
@@ -177,8 +177,8 @@ private:
         }
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
-            if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
-                if (const auto& map = InitOnInputs[i]; !map || Inputs[*map]->GetDependencesCount() > 0U) {
+            if (Outputs[i]->GetDependentsCount() > 0U || OutputsOnUpdate[i]) {
+                if (const auto& map = InitOnInputs[i]; !map || Inputs[*map]->GetDependentsCount() > 0U) {
                     Outputs[i]->SetValue(ctx, InitItems[i]->GetValue(ctx));
                 }
             }
@@ -186,11 +186,11 @@ private:
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (const auto out = output[i]) {
-                if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
+                if (Outputs[i]->GetDependentsCount() > 0U || OutputsOnUpdate[i]) {
                     *out = Outputs[i]->GetValue(ctx);
                 } else {
                     if (const auto& map = InitOnInputs[i]) {
-                        if (const auto from = *map; !Inputs[from]->GetDependencesCount()) {
+                        if (const auto from = *map; !Inputs[from]->GetDependentsCount()) {
                             if (const auto first = *InputsOnInit[from]; first != i) {
                                 *out = *output[first];
                             }
@@ -210,7 +210,7 @@ private:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
-            if (const auto& map = InputsOnUpdate[i]; map && !Inputs[i]->GetDependencesCount()) {
+            if (const auto& map = InputsOnUpdate[i]; map && !Inputs[i]->GetDependentsCount()) {
                 if (const auto out = output[*map]) {
                     fields[i] = out;
                     continue;
@@ -228,16 +228,16 @@ private:
         }
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
-            if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
-                if (const auto& map = UpdateOnInputs[i]; !map || Inputs[*map]->GetDependencesCount() > 0U) {
+            if (Outputs[i]->GetDependentsCount() > 0U || OutputsOnUpdate[i]) {
+                if (const auto& map = UpdateOnInputs[i]; !map || Inputs[*map]->GetDependentsCount() > 0U) {
                     ctx.MutableValues[TempStateIndex + i] = UpdateItems[i]->GetValue(ctx);
                 }
             }
         }
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
-            if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
-                if (const auto& map = UpdateOnInputs[i]; !map || Inputs[*map]->GetDependencesCount() > 0U) {
+            if (Outputs[i]->GetDependentsCount() > 0U || OutputsOnUpdate[i]) {
+                if (const auto& map = UpdateOnInputs[i]; !map || Inputs[*map]->GetDependentsCount() > 0U) {
                     Outputs[i]->SetValue(ctx, std::move(ctx.MutableValues[TempStateIndex + i]));
                 }
             }
@@ -245,11 +245,11 @@ private:
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (const auto out = output[i]) {
-                if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
+                if (Outputs[i]->GetDependentsCount() > 0U || OutputsOnUpdate[i]) {
                     *out = Outputs[i]->GetValue(ctx);
                 } else {
                     if (const auto& map = UpdateOnInputs[i]) {
-                        if (const auto from = *map; !Inputs[from]->GetDependencesCount()) {
+                        if (const auto from = *map; !Inputs[from]->GetDependentsCount()) {
                             if (const auto first = *InputsOnUpdate[from]; first != i) {
                                 *out = *output[first];
                             }

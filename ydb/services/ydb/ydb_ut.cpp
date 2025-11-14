@@ -46,7 +46,8 @@
 namespace NYdb {
 
 Ydb::StatusIds::StatusCode WaitForStatus(
-    std::shared_ptr<grpc::Channel> channel, const TString& opId, TString* error, int retries, TDuration sleepDuration
+    std::shared_ptr<grpc::Channel> channel, const TString& opId, TString* error,
+    const TString& database, int retries, TDuration sleepDuration
 ) {
     std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub;
     stub = Ydb::Operation::V1::OperationService::NewStub(channel);
@@ -55,6 +56,7 @@ Ydb::StatusIds::StatusCode WaitForStatus(
     Ydb::Operations::GetOperationResponse response;
     for (int retry = 0; retry <= retries; ++retry) {
         grpc::ClientContext context;
+        context.AddMetadata("x-ydb-database", database);
         auto grpcStatus = stub->GetOperation(&context, request, &response);
         UNIT_ASSERT_C(grpcStatus.ok(), grpcStatus.error_message());
         if (response.operation().ready()) {
@@ -1302,6 +1304,7 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
             std::unique_ptr<Ydb::Table::V1::TableService::Stub> Stub_;
             Stub_ = Ydb::Table::V1::TableService::NewStub(Channel_);
             grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/Root");
             Ydb::Table::AlterTableRequest request;
             TString scheme(
                 "path: \"/Root/TheTable\""

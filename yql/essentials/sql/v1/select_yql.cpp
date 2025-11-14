@@ -108,10 +108,9 @@ public:
             return true;
         }
 
-        if (columns.size() != Width_) {
-            ctx.Error() << "VALUES statement width is " << Width_
-                        << ", but got " << columns.size()
-                        << " column aliases";
+        if (Width_ < columns.size()) {
+            ctx.Error() << "Derived column list size "
+                        << "exceeds column count in VALUES";
             return false;
         }
 
@@ -124,7 +123,7 @@ private:
         TNodePtr columns = Y();
         for (size_t i = 0; i < Width_; ++i) {
             TString name;
-            if (!Columns_) {
+            if (!Columns_ || Columns_->size() <= i) {
                 name = TStringBuilder() << "column" << i;
             } else {
                 name = Columns_->at(i);
@@ -178,7 +177,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (!InitProjection(ctx, src) ||
-            (Source && !Source->Node->Init(ctx, src)) ||
+            !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
             !InitOrderBy(ctx, src)) {
             return false;
@@ -195,32 +194,32 @@ public:
         }
 
         if (Source) {
-            TNodePtr& node = Source->Node;
+            YQL_ENSURE(
+                !Source->Sources.empty(),
+                "Expected non-empty sources, got " << Source->Sources.size());
+            YQL_ENSURE(
+                Source->Sources.size() == Source->Constraints.size() + 1,
+                "Expected len(join_sources) == len(join_constraints) + 1, got "
+                    << Source->Sources.size() << " != " << Source->Constraints.size());
 
-            TString sourceName;
-            if (auto& alias = Source->Alias) {
-                sourceName = std::move(alias->Name);
-
-                if (auto& columns = alias->Columns) {
-                    if (auto* values = dynamic_cast<TYqlValuesNode*>(node.Get())) {
-                        if (!values->SetColumns(std::move(columns), ctx)) {
-                            return false;
-                        }
-                    } else {
-                        ctx.Error() << "Qualified by column names source alias "
-                                    << "is viable only for VALUES statement";
-                        return false;
-                    }
+            TNodePtr from = Y();
+            for (const auto& source : Source->Sources) {
+                if (auto element = BuildFromElement(ctx, source)) {
+                    from->Add(std::move(*element));
+                } else {
+                    return false;
                 }
             }
 
-            item->Add(Q(Y(Q("from"),
-                          Q(Y(Q(Y(
-                              std::move(node),
-                              Q(std::move(sourceName)),
-                              Q(Y(/* Columns are passed through SetColumns */)))))))));
+            TNodePtr joinOps = Y();
+            joinOps->Add(Q(Y(Q("push"))));
+            for (const auto& constraint : Source->Constraints) {
+                joinOps->Add(Q(Y(Q("push"))));
+                joinOps->Add(BuildJoinConstraint(constraint));
+            }
 
-            item->Add(Q(Y(Q("join_ops"), Q(Y(Q(Y(Q(Y(Q("push"))))))))));
+            item->Add(Q(Y(Q("from"), Q(std::move(from)))));
+            item->Add(Q(Y(Q("join_ops"), Q(Y(Q(std::move(joinOps)))))));
         }
 
         if (Where) {
@@ -263,6 +262,10 @@ public:
         return new TYqlSelectNode(*this);
     }
 
+    bool IsOrdered() const {
+        return OrderBy.Defined();
+    }
+
 private:
     bool InitProjection(TContext& ctx, ISource* src) const {
         return std::visit(
@@ -277,12 +280,38 @@ private:
     }
 
     bool InitTerms(TContext& ctx, ISource* src, const TVector<TNodePtr>& terms) const {
+        THashSet<TString> used = UsedLables(terms);
+
         for (size_t i = 0; i < terms.size(); ++i) {
             const TNodePtr& term = terms[i];
-            term->SetLabel(TermAlias(term, i));
+
+            TString label = TermAlias(term, i, used);
+            used.emplace(label);
+
+            term->SetLabel(std::move(label));
         }
 
         return ::NSQLTranslationV1::Init(ctx, src, terms);
+    }
+
+    bool InitSource(TContext& ctx, ISource* src) const {
+        if (!Source) {
+            return true;
+        }
+
+        for (const auto& source : Source->Sources) {
+            if (!source.Node->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        for (const auto& constraint : Source->Constraints) {
+            if (!constraint.Condition->Init(ctx, src)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     bool InitOrderBy(TContext& ctx, ISource* src) const {
@@ -299,15 +328,30 @@ private:
         return true;
     }
 
-    TString TermAlias(const TNodePtr& term, size_t i) const {
+    THashSet<TString> UsedLables(const TVector<TNodePtr>& terms) const {
+        THashSet<TString> used(terms.size());
+        for (const TNodePtr& term : terms) {
+            used.emplace(term->GetLabel());
+        }
+        return used;
+    }
+
+    TString TermAlias(const TNodePtr& term, size_t i, const THashSet<TString>& used) const {
         const TString& label = term->GetLabel();
         if (!label.empty()) {
             return label;
         }
+
         if (const TString* column = term->GetColumnName()) {
             return *column;
         }
-        return TStringBuilder() << "column" << i;
+
+        for (;; ++i) {
+            TString alias = TStringBuilder() << "column" << i;
+            if (!used.contains(alias)) {
+                return alias;
+            }
+        }
     }
 
     TNodePtr BuildYqlResultItems(const TProjection& projection) const {
@@ -330,8 +374,50 @@ private:
         return Y(BuildYqlResultItem("", Y("YqlStar")));
     }
 
-    TNodePtr BuildYqlResultItem(const TString& name, const TNodePtr& term) const {
+    TNodePtr BuildYqlResultItem(TString name, const TNodePtr& term) const {
+        name = DisambiguatedResultItemName(std::move(name), term);
         return Y("YqlResultItem", Q(name), Y("Void"), Y("lambda", Q(Y()), term));
+    }
+
+    TString DisambiguatedResultItemName(TString name, const TNodePtr& term) const {
+        if (const auto* source = term->GetSourceName(); source && 1 < Source->Sources.size()) {
+            name.prepend(".").prepend(*source);
+        }
+
+        return name;
+    }
+
+    TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
+        const auto build = [this](TNodePtr node, TString name = "") {
+            return Q(Y(
+                std::move(node),
+                Q(std::move(name)),
+                Q(Y(/* Columns are passed through SetColumns */))));
+        };
+
+        if (!source.Alias) {
+            return build(source.Node);
+        }
+
+        if (auto& columns = source.Alias->Columns) {
+            if (auto* values = dynamic_cast<TYqlValuesNode*>(source.Node.Get())) {
+                if (!values->SetColumns(std::move(columns), ctx)) {
+                    return Nothing();
+                }
+            } else {
+                ctx.Error() << "Qualified by column names source alias "
+                            << "is viable only for VALUES statement";
+                return Nothing();
+            }
+        }
+
+        return build(source.Node, source.Alias->Name);
+    }
+
+    TNodePtr BuildJoinConstraint(const TYqlJoinConstraint& constraint) const {
+        return Q(Y(
+            Q(ToString(constraint.Kind)),
+            Y("YqlWhere", Y("Void"), Y("lambda", Q(Y()), constraint.Condition))));
     }
 
     TNodePtr BuildSortSpecification(const TVector<TSortSpecificationPtr>& keys) const {
@@ -345,6 +431,17 @@ private:
     TNodePtr BuildSortSpecification(const TSortSpecificationPtr& key) const {
         TString modifier = key->Ascending ? "asc" : "desc";
         return Y("YqlSort", Y("Void"), Y("lambda", Q(Y()), key->OrderExpr), Q(modifier), Q("first"));
+    }
+
+    static TString ToString(EYqlJoinKind kind) {
+        switch (kind) {
+            case EYqlJoinKind::Inner:
+                return "inner";
+            case EYqlJoinKind::Left:
+                return "left";
+            case EYqlJoinKind::Right:
+                return "right";
+        }
     }
 
     TNodePtr Node_;
@@ -375,12 +472,23 @@ public:
         {
             block->Add(Y("let", "output", Source_));
 
+            if (!IsOrdered()) {
+                block->Add(Y("let", "output", Y("Unordered", "output")));
+            }
+
             block->Add(Y("let", "result_sink",
                          Y("DataSink", Q("result"))));
 
+            TNodePtr options = Y();
+            options->Add(Q(Y(Q("type"))));
+            options->Add(Q(Y(Q("autoref"))));
+
+            if (!IsOrdered()) {
+                options->Add(Q(Y(Q("unordered"))));
+            }
+
             block->Add(Y("let", "world",
-                         Y("Write!", "world", "result_sink", Y("Key"), "output",
-                           Q(Y(Q(Y(Q("type"))), Q(Y(Q("autoref"))))))));
+                         Y("Write!", "world", "result_sink", Y("Key"), "output", Q(options))));
 
             block->Add(Y("return", Y("Commit!", "world", "result_sink")));
         }
@@ -399,6 +507,13 @@ public:
     }
 
 private:
+    bool IsOrdered() const {
+        if (const auto* select = dynamic_cast<const TYqlSelectNode*>(Source_.Get())) {
+            return select->IsOrdered();
+        }
+        return false;
+    }
+
     TNodePtr Source_;
     TNodePtr Node_;
 };

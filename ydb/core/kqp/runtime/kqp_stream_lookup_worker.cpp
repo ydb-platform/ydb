@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -16,6 +17,8 @@ namespace NKikimr {
 namespace NKqp {
 
 constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
+constexpr ui64 SEQNO_SPACE = 40;
+constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
 
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
@@ -331,6 +334,11 @@ public:
 
         while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
+            if (!result.UnprocessedResultRow && Settings.VectorTopK &&
+                result.ReadResult->Get()->Record.HasStats()) {
+                resultStats.ReadRowsCount += result.ReadResult->Get()->Record.GetStats().GetRows();
+                resultStats.ReadBytesCount += result.ReadResult->Get()->Record.GetStats().GetBytes();
+            }
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
                 YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
@@ -366,8 +374,10 @@ public:
                 batch.push_back(std::move(row));
                 storageRowSize = std::max(storageRowSize, (i64)8);
 
-                resultStats.ReadRowsCount += 1;
-                resultStats.ReadBytesCount += storageRowSize;
+                if (!Settings.VectorTopK || !result.ReadResult->Get()->Record.HasStats()) {
+                    resultStats.ReadRowsCount += 1;
+                    resultStats.ReadBytesCount += storageRowSize;
+                }
                 resultStats.ResultRowsCount += 1;
                 resultStats.ResultBytesCount += storageRowSize;
             }
@@ -468,6 +478,10 @@ private:
             }
         }
 
+        if (Settings.VectorTopK) {
+            *record.MutableVectorTopK() = *Settings.VectorTopK;
+        }
+
         YQL_ENSURE(!ranges.empty());
         if (ranges.front().Point) {
             request->Keys.reserve(ranges.size());
@@ -498,11 +512,15 @@ private:
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
 public:
-    TKqpJoinRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TKqpJoinRows(TLookupSettings&& settings, ui64 taskId,
+        const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
         : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
-        , InputDesc(inputDesc) {
-
+        , InputDesc(inputDesc)
+        , InputRowSeqNo(taskId << SEQNO_SPACE)
+        , InputRowSeqNoLast((taskId + 1) << SEQNO_SPACE)
+    {
+        YQL_ENSURE(taskId < MaxTaskId);
         // read columns should contain join key and result columns
         for (auto joinKey : Settings.LookupKeyColumns) {
             ReadColumns.emplace(joinKey->Name, *joinKey);
@@ -537,6 +555,7 @@ public:
             lastRow = cookie.LastRow;
         } else {
             rowSeqNo = InputRowSeqNo++;
+            YQL_ENSURE(InputRowSeqNo < InputRowSeqNoLast);
         }
 
         if (joinKey.HasValue()) {
@@ -1193,6 +1212,7 @@ private:
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
+    ui64 InputRowSeqNoLast = 0;
     ui64 JoinKeySeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
     NMiniKQL::TStructType* LeftRowType = nullptr;
@@ -1200,6 +1220,7 @@ private:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc) {
 
@@ -1245,12 +1266,16 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
         });
     }
 
+    if (settings.HasVectorTopK()) {
+        preparedSettings.VectorTopK = std::make_unique<NKikimrKqp::TReadVectorTopK>(settings.GetVectorTopK());
+    }
+
     switch (settings.GetLookupStrategy()) {
         case NKqpProto::EStreamLookupStrategy::LOOKUP:
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
-            return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
+            return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), taskId, typeEnv, holderFactory, inputDesc);
         default:
             return {};
     }
@@ -1261,6 +1286,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateLookupWorker(TLookupSettings&& set
     AFL_ENSURE(settings.LookupStrategy == NKqpProto::EStreamLookupStrategy::LOOKUP);
     AFL_ENSURE(!settings.KeepRowsOrder);
     AFL_ENSURE(!settings.AllowNullKeysPrefixSize);
+    AFL_ENSURE(settings.LookupKeyColumns.size() <= settings.KeyColumns.size());
     return std::make_unique<TKqpLookupRows>(std::move(settings), typeEnv, holderFactory);
 }
 

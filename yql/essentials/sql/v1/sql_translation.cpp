@@ -1503,21 +1503,82 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
     return Nothing();
 }
 
+bool ColumnCompression(const TRule_compression_setting_entry& node, TTranslation& ctx, TCompression& compression) {
+    const auto id = to_lower(Id(node.GetRule_an_id1(), ctx));
+
+    const auto& value = node.GetRule_compression_setting_value3(); // compression_setting_value
+
+    if (compression.Entries.contains(id)) {
+        ctx.Context().Error() << "'" << id << "' setting can be specified only once";
+        return false;
+    }
+
+    switch (value.Alt_case()) {
+        case TRule_compression_setting_value::AltCase::kAltCompressionSettingValue1: {
+            const auto result = ParseInteger(ctx.Context(), value.GetAlt_compression_setting_value1().GetRule_integer1());
+            if (!result) {
+                return false; // ParseInteger has already set error to context
+            }
+            const auto literal = MakeIntrusive<TLiteralNumberNode<ui64>>(ctx.Context().Pos(), "Uint64", ToString(*result));
+
+            compression.Entries[std::move(id)] = std::move(literal);
+            break;
+        }
+        case TRule_compression_setting_value::AltCase::kAltCompressionSettingValue2: {
+            const auto result = Id(value.GetAlt_compression_setting_value2().GetRule_id1(), ctx);
+            const TNodePtr literal = BuildLiteralRawString(ctx.Context().Pos(), result);
+
+            compression.Entries[std::move(id)] = std::move(literal);
+            break;
+        }
+        case TRule_compression_setting_value::AltCase::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+
+    return true;
+}
+
+TMaybe<TCompression> ColumnCompression(const TRule_compression& node, TTranslation& ctx) {
+    // compression: COMPRESSION LPAREN (compression_setting_entry (COMMA compression_setting_entry)*)? COMMA? RPAREN;
+
+    TCompression compression;
+
+    if (!node.HasBlock3()) { // compression_setting_entry
+        return compression;
+    }
+
+    const auto& block = node.GetBlock3();
+    const auto& entry = block.GetRule_compression_setting_entry1();
+    if (!ColumnCompression(entry, ctx, compression)) {
+        return Nothing();
+    }
+
+    for (const auto& block2 : block.GetBlock2()) {
+        const auto& entry2 = block2.GetRule_compression_setting_entry2();
+        if (!ColumnCompression(entry2, ctx, compression)) {
+            return Nothing();
+        }
+    }
+
+    return compression;
+}
+
 TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslation& ctx) {
     TNodePtr defaultExpr;
-    bool nullable = true;
     TVector<TIdentifier> families;
+    TMaybe<TCompression> compression;
+    bool nullable = true;
 
     const auto& optionsList = node.GetRule_column_option_list3();
 
     enum class EOption {
         Family,
         NotNull,
-        DefaultValue
+        DefaultValue,
+        Compression,
     };
 
-    std::vector<TRule_column_option> columnOptions;
-    columnOptions.reserve(static_cast<size_t>(EOption::DefaultValue) + 1);
+    TVector<TRule_column_option> columnOptions(Reserve(static_cast<size_t>(EOption::Compression) + 1));
 
     {
         switch (optionsList.Alt_case()) {
@@ -1559,32 +1620,37 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
         for (const auto& rule : columnOptions) {
             switch (rule.Alt_case()) {
-                case TRule_column_option::kAltColumnOption1: {
+                case TRule_column_option::kAltColumnOption1: { // family_relation
+                    const auto opt = rule.GetAlt_column_option1().GetRule_family_relation1();
                     if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Family) != usedOptions.end()) {
-                        ctx.Context().Error() << "'FAMILY' option can be specified only once";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'FAMILY' option can be specified only once";
                         return {};
                     }
 
                     usedOptions.push_back(EOption::Family);
 
-                    const auto& familyRelation = rule.GetAlt_column_option1().GetRule_family_relation1();
-                    families.push_back(IdEx(familyRelation.GetRule_an_id2(), ctx));
+                    families.push_back(IdEx(opt.GetRule_an_id2(), ctx));
                     break;
                 }
-                case TRule_column_option::kAltColumnOption2: {
+                case TRule_column_option::kAltColumnOption2: { // nullability
+                    const auto opt = rule.GetAlt_column_option2().GetRule_nullability1();
                     if (std::find(usedOptions.begin(), usedOptions.end(), EOption::NotNull) != usedOptions.end()) {
-                        ctx.Context().Error() << "'NOT NULL' option can be specified only once";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken2());
+                        ctx.Context().Error(pos) << "'NOT NULL' option can be specified only once";
                         return {};
                     }
 
                     usedOptions.push_back(EOption::NotNull);
 
-                    nullable = !rule.GetAlt_column_option2().GetRule_nullability1().HasBlock1();
+                    nullable = !opt.HasBlock1();
                     break;
                 }
-                case TRule_column_option::kAltColumnOption3: {
+                case TRule_column_option::kAltColumnOption3: { // default_value
+                    const auto opt = rule.GetAlt_column_option3().GetRule_default_value1();
                     if (std::find(usedOptions.begin(), usedOptions.end(), EOption::DefaultValue) != usedOptions.end()) {
-                        ctx.Context().Error() << "'DEFAULT' option can be specified only once";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'DEFAULT' option can be specified only once";
                         return {};
                     }
 
@@ -1600,14 +1666,15 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
                     ctx.Context().DisableLegacyNotNull = true;
 
-                    defaultExpr = expr.Build(rule.GetAlt_column_option3().GetRule_default_value1().GetRule_expr2());
+                    defaultExpr = expr.Build(opt.GetRule_expr2());
 
                     if (AnyOf(ctx.Context().Issues.begin(), ctx.Context().Issues.end(), [](const auto& issue) {
                             return issue.GetCode() == TIssuesIds::YQL_MISSING_IS_BEFORE_NOT_NULL;
                         })) {
-                        ctx.Context().Error() << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
-                                              << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
-                                              << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'DEFAULT' option can not use expr which contains literall 'NOT NULL'."
+                                                 << " If you wanted to use two different options 'DEFAULT' and 'NOT NULL',"
+                                                 << " it is recommended to use the syntax '(DEFAULT value, NOT NULL, ...)'";
 
                         return {};
                     }
@@ -1618,13 +1685,30 @@ TMaybe<TColumnOptions> ColumnOptions(const TRule_column_schema& node, TTranslati
 
                     break;
                 }
+                case TRule_column_option::kAltColumnOption4: { // compression
+                    const auto opt = rule.GetAlt_column_option4().GetRule_compression1();
+                    if (std::find(usedOptions.begin(), usedOptions.end(), EOption::Compression) != usedOptions.end()) {
+                        TPosition pos = ctx.Context().TokenPosition(opt.GetToken1());
+                        ctx.Context().Error(pos) << "'COMPRESSION' option can be specified only once";
+                        return {};
+                    }
+
+                    usedOptions.push_back(EOption::Compression);
+
+                    compression = ColumnCompression(opt, ctx);
+                    break;
+                }
                 case TRule_column_option::ALT_NOT_SET:
                     Y_UNREACHABLE();
             }
         }
     }
 
-    return TColumnOptions{std::move(defaultExpr), nullable, std::move(families)};
+    return TColumnOptions{
+        .DefaultExpr = std::move(defaultExpr),
+        .Families = std::move(families),
+        .Compression = std::move(compression),
+        .Nullable = nullable};
 }
 
 TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schema& node) {
@@ -1633,12 +1717,12 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
     TNodePtr type = SerialTypeNode(node.GetRule_type_name_or_bind2());
     const bool serial = (type != nullptr);
 
-    auto columnOptions = ColumnOptions(node, *this);
+    const auto columnOptions = ColumnOptions(node, *this);
     if (!columnOptions) {
         return {};
     }
 
-    auto [defaultExpr, nullable, families] = columnOptions.GetRef();
+    const auto [defaultExpr, families, compression, nullable] = columnOptions.GetRef();
 
     if (!type) {
         type = TypeNodeOrBind(node.GetRule_type_name_or_bind2());
@@ -1648,14 +1732,16 @@ TMaybe<TColumnSchema> TSqlTranslation::ColumnSchemaImpl(const TRule_column_schem
         return {};
     }
 
-    return TColumnSchema(
-        std::move(pos),
-        std::move(name),
-        std::move(type),
-        nullable,
-        std::move(families),
-        serial,
-        std::move(defaultExpr));
+    return TColumnSchema{
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .Type = std::move(type),
+        .Families = std::move(families),
+        .DefaultExpr = std::move(defaultExpr),
+        .Compression = compression,
+        .Nullable = nullable,
+        .Serial = serial,
+    };
 }
 
 TNodePtr TSqlTranslation::SerialTypeNode(const TRule_type_name_or_bind& node) {
@@ -1909,7 +1995,7 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
             const TString name(Id(node.GetAlt_create_table_entry6().GetRule_an_id_schema1(), *this));
             const TPosition pos(Context().Pos());
 
-            params.Columns.push_back(TColumnSchema(pos, name, nullptr, true, {}, false, nullptr));
+            params.Columns.push_back({.Pos = std::move(pos), .Name = std::move(name), .Nullable = true});
             break;
         }
         case NSQLv1Generated::TRule_create_table_entry::ALT_NOT_SET:
@@ -2788,6 +2874,16 @@ static bool StoreTopicSettingsEntry(
                 return false;
             }
             settings.AutoPartitioningStrategy.Set(valueExprNode);
+        }
+    } else if (to_lower(id.Name) == "metrics_level") {
+        if (reset) {
+            settings.MetricsLevel.Reset();
+        } else {
+            if (!valueExprNode->IsIntegerLiteral()) {
+                ctx.Error() << to_upper(id.Name) << " value should be an integer";
+                return false;
+            }
+            settings.MetricsLevel.Set(valueExprNode);
         }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;

@@ -653,7 +653,10 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
     }
 
      Y_UNIT_TEST(LeftJoinPushdownPredicate_NestedJoin) {
-        TKikimrRunner kikimr;
+        TKikimrSettings appsettings;
+        appsettings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+
+        TKikimrRunner kikimr(appsettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -671,7 +674,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 INNER JOIN `/Root/Join1_3` AS t3
                 ON t1.Fk1 = t3.Key
 
-                WHERE t2.Value > 1001;
+                WHERE t2.Value > 1001
+
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(
@@ -694,7 +698,8 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 LEFT JOIN `/Root/Join1_2` AS t2
                 ON t1.Fk1 = t2.Key
 
-                WHERE t2.Value > 1001;
+                WHERE t2.Value > 1001
+                ORDER BY t1.Key1, t1.Key2;
             )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             CompareYson(

@@ -1,53 +1,83 @@
 #!/usr/bin/env python3
 
-import configparser
 import datetime
+import inspect
+import json
 import os
+import sys
 import time
 import uuid
 import ydb
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from contextlib import contextmanager
 
 class YDBWrapper:
-    """Обертка для работы с YDB с логированием статистики"""
+    """Wrapper for working with YDB with statistics logging"""
     
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None):
-        if config_path is None:
-            dir = os.path.dirname(__file__)
-            config_path = f"{dir}/../../config/ydb_qa_db.ini"
+    def __init__(self, config_path: str = None, enable_statistics: bool = None, script_name: str = None, silent: bool = False, use_local_config: bool = True):
+        # If use_local_config=True: use only local config file (ignore YDB_QA_CONFIG env)
+        # If use_local_config=False: Priority: YDB_QA_CONFIG env > config file (JSON)
+        # By default logs go to stdout (as before)
+        # If silent=True, logs go to stderr (for scripts called from other scripts)
+        self._log_stream = sys.stderr if silent else sys.stdout
         
-        self.config = configparser.ConfigParser()
-        self.config.read(config_path)
+        if use_local_config:
+            # Force use local config file, ignore environment variable
+            if config_path is None:
+                dir_path = os.path.dirname(__file__)
+                config_path = f"{dir_path}/../../config/ydb_qa_config.json"
+            
+            # Load JSON config
+            try:
+                with open(config_path, 'r') as f:
+                    config_dict = json.load(f)
+                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+            except FileNotFoundError:
+                raise RuntimeError(f"Config file not found: {config_path}")
+            except json.JSONDecodeError as e:
+                raise RuntimeError(f"Invalid JSON config file: {e}")
+        else:
+            # Original behavior: YDB_QA_CONFIG env > config file
+            ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
+            
+            if ydb_qa_config_env:
+                # Parse JSON from ENV
+                try:
+                    config_dict = json.loads(ydb_qa_config_env)
+                    enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+                    
+                except (json.JSONDecodeError, KeyError) as e:
+                    raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
+            else:
+                # Fallback to JSON file for local development
+                if config_path is None:
+                    dir_path = os.path.dirname(__file__)
+                    config_path = f"{dir_path}/../../config/ydb_qa_config.json"
+                
+                # Load JSON config
+                try:
+                    with open(config_path, 'r') as f:
+                        config_dict = json.load(f)
+                    enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
+                except FileNotFoundError:
+                    raise RuntimeError(f"Config file not found: {config_path}")
+                except json.JSONDecodeError as e:
+                    raise RuntimeError(f"Invalid JSON config file: {e}")
         
-        # Основная база данных
-        self.database_endpoint = self.config["QA_DB"]["DATABASE_ENDPOINT"]
-        self.database_path = self.config["QA_DB"]["DATABASE_PATH"]
-        
-        # Таймаут подключения
-        self._connection_timeout = int(os.environ.get("YDB_CONNECTION_TIMEOUT", 
-                                                      self.config["QA_DB"].get("CONNECTION_TIMEOUT", "15")))
-        
-        # База данных для статистики
-        self.stats_endpoint = self.config["STATISTICS_DB"]["DATABASE_ENDPOINT"]
-        self.stats_path = self.config["STATISTICS_DB"]["DATABASE_PATH"]
-        self.stats_table = self.config["STATISTICS_DB"]["STATISTICS_TABLE"]
-        
-        # Настройки статистики
-        if enable_statistics is None:
-            enable_statistics = os.environ.get("YDB_ENABLE_STATISTICS", "true").lower() in ("true", "1", "yes")
-        
+        # Statistics settings
         self._enable_statistics = enable_statistics
         self._cluster_version = None
         self._session_id = str(uuid.uuid4())
         
-        # Сохраняем script_name для всех операций
-        self._script_name = script_name or "unknown_script"
+        # Automatically determine script_name if not provided
+        if script_name is None:
+            script_name = self._get_caller_script_name()
+        self._script_name = script_name
         
-        # GitHub Action info - получаем один раз
+        # GitHub Action info - get once
         self._github_info = self._get_github_action_info()
         
-        # Получаем версию кластера один раз при инициализации
+        # Get cluster version once during initialization
         try:
             with self.get_driver() as driver:
                 self._get_cluster_version(driver)
@@ -55,7 +85,7 @@ class YDBWrapper:
             self._log("warning", f"Failed to get cluster version: {e}")
             self._cluster_version = "unknown"
         
-        # Проверяем доступность stats DB только один раз при инициализации
+        # Check stats DB availability only once during initialization
         self._stats_available = None
         if self._enable_statistics:
             self._stats_available = self._check_stats_availability()
@@ -66,29 +96,100 @@ class YDBWrapper:
         else:
             self._log("info", "Statistics logging disabled")
     
+    def _load_config_from_dict(self, config_dict: dict, enable_statistics: bool = None):
+        """Load configuration from dictionary"""
+        dbs = config_dict["databases"]
+        main = dbs["main"]
+        stats = dbs.get("statistics", {})
+        variables = config_dict.get("variables", {})
+        flags = config_dict.get("flags", {})
+        
+        # Store flags as attribute for access from other scripts
+        self._flags = flags
+        
+        # Automatic field mapping
+        config_mapping = {
+            'database_endpoint': main["endpoint"],
+            'database_path': main["path"],
+            '_connection_timeout': main.get("connection_timeout", 60),
+            '_main_db_tables': main.get("tables", {}),
+            'stats_endpoint': stats.get("endpoint", main["endpoint"]),
+            'stats_path': stats.get("path", main["path"]),
+            '_stats_connection_timeout': stats.get("connection_timeout",60),
+            'stats_table': stats.get("tables", {}).get("query_statistics", "analytics/query_statistics"),
+            '_stats_db_tables': stats.get("tables", {})
+        }
+        
+        for key, value in config_mapping.items():
+            setattr(self, key, value)
+        
+        # Enable statistics from flags (default True)
+        if enable_statistics is None:
+            enable_statistics = flags.get("enable_statistics", True)
+        
+        return enable_statistics
+    
+    def _get_caller_script_name(self) -> str:
+        """Automatically determine the name of the script that called YDBWrapper"""
+        try:
+            # Get call stack
+            stack = inspect.stack()
+            
+            # Find first frame that is outside ydb_wrapper.py
+            for frame_info in stack:
+                frame_filename = frame_info.filename
+                
+                # Skip current file (ydb_wrapper.py)
+                if 'ydb_wrapper.py' not in frame_filename:
+                    # Get filename without path but with extension
+                    script_name = os.path.basename(frame_filename)
+                    return script_name
+            
+            # If not found, use default value
+            return "unknown_script"
+            
+        except Exception:
+            # On error return default value
+            return "unknown_script"
+    
+    def _make_full_path(self, table_path: str) -> str:
+        """Convert relative path to full path (with database_path)
+        
+        Args:
+            table_path: Relative path to table
+            
+        Returns:
+            Full path to table
+        """
+        # If path is already full (starts with database_path), return as is
+        if table_path.startswith(self.database_path):
+            return table_path
+        
+        # Remove leading slash if present
+        table_path = table_path.lstrip('/')
+        
+        # Add database_path
+        return f"{self.database_path}/{table_path}"
+    
     def __enter__(self):
-        """Контекстный менеджер - вход"""
+        """Context manager - entry"""
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Контекстный менеджер - выход"""
-        pass  # Больше не нужно останавливать потоки
-    
-    def close(self):
-        """Корректное завершение работы"""
-        pass  # Больше не нужно останавливать потоки
+        """Context manager - exit"""
+        pass  # No longer need to stop threads
     
     def _log(self, level: str, message: str, details: str = ""):
-        """Универсальное логирование"""
+        """Universal logging"""
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         icons = {"start": "🚀", "progress": "⏳", "success": "✅", "error": "❌", "info": "ℹ️", "warning": "⚠️", "stats": "📊"}
         if details:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}")
+            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message} | {details}", file=self._log_stream)
         else:
-            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}")
+            print(f"🕐 [{timestamp}] {icons.get(level, '📝')} {message}", file=self._log_stream)
     
     def _setup_credentials(self):
-        """Настройка учетных данных YDB"""
+        """Setup YDB credentials"""
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
             raise RuntimeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing")
         
@@ -97,9 +198,9 @@ class YDBWrapper:
         ]
     
     def check_credentials(self):
-        """Проверка наличия учетных данных YDB"""
+        """Check for YDB credentials"""
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-            print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+            print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=self._log_stream)
             return False
         
         # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
@@ -110,7 +211,7 @@ class YDBWrapper:
         return True
     
     def _get_cluster_version(self, driver) -> str:
-        """Получение версии кластера YDB"""
+        """Get YDB cluster version"""
         if self._cluster_version is not None:
             return self._cluster_version
             
@@ -132,7 +233,7 @@ class YDBWrapper:
     
     @contextmanager
     def get_driver(self):
-        """Контекстный менеджер для получения драйвера YDB"""
+        """Context manager for getting YDB driver"""
         self._setup_credentials()
         
         with ydb.Driver(
@@ -158,8 +259,8 @@ class YDBWrapper:
                 self._log("error", "Check your YDB credentials and network connectivity")
                 raise RuntimeError(f"YDB connection failed: {e}") from e
             
-            # Версия кластера уже получена в __init__
-            # Дополнительно получаем её только если она None (fallback)
+            # Cluster version already obtained in __init__
+            # Get it additionally only if it's None (fallback)
             if self._cluster_version is None:
                 try:
                     self._get_cluster_version(driver)
@@ -170,19 +271,19 @@ class YDBWrapper:
             yield driver
     
     def _check_stats_availability(self) -> bool:
-        """Проверка доступности базы данных статистики (вызывается только один раз в __init__)"""
+        """Check statistics database availability (called only once in __init__)"""
         try:
-            # Настраиваем credentials
+            # Setup credentials
             self._setup_credentials()
             
-            # Подключаемся к базе статистики с тем же таймаутом, что и для основной базы
+            # Connect to statistics database
             driver = ydb.Driver(
                 endpoint=self.stats_endpoint,
                 database=self.stats_path,
                 credentials=ydb.credentials_from_env_variables()
             )
             try:
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
+                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
                 tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
                 table_client = ydb.TableClient(driver, tc_settings)
                 scan_query = ydb.ScanQuery("SELECT 1 as test", {})
@@ -196,14 +297,18 @@ class YDBWrapper:
     
     def _log_statistics(self, operation_type: str, query: str, duration: float, 
                        status: str, error: str = None, rows_affected: int = None,
-                       cluster_version: str = None, table_path: str = None):
-        """Логирование статистики выполнения операций (синхронно)"""
-        # Проверяем, нужно ли логировать статистику
+                       cluster_version: str = None, table_path: str = None, query_name: str = None):
+        """Log operation statistics (synchronously)
+        
+        Args:
+            query_name: Optional name for the query (e.g., monitoring query filename)
+        """
+        # Check if we need to log statistics
         if not self._enable_statistics or not self._stats_available:
             return
         
-        # Подготавливаем данные для записи
-        # Используем timestamp в микросекундах (как YDB Timestamp)
+        # Prepare data for writing
+        # Use timestamp in microseconds (as YDB Timestamp)
         timestamp_us = int(time.time() * 1000000)
         
         stats_data = {
@@ -216,6 +321,7 @@ class YDBWrapper:
             'error': error,
             'rows_affected': rows_affected,
             'script_name': self._script_name,
+            'query_name': query_name,
             'cluster_version': cluster_version,
             'database_endpoint': self.database_endpoint,
             'database_path': self.database_path,
@@ -225,23 +331,23 @@ class YDBWrapper:
             'github_run_url': self._github_info['run_url']
         }
         
-        # Логируем детали отправляемой статистики
+        # Log details of statistics being sent
         self._log("stats", "Sending statistics", 
                   f"operation={operation_type}, status={status}, duration={duration:.2f}s, rows={rows_affected or 0}, cluster={cluster_version or 'unknown'}")
         
-        # Записываем статистику синхронно
+        # Write statistics synchronously
         send_start = time.time()
         success = self._write_stats_sync(stats_data)
         send_duration = time.time() - send_start
         
-        # Логируем результат отправки
+        # Log send result
         if success:
             self._log("success", f"Statistics sent successfully in {send_duration:.2f}s")
     
     def _write_stats_sync(self, stats_data):
-        """Синхронная запись статистики"""
+        """Synchronous statistics writing"""
         try:
-            # Настраиваем credentials для базы статистики
+            # Setup credentials for statistics database
             self._setup_credentials()
             
             driver = ydb.Driver(
@@ -250,15 +356,15 @@ class YDBWrapper:
                 credentials=ydb.credentials_from_env_variables()
             )
             try:
-                # Подключаемся к базе статистики
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
-                # Создаем таблицу статистики если не существует
+                # Connect to statistics database
+                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
+                # Create statistics table if it doesn't exist
                 self._ensure_stats_table_exists(driver)
                 
-                # Подготавливаем данные для вставки
+                # Prepare data for insertion
                 stats_data_list = [stats_data]
                 
-                # Вставляем статистику
+                # Insert statistics
                 table_client = ydb.TableClient(driver)
                 column_types = (
                     ydb.BulkUpsertColumns()
@@ -271,6 +377,7 @@ class YDBWrapper:
                     .add_column("error", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("rows_affected", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                     .add_column("script_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("query_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("cluster_version", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("database_endpoint", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("database_path", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -289,7 +396,7 @@ class YDBWrapper:
                 driver.stop()
                 
         except TimeoutError as e:
-            self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._connection_timeout}s)")
+            self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._stats_connection_timeout}s)")
             self._stats_available = False
             return False
         except Exception as e:
@@ -299,7 +406,7 @@ class YDBWrapper:
             return False
     
     def _ensure_stats_table_exists(self, driver):
-        """Создание таблицы статистики если не существует"""
+        """Create statistics table if it doesn't exist"""
         def create_stats_table(session):
             create_sql = f"""
                 CREATE TABLE IF NOT EXISTS `{self.stats_table}` (
@@ -312,6 +419,7 @@ class YDBWrapper:
                     `error` Utf8,
                     `rows_affected` Uint64,
                     `script_name` Utf8 NOT NULL,
+                    `query_name` Utf8,
                     `cluster_version` Utf8,
                     `database_endpoint` Utf8,
                     `database_path` Utf8,
@@ -330,15 +438,15 @@ class YDBWrapper:
             pool.retry_operation_sync(create_stats_table)
     
     def _execute_with_logging(self, operation_type: str, operation_func: Callable, 
-                             query: str = None, table_path: str = None) -> Any:
-        """Универсальный метод выполнения операций с логированием"""
+                             query: str = None, table_path: str = None, query_name: str = None) -> Any:
+        """Universal method for executing operations with logging"""
         start_time = time.time()
         
-        # Логируем начало операции
+        # Log operation start
         self._log("start", f"Executing {operation_type}")
         
         if query:
-            # Для bulk_upsert не показываем детали для каждого batch'а
+            # For bulk_upsert don't show details for each batch
             if operation_type != "bulk_upsert":
                 self._log("info", f"Query details:\n{query}")
         
@@ -346,7 +454,7 @@ class YDBWrapper:
         error = None
         rows_affected = 0
         
-        # Используем _cluster_version или 'unknown' если он None
+        # Use _cluster_version or 'unknown' if it's None
         cluster_version = self._cluster_version or "unknown"
         
         try:
@@ -368,7 +476,7 @@ class YDBWrapper:
                             results = results + result.result_set.rows
                             rows_affected += batch_size
                             
-                            # Логируем прогресс только каждые 50 батчей или каждые 10000 строк (но не для пустых результатов)
+                            # Log progress only every 50 batches or every 10000 rows (but not for empty results)
                             if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:
                                 elapsed = time.time() - start_time
                                 self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
@@ -384,7 +492,7 @@ class YDBWrapper:
                     else:
                         self._log("success", f"Scan query completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
                     
-                    # Логируем статистику
+                    # Log statistics
                     self._log_statistics(
                         operation_type=operation_type,
                         query=query,
@@ -392,16 +500,17 @@ class YDBWrapper:
                         status=status,
                         rows_affected=rows_affected,
                         cluster_version=cluster_version,
-                        table_path=table_path
+                        table_path=table_path,
+                        query_name=query_name
                     )
                     
                     return results
                 
                 elif operation_type == "scan_query_with_metadata":
-                    # Для scan_query_with_metadata используем operation_func
+                    # For scan_query_with_metadata use operation_func
                     result = operation_func(driver)
                     
-                    # operation_func всегда возвращает (results, column_types)
+                    # operation_func always returns (results, column_types)
                     data, metadata = result
                     rows_affected = len(data) if isinstance(data, list) else 0
                     
@@ -413,7 +522,7 @@ class YDBWrapper:
                     else:
                         self._log("success", f"Scan query with metadata completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
                     
-                    # Логируем статистику (используем "scan_query" для обоих типов scan операций)
+                    # Log statistics (use "scan_query" for both types of scan operations)
                     self._log_statistics(
                         operation_type="scan_query",
                         query=query,
@@ -421,23 +530,24 @@ class YDBWrapper:
                         status=status,
                         rows_affected=rows_affected,
                         cluster_version=cluster_version,
-                        table_path=table_path
+                        table_path=table_path,
+                        query_name=query_name
                     )
                     
                     return result
                 
                 else:
-                    # Для других операций
+                    # For other operations
                     result = operation_func(driver)
                     
-                    # Если операция вернула число, используем его как rows_affected
+                    # If operation returned a number, use it as rows_affected
                     if isinstance(result, (int, float)) and operation_type in ["bulk_upsert", "create_table"]:
                         rows_affected = int(result)
-                    # Если операция вернула кортеж (данные + метаданные), извлекаем количество строк
+                    # If operation returned a tuple (data + metadata), extract row count
                     elif isinstance(result, tuple) and len(result) == 2 and operation_type == "scan_query":
                         data, metadata = result
                         rows_affected = len(data) if isinstance(data, list) else 0
-                    # Если scan_query вернул просто список, считаем количество строк
+                    # If scan_query returned just a list, count rows
                     elif isinstance(result, list) and operation_type == "scan_query":
                         rows_affected = len(result)
                     
@@ -446,7 +556,7 @@ class YDBWrapper:
                     
                     self._log("success", f"{operation_type} completed", f"Duration: {duration:.2f}s")
                     
-                    # Логируем статистику
+                    # Log statistics
                     self._log_statistics(
                         operation_type=operation_type,
                         query=query or f"{operation_type} operation",
@@ -454,7 +564,8 @@ class YDBWrapper:
                         status=status,
                         rows_affected=rows_affected,
                         cluster_version=cluster_version,
-                        table_path=table_path
+                        table_path=table_path,
+                        query_name=query_name
                     )
                     
                     return result
@@ -467,26 +578,30 @@ class YDBWrapper:
             
             self._log("error", f"{operation_type} failed", f"Error: {error}, Duration: {duration:.2f}s")
             
-            # Логируем статистику ошибки
+            # Normalize operation_type for statistics (use "scan_query" for both scan operations)
+            stats_operation_type = "scan_query" if operation_type == "scan_query_with_metadata" else operation_type
+            
+            # Log error statistics
             self._log_statistics(
-                operation_type=operation_type,
+                operation_type=stats_operation_type,
                 query=query or f"{operation_type} operation",
                 duration=duration,
                 status=status,
                 error=error,
                 cluster_version=cluster_version,
-                table_path=table_path if operation_type == "bulk_upsert" else None
+                table_path=table_path if operation_type == "bulk_upsert" else None,
+                query_name=query_name
             )
             
             raise
     
     
-    def execute_scan_query(self, query: str) -> List[Dict[str, Any]]:
-        """Выполнение scan query с логированием"""
-        return self._execute_with_logging("scan_query", None, query, None)
+    def execute_scan_query(self, query: str, query_name: str = None) -> List[Dict[str, Any]]:
+        """Execute scan query with logging"""
+        return self._execute_with_logging("scan_query", None, query, None, query_name)
     
-    def execute_scan_query_with_metadata(self, query: str) -> tuple[List[Dict[str, Any]], List[tuple[str, Any]]]:
-        """Выполнение scan query с возвратом данных и метаданных колонок"""
+    def execute_scan_query_with_metadata(self, query: str, query_name: str = None) -> Tuple[List[Dict[str, Any]], List[Tuple[str, Any]]]:
+        """Execute scan query with return of data and column metadata"""
         def operation(driver):
             tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
             table_client = ydb.TableClient(driver, tc_settings)
@@ -507,48 +622,66 @@ class YDBWrapper:
                 except StopIteration:
                     break
             
-            # Если нет результатов, column_types может быть None
+            # If no results, column_types may be None
             if column_types is None:
                 column_types = []
             
             return results, column_types
         
-        return self._execute_with_logging("scan_query_with_metadata", operation, query, None)
+        return self._execute_with_logging("scan_query_with_metadata", operation, query, None, query_name)
     
     def create_table(self, table_path: str, create_sql: str):
-        """Создание таблицы с логированием"""
+        """Create table with logging
+        
+        Args:
+            table_path: Relative path to table (e.g., 'test_results/test_runs')
+            create_sql: SQL for table creation
+        """
+        # Convert to full path for YDB (if not already full)
+        full_path = self._make_full_path(table_path)
+        
         def operation(driver):
             def callee(session):
                 session.execute_scheme(create_sql)
             
             with ydb.SessionPool(driver) as pool:
                 pool.retry_operation_sync(callee)
-            return 1  # Возвращаем 1 для обозначения создания таблицы
+            return 1  # Return 1 to indicate table creation
         
         return self._execute_with_logging("create_table", operation, create_sql, table_path)
     
     def bulk_upsert(self, table_path: str, rows: List[Dict[str, Any]], 
                    column_types: ydb.BulkUpsertColumns):
-        """Выполнение bulk upsert с логированием"""
+        """Execute bulk upsert with logging
+        
+        Args:
+            table_path: Relative path to table (e.g., 'test_results/test_runs')
+        """
+        # Convert to full path for YDB
+        full_path = self._make_full_path(table_path)
         rows_count = len(rows) if rows else 0
         
         def operation(driver):
             table_client = ydb.TableClient(driver)
-            table_client.bulk_upsert(table_path, rows, column_types)
-            return rows_count  # Возвращаем количество строк для статистики
+            table_client.bulk_upsert(full_path, rows, column_types)
+            return rows_count  # Return row count for statistics
         
         return self._execute_with_logging("bulk_upsert", operation, f"BULK_UPSERT to {table_path}", table_path)
     
     def bulk_upsert_batches(self, table_path: str, all_rows: List[Dict[str, Any]], 
-                           column_types: ydb.BulkUpsertColumns, batch_size: int = 1000):
-        """Выполнение bulk upsert с разбивкой на batches и агрегированной статистикой
+                           column_types: ydb.BulkUpsertColumns, batch_size: int = 1000, query_name: str = None):
+        """Execute bulk upsert with batching and aggregated statistics
         
         Args:
-            table_path: Путь к таблице
-            all_rows: Все данные для вставки
-            column_types: Типы колонок
-            batch_size: Размер batch (по умолчанию 1000)
+            table_path: Relative path to table (e.g., 'test_results/test_runs')
+            all_rows: All data to insert
+            column_types: Column types
+            batch_size: Batch size (default 1000)
+            query_name: Optional name for the query (e.g., table name)
         """
+        # Convert to full path for YDB
+        full_path = self._make_full_path(table_path)
+        
         start_time = time.time()
         total_rows = len(all_rows)
         
@@ -563,7 +696,7 @@ class YDBWrapper:
         status = "success"
         error = None
         
-        # Используем _cluster_version или 'unknown' если он None
+        # Use _cluster_version or 'unknown' if it's None
         cluster_version = self._cluster_version or "unknown"
         
         try:
@@ -572,9 +705,9 @@ class YDBWrapper:
                 
                 for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
                     batch_rows = all_rows[start_idx:start_idx + batch_size]
-                    table_client.bulk_upsert(table_path, batch_rows, column_types)
+                    table_client.bulk_upsert(full_path, batch_rows, column_types)
                     
-                    # Логируем прогресс каждые 10 batches или для последнего
+                    # Log progress every 10 batches or for the last one
                     if batch_num % 10 == 0 or start_idx + batch_size >= total_rows:
                         elapsed = time.time() - start_time
                         processed = min(start_idx + batch_size, total_rows)
@@ -585,7 +718,7 @@ class YDBWrapper:
             self._log("success", f"bulk_upsert_batches completed", 
                       f"Total: {total_rows} rows in {num_batches} batches, Duration: {duration:.2f}s")
             
-            # Логируем ОДНУ запись статистики для всей операции
+            # Log ONE statistics record for the entire operation
             self._log_statistics(
                 operation_type="bulk_upsert",
                 query=f"BULK_UPSERT to {table_path} ({total_rows} rows in {num_batches} batches)",
@@ -593,7 +726,8 @@ class YDBWrapper:
                 status=status,
                 rows_affected=total_rows,
                 cluster_version=cluster_version,
-                table_path=table_path
+                table_path=table_path,
+                query_name=query_name
             )
             
         except Exception as e:
@@ -610,16 +744,34 @@ class YDBWrapper:
                 status=status,
                 error=error,
                 cluster_version=cluster_version,
-                table_path=table_path
+                table_path=table_path,
+                query_name=query_name
             )
             raise
     
-    def get_session_id(self) -> str:
-        """Получение ID текущей сессии"""
-        return self._session_id
+    def execute_dml(self, query: str, parameters: Dict[str, Any] = None, query_name: str = None):
+        """Execute DML query (INSERT/UPDATE/DELETE) with parameters
+        
+        Args:
+            query: SQL query with DECLARE parameters
+            parameters: Parameters dictionary {$param_name: value}
+            query_name: Query name for logging
+        """
+        def operation(driver):
+            def callee(session):
+                prepared_query = session.prepare(query)
+                with session.transaction() as tx:
+                    tx.execute(prepared_query, parameters or {}, commit_tx=True)
+                    return 1  # Successful execution
+            
+            with ydb.SessionPool(driver) as pool:
+                return pool.retry_operation_sync(callee)
+        
+        return self._execute_with_logging("dml_query", operation, query, None, query_name)
+    
     
     def _get_github_action_info(self) -> dict:
-        """Получение информации о GitHub Action если скрипт запущен в GitHub Actions"""
+        """Get GitHub Action information if script is run in GitHub Actions"""
         github_info = {
             "workflow_name": None,
             "run_id": None,
@@ -627,7 +779,7 @@ class YDBWrapper:
         }
         
         try:
-            # GitHub Actions устанавливает эти переменные окружения
+            # GitHub Actions sets these environment variables
             workflow_name = os.environ.get("GITHUB_WORKFLOW")
             run_id = os.environ.get("GITHUB_RUN_ID")
             repository = os.environ.get("GITHUB_REPOSITORY")
@@ -640,33 +792,86 @@ class YDBWrapper:
                 github_info["run_url"] = f"https://github.com/{repository}/actions/runs/{run_id}"
                 
         except Exception:
-            # Игнорируем ошибки получения GitHub информации
+            # Ignore errors getting GitHub information
             pass
             
         return github_info
     
     def _normalize_table_path(self, table_path: str) -> str:
-        """Нормализация пути к таблице - исключаем database_path для краткости"""
+        """Normalize table path - exclude database_path for brevity"""
         if not table_path:
             return None
             
-        # Если путь начинается с database_path, убираем его
+        # If path starts with database_path, remove it
         if self.database_path and table_path.startswith(self.database_path):
             normalized = table_path[len(self.database_path):]
-            # Убираем ведущий слеш если есть
+            # Remove leading slash if present
             if normalized.startswith('/'):
                 normalized = normalized[1:]
             return normalized
             
         return table_path
     
+    def get_table_path(self, table_name: str, database: str = "main") -> str:
+        """Get table path from configuration
+        
+        Args:
+            table_name: Table name (e.g., 'test_results')
+            database: Database ('main' or 'statistics')
+        
+        Returns:
+            Table path relative to database
+        
+        Raises:
+            KeyError: If table not found in configuration
+        """
+        if database == "main":
+            if table_name not in self._main_db_tables:
+                raise KeyError(f"Table '{table_name}' not found in databases.main.tables config")
+            return self._main_db_tables[table_name]
+        elif database == "statistics":
+            if table_name not in self._stats_db_tables:
+                raise KeyError(f"Table '{table_name}' not found in databases.statistics.tables config")
+            return self._stats_db_tables[table_name]
+        else:
+            raise ValueError(f"Unknown database: {database}. Use 'main' or 'statistics'")
+    
+    def get_flag(self, flag_name: str, default: Any = None) -> Any:
+        """Get flag value from configuration
+        
+        Args:
+            flag_name: Flag name (e.g., 'enable_backup_write')
+            default: Default value if flag is not found
+        
+        Returns:
+            Flag value or default if not found
+        """
+        flags = getattr(self, '_flags', {})
+        return flags.get(flag_name, default)
+    
+    def get_available_tables(self, database: str = "main") -> dict:
+        """Get dictionary of all available tables
+        
+        Args:
+            database: Database ('main' or 'statistics')
+        
+        Returns:
+            Dictionary {table_name: table_path}
+        """
+        if database == "main":
+            return self._main_db_tables.copy()
+        elif database == "statistics":
+            return self._stats_db_tables.copy()
+        else:
+            raise ValueError(f"Unknown database: {database}")
+    
     def get_cluster_info(self) -> Dict[str, Any]:
-        """Получение информации о кластере и статистике (без создания нового подключения)"""
+        """Get cluster and statistics information (without creating new connection)"""
         try:
-            # Используем уже полученную версию, не создаём новое подключение
+            # Use already obtained version, don't create new connection
             version = self._cluster_version
             
-            # Проверяем статус статистики
+            # Check statistics status
             stats_status = "disabled"
             if self._enable_statistics:
                 stats_status = "enabled_and_available" if self._stats_available else "enabled_but_unavailable"

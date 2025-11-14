@@ -290,23 +290,21 @@ void Deserialize(TDuration& value, INodePtr node)
     switch (node->GetType()) {
         case ENodeType::Int64: {
             auto ms = node->AsInt64()->GetValue();
-            if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
-            }
+            THROW_ERROR_EXCEPTION_IF(ms < 0, "Duration can not be negative (Value: %v)", ms);
             value = TDuration::MilliSeconds(static_cast<ui64>(ms));
             break;
         }
 
-        case ENodeType::Uint64:
+        case ENodeType::Uint64: {
             value = TDuration::MilliSeconds(node->AsUint64()->GetValue());
             break;
+        }
 
         case ENodeType::Double: {
             auto ms = node->AsDouble()->GetValue();
-            if (ms < 0) {
-                THROW_ERROR_EXCEPTION("Duration cannot be negative");
-            }
-            value = TDuration::MicroSeconds(static_cast<ui64>(ms * 1'000.0));
+            THROW_ERROR_EXCEPTION_IF(!std::isfinite(ms), "Duration must be finite");
+            THROW_ERROR_EXCEPTION_IF(ms < 0, "Duration can not be negative (Value: %v)", ms);
+            value = TDuration::MilliSeconds(ms);
             break;
         }
 

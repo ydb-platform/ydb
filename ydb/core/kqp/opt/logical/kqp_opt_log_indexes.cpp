@@ -446,7 +446,7 @@ auto NewLambdaFrom(TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& 
 
 auto LevelLambdaFrom(
     const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, TNodeOnNodeOwnedMap& replaces,
-    const TExprBase& fromArgs, const TExprBase& fromBody)
+    const TExprBase& fromArgs, const TExprBase& fromBody, TExprNode::TPtr& targetVectorExpr)
 {
     auto newLambda = NewLambdaFrom(ctx, pos, replaces, *fromArgs.Raw(), fromBody);
     replaces.clear();
@@ -463,7 +463,8 @@ auto LevelLambdaFrom(
                     .Struct(oldMember.Cast().Struct())
                 .Done();
                 replaces.emplace(oldMember.Raw(), newMember.Ptr());
-                break;
+            } else if (arg.Raw() != apply.Callable().Raw()) {
+                targetVectorExpr = arg.Ptr();
             }
         }
         return ctx.NewLambda(pos,
@@ -473,7 +474,7 @@ auto LevelLambdaFrom(
 
     auto innerMap = flatMap.Cast().Lambda().Body().Maybe<TCoFlatMap>();
     if (innerMap) {
-        // Handle the FlatMap(<expression>, lambda expr: FlatMap(<freearg0>, lambda freearg0: Knn::Distance(Member(freearg0, 'embedding'), expr))) case
+        // Handle the FlatMap(<expression>, lambda exprarg: FlatMap(<freearg0>, lambda freearg0: Knn::Distance(Member(freearg0, 'embedding'), exprarg))) case
         // See also CanUseVectorIndex()
         auto apply = innerMap.Cast().Lambda().Body().Cast<TCoApply>();
         TVector<TExprBase> newArgs;
@@ -487,7 +488,13 @@ auto LevelLambdaFrom(
                     .Struct(oldMember.Struct())
                     .Done());
             } else {
-                newArgs.push_back(arg);
+                // Refer two levels up from this lambda... i.e. refer <expression> from <exprarg> in the line above
+                if (arg.Raw() == flatMap.Cast().Lambda().Args().Arg(0).Raw()) {
+                    targetVectorExpr = flatMap.Cast().Input().Ptr();
+                } else {
+                    targetVectorExpr = arg.Ptr();
+                }
+                newArgs.push_back(TExprBase(targetVectorExpr));
             }
         }
         auto newApply = Build<TCoApply>(ctx, pos)
@@ -509,7 +516,8 @@ auto LevelLambdaFrom(
                 .Struct(oldMember.Struct())
             .Done();
             replaces.emplace(arg.Raw(), newMember.Ptr());
-            break;
+        } else {
+            targetVectorExpr = arg.Ptr();
         }
     }
     return ctx.NewLambda(pos,
@@ -540,28 +548,21 @@ void RemapIdToParent(TExprContext& ctx, TPositionHandle pos, TExprNodePtr& read)
 }
 
 void VectorReadLevel(
-    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos, const TKqpOptimizeContext& kqpCtx,
-    const TExprNodePtr& lambda, const TCoTopBase& top,
-    const TKqpTable& levelTable, const TCoAtomList& levelColumns,
-    TExprNodePtr& read)
+    const TIndexDescription& indexDesc, TExprContext& ctx, TPositionHandle pos,
+    const TExprNodePtr& lambda, const TCoTopBase& top, const TKqpTable& levelTable, const TCoAtomList& levelColumns,
+    const TExprNodePtr& levelTopCount, const TCoNameValueTupleList& streamLookupSettings, TExprNodePtr& read)
 {
     const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
         .settings();
-    const auto clusters = std::max<ui32>(2, settings.clusters());
     const auto levels = std::max<ui32>(1, settings.levels());
     Y_ENSURE(levels >= 1);
-    const auto levelTop = std::min<ui32>(kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1), clusters);
-
-    auto count = ctx.Builder(pos)
-        .Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal()
-    .Build();
 
     for (ui32 level = 1;; ++level) {
         read = Build<TCoTop>(ctx, pos)
             .Input(read)
             .KeySelectorLambda(lambda)
             .SortDirections(top.SortDirections())
-            .Count(count)
+            .Count(levelTopCount)
         .Done().Ptr();
 
         RemapIdToParent(ctx, pos, read);
@@ -570,13 +571,11 @@ void VectorReadLevel(
             break;
         }
 
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
         read = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(levelTable)
             .LookupKeys(read)
             .Columns(levelColumns)
-            .Settings(settings.BuildNode(ctx, pos))
+            .Settings(streamLookupSettings)
             .Done().Ptr();
     }
 }
@@ -588,34 +587,38 @@ void VectorReadMain(
     const TKqpTable& mainTable,
     const TIntrusivePtr<TKikimrTableMetadata> & mainTableMeta,
     const TCoAtomList& mainColumns,
+    const TKqpStreamLookupSettings& pushdownSettings,
     TExprNodePtr& read)
 {
-    TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
     const bool isCovered = CheckIndexCovering(mainColumns, postingTableMeta);
+    const auto settingsNode = pushdownSettings.BuildNode(ctx, pos);
 
     if (!isCovered) {
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+
+        const bool isVectorCovered = postingTableMeta->Columns.contains(pushdownSettings.VectorTopColumn);
         const auto postingColumns = BuildKeyColumnsList(pos, ctx, mainTableMeta->KeyColumnNames);
 
         read = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(postingTable)
             .LookupKeys(read)
             .Columns(postingColumns)
-            .Settings(settings.BuildNode(ctx, pos))
+            .Settings(isVectorCovered ? settingsNode : settings.BuildNode(ctx, pos))
         .Done().Ptr();
 
         read = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(mainTable)
             .LookupKeys(read)
             .Columns(mainColumns)
-            .Settings(settings.BuildNode(ctx, pos))
+            .Settings(settingsNode)
         .Done().Ptr();
     } else {
         read = Build<TKqlStreamLookupTable>(ctx, pos)
             .Table(postingTable)
             .LookupKeys(read)
             .Columns(mainColumns)
-            .Settings(settings.BuildNode(ctx, pos))
+            .Settings(settingsNode)
         .Done().Ptr();
     }
 }
@@ -653,7 +656,8 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     const auto& mainColumns = match.Columns();
 
     TNodeOnNodeOwnedMap replaces;
-    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody);
+    TExprNode::TPtr targetVector;
+    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
 
     auto listType = Build<TCoListType>(ctx, pos)
         .ItemType<TCoStructType>()
@@ -691,18 +695,28 @@ TExprBase DoRewriteTopSortOverKMeansTree(
         .Build()
     .Done();
 
+    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
+
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
+    settings.VectorTopIndex = indexDesc.Name;
+    settings.VectorTopTarget = targetVector;
+    settings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal().Build();
+    auto settingsNode = settings.BuildNode(ctx, pos);
+
     auto read = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
         .LookupKeys(lookupKeys)
         .Columns(levelColumns)
-        .Settings(settings.BuildNode(ctx, pos))
+        .Settings(settingsNode)
         .Done().Ptr();
 
-    VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, read);
+    VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, settings.VectorTopLimit, settingsNode, read);
 
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, read);
+    settings.VectorTopColumn = indexDesc.KeyColumns.back();
+    settings.VectorTopLimit = top.Count().Ptr();
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
@@ -792,7 +806,8 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
             args.Ptr(),
             ctx.ReplaceNodes(TExprNode::TListType{optionalIf.Ptr()}, replaces));
     }();
-    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody);
+    TExprNode::TPtr targetVector;
+    const auto levelLambda = LevelLambdaFrom(indexDesc, ctx, pos, replaces, lambdaArgs, lambdaBody, targetVector);
 
     auto read = match.BuildRead(ctx, prefixTable, prefixColumns).Ptr();
 
@@ -810,22 +825,31 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     auto prefixLeafRows = FilterLeafRows<TCoCmpGreaterOrEqual>(TExprBase(read), ctx, pos);
     auto prefixRootRows = FilterLeafRows<TCoCmpLess>(TExprBase(read), ctx, pos);
 
+    const auto levelTop = kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1);
+
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    settings.VectorTopColumn = NTableIndex::NKMeans::CentroidColumn;
+    settings.VectorTopIndex = indexDesc.Name;
+    settings.VectorTopTarget = targetVector;
+    settings.VectorTopLimit = ctx.Builder(pos).Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal().Build();
+    auto settingsNode = settings.BuildNode(ctx, pos);
     auto levelRows = Build<TKqlStreamLookupTable>(ctx, pos)
         .Table(levelTable)
         .LookupKeys(prefixRootRows)
         .Columns(levelColumns)
-        .Settings(settings.BuildNode(ctx, pos))
+        .Settings(settingsNode)
         .Done().Ptr();
-    VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, levelRows);
+    VectorReadLevel(indexDesc, ctx, pos, levelLambda, top, levelTable, levelColumns, settings.VectorTopLimit, settingsNode, levelRows);
 
     read = Build<TCoUnionAll>(ctx, pos)
         .Add(levelRows)
         .Add(prefixLeafRows)
         .Done().Ptr();
 
-    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, read);
+    settings.VectorTopColumn = indexDesc.KeyColumns.back();
+    settings.VectorTopLimit = top.Count().Ptr();
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, settings, read);
 
     if (mainLambda) {
         read = Build<TCoMap>(ctx, flatMap.Pos())

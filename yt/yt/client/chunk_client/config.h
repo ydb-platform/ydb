@@ -378,6 +378,9 @@ struct TReplicationWriterConfig
     //! Acquiring resources for putting blocks before invoking PutBlocks.
     bool UseProbePutBlocks;
 
+    //! If |true| data node will preallocate disk space before writing.
+    bool PreallocateDiskSpace;
+
     int GetDirectUploadNodeCount();
 
     REGISTER_YSON_STRUCT(TReplicationWriterConfig);

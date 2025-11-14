@@ -1,0 +1,1549 @@
+Snowball 3.0.1 (2025-05-09)
+===========================
+
+Python
+------
+
+* The __init__.py in 3.0.0 was incorrectly generated due to a missing
+  build dependency and the list of algorithms was empty.  First reported by
+  laymonage.  Thanks to Dmitry Shachnev, Henry Schreiner and Adam Turner for
+  diagnosing and fixing.  (#229, #230, #231)
+
+* Add trove classifiers for Armenian and Yiddish which have now been registered
+  with PyPI.  Thanks to Henry Schreiner and Dmitry Shachnev.  (#228)
+
+* Update documented details of Python 2 support in old versions.
+
+Snowball 3.0.0 (2025-05-08)
+===========================
+
+Ada
+---
+
+* Bug fixes:
+
+  + Fix invalid Ada code generated for Snowball `loop` (it was partly Pascal!)
+    None of the stemmers shipped in previous releases triggered this bug, but
+    the Turkish stemmer now does.
+
+  + The Ada runtime was not tracking the current length of the string
+    but instead used the current limit value or some other substitute, which
+    manifested as various incorrect behaviours for code inside of `setlimit`.
+
+  + `size` was incorrectly returning the difference between the limit and the
+    backwards limit.
+
+  + `lenof` or `sizeof` on a string variable generated Ada code that didn't
+    even compile.
+
+  + Fix incorrect preconditions on some methods in the runtime.
+
+  + Fix bug in runtime code used by `attach`, `insert`, `<-` and string
+    variable assignment when a (sub)string was replaced with a larger string.
+    This bug was triggered by code in the Kraaij-Pohlmann Dutch stemmer
+    implementation (which was previously not enabled by default but is now the
+    standard Dutch stemmer).
+
+  + Fix invalid code generated for `insert`, `<-` and string variable
+    assignment.  This bug was triggered by code in the Kraaij-Pohlmann
+    Dutch stemmer implementation (which was previously not enabled by default
+    but is now the standard Dutch stemmer).
+
+  + Generate valid code for programs which don't use `among`.  This didn't
+    affect code generation for any algorithms we currently ship.
+
+  + If the end of a routine was unreachable code the Snowball compiler
+    would think the start of the next routine was also unreachable and would
+    not generate it.  This didn't affect code generation for any algorithms we
+    currently ship.
+
+* Code quality:
+
+  + Only declare variables A and C when each is needed.
+
+  + Fix indentation of generated declarations.
+
+  + Drop extra blank line before `Result := True`.
+
+C/C++
+-----
+
+* Bug fixes:
+
+  + Fix potential NULL dereference in runtime code if we failed to allocate
+    memory for the p or S member for a Snowball program which uses one or more
+    string variables.  Problem was introduced in Snowball 2.0.0.  Fixes #206,
+    reported by Maxim Korotkov.
+
+  + Fix invalid C code generated when a failure is handled in a context with
+    the opposite direction to where it happened, for example:
+
+        externals (stem)
+        define stem as ( try backwards 'x' )
+
+    This was fixed by changing the C generator to work like all the other
+    generators and pre-generate the code to handle failure.
+
+  + Eliminate assumptions that NULL has all-zero bit pattern.  We don't know
+    of any current platforms where this assumption fails, but the C standard
+    doesn't require an all-zero bit pattern for NULL.  Fixes #207.
+
+* Optimisations:
+
+  + Store index delta for among substring_i field.  This makes trying
+    substrings after a failed match slightly faster because we can just add
+    the offset to the pointer we already have to the current element.
+
+* Code quality:
+
+  + Improve formatting of generated code.
+
+C#
+--
+
+* Bug fixes:
+
+  + Add missing runtime support for testing for a string var at the current
+    position when working forwards.  This situation isn't exercised by any of
+    the stemming algorithms we currently ship.
+
+  + Adjust generated code to work around a code flow analysis bug in the `mcs`
+    C# compiler.
+
+* Code quality:
+
+  + Prune unused `using System.Text;`.
+
+  + Generate C# with UTF-8 source encoding.  This makes the generated code
+    easier to follow, which helps during development.  It's also a bit smaller.
+    For now codepoints U+0590 and above are still emitted as escape sequences
+    to avoid confusing source code rendering when LTR scripts are involved.
+
+Go
+--
+
+* Optimisations:
+
+  + Drop some unneeded Go code generated for string `$`.  None of the shipped
+    stemmers use string `$`, though the Schinke Latin stemmer algorithm on the
+    website does.
+
+* Code quality:
+
+  + Dispatch among result with `switch` instead of an `if` ... `else if` chain
+    (which looks like we did because the Go generator evolved from the Python
+    generator and Python didn't used to have a switch-like construct.  This
+    doesn't make a measurable speed difference so it seems the Go compiler is
+    optimising both to equivalent code, but using a switch here seems clearer,
+    a better match for the intent, and is a bit simpler to generate.
+
+  + Generate Go with UTF-8 source encoding.  This makes the generated code
+    easier to follow, which helps during development.  It's also a bit smaller.
+    For now codepoints U+0590 and above are still emitted as escape sequences
+    to avoid confusing source code rendering when LTR scripts are involved.
+
+Java
+----
+
+* The Java code generated by Snowball requires now requires Java >= 7.  Java 7
+  was released in 2011, and Java 6's EOL was 2013 so we don't expect this
+  to be a problematic requirement.  See #195.
+
+* Optimisations:
+
+  + We now store the current string in a `char[]` rather than using a
+    `StringBuilder` to reduce overheads.  The `getCurrent()` method continues
+    to return a Java `String`, but the `char[]` can be accessed using the new
+    `getCurrentBuffer()` and `getCurrentBufferLength()` methods.  Patch from
+    Robert Muir (#195).
+
+  + Use a more efficient mechanism for calling `among` functions.  Patch from
+    Robert Muir (#195).
+
+* Code quality:
+
+  + Consistently put `[]` right after element type for array types, which seems
+    the most used style.
+
+  + Fix javac warnings in SnowballProgram.java.
+
+  + Improve formatting of generated code.
+
+Javascript
+----------
+
+* Bug fixes:
+
+  + Use base class specified by `-p` in string `$` rather than hard-coding
+    `BaseStemmer` (which is the default if you don't specify `-p`).  None of
+    the shipped stemmers use string `$`, though the Schinke Latin stemmer
+    algorithm on the website does.
+
+* Code quality:
+
+  + Modernise the generated code a bit.  Loosely based on changes proposed in
+    #123 by Emily Marigold Klassen.
+
+* Other changes:
+
+  + The Javascript runner is now specified by make variable `JSRUN` instead
+    of `NODE` (since node is just one JS implementation).  The default value
+    is now `node` instead of `nodejs` (older Debian and Ubuntu packages used
+    `/usr/bin/nodejs` because `/usr/bin/node` was already in use by a
+    completely different package, but that has since changed).
+
+Pascal
+------
+
+* Bug fixes:
+
+  + Add missing semicolons to code generated in some cases for a function which
+    always succeeds or always fails.  The new dutch.sbl was triggering this
+    bug.
+
+  + If the end of a routine was unreachable code the Snowball compiler
+    would think the start of the next routine was also unreachable and would
+    not generate it.  This didn't affect code generation for any algorithms we
+    currently ship.
+
+* Code quality:
+
+  + Eliminate commented out code generated for string `$`.  None of the shipped
+    stemmers use string `$`, though the Schinke Latin stemmer algorithm on the
+    website does.
+
+* Other changes:
+
+  + Enable warnings, etc from fpc.
+
+  + Select GNU-style diagnostic format.
+
+Python
+------
+
+* Optimisations:
+
+  + Use Python set for grouping checks.  This speeds up running the Python
+    testsuite by about 4%.
+
+  + Routines used in `among` are now referenced by name directly in the
+    generated code, rather than using a string containing the name.  This
+    avoids a `getattr()` call each time an among wants to call a routine.  This
+    doesn't seem to make a measurable speed difference, but it's cleaner and
+    avoids problems with name mangling.  Suggested by David Corbett in #217.
+
+  + Simplify code generated for `loop`.  If the iteration count is constant and
+    at most 4 then iterate over a tuple which microbenchmarking shows is
+    faster.  The only current uses of loop in the shipped stemmers are `loop 2`
+    so benefit from this.  Otherwise we now use `range(AE)` instead of
+    `range (AE, 0, -1)` (the actual value of the loop variable is never
+    used so only the number of iterations matter).
+
+* Bug fixes:
+
+  + Correctly handle stemmer names with an underscore.
+
+* Code quality:
+
+  + Generate Python with UTF-8 source encoding.  This makes the generated code
+    easier to follow, which helps during development.  It's also a bit smaller.
+    For now codepoints U+0590 and above are still emitted as escape sequences
+    to avoid confusing source code rendering when LTR scripts are involved.
+
+* Other changes:
+
+  + Set python_requires to indicate to install tools that the generated code
+    won't work with Python 3.0.x, 3.1.x and 3.2.x (due to use of `u"foo"`
+    string literals).  Closes #192 and #191, opened by Andreas Maier.
+
+  + Add classifiers to indicate support for Python 3.3 and for 3.8 to 3.13.
+    Fixes #158, reported by Dmitry Shachnev.
+
+  + Stop marking the wheel as universal, which had started to give a warning
+    message.  Patch from Dmitry Shachnev (#210).
+
+  + Stop calling `setup.py` directly which is deprecated and now produces a
+    warning - use the `build` module instead.  Patch from Dmitry Shachnev
+    (#210).
+
+Rust
+----
+
+* Optimisations:
+
+  + Shortcut unnecessary calls to find_among, porting an optimization from the
+    C generator.  In some stemming benchmarks this improves the performance
+    of the rust english stemmer by about 27%.  Patch from jedav (#202).
+
+* Code quality:
+
+  + Suppress unused_parens warning, for example triggered by the code generated
+    for `$x = x*x` (where `x` is an integer).
+
+  + Dispatch `among` result with `match` instead of an `if` ... `else if` chain
+    (which looks like we did because the Rust generator evolved from the Python
+    generator and Python didn't used to have a switch-like construct.  This
+    results in a 3% speed-up for an unoptimised Rust compile but doesn't seem
+    to make a measurable difference when optimising so it seems the Rust
+    compiler is optimising both to equivalent code.  However using a `match`
+    here seems clearer, a better match for the intent, and is a bit simpler to
+    generate.
+
+  + Generate Rust with UTF-8 source encoding.  This makes the generated code
+    easier to follow, which helps during development.  It's also a bit smaller.
+    For now codepoints U+0590 and above are still emitted as escape sequences
+    to avoid confusing source code rendering when LTR scripts are involved.
+
+New stemming algorithms
+-----------------------
+
+* Add Esperanto stemmer from David Corbett (#185).
+
+* Add Estonian algorithm from Linda Freienthal (#108).
+
+Behavioural changes to existing algorithms
+------------------------------------------
+
+* Dutch: Switch to Kraaij-Pohlmann as the default for Dutch.  In case you
+  want Martin Porter's Dutch stemming algorithm for compatibility, this is now
+  available as `dutch_porter`.  Fixes #1, reported by gboer.
+
+* Dutch (Kraaij-Pohlmann): Fix differences between the Snowball implementation
+  and the original C implementation.
+
+* Dutch (Kraaij-Pohlmann): Add a small number of exceptions to the Snowball
+  implementation to avoid unwanted conflations.  This addresses all cases so
+  far identified which Martin's Dutch stemmer handled better.  Fixes #208.
+
+* Dutch (Porter): The "at least 3 characters" part of the R1 definition was
+  actually implemented such that when working in UTF-8 it was "at least 3
+  bytes".  We stripped accents normally found in Dutch except for `è` before
+  setting R1, and no Dutch words starting `è` seem to stem differently
+  depending on encoding, but proper nouns and other words of foreign origin may
+  contain other accented characters and it seems better for the stemmer to
+  handle such words the same way regardless of the encoding in use.
+
+* English: Replace '-ogist' with '-og' to conflate "geologist" and "geology", etc.
+  Suggested by Marc Schipperheijn on snowball-discuss.
+
+* English: Add extra condition to undoubling.  We no longer undouble if the
+  double consonant is preceded by exactly "a", "e" or "o" to avoid conflating
+  "add"/"ad", "egg"/"eg", "off"/"of", etc.  Fixes #182, reported by Ed Page.
+
+* English: Avoid conflating 'emerge' and 'emergency'.  Reported by Frederick Ross
+  on snowball-discuss.
+
+* English: Avoid conflating 'evening' and 'even'.  Reported by Ann B on
+  snowball-discuss.
+
+* English: Avoid conflating 'lateral' and 'later'.  Reported by Steve Tolkin on
+  snowball-discuss.
+
+* English: Avoid conflating 'organ', 'organic' and 'organize'.
+
+* English: Avoid conflating 'past' and 'paste'.  Reported by Sonny on
+  snowball-discuss.
+
+* English: Avoid conflating 'universe', 'universal' and 'university'.  Reported
+  by Clem Wang on snowball-discuss.
+
+* English: Handle -eed and -ing exceptions in their respective rules.
+  This avoids the overhead of checking for them for the majority of
+  words which don't end -eed or -ing.  It also allows us to easily handle
+  vying->vie and hying->hie at basically no extra cost.  Reduces the time to
+  stem all words in our English word list by nearly 2%.
+
+* French: Remove elisions as first step.  See #187.  Originally reported by
+  Paul Rudin and kelson42.
+
+* French: Remove -aise and -aises so for example, "française" and "françaises"
+  are now conflated with "français".  Fixes #209.  Originally reported by
+  ririsoft and Fred Fung.
+
+* French: Avoid incorrect conflation of `mauvais` (bad) with `mauve` (mauve,
+  mallow or seagull); avoid conflating `mal` with `malais`, `pal` with
+  `palais`, etc.
+
+* French: Avoid conflating `ni` (neither/nor) with `niais`
+  (inexperienced/silly) and `nie`/`nié`/`nier`/`nierais`/`nierons` (to deny).
+
+* French: -oux -> -ou.  Fixes #91, reported by merwok.
+
+* German: Replace with the "german2" variant.  This normalises umlauts ("ä" to
+  "ae", "ö" to "oe", "ü" to "ue") which is presumably much less common in
+  newly created text than it once was as modern computer systems generally
+  don't have the limitations which motivated this, but there will still be
+  large amounts of legacy text which it seems helpful for the stemmer to
+  handle without having to know to select a variant.
+
+  On our sample German vocabulary which contains 35033 words, 77 words give
+  different stems.  A significant proportion of these are foreign words, and
+  some are proper nouns.  Some cases definitely seem improved, and quite a few
+  are just different but effectively just change the stem for a word or group
+  of words to a stem that isn't otherwise generated.  There don't seem any
+  changes that are clearly worse, though there are some changes that have both
+  good and bad aspects to them.
+
+  Fixes #92, reported by jrabensc.
+
+* German: Don't remove -em if preceded by -syst to avoid overstemming words
+  ending -system.  This change means we now conflate e.g. "system" and
+  "systemen".  Partly addresses #161, reported by Olga Gusenikova.
+
+* German: Remove -erin and -erinnen suffixes which conflates singular and
+  plural female versions of nouns with the male versions.  Fixes #85 and
+  partly addresses #161, reported by Olga Gusenikova.
+
+* German: Replace -ln and -lns with -l.  This improves 82 cases in the current
+  sample data without making anything worse.  Tests on a larger word list look
+  good too.  Partly addresses #161, reported by Olga Gusenikova.
+
+* German: Remove -et suffix when we safely can.  Fixes #200, reported by Robert
+  Frunzke.
+
+* Greek: Fix "faulty slice operation" for input `ισαισα`.  The fix changes
+  `ισα` to stem to `ισ` instead of the empty string, which seems better (and to
+  be what the second paper actually says to do if read carefully).  Fixes #204,
+  reported by subnix.
+
+* Italian: Address overstemming of "divano" (sofa) which previously stemmed to
+  "div", which is the stem for 'diva' (diva).  Now it is stemmed to 'divan',
+  which is what its plural form 'divani' already stemmed to.  Fixes #49,
+  reported by francesco.
+
+* Norwegian: Improve stemming of words ending -ers.  Fixes #175, reported by
+  Karianne Berg.
+
+* Norwegian: Include more accented vowels - treating "ê", "ò", "ó" and "ô"
+  as vowels improves the stemming of a fairly small number of words, but
+  there's basically no cost to having extra vowels in the grouping, and some
+  of these words are commonly used.  Fixes #218, reported by András Jankovics.
+
+* Romanian: Fix to work with Romanian text encoded using the correct Unicode
+  characters.  Romanian uses a "comma below" diacritic on letters "s" and "t"
+  ("ș" and "ț").  Before Unicode these weren't easily available so Romanian
+  text was written using the visually similar "cedilla" diacritic on these
+  letters instead ("ş" and "ţ").  Previously our stemmer only recognised the
+  latter.  Now it maps the cedilla forms to "comma below" as a first step.
+  Patch from Robert Muir.
+
+* Spanish: Handle -acion like -ación and -ucion like -ución.  It's apparently
+  common to miss off accents in Spanish, and there are examples in our test
+  vocabulary that these change helps.  Proposed by Damian Janowski.
+
+* Swedish: Replace suffix "öst" with "ös" when preceded by any of 'iklnprtuv'
+  rather than just 'l'.  The new rule only requires the "öst" to be in R1
+  whereas previously we required all of "löst" to be.  This second tweak
+  doesn't seem to affect any words ending "löst" but it conflates a few extra
+  cases when combined with the expanded list of preceding letters, and seems
+  more logical linguistically (since "ös" is akin to "ous" in English).  Fixes
+  #152, reported by znakeeye.
+
+* Swedish: Remove -et/-ets in cases where it helps.  Removing -et can't be done
+  unconditionally because many words end in -et where this isn't a suffix.
+  However it's a very common suffix so it seems worth crafting a more complex
+  condition under which to remove.  Fixes #47.
+
+* Turkish: Remove proper noun suffixes.  For example, `Türkiye'dir` ("it is
+  Turkey") is now conflated with `Türkiye` ("Turkey").  Fixes #188.
+
+* Yiddish: Avoid generating empty stem for input "גע" (not a valid word, but
+  it's better to avoid an empty stem for any non-empty input).
+
+Optimisations to existing algorithms
+------------------------------------
+
+* General change: Use `gopast` everywhere to establish R1 and R2 as it is a
+  little more efficient to do so.
+
+* Basque: Use an empty action rather than replacing the suffix with itself
+  which seems clearer and is a little more efficient.
+
+* Dutch (Porter): Optimise prelude routine.
+
+* English: Remove unnecessary exception for `skis` as the algorithm stems
+  `skis` to `ski` by itself (`skies` and `sky` do still need a special case to
+  avoid conflation with `ski` though).
+
+* Hungarian: We no longer take digraphs into account when determining where R1
+  starts.  This can only make a difference to the stemming if we removed a
+  suffix that started with the last character of the digraph (or with "zs" in
+  the case of "dzs"), and that doesn't happen for any of the suffixes we remove
+  for any valid Hungarian words.  This simplification speeds up stemming by
+  ~2% on the current sample vocabulary list.  See #216.  Thanks to András
+  Jankovics for confirming no Hungarian words are affected by this change.
+
+* Lithuanian: Remove redundant R1 check.
+
+* Nepali: Eliminate redundant check_category_2 routine.
+
+* Tamil: Optimise by using `among` instead of long `or` chains.  The generated
+  C version now takes 43% less time to processes the test vocabulary.
+
+* Tamil: Remove many cases which can't be triggered due to being handled by
+  another case.
+
+* Tamil: Clean up some uses of `test`.
+
+* Tamil: Make `fix_va_start` simpler and faster.
+
+* Tamil: Localise use of `found_a_match` flag.
+
+* Tamil: Eliminate pointless flag changes.
+
+* Turkish: Minor optimisations.
+
+Code clarity improvements to existing algorithms
+------------------------------------------------
+
+* Stop noting dates changes were made in comments in the code - we now maintain
+  a changelog in each algorithm's description page on the website (and the
+  version control history provides a finer grained view).
+
+* Always use `insert` instead of `<+` as the named command seems clearer.
+
+* English: Add comments documenting motivating examples for all exceptional
+  cases.
+
+* Lithuanian: Change to recommended latin stringdef codes.  Using common codes
+  makes it easier to work across algorithms, but they are more mnemonic so also
+  seem clearer when just considering this one algorithm.
+
+* Serbian: Change to recommended latin stringdef codes.  Using common codes
+  makes it easier to work across algorithms, but they are more mnemonic so also
+  seem clearer when just considering this one algorithm.
+
+* Turkish: Use `{sc}` for s-cedilla and `{i}` for dotless-i to match other
+  uses.
+
+Compiler
+--------
+
+* Generic code generation improvements:
+
+  + Show Snowball source leafname in "generated" comment at start of files.
+
+  + Add generic reachability tracking machinery.  This facilitates various new
+    optimisations, so far the following have been implemented:
+
+    - Tail-calling
+    - Simpler code for calling routines which always give the same signal
+    - Simpler code when a routine ends in a integer test (this also allows
+      eliminating an Ada-specific codegen optimisation which did something
+      similar but only for routines which consisted *entirely* of a single
+      integer test.
+    - Dead code reporting and removal (only in simple cases currently)
+
+    Currently this overlaps in functionality with the existing reachability
+    tracking which is implemented on a per-language basis, and only for some
+    languages.  This reachability tracking was originally added for Java
+    where some unreachable code is invalid and result in a compile time error,
+    but then seems to have been copied for some other newer languages which
+    may or may not actually need it.  The approach it uses unfortunately
+    relies on correctly updating the reachability flag anywhere in the
+    generator code where reachability can change which has proved to be a
+    source of bugs, some unfixed.  This new approach seems better and with some
+    more work should allow us to eliminate the older code.  Fixes #83.
+
+  + Omit check for `among` failing in generated code when we can tell at
+    compile time that it can't fail.
+
+  + Optimise `goto`/`gopast` applied to a grouping or inverted grouping (which
+    is by far the most common way to use `goto`/`gopast`) for all target
+    languages (new for Go, Java, Javascript, Pascal and Rust).
+
+  + We never need to restore the cursor after `not`.  If `not` turns signal `f`
+    into `t` then it sets `c` back to its old position; otherwise, `not`
+    signals `f` and `c` will get reset by whatever ultimately handles this `f`
+    (or the program exits and the position of `c` no longer matters).  This
+    slightly improves the generated code for the `english` and `porter`
+    stemmers.
+
+  + Don't generate code for undefined or unused routines.
+
+  + Avoid generating variable names and then not actually using them.  This
+    eliminates mysterious gaps in the numbering of variables in the generated
+    code.
+
+  + Eliminate `!`/`not` from integer test code by generating the inverse
+    comparison operator instead for all languages, e.g. for Python we now
+    generate
+
+      if self.I_p1 >= self.I_x:
+
+    instead of
+
+      if not self.I_p1 < self.I_x:
+
+    This isn't going to be faster in compiled languages with an optimiser but
+    for scripting languages it may be faster, and even if not, it makes for a
+    little less work when loading the script.
+
+  + Canonicalise `hop 1` to `next` as the generated code for `next` can be
+    slightly more efficient.  This will also apply to `hop` followed by a
+    constant expression which Snowball can reduce to `1`.
+
+  + Avoid trailing whitespace in generated files.
+
+  + Fix problems with --comments option:
+
+    - When generating C code we would segfault for code containing `atleast`,
+      `hop` or integer tests.
+    - Fix missing comments for some commands in some target languages.
+    - Fix inconsistent formatting of comments in some target languages.
+    - Comments in C are now always on their own line - previously some were
+      after at the end of the line and some on their own line which made them
+      harder to follow.
+    - Emit comments before `among` and before routine/external definitions.
+
+  + Simplify more cases of numeric expressions (e.g. `x * 1` to `x`).
+
+* Improve --help output.
+
+* Division by zero during constant folding now gives an error.
+
+* For `hop` followed by an unexpected token (e.g. `hop hop`) we were
+  already emitting a suitable error but would then segfault.
+
+* Emit error for redefinition of a grouping.
+
+* Improve errors for `define` of an undeclared name.  We already peek at the
+  next token to decide whether to try to parse as a routine or grouping.
+  Previously we parsed as a routine if it was `as`, and a grouping otherwise,
+  but routine definitions are more common and a grouping can only start with
+  a literal string or a name, so now we assume a routine definition with a
+  missing `as` if the next token isn't valid for either.
+
+* Suppress duplicate (or even triplicate) "unexpected" errors for the same
+  token when the compiler tried to recover from the error by adjusting the
+  parse stare and marking the token to be reparsed, but the same token then
+  failed to parse in the new state.
+
+* Fix NULL pointer dereference if an undefined grouping is used in the
+  definition of another grouping.
+
+* Fix mangled error for `set` or `unset` on a non-boolean:
+
+  test.sbl:2: nameInvalid type 98 in name_of_type()
+
+* Emit warning if `=>` is used.  The documentation of how it works doesn't
+  match the implementation, and it seems it has only ever been used in the
+  Schinke stemmer implementation (which assumes the implemented behaviour).
+  We've updated the Schinke implementation to avoid it.  If you're using it
+  in your own Snowball code please let us know.
+
+* Improve errors for unterminated string literals.
+
+* Fix NULL pointer dereference on invalid code such as `$x = $y`.
+
+* If malloc fails while compiling the compiler will now report the failure
+  and exit.  Previously the NULL return from malloc wasn't checked for so
+  we'd typically segfault.
+
+* `lenof` and `sizeof` applied to a string variable now mark the variable
+  as used, which avoids a bogus error followed by a confusing additional
+  message if this is the only use of that variable:
+
+  lenofsizeofbug.sbl:3: warning: string 's' is set but never used
+  Unhandled type of dead assignment via sizeof
+
+  This is situation is unlikely to occur in real world code.
+
+* The reported line number for "string not terminated" error was one too high
+  in the case where we were in a stringdef (but correct if we weren't).
+
+* Eliminate special handling for among starter.  We now convert the starter
+  to be a command before the among, adding an explict substring if there
+  isn't one.
+
+* We now warn if the body of a `repeat` or `atleast` loop always signals
+  `t` (meaning it will loop forever which is very undesirable for a stemming
+  algorithm) or always signals `f` (meaning it will never loop, which seems
+  unlikely to be what was intended).
+
+* Release memory in compiler before exit.  The OS will free all allocated
+  memory when a process exits, so this memory isn't actually leaked, but it can
+  be annoying with when using snowball as part of a larger build process with
+  some leak-finding tools.  Patch from jsteemann in #166.
+
+* Store textual data more efficiently in memory during Snowball compilation.
+  Previously almost all textual data was stored as 16 bit values, but most
+  such data only uses 8 bit character values.  Doubling the memory usage
+  isn't really an issue as Snowball programs are tiny, but this also
+  complicated code handling such data.  Now only literal strings use the
+  16 bit values.
+
+* Fix clang -Wunused-but-set-variable warning in compiler code.
+
+* Fix a few -Wshadow warnings in compiler and enable this warning by default.
+
+* Tighten parsing of `writef()` format strings.  We now error out on
+  unrecognised escape codes or if a numbered escape is used with too high a
+  number or a non-digit.  This change reveals that the Go and Rust generators
+  were using invalid escape ~A - the old writef() code was substituting this
+  with just A which is what is wanted so this case was harmless but being
+  lenient here could hide bugs, especially when copying code between
+  generators as they don't all support the same set of format codes.
+
+Build system
+------------
+
+* Turn on Java warnings and make them errors.
+
+* Compile C code with -g by default.  This makes debugging easier, and
+  matches the default for at least some other build systems (e.g. autotools).
+
+* Fix "make clean" to remove all built Ada files.
+
+* Clean `stemtest` too.  Patch from Stefano Rivera.
+
+* Add missing `COMMON_FILES` dependency to dist targets.
+
+* GNUmakefile: Tidy up and make more consistent
+
+* GNUmakefile: Make use of $* to improve speed and readability.
+
+* Use $(patsubst ...) instead of sed in .java.class rule which gives cleaner
+  make output and is a bit more efficient.
+
+* Add `WERROR` make variable to provide a way to add `-Werror` to existing
+  CFLAGS.
+
+libstemmer
+----------
+
+Testsuite
+---------
+
+* Give a clear error if snowball-data isn't found.  Fixes #196, reported by
+  Andrea Maccis.
+
+* Handle not thinning testdata better.  If THIN_FACTOR is set to 1 we no longer
+  run gzipped test data through awk.  We also now handle THIN_FACTOR being set
+  empty as equivalent to 1 for convenience.
+
+* csharp_stemwords: Correctly handle a stemmer name containing an underscore.
+
+* csharp_stemwords: Make `-i` option optional and read from stdin if omitted,
+  like the C version does.
+
+* csharp_stemwords: Process the input line by line which is more helpful for
+  interactive testing, and also a little faster.
+
+* Fix Java TestApp to allow a single argument.  The documented command line
+  syntax is that you only need to specify the language and there was already
+  code to read from stdin if no input file was specified, but at least two
+  command line options were required.
+
+* Fix deprecation warning in TestApp.java.
+
+* Optimise TestApp.java by creating fewer objects.  Patch from Robert Muir.
+
+* stemwords.py: We no longer create an empty output file if we fail to open the
+  input file.
+
+* stemwords: Improve error message to say "Out of memory or internal error"
+  rather than just "Out of memory".
+
+Documentation
+-------------
+
+* Include "what is stemming" section in each README.
+
+* Include section on threads in each README.  Based on patch for Python from
+  dbcerigo.
+
+* Document that input should be lowercase with composed accents.  See #186,
+  reported by 1993fpale.
+
+* Add README section on building, including notes on cross-compiling.  Fixes
+  #205, reported by sin-ack.
+
+* CONTRIBUTING.rst: Clarify which charsets to list
+
+* CONTRIBUTING.rst: Add general advice section.  In particular, note to use
+  spaces-only for indentation in most cases.  Thanks to Dmitry Shachnev for
+  raising this point.
+
+* CONTRIBUTING.rst: Note that UTF-8 is OK in comments.  Thanks to Dmitry
+  Shachnev for asking.
+
+* Fix some typos.  Patch from Josh Soref.
+
+* Document that our CI now uses github actions.
+
+* Update link to Greek stemmer PDF.  Patch from Michael Bissett (#33).
+
+Snowball 2.2.0 (2021-11-10)
+===========================
+
+New Code Generators
+-------------------
+
+* Add Ada generator from Stephane Carrez (#135).
+
+Javascript
+----------
+
+* Fix generated code to use integer division rather than floating point
+  division.
+
+  Noted by David Corbett.
+
+Pascal
+------
+
+* Fix code generated for division.  Previously real division was used and the
+  generated code would fail to compile with an "Incompatible types" error.
+
+  Noted by David Corbett.
+
+* Fix code generated for Snowball's `minint` and `maxint` constant.
+
+Python
+------
+
+* Python 2 is no longer actively supported, as proposed on the mailing list:
+  https://lists.tartarus.org/pipermail/snowball-discuss/2021-August/001721.html
+
+* Fix code generated for division.  Previously the Python code we generated
+  used integer division but rounded negative fractions towards negative
+  infinity rather than zero under Python 2, and under Python 3 used floating
+  point division.
+
+  Noted by David Corbett.
+
+Code quality Improvements
+-------------------------
+
+* C/C++: Generate INT_MIN and INT_MAX directly, including <limits.h> from
+  the generated C file if necessary, and remove the MAXINT and MININT macros
+  from runtime/header.h.
+
+* C#: An `among` without functions is now generated as `static` and groupings
+  are now generated as constant.  Patches from James Turner in #146 and #147.
+
+Code generation improvements
+----------------------------
+
+* General:
+
+  + Constant numeric subexpressions and constant numeric tests are now
+    evaluated at Snowball compile time.
+
+  + Simplify the following degnerate `loop` and `atleast` constructs where
+    N is a compile-time constant:
+
+    - loop N C where N <= 0 is a no-op.
+
+    - loop N C where N == 1 is just C.
+
+    - atleast N C where N <= 0 is just repeat C.
+
+    If the value of N doesn't depend on the current target language, platform
+    or Unicode settings then we also issue a warning.
+
+Behavioural changes to existing algorithms
+------------------------------------------
+
+* german2: Fix handling of `qu` to match algorithm description.  Previously
+  the implementation erroneously did `skip 2` after `qu`.  We suspect this was
+  intended to skip the `qu` but that's already been done by the substring/among
+  matching, so it actually skips an extra two characters.
+
+  The implementation has always differed in this way, but there's no good
+  reason to skip two extra characters here so overall it seems best to change
+  the code to match the description.  This change only affects the stemming of
+  a single word in the sample vocabulary - `quae` which seems to actually be
+  Latin rather than German.
+
+Optimisations to existing algorithms
+------------------------------------
+
+* arabic: Handle exception cases in the among they're exceptions to.
+
+* greek: Remove unused slice setting, handle exception cases in the among
+  they're exceptions to, and turn `substring ... among ...  or substring ...
+  among ...` into a single `substring ... among ...` in cases where it is
+  trivial to do so.
+
+* hindi: Eliminate the need for variable `p`.
+
+* irish: Minor optimisation in setting `pV` and `p1`.
+
+* yiddish: Make use of `among` more.
+
+Compiler
+--------
+
+* Fix handling of `len` and `lenof` being declared as names.
+
+  For compatibility with programs written for older Snowball versions
+  len and lenof stop being tokens if declared as names.  However this
+  code didn't work correctly if the tokeniser's name buffer needed to
+  be enlarged to hold the token name (i.e. 3 or 5 elements respectively).
+
+* Report a clearer error if `=` is used instead of `==` in an integer test.
+
+* Replace a single entry command list with its contents in the internal syntax
+  tree.  This puts things in a more canonical form, which helps subsequent
+  optimisations.
+
+Build system
+------------
+
+* Support building on Microsoft Windows (using mingw+msys or a similar
+  Unix-like environment).  Patch from Jannick in #129.
+
+* Split out INCLUDES from CPPFLAGS so that CPPFLAGS can now be overridden by
+  the user if required.  Fixes #148, reported by Dominique Leuenberger.
+
+* Regenerate algorithms.mk only when needed rather than on every `make` run.
+
+libstemmer
+----------
+
+* The libstemmer static library now has a `.a` extension, rather than `.o`.
+  Patch from Michal Vasilek in #150.
+
+Testsuite
+---------
+
+* stemtest: Test that numbers and numeric codes aren't damaged by any of the
+  algorithms.  Regression test for #66.  Fixes #81.
+
+* ada: Fix ada tests to fail if output differs.  There was an extra `| head
+  -300` compared to other languages, which meant that the exit code of `diff`
+  was ignored.  It seems more helpful (and is more consistent) not to limit how
+  many differences are shown so just drop this addition.
+
+* go: Stop thinning testdata.  It looks like we only are because the test
+  harness code was based on that for rust, which was based on that for
+  javascript, which was only thinning because it was reading everything into
+  memory and the larger vocabulary lists were resulting in out of memory
+  issues.
+
+* javascript: Speed up stemwords.js.  Process input line-by-line rather than
+  reading the whole file into memory, splitting, iterating, and creating an
+  array with all the output, joining and writing out a single huge string.
+  This also means we can stop thinning the test data for javascript, which we
+  were only doing because the huge arabic test data file was causing out of
+  memory errors.  Also drop the -p option, which isn't useful here and
+  complicates the code.
+
+* rust: Turn on optimisation in the makefile rather than the CI config.  This
+  makes the tests run in about 1/5 of the time and there's really no reason to
+  be thinning the testdata for rust.
+
+Documentation
+-------------
+
+* CONTRIBUTING.rst: Improve documentation for adding a new stemming algorithm.
+
+* Improve wording of Python docs.
+
+Snowball 2.1.0 (2021-01-21)
+===========================
+
+C/C++
+-----
+
+* Fix decoding of 4-byte UTF-8 sequences in `grouping` checks.  This bug
+  affected Unicode codepoints U+40000 to U+7FFFF and U+C0000 to U+FFFFF and
+  doesn't affect any of the stemming algorithms we currently ship (#138,
+  reported by Stephane Carrez).
+
+Python
+------
+
+* Fix snowballstemmer.algorithms() method (#132, reported by kkaiser).
+
+* Update code to generate trove language classifiers for PyPI.  All the
+  natural languages we previously had stemmers for have now been added to
+  PyPI's list, but Armenian and Yiddish aren't on it.  Patch from Dmitry
+  Shachnev.
+
+Code Quality Improvements
+-------------------------
+
+* Suppress GCC warning in compiler code.
+
+* Use `const` pointers more in C runtime.
+
+* Only use spaces for indentation in javascript code.  Change proposed by Emily
+  Marigold Klassen in #123, and seems to be the modern Javascript norm.
+
+New Snowball Language Features
+------------------------------
+
+* `lenof` and `sizeof` can now be applied to a literal string, which can be
+  useful if you want to do calculations on cursor values.
+
+  This change actually simplifies the language a little, since you can now use
+  a literal string in any read-only context which accepts a string variable.
+
+Code generation improvements
+----------------------------
+
+* General:
+
+  + Fix bugs in the code generated to handle failure of `goto`, `gopast` or
+    `try` inside `setlimit` or string-`$`.  This affected all languages (though
+    the issue with `try` wasn't present for C).  These bugs don't affect any of
+    the stemming algorithms we currently ship.  Reported by Stefan Petkovic on
+    snowball-discuss.
+
+  + Change `hop` with a negative argument to work as documented.  The manual
+    says a negative argument to hop will raise signal f, but the implementation
+    for all languages was actually to move the cursor in the opposite direction
+    to `hop` with a positive argument.  The implemented behaviour is
+    problematic as it allows invalidating implicitly saved cursor values by
+    modifying the string outside the current region, so we've decided it's best
+    to fix the implementation to match the documentation.
+
+    The only Snowball code we're aware of which relies on this was the original
+    version of the new Yiddish stemming algorithm, which has been updated not
+    to rely on this.
+
+    The compiler now issues a warning for `hop` with a constant negative
+    argument (internally now converted to `false`), and for `hop` with a
+    constant zero argument (internally now converted to `true`).
+
+  + Canonicalise `among` actions equivalent to `()` such as `(true)` which
+    previously resulted in an extra case in the among, and for Python
+    we'd generate invalid Python code (`if` or `elif` with an empty body).
+    Bug revealed by Assaf Urieli's Yiddish stemmer in #137.
+
+  + Eliminate variables whose values are never used - they no longer have
+    corresponding member variables, etc, and no code is generated for any
+    assignments to them.
+
+  + Don't generate anything for an unused `grouping`.
+
+  + Stop warning "grouping X defined but not used" for a `grouping` which is
+    only used to define another `grouping`.
+
+* C/C++:
+
+  + Store booleans in same array as integers.  This means each boolean is
+    stored as an int instead of an unsigned char which means 4 bytes instead of
+    1, but we save a pointer (4 or 8 bytes) in struct SN_env which is a win for
+    all the current stemmers.  For an algorithm which uses both integers and
+    booleans, we also save the overhead of allocating a block on the heap, and
+    potentially improve data locality.
+
+  + Eliminate duplicate generated C comment for sliceto.
+
+* Pascal:
+
+  + Avoid generating unused variables.  The Pascal code generated for the
+    stemmers we ship is now warning free (tested with fpc 3.2.0).
+
+  + Don't emit empty `private` sections.  Cosmetic, but makes the generated
+    code a bit easier to follow.
+
+* Python:
+
+  + End `if`-chain with `else` where possible, avoiding a redundant test
+    of the variable being switched on.  This optimisation kicks in for an
+    `among` where all cases have commands.  This change seems to speed up `make
+    check_python_arabic` by a few percent.
+
+New stemming algorithms
+-----------------------
+
+* Add Serbian stemmer from stef4np (#113).
+
+* Add Yiddish stemmer from Assaf Urieli (#137).
+
+* Add Armenian stemmer from Astghik Mkrtchyan.  It's been on the website for
+  over a decade, and included in Xapian for over 9 years without any negative
+  feedback.
+
+Optimisations to existing algorithms
+------------------------------------
+
+* kraaij_pohlmann: Use `$v = limit` instead of `do (tolimit setmark v)` since
+  this generates simpler code, and also matches the code other algorithm
+  implementations use.
+
+  Probably for languages like C with optimising compilers the compiler
+  will generate equivalent code anyway, but e.g. for Python this should be
+  an improvement.
+
+Code clarity improvements to existing algorithms
+------------------------------------------------
+
+* hindi.sbl: Fix comment typo.
+
+Compiler
+--------
+
+* Don't count `$x = x + 1` as initialising or using `x`, so it's now handled
+  like `$x += 1` already is.
+
+* Comments are now only included in the generated code if command line option
+  -comments is specified.
+
+  The comments in the generated code are useful if you're trying to debug the
+  compiler, and perhaps also if you are trying to debug your Snowball code, but
+  for everyone else they just bloat the code which as the number of languages
+  we support grows becomes more of an issue.
+
+* `-parentclassname` is not only for java and csharp so don't disable it if
+  those backends are disabled.
+
+* `-syntax` now reports the value for each numeric literal.
+
+* Report location for excessive get nesting error.
+
+* Internally the compiler now represents negated literal numbers as a simple
+  `c_number` rather than `c_neg` applied to a `c_number` with a positive value.
+  This simplifies optimisations that want to check for a constant numeric
+  expression.
+
+Build system
+------------
+
+* Link binaries with LDFLAGS if it's set, which is needed for some platform
+  (e.g. OpenEmbedded).  Patch from Andreas Müller (#120).
+
+* Add missing dependencies of algorithms.go rule.
+
+Testsuite
+---------
+
+* C: Add stemtest for low-level regression tests.
+
+Documentation
+-------------
+
+* Document a C99 compiler as a requirement for building the snowball compiler
+  (but the C code it generates should still work with any ISO C compiler).
+
+  A few declarations mixed with code crept in some time ago (which nobody's
+  complained about), so this is really just formally documenting a requirement
+  which already existed.
+
+* README: Explain what Snowball is and what Stemming is (#131, reported by Sean
+  Kelly).
+
+* CONTRIBUTING.rst: Expand section on adding a new generator.
+
+* For Python snowballstemmer module include global NEWS instead of
+  Python-specific CHANGES.rst and use README.rst as the long description.
+  Patch from Dmitry Shachnev (#119).
+
+* COPYING: Update and incorporate Python backend licensing information which
+  was previously in a separate file.
+
+Snowball 2.0.0 (2019-10-02)
+===========================
+
+C/C++
+-----
+
+* Fully handle 4-byte UTF-8 sequences.  Previously `hop` and `next` handled
+  sequences of any length, but commands which look at the character value only
+  handled sequences up to length 3.  Fixes #89.
+
+* Fix handling of a 3-byte UTF-8 sequence in a grouping in `backwardmode`.
+
+Java
+----
+
+* TestApp.java:
+
+  - Always use UTF-8 for I/O.  Patch from David Corbett (#80).
+
+  - Allow reading input from stdin.
+
+  - Remove rather pointless "stem n times" feature.
+
+  - Only lower case ASCII to match stemwords.c.
+
+  - Stem empty lines too to match stemwords.c.
+
+Code Quality Improvements
+-------------------------
+
+* Fix various warnings from newer compilers.
+
+* Improve use of `const`.
+
+* Share common functions between compiler backends rather than having multiple
+  copies of the same code.
+
+* Assorted code clean-up.
+
+* Initialise line_labelled member of struct generator to 0.  Previously we were
+  invoking undefined behaviour, though in practice it'll be zero initialised on
+  most platforms.
+
+New Code Generators
+-------------------
+
+* Add Python generator (#24).  Originally written by Yoshiki Shibukawa, with
+  additional updates by Dmitry Shachnev.
+
+* Add Javascript generator.  Based on JSX generator (#26) written by Yoshiki
+  Shibukawa.
+
+* Add Rust generator from Jakob Demler (#51).
+
+* Add Go generator from Marty Schoch (#57).
+
+* Add C# generator.  Based on patch from Cesar Souza (#16, #17).
+
+* Add Pascal generator.  Based on Delphi backend from stemming.zip file on old
+  website (#75).
+
+New Snowball Language Features
+------------------------------
+
+* Add `len` and `lenof` to measure Unicode length.  These are similar to `size`
+  and `sizeof` (respectively), but `size` and `sizeof` return the length in
+  bytes under `-utf8`, whereas these new commands give the same result whether
+  using `-utf8`, `-widechars` or neither (but under `-utf8` they are O(n) in
+  the length of the string).  For compatibility with existing code which might
+  use these as variable or function names, they stop being treated as tokens if
+  declared to be a variable or function.
+
+* New `{U+1234}` stringdef notation for Unicode codepoints.
+
+* More versatile integer tests.  Now you can compare any two arithmetic
+  expressions with a relational operator in parentheses after the `$`, so for
+  example `$(len > 3)` can now be used when previously a temporary variable was
+  required: `$tmp = len $tmp > 3`
+
+Code generation improvements
+----------------------------
+
+* General:
+
+  + Avoid unnecessarily saving and restoring of the cursor for more commands -
+    `atlimit`, `do`, `set` and `unset` all leave the cursor alone or always
+    restore its value, and for C `booltest` (which other languages already
+    handled).
+
+  + Special case handling for `setlimit tomark AE`.  All uses of setlimit in
+    the current stemmers we ship follow this pattern, and by special-casing we
+    can avoid having to save and restore the cursor (#74).
+
+  + Merge duplicate actions in the same `among`.  This reduces the size of the
+    switch/if-chain in the generated code which dispatch the among for many of
+    the stemmers.
+
+  + Generate simpler code for `among`.  We always check for a zero return value
+    when we call the among, so there's no point also checking for that in the
+    switch/if-chain.  We can also avoid the switch/if-chain entirely when
+    there's only one possible outcome (besides the zero return).
+
+  + Optimise code generated for `do <function call>`.  This speeds up "make
+    check_python" by about 2%, and should speed up other interpreted languages
+    too (#110).
+
+  + Generate more and better comments referencing snowball source.
+
+  + Add homepage URL and compiler version as comments in generated files.
+
+* C/C++:
+
+  + Fix `size` and `sizeof` to not report one too high (reported by Assem
+    Chelli in #32).
+
+  + If signal `f` from a function call would lead to return from the current
+    function then handle this and bailing out on an error together with a
+    simple `if (ret <= 0) return ret;`
+
+  + Inline testing for a single character literals.
+
+  + Avoiding generating `|| 0` in corner case - this can result in a compiler
+    warning when building the generated code.
+
+  + Implement `insert_v()` in terms of `insert_s()`.
+
+  + Add conditional `extern "C"` so `runtime/api.h` can be included from C++
+    code.  Closes #90, reported by vvarma.
+
+* Java:
+
+  + Fix functions in `among` to work in Java.  We seem to need to make the
+    methods called from among `public` instead of `private`, and to call them
+    on `this` instead of the `methodObject` (which is cleaner anyway).  No
+    revision in version control seems to generate working code for this case,
+    but Richard says it definitely used to work - possibly older JVMs failed to
+    correctly enforce the access controls when methods were invoked by
+    reflection.
+
+  + Code after handling `f` by returning from the current function is
+    unreachable too.
+
+  + Previously we incorrectly decided that code after an `or` was
+    unreachable in certain cases.  None of the current stemmers in the
+    distribution triggered this, but Martin Porter's snowball version
+    of the Schinke Latin stemmer does.  Fixes #58, reported by Alexander
+    Myltsev.
+
+  + The reachability logic was failing to consider reachability from
+    the final command in an `or`.  Fixes #82, reported by David Corbett.
+
+  + Fix `maxint` and `minint`.  Patch from David Corbett in #31.
+
+  + Fix `$` on strings.  The previous generated code was just wrong.  This
+    doesn't affect any of the included algorithms, but for example breaks
+    Martin Porter's snowball implementation of Schinke's Latin Stemmer.
+    Issue noted by Jakob Demler while working on the Rust backend in #51,
+    and reported in the Schinke's Latin Stemmer by Alexander Myltsev
+    in #58.
+
+  + Make SnowballProgram objects serializable.  Patch from Oleg Smirnov in #43.
+
+  + Eliminate range-check implementation for groupings.  This was removed from
+    the C generator 10 years earlier, isn't used for any of the existing
+    algorithms, and it doesn't seem likely it would be - the grouping would
+    have to consist entirely of a contiguous block of Unicode code-points.
+
+  + Simplify code generated for `repeat` and `atleast`.
+
+  + Eliminate unused return values and variables from runtime functions.
+
+  + Only import the `among` and `SnowballProgram` classes if they're actually
+    used.
+
+  + Only generate `copy_from()` method if it's used.
+
+  + Merge runtime functions `eq_s` and `eq_v` functions.
+
+  + Java arrays know their own length so stop storing it separately.
+
+  + Escape char 127 (DEL) in generated Java code.  It's unlikely that this
+    character would actually be used in a real stemmer, so this was more of a
+    theoretical bug.
+
+  + Drop unused import of InvocationTargetException from SnowballStemmer.
+    Reported by GerritDeMeulder in #72.
+
+  + Fix lint check issues in generated Java code.  The stemmer classes are only
+    referenced in the example app via reflection, so add
+    @SuppressWarnings("unused") for them.  The stemmer classes override
+    equals() and hashCode() methods from the standard java Object class, so
+    mark these with @Override.  Both suggested by GerritDeMeulder in #72.
+
+  + Declare Java variables at point of use in generated code.  Putting all
+    declarations at the top of the function was adding unnecessary complexity
+    to the Java generator code for no benefit.
+
+  + Improve formatting of generated code.
+
+New stemming algorithms
+-----------------------
+
+* Add Tamil stemmer from Damodharan Rajalingam (#2, #3).
+
+* Add Arabic stemmer from Assem Chelli (#32, #50).
+
+* Add Irish stemmer from Jim O'Regan (#48).
+
+* Add Nepali stemmer from Arthur Zakirov (#70).
+
+* Add Indonesian stemmer from Olly Betts (#71).
+
+* Add Hindi stemmer from Olly Betts (#73). Thanks to David Corbett for review.
+
+* Add Lithuanian stemmer from Dainius Jocas (#22, #76).
+
+* Add Greek stemmer from Oleg Smirnov (#44).
+
+* Add Catalan and Basque stemmers from Israel Olalla (#104).
+
+Behavioural changes to existing algorithms
+------------------------------------------
+
+* Portuguese:
+
+  + Replace incorrect Spanish suffixes by Portuguese suffixes (#1).
+
+* French:
+
+  + The MSDOS CP850 version of the French algorithm was missing changes present
+    in the ISO8859-1 and Unicode versions.  There's now a single version of
+    each algorithm which was based on the Unicode version.
+
+  + Recognize French suffixes even when they begin with diaereses.  Patch from
+    David Corbett in #78.
+
+* Russian:
+
+  + We now normalise 'ё' to 'е' before stemming.  The documentation has long
+    said "we assume ['ё'] is mapped into ['е']" but it's more convenient for
+    the stemmer to actually perform this normalisation.  This change has no
+    effect if the caller is already normalising as we recommend.  It's a change
+    in behaviour they aren't, but 'ё' occurs rarely (there are currently no
+    instances in our test vocabulary) and this improves behaviour when it does
+    occur.  Patch from Eugene Mirotin (#65, #68).
+
+* Finish:
+
+  + Adjust the Finnish algorithm not to mangle numbers.  This change also
+    means it tends to leave foreign words alone.  Fixes #66.
+
+* Danish:
+
+  + Adjust Danish algorithm not to mangle alphanumeric codes. In particular
+    alphanumeric codes ending in a double digit (e.g. 0x0e00, hal9000,
+    space1999) are no longer mangled.  See #81.
+
+Optimisations to existing algorithms
+------------------------------------
+
+* Turkish:
+
+  + Simplify uses of `test` in stemmer code.
+
+  + Check for 'ad' or 'soyad' more efficiently, and without needing the
+    strlen variable.  This speeds up "make check_utf8_turkish" by 11%
+    on x86 Linux.
+
+* Kraaij-Pohlmann:
+
+  + Eliminate variable x `$p1 <= cursor` is simpler and a little more efficient
+    than `setmark x $x >= p1`.
+
+Code clarity improvements to existing algorithms
+------------------------------------------------
+
+* Turkish:
+
+  + Use , for cedilla to match the conventions used in other stemmers.
+
+* Kraaij-Pohlmann:
+
+  + Avoid cryptic `[among ( (])` ... `)` construct - instead use the same
+    `[substring] among (` ... `)` construct we do in other stemmers.
+
+Compiler
+--------
+
+* Support conventional --help and --version options.
+
+* Warn if -r or -ep used with backend other than C/C++.
+
+* Warn if encoding command line options are specified when generating code in a
+  language with a fixed encoding.
+
+* The default classname is now set based on the output filename, so `-n` is now
+  often no longer needed.  Fixes #64.
+
+* Avoid potential one byte buffer over-read when parsing snowball code.
+
+* Avoid comparing with uninitialised array element during compilation.
+
+* Improve `-syntax` output for `setlimit L for C`.
+
+* Optimise away double negation so generators don't have to worry about
+  generating `--` (decrement operator in many languages).  Fixes #52, reported
+  by David Corbett.
+
+* Improved compiler error and warning messages:
+
+  - We now report FILE:LINE: before each diagnostic message.
+
+  - Improve warnings for unused declarations/definitions.
+
+  - Warn for variables which are used, but either never initialised
+    or never read.
+
+  - Flag non-ASCII literal strings.  This is an error for wide Unicode, but
+    only a warning for single-byte and UTF-8 which work so long as the source
+    encoding matches the encoding used in the generated stemmer code.
+
+  - Improve error recovery after an undeclared `define`.  We now sniff the
+    token after the identifier and if it is `as` we parse as a routine,
+    otherwise we parse as a grouping.  Previously we always just assumed it was
+    a routine, which gave a confusing second error if it was a grouping.
+
+  - Improve error recovery after an unexpected token in `among`.  Previously
+    we acted as if the unexpected token closed the `among` (this probably
+    wasn't intended but just a missing `break;` in a switch statement).  Now we
+    issue an error and try the next token.
+
+* Report error instead of silently truncating character values (e.g. `hex 123`
+  previously silently became byte 0x23 which is `#` rather than a
+  g-with-cedilla).
+
+* Enlarge the initial input buffer size to 8192 bytes and double each time we
+  hit the end.  Snowball programs are typically a few KB in size (with the
+  current largest we ship being the Greek stemmer at 27KB) so the previous
+  approach of starting with a 10 byte input buffer and increasing its size by
+  50% plus 40 bytes each time it filled was inefficient, needing up to 15
+  reallocations to load greek.sbl.
+
+* Identify variables only used by one `routine`/`external`.  This information
+  isn't yet used, but such variables which are also always written to before
+  being read can be emitted as local variables in most target languages.
+
+* We now allow multiple source files on command line, and allow them to be
+  after (or even interspersed) with options to better match modern Unix
+  conventions.  Support for multiple source files allows specifying a single
+  byte character set mapping via a source file of `stringdef`.
+
+* Avoid infinite recursion in compiler when optimising a recursive snowball
+  function.  Recursive functions aren't typical in snowball programs, but
+  the compiler shouldn't crash for any input, especially not a valid one.
+  We now simply limit on how deep the compiler will recurse and make the
+  pessimistic assumption in the unlikely event we hit this limit.
+
+Build system
+------------
+
+* `make clean` in C libstemmer_c distribution now removes `examples/*.o`.
+  (#59)
+
+* Fix all the places which previously had to have a list of stemmers to work
+  dynamically or be generated, so now only modules.txt needs updating to add
+  a new stemmer.
+
+* Add check_java make target which runs tests for java.
+
+* Support gzipped test data (the uncompressed arabic test data is too big for
+  github).
+
+* GNUmakefile: Drop useless `-eprefix` and `-r` options from snowball
+  invocations for Java - these are only meaningful when generating C code.
+
+* Pass CFLAGS when linking which matches convention (e.g. automake does it) and
+  facilitates use of tools such as ASan.  Fixes #84, reported by Thomas
+  Pointhuber.
+
+* Add CI builds with -std=c90 to check compiler and generated code are C90
+  (#54)
+
+libstemmer
+----------
+
+* Split out CPPFLAGS from CFLAGS and use CFLAGS when linking stemwords.
+
+* Add -O2 to CFLAGS.
+
+* Make generated tables of encodings and modules const.
+
+* Fix clang static analyzer memory leak warning (in practice this code path
+  can never actually be taken).  Patch from Patrick O. Perry (#56)
+
+Documentation
+-------------
+
+* Added copyright and licensing details (#10).
+
+* Document that libstemmer supports ISO_8859_2 encoding.  Currently hungarian
+  and romanian are available in ISO_8859_2.
+
+* Remove documentation falsely claiming that libstemmer supports CP850
+  encoding.
+
+* CONTRIBUTING.rst: Add guidance for contributing new stemming algorithms and
+  new language backends.
+
+* Overhaul libstemmer_python_README.  Most notably, replace the benchmark data
+  which was very out of date.

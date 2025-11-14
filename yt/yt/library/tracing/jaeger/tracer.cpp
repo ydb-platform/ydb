@@ -220,7 +220,7 @@ void ToProto(NProto::Span* proto, const TTraceContextPtr& traceContext)
     }
 }
 
-template<typename TK, typename TV>
+template <typename TK, typename TV>
 std::vector<TK> ExtractKeys(THashMap<TK, TV> const& inputMap) {
     std::vector<TK> retval;
     for (auto const& element : inputMap) {

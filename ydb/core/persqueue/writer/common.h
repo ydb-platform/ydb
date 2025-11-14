@@ -12,7 +12,8 @@ namespace NKikimr::NPQ {
 inline bool BasicCheck(const NKikimrClient::TResponse& response, TString& error, bool mustHaveResponse = true) {
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         error = TStringBuilder() << "Status is not ok"
-            << ": status# " << static_cast<ui32>(response.GetStatus());
+            << ": status# " << static_cast<ui32>(response.GetStatus())
+            << " " << response.GetErrorReason();
         return false;
     }
 

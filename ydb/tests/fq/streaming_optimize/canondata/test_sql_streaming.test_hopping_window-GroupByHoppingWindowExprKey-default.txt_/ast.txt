@@ -35,7 +35,7 @@
     (let $40 (CallableType '() '((OptionalType (DataType 'Timestamp))) $39))
     (let $41 (Udf '"DateTime2.FromMilliseconds" (Void) (VoidType) '"" $40 (VoidType) '"" '('('"blocks") $33)))
     (return (Apply $41 $38))
-  ))))) (Interval '"5000") (Interval '"10000") (Interval '"5000000") 'true (lambda '($42) (AsStruct '('Sum0 (Member $42 '"v")))) (lambda '($43 $44) (AsStruct '('Sum0 (AggrAdd (Member $43 '"v") (Member $44 'Sum0))))) $34 $34 (lambda '($46 $47) (AsStruct '('Sum0 (AggrAdd (Member $46 'Sum0) (Member $47 'Sum0))))) (lambda '($48 $49 $50) (AsStruct '('Sum0 (Member $49 'Sum0)) '('group0 $48) '('"group1" $50))) '"1"))
+  ))))) (Interval '"5000") (Interval '"10000") (Interval '"5000000") 'true (lambda '($42) (AsStruct '('Sum0 (Member $42 '"v")))) (lambda '($43 $44) (AsStruct '('Sum0 (AggrAdd (Member $43 '"v") (Member $44 'Sum0))))) $34 $34 (lambda '($46 $47) (AsStruct '('Sum0 (AggrAdd (Member $46 'Sum0) (Member $47 'Sum0))))) (lambda '($48 $49 $50) (AsStruct '('Sum0 (Member $49 'Sum0)) '('group0 $48) '('"group1" $50))) '"1" '"group1"))
   (return (FlatMap (ExtractMembers $35 '('Sum0)) (lambda '($51) (block '(
     (let $52 (ResourceType '"Yson2.Node"))
     (let $53 '($52 '"" '"1"))

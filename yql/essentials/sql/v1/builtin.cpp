@@ -2827,7 +2827,9 @@ enum EAggrFuncTypeCallback {
     LIST,
     UDAF,
     PG,
-    NTH_VALUE
+    NTH_VALUE,
+    RANDOM_SAMPLE,
+    RANDOM_VALUE
 };
 
 struct TCoreFuncInfo {
@@ -2871,7 +2873,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     const TString& factoryName,
     EAggrFuncTypeCallback type = NORMAL,
     const TString& functionNameOverride = TString(),
-    const TVector<EAggregateMode>& validModes = {}) {
+    const TVector<EAggregateMode>& validModes = {})
+{
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
     return [functionName, realFunctionName, factoryName, type, validModes](TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
         if (!validModes.empty()) {
@@ -2936,6 +2939,12 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                 break;
             case NTH_VALUE:
                 factory = BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+                break;
+            case RANDOM_SAMPLE:
+                factory = BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, false);
+                break;
+            case RANDOM_VALUE:
+                factory = BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, true);
                 break;
         }
         if (isFactory) {
@@ -3502,7 +3511,10 @@ struct TBuiltinFuncData {
 
             // MatchRecognize navigation functions
             {"first", {"First", "MatchRec", BuildAggrFuncFactoryCallback("First", "first_traits_factory")}},
-            {"last", {"Last", "MatchRec", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")}}};
+            {"last", {"Last", "MatchRec", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")}},
+
+            {"randomsample", {"RandomSample", "Agg", BuildAggrFuncFactoryCallback("RandomSample", "random_sample_factory", RANDOM_SAMPLE)}},
+            {"randomvalue", {"RandomValue", "Agg", BuildAggrFuncFactoryCallback("RandomValue", "random_value_factory", RANDOM_VALUE)}}};
         return aggrFuncs;
     }
 

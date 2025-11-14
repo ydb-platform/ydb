@@ -19,10 +19,9 @@ class IClientImplCommon;
 
 namespace NYdb::inline Dev::NRetry {
 
-ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
-void Backoff(const NRetry::TBackoffSettings& settings, ui32 retryNumber);
+void Backoff(const NRetry::TBackoffSettings& settings, std::uint32_t retryNumber);
 void AsyncBackoff(std::shared_ptr<IClientImplCommon> client, const TBackoffSettings& settings,
-    ui32 retryNumber, const std::function<void()>& fn);
+    std::uint32_t retryNumber, const std::function<void()>& fn);
 
 enum class NextStep {
     RetryImmediately,
@@ -34,7 +33,7 @@ enum class NextStep {
 class TRetryContextBase : TNonCopyable {
 protected:
     TRetryOperationSettings Settings_;
-    ui32 RetryNumber_;
+    std::uint32_t RetryNumber_;
     TInstant RetryStartTime_;
 
 protected:

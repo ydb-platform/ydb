@@ -10,8 +10,6 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
-Y_UNIT_TEST_SUITE(TKqpScheduler) {
-
 namespace {
     // hardcoded from ydb/core/protos/table_service_config.proto
     constexpr TDelayParams kDefaultDelayParams{
@@ -35,10 +33,13 @@ namespace {
         return tasks;
     }
 
-    void UpdateDemand(std::vector<TSchedulableTaskPtr>& tasks, ui64 demand) {
+    void ShrinkDemand(std::vector<TSchedulableTaskPtr>& tasks, ui64 demand) {
+        Y_ENSURE(demand * 2 < tasks.size());
         tasks.resize(2 * demand);
     }
-}
+} // namespace
+
+Y_UNIT_TEST_SUITE(TKqpScheduler) {
 
     Y_UNIT_TEST(SingleDatabasePoolQueryStructure) {
         /*
@@ -713,40 +714,29 @@ namespace {
             tasks.emplace_back(CreateDemandTasks(query, kQueryDemand));
         }
 
-        scheduler.UpdateFairShare();
+        auto CheckFairShare = [&](const std::vector<ui64>& expectedFairShare) {
+            scheduler.UpdateFairShare();
 
-        std::vector<ui64> fairShares = {5, 4, 1};
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
-            auto querySnapshot = query->GetSnapshot();
-            UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
-        }
+            for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
+                auto querySnapshot = queries.at(queryId)->GetSnapshot();
+                UNIT_ASSERT(querySnapshot);
+                UNIT_ASSERT_VALUES_EQUAL_C(querySnapshot->FairShare, expectedFairShare.at(queryId),
+                    "Wrong fair-share for query " << queryId);
+            }
+        };
 
+        CheckFairShare({5, 4, 1});
+
+        // Add one more query
         NHdrf::NDynamic::TQueryPtr new_query = queries.emplace_back(scheduler.AddOrUpdateQuery(databaseId, poolId, 4, {}));
         tasks.emplace_back(CreateDemandTasks(new_query, kQueryDemand));
 
-        scheduler.UpdateFairShare();
+        CheckFairShare({5, 3, 1, 1});
 
-        // distribution in FIFO ordering
-        fairShares = {5, 3, 1, 1};
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
-            auto querySnapshot = query->GetSnapshot();
-            UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
-        }
+        // Shrink demand of the first query
+        ShrinkDemand(tasks[0], 2);
 
-        UpdateDemand(tasks[0], 2);
-        scheduler.UpdateFairShare();
-
-        fairShares = {2, 5, 2, 1};
-        for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-            auto query = queries[queryId];
-            auto querySnapshot = query->GetSnapshot();
-            UNIT_ASSERT(querySnapshot);
-            UNIT_ASSERT_VALUES_EQUAL(querySnapshot->FairShare, fairShares[queryId]);
-        }
+        CheckFairShare({2, 5, 2, 1});
 
         auto* poolSnapshot = queries[0]->GetSnapshot()->GetParent();
         UNIT_ASSERT(poolSnapshot);

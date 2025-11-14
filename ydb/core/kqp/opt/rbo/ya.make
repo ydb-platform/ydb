@@ -8,6 +8,8 @@ SRCS(
     kqp_convert_to_physical.cpp
     kqp_plan_conversion_utils.cpp
     kqp_rbo_type_ann.cpp
+    kqp_rename_unused_stage.cpp
+    kqp_constant_folding_stage.cpp
 )
 
 PEERDIR(

@@ -1,6 +1,6 @@
 # Download {{ ydb-short-name }} CLI
 
-[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) (`ydb`) is a command-line utility for working with {{ ydb-short-name }} databases.
+[{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) (`ydb`) is a command-line utility for working with {{ ydb-short-name }} databases. It is distributed under the [Apache 2.0 license](https://github.com/ydb-platform/ydb/blob/main/LICENSE).
 
 ## Linux (amd64)
 

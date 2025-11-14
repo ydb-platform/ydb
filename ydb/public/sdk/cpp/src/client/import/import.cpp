@@ -87,6 +87,40 @@ const TImportFromS3Response::TMetadata& TImportFromS3Response::Metadata() const 
     return Metadata_;
 }
 
+/// FS
+TImportFromFsResponse::TImportFromFsResponse(TStatus&& status, Ydb::Operations::Operation&& operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    ImportFromFsMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+
+    // settings
+    Metadata_.Settings.BasePath(metadata.settings().base_path());
+
+    for (const auto& item : metadata.settings().items()) {
+        Metadata_.Settings.AppendItem({item.source_path(), item.destination_path()});
+    }
+
+    Metadata_.Settings.Description(metadata.settings().description());
+    Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+
+    if (metadata.settings().no_acl()) {
+        Metadata_.Settings.NoACL(metadata.settings().no_acl());
+    }
+
+    if (metadata.settings().skip_checksum_validation()) {
+        Metadata_.Settings.SkipChecksumValidation(metadata.settings().skip_checksum_validation());
+    }
+
+    // progress
+    Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
+    Metadata_.ItemsProgress = ItemsProgressFromProto(metadata.items_progress());
+}
+
+const TImportFromFsResponse::TMetadata& TImportFromFsResponse::Metadata() const {
+    return Metadata_;
+}
+
 TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TStatus&& status, const Ydb::Import::ListObjectsInS3ExportResult& proto)
     : TStatus(std::move(status))
     , Proto_(std::make_unique<Ydb::Import::ListObjectsInS3ExportResult>(proto))
@@ -162,6 +196,13 @@ public:
         return RunOperation<V1::ImportService, ImportFromS3Request, ImportFromS3Response, TImportFromS3Response>(
             std::move(request),
             &V1::ImportService::Stub::AsyncImportFromS3,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncImportFromFsResponse ImportFromFs(ImportFromFsRequest&& request, const TImportFromFsSettings& settings) {
+        return RunOperation<V1::ImportService, ImportFromFsRequest, ImportFromFsResponse, TImportFromFsResponse>(
+            std::move(request),
+            &V1::ImportService::Stub::AsyncImportFromFs,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -275,6 +316,37 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
     }
 
     return Impl_->ImportFromS3(std::move(request), settings);
+}
+
+TAsyncImportFromFsResponse TImportClient::ImportFromFs(const TImportFromFsSettings& settings) {
+    auto request = MakeOperationRequest<ImportFromFsRequest>(settings);
+    Ydb::Import::ImportFromFsSettings& settingsProto = *request.mutable_settings();
+
+    settingsProto.set_base_path(TStringType{settings.BasePath_});
+
+    for (const auto& item : settings.Item_) {
+        auto& protoItem = *settingsProto.mutable_items()->Add();
+        protoItem.set_source_path(item.Src);
+        protoItem.set_destination_path(item.Dst);
+    }
+
+    if (settings.Description_) {
+        settingsProto.set_description(TStringType{settings.Description_.value()});
+    }
+
+    if (settings.NumberOfRetries_) {
+        settingsProto.set_number_of_retries(settings.NumberOfRetries_.value());
+    }
+
+    if (settings.NoACL_) {
+        settingsProto.set_no_acl(settings.NoACL_.value());
+    }
+
+    if (settings.SkipChecksumValidation_) {
+        settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
+    }
+
+    return Impl_->ImportFromFs(std::move(request), settings);
 }
 
 TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, std::int64_t pageSize, const std::string& pageToken) {

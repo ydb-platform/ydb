@@ -17,16 +17,16 @@ namespace NKikimr::NStorage {
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             LocalPileQuorum = BridgeInfo && HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap,
-                BridgeInfo->SelfNodePile->BridgePileId, nullptr);
+                BridgeInfo->SelfNodePile->BridgePileId, *Cfg, nullptr, true);
             GlobalQuorum = (!BridgeInfo || BridgeInfo->SelfNodePile->IsPrimary) && HasNodeQuorum(*StorageConfig,
-                connected, BridgePileNameMap, TBridgePileId(), nullptr);
+                connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
                 ConnectedUnsyncedPiles.clear();
                 for (const auto& pile : BridgeInfo->Piles) {
                     if (pile.State == NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1 && HasNodeQuorum(*StorageConfig,
-                            connected, BridgePileNameMap, pile.BridgePileId, nullptr)) {
+                            connected, BridgePileNameMap, pile.BridgePileId, *Cfg, nullptr, true)) {
                         ConnectedUnsyncedPiles.insert(pile.BridgePileId);
                     }
                 }
@@ -108,7 +108,10 @@ namespace NKikimr::NStorage {
         RootState = ERootState::ERROR_TIMEOUT;
         ErrorReason = reason;
         OpQueueOnError(reason);
-        CurrentProposition.reset();
+        if (CurrentProposition) {
+           UndoCurrentPropositionNodeChange(*CurrentProposition);
+           CurrentProposition.reset();
+        }
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
         AbortAllScatterTasks(std::nullopt);
@@ -126,6 +129,15 @@ namespace NKikimr::NStorage {
         InvokeQ = std::exchange(InvokePending, {});
         if (!InvokeQ.empty()) {
             TActivationContext::Send(new IEventHandle(TEvPrivate::EvExecuteQuery, 0, InvokeQ.front().ActorId, {}, nullptr, 0));
+        }
+    }
+
+    void TDistributedConfigKeeper::UndoCurrentPropositionNodeChange(TProposition& proposition) {
+        if (!proposition.AddedNodes.empty()) {
+            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
+            for (const auto& nodeId : proposition.AddedNodes) {
+                UnsubscribeInterconnect(nodeId.NodeId());
+            }
         }
     }
 
@@ -159,7 +171,7 @@ namespace NKikimr::NStorage {
             connected.push_back(nodeId);
         }
         return HasNodeQuorum(config, connected, BridgePileNameMap, local && BridgeInfo ?
-            BridgeInfo->SelfNodePile->BridgePileId : TBridgePileId(), nullptr);
+            BridgeInfo->SelfNodePile->BridgePileId : TBridgePileId(), *Cfg, nullptr, true);
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
@@ -175,7 +187,8 @@ namespace NKikimr::NStorage {
                 successfulNodes.emplace_back(node);
             }
         }
-        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, BridgePileNameMap, TBridgePileId(), &err);
+        const bool nodeQuorum = HasNodeQuorum(*StorageConfig, successfulNodes, BridgePileNameMap, TBridgePileId(), *Cfg,
+            &err, true);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Calculate configuration quorum
@@ -215,7 +228,7 @@ namespace NKikimr::NStorage {
                     nodesWithoutDistconf.emplace_back(node);
                 }
             }
-            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, BridgePileNameMap, TBridgePileId(), nullptr)) {
+            if (HasNodeQuorum(*StorageConfig, nodesWithoutDistconf, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
                 // yes, distconf is disabled on the majority of the nodes, so we can't do anything about it
                 return {.IsDistconfDisabledQuorum = true};
             }
@@ -256,7 +269,7 @@ namespace NKikimr::NStorage {
         }
         for (auto it = baseConfigs.begin(); it != baseConfigs.end(); ) { // filter out configs not having node quorum
             TBaseConfigInfo& r = it->second;
-            if (HasNodeQuorum(r.Config, r.HavingNodeIds, BridgePileNameMap, TBridgePileId(), nullptr)) {
+            if (HasNodeQuorum(r.Config, r.HavingNodeIds, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr)) {
                 ++it;
             } else {
                 baseConfigs.erase(it++);
@@ -459,9 +472,9 @@ namespace NKikimr::NStorage {
 
         // reset current proposition in advance
         auto proposition = *std::exchange(CurrentProposition, std::nullopt);
+        Y_ABORT_UNLESS(proposition.ActorId);
 
         auto finishWithError = [&](TString error) {
-            Y_ABORT_UNLESS(proposition.ActorId);
             Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::move(error)));
         };
 
@@ -479,7 +492,6 @@ namespace NKikimr::NStorage {
             ApplyStorageConfig(proposition.StorageConfig);
 
             // this proposition came from actor -- we notify that actor and finish operation
-            Y_ABORT_UNLESS(proposition.ActorId);
             Send(proposition.ActorId, new TEvPrivate::TEvConfigProposed(std::nullopt));
         } else {
             STLOG(PRI_DEBUG, BS_NODE, NWDC47, "no quorum for ProposedStorageConfig", (Record, *res),
@@ -488,6 +500,9 @@ namespace NKikimr::NStorage {
                 (Error, err.Str()));
             finishWithError(TStringBuilder() << "no quorum for ProposedStorageConfig:" << err.Str());
         }
+
+        // update nameservice configuration with correct values
+        UndoCurrentPropositionNodeChange(proposition);
 
         // if this proposition was made by an actor, but it has died, then we have to return state to correct one
         if (DeadActorWaitingForProposition) {
@@ -519,7 +534,7 @@ namespace NKikimr::NStorage {
             }
 
             case TEvScatter::kProposeStorageConfig:
-                if (ProposedStorageConfigCookieUsage) {
+                if (ProposedStorageConfigCookie) {
                     auto *status = task.Response.MutableProposeStorageConfig()->AddStatus();
                     SelfNode.Serialize(status->MutableNodeId());
                     status->SetStatus(TEvGather::TProposeStorageConfig::RACE);
@@ -536,21 +551,13 @@ namespace NKikimr::NStorage {
                 } else if (proposed.HasClusterState() && (!BridgeInfo || !NBridge::PileStateTraits(proposed.GetClusterState().GetPerPileState(BridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())).RequiresConfigQuorum)) {
                     // won't persist propsed config when this node is not part of the quorum
                 } else {
-                    ProposedStorageConfigCookie = cookie;
+                    ProposedStorageConfigCookie.emplace(cookie);
                     ProposedStorageConfig.emplace(proposed);
 
-                    // issue notification to node warden
-                    if (StorageConfig && StorageConfig->GetGeneration() &&
-                            StorageConfig->GetGeneration() < ProposedStorageConfig->GetGeneration()) {
-                        ReportStorageConfigToNodeWarden(cookie);
-                        ++task.AsyncOperationsPending;
-                        ++ProposedStorageConfigCookieUsage;
-                    }
-
                     PersistConfig([this, cookie](TEvPrivate::TEvStorageConfigStored& msg) {
-                        Y_ABORT_UNLESS(ProposedStorageConfigCookieUsage);
-                        Y_ABORT_UNLESS(cookie == ProposedStorageConfigCookie);
-                        --ProposedStorageConfigCookieUsage;
+                        Y_ABORT_UNLESS(ProposedStorageConfigCookie);
+                        Y_ABORT_UNLESS(cookie == *ProposedStorageConfigCookie);
+                        ProposedStorageConfigCookie.reset();
 
                         if (auto it = ScatterTasks.find(cookie); it != ScatterTasks.end()) {
                             TScatterTask& task = it->second;
@@ -577,7 +584,6 @@ namespace NKikimr::NStorage {
                     });
 
                     ++task.AsyncOperationsPending;
-                    ++ProposedStorageConfigCookieUsage;
                 }
                 break;
 
@@ -771,11 +777,33 @@ namespace NKikimr::NStorage {
             .MindPrev = mindPrev,
         });
 
+        Y_ABORT_UNLESS(StorageConfig);
+        const auto& currentNodesProto = StorageConfig->GetAllNodes();
+        std::vector<TNodeIdentifier> currentNodes(currentNodesProto.begin(), currentNodesProto.end());
+        std::ranges::sort(currentNodes);
+
+        const auto& newNodesProto = configToPropose->GetAllNodes();
+        std::vector<TNodeIdentifier> newNodes(newNodesProto.begin(), newNodesProto.end());
+        std::ranges::sort(newNodes);
+
+        std::vector<TNodeIdentifier> addedNodes;
+        std::ranges::set_difference(newNodes, currentNodes, std::back_inserter(addedNodes));
+        if (!addedNodes.empty()) {
+            Send(GetNameserviceActorId(), new TEvNodeWardenStorageConfig(
+                std::make_shared<NKikimrBlobStorage::TStorageConfig>(CurrentProposition->StorageConfig),
+                SelfManagementEnabled,
+                Cfg->BridgeConfig
+                    ? GenerateBridgeInfo(CurrentProposition->StorageConfig)
+                    : nullptr
+            ));
+            CurrentProposition->AddedNodes = {addedNodes.begin(), addedNodes.end()};
+        }
+
         // issue scatter task
         TEvScatter task;
         task.SetTaskId(RandomNumber<ui64>());
         task.MutableProposeStorageConfig()->MutableConfig()->Swap(configToPropose);
-        IssueScatterTask(TActorId(), std::move(task));
+        IssueScatterTask(TScatterTaskOriginFsm{}, std::move(task), addedNodes);
 
         return std::nullopt;
     }

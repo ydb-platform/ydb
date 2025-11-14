@@ -107,6 +107,539 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         setup.CreateTopic(name, TEST_CONSUMER, 1);
     }
 
+    Y_UNIT_TEST(CreateTopicWithStreamingConsumer) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddStreamingConsumer("consumer_name");
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Streaming);
+    }
+
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer_MoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddConsumer()
+                .ConsumerName("shared_consumer_name")
+                .ConsumerType(EConsumerType::Shared)
+                .DefaultProcessingTimeout(TDuration::Seconds(7))
+                .KeepMessagesOrder(true)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(11)
+                    .EndCondition()
+                    .MoveAction("deadLetterQueue-topic")
+                .EndDeadLetterPolicy()
+            .EndAddConsumer();
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
+    }
+
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer_DeleteDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddSharedConsumer()
+                .ConsumerName("shared_consumer_name")
+                .DefaultProcessingTimeout(TDuration::Seconds(7))
+                .KeepMessagesOrder(true)
+                .BeginDeadLetterPolicy()
+                    .Enabled(true)
+                    .DeleteAction()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(11)
+                    .EndCondition()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer();
+        Cerr << ">>>>> " << topics.Consumers_[0].DeadLetterPolicy_.Action_ << Endl;
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Delete);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "");
+    }
+
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer_DisabledDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddConsumer()
+                .ConsumerName("shared_consumer_name")
+                .ConsumerType(EConsumerType::Shared)
+                .DefaultProcessingTimeout(TDuration::Seconds(7))
+                .KeepMessagesOrder(true)
+            .EndAddConsumer();
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), false);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Unspecified);
+    }
+
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer_KeepMessagesOrder_False) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddSharedConsumer("shared_consumer_name")
+                .KeepMessagesOrder(false)
+            .EndAddConsumer();
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), false);
+    }
+
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer_KeepMessagesOrder_True) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddSharedConsumer("shared_consumer_name")
+                .KeepMessagesOrder(true)
+            .EndAddConsumer();
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+    }
+
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_MoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .MoveAction("deadLetterQueue-topic")
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer();
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .DefaultProcessingTimeout(TDuration::Seconds(13))
+                    .BeginAlterDeadLetterPolicy()
+                        .Enabled(true)
+                        .AlterMoveAction("deadLetterQueue-topic-new")
+                        .BeginCondition()
+                            .MaxProcessingAttempts(17)
+                        .EndCondition()
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(13));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic-new");
+    }
+
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_DisableDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .MoveAction("deadLetterQueue-topic")
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer();
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+            auto& c = describe.GetTopicDescription().GetConsumers()[0];
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .BeginAlterDeadLetterPolicy()
+                        .Enabled(false)
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), false);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
+    }
+
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_SetDeleteDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .MoveAction("deadLetterQueue-topic")
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer();
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .BeginAlterDeadLetterPolicy()
+                        .SetDeleteAction()
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Delete);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "");
+    }
+
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_SetMoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .DeleteAction()
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer();
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .BeginAlterDeadLetterPolicy()
+                        .SetMoveAction("dlq-topic")
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "dlq-topic");
+    }
+
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_AlterMoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .MoveAction("dlq-topic")
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer();
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .BeginAlterDeadLetterPolicy()
+                        .AlterMoveAction("dlq-topic-new")
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "dlq-topic-new");
+    }
+
+    Y_UNIT_TEST(AlterTopicWithSharedConsumer_DeleteDeadLetterPolicy_AlterMoveDeadLetterPolicy) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .DeleteAction()
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                    .EndDeadLetterPolicy()
+                .EndAddConsumer();
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .BeginAlterDeadLetterPolicy()
+                        .AlterMoveAction("dlq-topic-new")
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(!status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Delete);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "");
+    }
+
+    Y_UNIT_TEST(AlterDeadLetterPolicy_StreamingConsumer) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        {
+            TCreateTopicSettings topics;
+            topics.BeginAddStreamingConsumer("shared_consumer_name");
+
+            auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        }
+
+        {
+            TAlterTopicSettings topics;
+            topics.BeginAlterConsumer()
+                    .ConsumerName("shared_consumer_name")
+                    .BeginAlterDeadLetterPolicy()
+                        .AlterMoveAction("dlq-topic-new")
+                    .EndAlterDeadLetterPolicy()
+                .EndAlterConsumer();
+            auto status = client.AlterTopic("topic_name", topics).GetValueSync();
+            auto issue = status.GetIssues().ToOneLineString();
+            UNIT_ASSERT_C(!status.IsSuccess(), issue);
+            UNIT_ASSERT_C(issue.contains("Cannot alter consumer type"), issue);
+        }
+    }
+
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
         if (EnableDirectRead) {
             // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.

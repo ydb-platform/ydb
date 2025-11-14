@@ -24,12 +24,14 @@ constexpr TDuration PING_PERIOD = TDuration::Seconds(30);
 
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
-    const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
+    const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
+    const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
+    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
     const TCPULimits& cpuLimits)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
+    , Database(database)
     , TxId(txId)
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
@@ -648,6 +650,7 @@ void TKqpScanFetcherActor::ResolveShard(TShardState& state) {
                                                            << ", attempt #" << state.ResolveAttempt);
 
     auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+    request->DatabaseName = Database;
     request->ResultSet.emplace_back(std::move(keyDesc));
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 }

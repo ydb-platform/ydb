@@ -18,6 +18,7 @@ namespace NInterconnect {
         bool SoftLoad;                      // is the load soft?
         TDuration Duration;                 // test duration
         bool UseProtobufWithPayload;        // store payload separately
+        ui32 RdmaMode;                      // rdma params bitmap, 0 - not used
     };
     NActors::IActor* CreateLoadActor(const TLoadParams& params);
 

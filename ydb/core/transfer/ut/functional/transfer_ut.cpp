@@ -1519,7 +1519,6 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
         testCase.CreateTopic(1);
 
-        testCase.CreateDirectory("/local/subdir");
         testCase.CreateTransfer(TStringBuilder() << "subdir/" << testCase.TransferName, Sprintf(R"(
                 $l = ($x) -> {
                     return [

@@ -35,6 +35,17 @@
 
 Чтение может быть произведено в формате как есть (в "сыром" виде) или в формате JSON. Запись можно выполнять только в виде байтового потока, который интерпретируется на принимающей стороне.
 
+### Конфигурирование
+
+Функциональность включается установкой флагов `enable_external_data_sources` и `enable_streaming_queries` в конфигурации кластера.
+Пример:
+
+```yaml
+feature_flags:
+  enable_external_data_sources: true
+  enable_streaming_queries: true
+```
+
 ## Синтаксис
 
 Чтение реализовано через [внешние источники данных](../datamodel/external_data_source), поэтому предварительно необходимо создать источник через [CREATE EXTERNAL DATA SOURCE](../../../yql/reference/syntax/create-external-data-source).

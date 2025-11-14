@@ -15,17 +15,19 @@
 Предварительные условия:
 
 * запущенная база {{ ydb-short-name }}, пример запуска [quick start](../quickstart.md),
-* включены флаги `enable_external_data_sources` и  `enable_streaming_queries`,
+* включены флаги `enable_external_data_sources` и  `enable_streaming_queries`:
 
-  Если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:
-  ```bash
-  docker run ... -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries ydbplatform/local-ydb:trunk
-  ```
+  * если вы запускаете {{ ydb-short-name }} через docker, то передайте флаги в `docker run`:
 
-  Если вы запускаете {{ ydb-short-name }} через `local_ydb`, то передайте флаги в `deploy`:
-  ```bash
-  ./local_ydb deploy --ydb-working-dir=... --ydb-binary-path=... --enable-feature-flag=enable_external_data_sources --enable-feature-flag=enable_streaming_queries
-  ```
+    ```bash
+    docker run ... -e YDB_FEATURE_FLAGS=enable_external_data_sources,enable_streaming_queries ydbplatform/local-ydb:trunk
+    ```
+
+  * если вы запускаете {{ ydb-short-name }} через `local_ydb`, то передайте флаги в `deploy`:
+
+    ```bash
+    ./local_ydb deploy --ydb-working-dir=... --ydb-binary-path=... --enable-feature-flag=enable_external_data_sources --enable-feature-flag=enable_streaming_queries
+    ```
 
 ## Шаг 1. Создание топиков {#step1}
 

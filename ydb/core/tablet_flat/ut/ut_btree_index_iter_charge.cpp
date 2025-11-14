@@ -556,7 +556,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                             UNIT_ASSERT_LE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged + 4, messageWithValues);
                         }
 
-                        UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.BytesPrecharged, treeChargeResult.BytesPrecharged, message);
+                        // The flat implementation always returns 0 bytes charged, if the bytes limit is not set
+                        UNIT_ASSERT_VALUES_UNEQUAL_C(treeChargeResult.BytesPrecharged, 0, message);
 
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
                             false, reverse && itemsLimit, !reverse && itemsLimit);
@@ -629,7 +630,8 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                     UNIT_ASSERT_LE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged + 4, messageWithValues);
                                 }
 
-                                UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.BytesPrecharged, treeChargeResult.BytesPrecharged, message);
+                                // The flat implementation always returns 0 bytes charged, if the bytes limit is not set
+                                UNIT_ASSERT_VALUES_UNEQUAL_C(treeChargeResult.BytesPrecharged, 0, message);
 
                                 AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
                                     true, reverse && itemsLimit, !reverse && itemsLimit);

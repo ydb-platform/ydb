@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       pull_request_input:
-        description: 'Overrides default branches, use with pull/* prefix, ex. pull/12345'
+        description: 'Pull request, overrides default branches, use with pull/* prefix, ex. pull/12345'
         required: false
         default: ''
       use_default_branches:

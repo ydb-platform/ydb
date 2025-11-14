@@ -206,7 +206,7 @@ class YdbCluster:
     @staticmethod
     def _create_ydb_driver(endpoint, database, oauth=None, iam_file=None):
         credentials = None
-        LOGGER.info(f"Connecting to {endpoint} to {database} ydb_access_token is set {oauth is not None}")
+        LOGGER.info(f"Connecting to {endpoint} to {database} ydb_access_token is set {oauth is not None}, iam file path is {iam_file}")
 
         if oauth is not None:
             credentials = ydb.AccessTokenCredentials(oauth)

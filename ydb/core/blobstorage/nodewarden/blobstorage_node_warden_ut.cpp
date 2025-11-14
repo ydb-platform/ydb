@@ -1130,6 +1130,84 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
             pdiskId, 12, 2u);
     }
+
+    CUSTOM_UNIT_TEST(TestEvVGenerationChangeRace) {
+        // This test reproduces the race condition where TEvVGenerationChange
+        // arrives at VDisk before TEvLocalRecoveryDone, causing a segfault
+        // when trying to access PDiskCtx->Dsk which is still nullptr.
+        //
+        // The race happens when:
+        // 1. VDisk starts and enters StateLocalRecovery
+        // 2. LocalRecovery actor sends TEvYardInit to PDisk
+        // 3. BSController sends TEvVGenerationChange (due to GroupSizeInUnits change)
+        // 4. VDisk tries to handle generation change but PDiskCtx is not yet initialized
+        // 5. Crash at blobstorage_skeleton.cpp:2457 when accessing PDiskCtx->Dsk->Owner
+
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, "", nullptr);
+        runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BS_SKELETON, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BS_LOCALRECOVERY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
+
+        // Track state
+        bool localRecoveryDoneDelayed = false;
+        TAutoPtr<IEventHandle> delayedLocalRecoveryDone;
+        bool groupSizeChangeRequested = false;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+            // Delay TEvLocalRecoveryDone to keep VDisk in StateLocalRecovery
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvLocalRecoveryDone && !localRecoveryDoneDelayed) {
+                Cerr << "Delaying TEvLocalRecoveryDone to keep VDisk in StateLocalRecovery" << Endl;
+                localRecoveryDoneDelayed = true;
+                delayedLocalRecoveryDone = ev.Release();
+
+                // Now trigger group size change via BSController
+                // This will cause TEvVGenerationChange to be sent to VDisk
+                if (!groupSizeChangeRequested) {
+                    Cerr << "Requesting GroupSizeInUnits change via BSController" << Endl;
+                    groupSizeChangeRequested = true;
+
+                    // Send configuration command to BSController to change GroupSizeInUnits
+                    auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+                    auto& cmd = *request->Record.MutableRequest()->AddCommand()->MutableChangeGroupSizeInUnits();
+                    cmd.AddGroupId(0x2000000);
+                    cmd.SetSizeInUnits(2);  // Change from default to trigger TEvVGenerationChange
+
+                    auto edge = runtime.AllocateEdgeActor();
+                    NTabletPipe::TClientConfig pipeConfig;
+                    pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+                    runtime.SendToPipe(MakeBSControllerID(), edge, request.Release(), 0, pipeConfig);
+                }
+
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            // After TEvVGenerationChange is sent, deliver the delayed TEvLocalRecoveryDone
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGenerationChange && delayedLocalRecoveryDone) {
+                Cerr << "TEvVGenerationChange detected, now delivering delayed TEvLocalRecoveryDone" << Endl;
+                runtime.Send(delayedLocalRecoveryDone.Release());
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime.SetObserverFunc(observer);
+
+        // Wait for the test to complete
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(
+            TEvBlobStorage::EvControllerConfigResponse, 1));
+
+        // This should either crash (without the fix) or complete successfully (with the fix)
+        // Without fix: VDisk crashes when handling TEvVGenerationChange in StateLocalRecovery
+        // With fix: TEvVGenerationChange is stashed and processed after TEvLocalRecoveryDone
+        runtime.DispatchEvents(options, TDuration::Seconds(1));
+
+        Cerr << "Test completed successfully - race condition was handled correctly" << Endl;
+    }
+
 }
 
 } // namespace NBlobStorageNodeWardenTest

@@ -369,6 +369,11 @@ runs:
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
+          ulimit -c unlimited
+          sudo mkdir -p /coredumps
+          sudo chmod 1777 /coredumps
+          echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
+
           monitor_memory() {
               set +x
               while true; do
@@ -381,7 +386,7 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
-
+  
           set +e
           ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \

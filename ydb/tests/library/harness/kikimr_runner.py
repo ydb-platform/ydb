@@ -813,6 +813,12 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 drive_proto.Kind = drive['pdisk_user_kind']
                 drive_proto.Type = drive.get('pdisk_type', 0)
 
+                for key, value in drive.get('pdisk_config', {}).items():
+                    if key == 'expected_slot_count':
+                        drive_proto.PDiskConfig.ExpectedSlotCount = value
+                    else:
+                        raise KeyError(f"unknown pdisk_config option {key}")
+
         cmd = request.Command.add()
         cmd.DefineBox.BoxId = 1
         for node_id, node in self.nodes.items():

@@ -630,6 +630,17 @@
         // Always include report link
         body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
         
+        // Add HTML report link
+        body += "**HTML Report:** [link](" + encodeURIComponent(window.location.href) + ")%0A%0A";
+        
+        // Add workflow run link  
+        {% if workflow_url %}
+        const workflowUrl = "{{ workflow_url }}";
+        if (workflowUrl && workflowUrl !== "") {
+            body += "**Workflow Run:** [link](" + encodeURIComponent(workflowUrl) + ")%0A%0A";
+        }
+        {% endif %}
+        
         return body;
     }
 
@@ -650,7 +661,7 @@
         if (errorText && errorText.trim() !== "") {
             const errorPrefix = "**Error Summary:**%0A```%0A";
             const errorSuffix = "%0A```%0A%0A";
-            const truncationMsg = "%0A<TRUNCATED>";
+            const errorTooLargeMsg = "ERROR TOO LARGE, PASTE IT BY YOURSELF";
             
             const fullErrorText = errorText.trim();
             const encodedFullError = encodeURIComponent(fullErrorText);
@@ -665,13 +676,8 @@
                 if (encodedFullError.length <= allowedDelta) {
                     body += errorPrefix + encodedFullError + errorSuffix;
                 } else {
-                    const allowedForEncoded = allowedDelta - truncationMsg.length;
-                    if (allowedForEncoded > 0) {
-                        const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
-                        if (truncatedEncoded) {
-                            body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
-                        }
-                    }
+                    // If error is too large, show the error too large message instead of truncating
+                    body += errorPrefix + encodeURIComponent(errorTooLargeMsg) + errorSuffix;
                 }
             }
         }

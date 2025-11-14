@@ -81,6 +81,10 @@ proto_kotlin="flag"
 proto_kotlin_grpc="flag"
 proto_kotlin_grpc_version="str"
 
+proto_plugins="list"
+proto_plugins-name="str"
+proto_plugins-bin="str"
+
 kotlin_version="str"
 with_kotlin="flag"
 with_kotlinc_plugin_allopen="set"

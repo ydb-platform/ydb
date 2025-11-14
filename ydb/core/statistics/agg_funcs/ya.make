@@ -11,7 +11,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE(
-    udfs
-)

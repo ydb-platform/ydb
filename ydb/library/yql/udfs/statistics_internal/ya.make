@@ -10,6 +10,10 @@ SRCS(
     udf.cpp
 )
 
+PEERDIR(
+    ydb/core/statistics/agg_funcs
+)
+
 END()
 
 RECURSE_FOR_TESTS(

@@ -39,7 +39,6 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/ymq/actor
     ydb/core/ymq/base
-    ydb/core/statistics/agg_funcs/udfs
     ydb/library/folder_service/mock
     ydb/library/keys
     ydb/library/pdisk_io
@@ -55,6 +54,7 @@ PEERDIR(
     yql/essentials/udfs/common/ip_base
     ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/roaring
+    ydb/library/yql/udfs/statistics_internal
     yql/essentials/udfs/common/json
     yql/essentials/udfs/common/json2
     yql/essentials/udfs/common/math

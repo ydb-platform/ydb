@@ -1,11 +1,10 @@
-UNITTEST_FOR(ydb/core/statistics/agg_funcs/udfs)
+UNITTEST_FOR(ydb/library/yql/udfs/statistics_internal)
 
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/statistics/ut_common
-    ydb/core/statistics/agg_funcs/udfs
     ydb/core/testlib/default
 )
 

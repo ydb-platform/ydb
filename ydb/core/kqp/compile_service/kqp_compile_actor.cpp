@@ -80,6 +80,7 @@ public:
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
+        , TriedFallbackSqlVersion(false)
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, kqpSettings->Settings, false);
 
@@ -88,6 +89,7 @@ public:
         }
 
         ApplyServiceConfig(*Config, tableServiceConfig);
+        OriginalSqlVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
@@ -251,6 +253,14 @@ private:
             new TEvents::TEvWakeup()));
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
+
+        // If database has legacy syntax (SqlVersion = 0), try SqlVersion = 1 first
+        if (OriginalSqlVersion == 0 && !TriedFallbackSqlVersion) {
+            Config->_KqpYqlSyntaxVersion = 1;
+            TriedFallbackSqlVersion = true;
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Trying compilation with SqlVersion = 1 (fallback from legacy syntax)"
+                << ", self: " << ctx.SelfID);
+        }
 
         auto prepareSettings = PrepareCompilationSettings(ctx);
 
@@ -532,6 +542,55 @@ private:
             return;
         }
 
+        // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
+        if (status != Ydb::StatusIds::SUCCESS && TriedFallbackSqlVersion && OriginalSqlVersion == 0) {
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0"
+                << ", self: " << ctx.SelfID
+                << ", issues: " << kqpResult.Issues().ToString());
+
+            // Reset to original SqlVersion = 0
+            Config->_KqpYqlSyntaxVersion = 0;
+            TriedFallbackSqlVersion = false;
+
+            // Restart compilation with SqlVersion = 0
+            auto prepareSettings = PrepareCompilationSettings(ctx);
+            NCpuTime::TCpuTimer timer(CompileCpuTime);
+
+            switch (QueryId.Settings.QueryType) {
+                case NKikimrKqp::QUERY_TYPE_SQL_DML:
+                    AsyncCompileResult = KqpHost->PrepareDataQuery(QueryRef, prepareSettings);
+                    break;
+
+                case NKikimrKqp::QUERY_TYPE_AST_DML:
+                    AsyncCompileResult = KqpHost->PrepareDataQueryAst(QueryRef, prepareSettings);
+                    break;
+
+                case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
+                case NKikimrKqp::QUERY_TYPE_AST_SCAN:
+                    AsyncCompileResult = KqpHost->PrepareScanQuery(QueryRef, QueryId.IsSql(), prepareSettings);
+                    break;
+
+                case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
+                    prepareSettings.ConcurrentResults = false;
+                    AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, SplitExpr.get());
+                    break;
+
+                case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
+                    AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, SplitExpr.get());
+                    break;
+
+                case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
+                    AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings, SplitExpr.get());
+                    break;
+
+                default:
+                    YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
+            }
+
+            Continue(ctx);
+            return;
+        }
+
         auto database = QueryId.Database;
         if (kqpResult.SqlVersion) {
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
@@ -638,6 +697,8 @@ private:
     bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
+    ui16 OriginalSqlVersion;
+    bool TriedFallbackSqlVersion;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {

@@ -563,6 +563,8 @@ class TestViewer(object):
                                     'InstanceGuid',
                                     'WriteThroughput',
                                     'ReadThroughput',
+                                    'StorageSize',
+                                    'StorageCount',
                                     })
 
         # cluster
@@ -573,6 +575,11 @@ class TestViewer(object):
                                     'StorageTotal',
                                     'StorageUsed',
                                     'ROT',
+                                    })
+
+        # tablets
+        replace_with_values.update({'DataSize',
+                                    'IndexSize',
                                     })
 
         # replication
@@ -1559,3 +1566,10 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
         return result
+
+    @classmethod
+    def test_storage_stats(cls):
+        return cls.get_viewer_normalized("/viewer/storage_stats", {
+            'database': cls.dedicated_db,
+            'path': '.,table1,topic1',
+        })

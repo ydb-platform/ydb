@@ -1231,6 +1231,156 @@
         ],
         "TotalGroups": 5
     },
+    "test.TestViewer.test_storage_stats": {
+        "Paths": [
+            {
+                "FullPath": "/Root/dedicated_db",
+                "Groups": [
+                    {
+                        "GroupId": "2181038082",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number"
+                    }
+                ],
+                "Media": [
+                    {
+                        "Kind": "hdd",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number"
+                    }
+                ],
+                "Path": ".",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": [
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037893",
+                        "Type": "Coordinator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037895",
+                        "Type": "Coordinator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037896",
+                        "Type": "Coordinator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037888",
+                        "Type": "Hive"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037889",
+                        "Type": "Mediator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037890",
+                        "Type": "Mediator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037892",
+                        "Type": "Mediator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037897",
+                        "Type": "SchemeShard"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037894",
+                        "Type": "StatisticsAggregator"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037891",
+                        "Type": "SysViewProcessor"
+                    }
+                ]
+            },
+            {
+                "DataSize": "not-zero-number",
+                "FullPath": "/Root/dedicated_db/table1",
+                "Groups": [
+                    {
+                        "GroupId": "2181038082",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number"
+                    }
+                ],
+                "Media": [
+                    {
+                        "Kind": "hdd",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number"
+                    }
+                ],
+                "Path": "table1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": [
+                    {
+                        "DataSize": "not-zero-number",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037898",
+                        "Type": "DataShard"
+                    }
+                ]
+            },
+            {
+                "FullPath": "/Root/dedicated_db/topic1",
+                "Groups": [
+                    {
+                        "GroupId": "2181038082",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number"
+                    }
+                ],
+                "Media": [
+                    {
+                        "Kind": "hdd",
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number"
+                    }
+                ],
+                "Path": "topic1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": [
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037899",
+                        "Type": "PersQueue"
+                    },
+                    {
+                        "StorageCount": "not-zero-number",
+                        "StorageSize": "not-zero-number",
+                        "TabletId": "72075186224037900",
+                        "Type": "PersQueueReadBalancer"
+                    }
+                ]
+            }
+        ]
+    },
     "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
             "status_code": 400,

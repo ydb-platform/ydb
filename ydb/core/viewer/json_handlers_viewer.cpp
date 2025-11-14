@@ -41,6 +41,7 @@
 #include "viewer_multipart_counter.h"
 #include "viewer_groups.h"
 #include "viewer_sse_counter.h"
+#include "viewer_storage_stats.h"
 
 namespace NKikimr::NViewer {
 
@@ -375,6 +376,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerMultipartCounterHandler(jsonHandlers);
     InitViewerTextStreamCounterHandler(jsonHandlers);
     InitViewerGroupsJsonHandler(jsonHandlers);
+    jsonHandlers.AddHandler("/viewer/storage_stats", new TJsonHandler<TJsonStorageStats>(TJsonStorageStats::GetSwagger()));
 }
 
 }

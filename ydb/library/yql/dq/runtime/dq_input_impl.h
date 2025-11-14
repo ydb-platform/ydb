@@ -1,6 +1,8 @@
 #pragma once
 
 #include <util/generic/overloaded.h>
+#include <ydb/library/yql/dq/runtime/dq_async_input.h>
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -197,7 +199,7 @@ public:
         ui64 popBytes = 0;
         ui64 popRows = 0;
 
-        while (!Batches.empty() && BeforeBarrier.BatchesCount--) {
+        while (!Batches.empty() && BeforeBarrier.BatchesCount > 0) {
             const auto end = std::visit(TOverloaded {
                 [&batch, &popBytes, &popRows](TBatch& part) -> bool {
                     if (batch.IsWide()) {
@@ -219,6 +221,7 @@ public:
                 },
             }, Batches.front());
             Batches.pop_front();
+            BeforeBarrier.BatchesCount--;
 
             if (end) {
                 break;

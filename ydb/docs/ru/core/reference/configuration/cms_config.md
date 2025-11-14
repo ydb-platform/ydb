@@ -1,6 +1,6 @@
 # cms_config
 
-[Cluster Management System (CMS)](../../concepts/glossary.md#cms) — компонент {{ ydb-short-name }}, с помощью которого можно выполнять [безопасное обслуживание кластера {{ ydb-short-name }}](../../devops/concepts/maintenance-without-downtime.md), например, обновлять его версию или заменять сломавшиеся диски без потери доступности. Поведение CMS конфигурируется в секции `cms_config` [конфигурации](../../reference/configuration) {{ ydb-short-name }}.
+[Cluster Management System (CMS)](../../concepts/glossary.md#cms) — компонент {{ ydb-short-name }}, с помощью которого можно выполнять [безопасное обслуживание кластера {{ ydb-short-name }}](../../devops/concepts/maintenance-without-downtime.md), например, обновлять его версию или заменять сломавшиеся диски без потери доступности. Поведение CMS конфигурируется в секции `cms_config` конфигурации {{ ydb-short-name }}.
 
 ## Приостановка обслуживания кластера
 

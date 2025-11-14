@@ -2764,7 +2764,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
 
     bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
 
-    if (partitions.size() > 0 && (isSequentialInFlight || singlePartitionedStage)) {
+    if (partitions.size() > 0 && (isSequentialInFlight || singlePartitionedStage) && !GetMeta().MaxBatchSize) {
         auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
 
         if (stats) {
@@ -2970,7 +2970,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                 }
             }
 
-            if (stage.GetIsSinglePartition()) {
+            if (stage.GetIsSinglePartition() && !GetMeta().MaxBatchSize) {
                 YQL_ENSURE(stageInfo.Tasks.size() <= 1, "Unexpected multiple tasks in single-partition stage");
             }
 

@@ -207,7 +207,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
                                    adjustLimit(key.RangeLimits.ItemsLimit),
                                    adjustLimit(key.RangeLimits.BytesLimit),
                                    key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                   GetReadVersion(key.TableId));
+                                   GetReadVersion(key.TableId)).Ready;
         ret &= ready;
     }
 

@@ -3020,22 +3020,22 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         }
 
         for (auto& item : Items) {
-            TMapping::iterator mappingIt;
+            const TMapping::value_type::second_type* found = nullptr;
             if (item.SrcPrefix) {
-                mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
-                if (mappingIt == schemaMappingPrefixIndex.end()) {
+                found = schemaMappingPrefixIndex.FindPtr(NBackup::NormalizeItemPrefix(item.SrcPrefix));
+                if (!found) {
                     result.AddError(TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
                 }
             } else if (item.SrcPath) {
-                mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
-                if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                found = schemaMappingObjectPathIndex.FindPtr(NBackup::NormalizeItemPath(item.SrcPath));
+                if (!found) {
                     result.AddError(TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
                 }
             }
 
-            if (mappingIt) {
+            if (found) {
                 const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
-                for (const auto& [index, suffix] : mappingIt->second) {
+                for (const auto& [index, suffix] : *found) {
                     const auto& schemaMappingItem = SchemaMapping->Items[index];
                     TStringBuilder dstPath;
                     if (item.DstPathName) {

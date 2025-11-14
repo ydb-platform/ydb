@@ -1,93 +1,163 @@
 name: Create issues for muted tests
 
 on:
-  pull_request_review:
+  pull_request:
     types:
-      - submitted
-    branches:
-      - main
+      - closed
   workflow_dispatch:
     inputs:
-        pr_number: 
-            description: 'The pull request number'
-            required: true
-            type: number
+      pr_number: 
+        description: 'The pull request number'
+        required: true
+        type: number
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
+  BUILD_TYPE: relwithdebinfo
 
 jobs:
-  create-issues-for-muted-tests:
+  get-pr-base-branch:
     runs-on: ubuntu-latest
-    if: |
-      ((github.event_name == 'pull_request_review' && 
-      github.event.review.state == 'approved' && 
-      contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
-      github.event.pull_request.base.ref == 'main') || 
-      github.event_name == 'workflow_dispatch')
-
+    outputs:
+      base_branch: ${{ steps.get_base_branch.outputs.base_branch }}
     steps:
-      - name: Set environment variables for branches
+      - name: Get PR base branch
+        if: github.event_name == 'workflow_dispatch'
+        id: get_base_branch
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref }}" >> $GITHUB_ENV
-          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref }}" >> $GITHUB_ENV
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          BASE_BRANCH=$(gh pr view $PR_NUMBER --json baseRefName --jq -r '.baseRefName')
+          echo "base_branch=${BASE_BRANCH}" >> $GITHUB_OUTPUT
+      - name: Skip for pull_request
+        if: github.event_name == 'pull_request'
+        run: echo "Skipping - using event data"
 
+  update-ydb:
+    if: |
+      ((github.event_name == 'pull_request' && 
+      github.event.pull_request.merged == true && 
+      contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
+      (github.event_name == 'workflow_dispatch' && needs.get-pr-base-branch.result == 'success'))
+    needs: get-pr-base-branch
+    uses: ./.github/workflows/reusable/update_ydb_for_muted_tests.yml
+    with:
+      branch: ${{ github.event.pull_request.base.ref || needs.get-pr-base-branch.outputs.base_branch }}
+      build_type: ${{ env.BUILD_TYPE }}
+    secrets:
+      CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+  process-muted-tests:
+    needs: [update-ydb, get-pr-base-branch]
+    if: |
+      ((github.event_name == 'pull_request' && 
+      github.event.pull_request.merged == true && 
+      contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
+      (github.event_name == 'workflow_dispatch' && needs.get-pr-base-branch.result == 'success'))
+    runs-on: ubuntu-latest
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
-
+          ref: main
+          fetch-depth: 0
+      
       - name: Install dependencies
         run: |
-            python -m pip install --upgrade pip
-            pip install ydb[yc] PyGithub requests matplotlib numpy
-
+          python -m pip install --upgrade pip
+          pip install ydb[yc] PyGithub requests matplotlib numpy
+      
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
-            ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+      
+      - name: Get PR details for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        id: get_pr_details
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          PR_NUMBER="${{ github.event.inputs.pr_number }}"
+          PR_DATA=$(gh pr view $PR_NUMBER --json baseRefName,mergeCommit --jq '{base_branch: .baseRefName, merge_commit_sha: .mergeCommit.oid}')
+          BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base_branch')
+          MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha // empty')
+          echo "base_branch=${BASE_BRANCH}" >> $GITHUB_OUTPUT
+          echo "merge_commit_sha=${MERGE_SHA}" >> $GITHUB_OUTPUT
+          echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+      
+      - name: Get muted_ya.txt from merge commit
+        id: get_file
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            MERGE_SHA="${{ steps.get_pr_details.outputs.merge_commit_sha }}"
+            BASE_BRANCH="${{ steps.get_pr_details.outputs.base_branch }}"
+          else
+            MERGE_SHA="${{ github.event.pull_request.merge_commit_sha || '' }}"
+            BASE_BRANCH="${{ github.event.pull_request.base.ref || 'main' }}"
+          fi
+          
+          python3 .github/scripts/tests/process_muted_tests_after_merge.py get-muted-file \
+            --merge_commit_sha="${MERGE_SHA}" \
+            --base_branch="${BASE_BRANCH}" \
+            --output="muted_ya.txt"
+          echo "muted_ya_file=muted_ya.txt" >> $GITHUB_OUTPUT
+          echo "base_branch=${BASE_BRANCH}" >> $GITHUB_OUTPUT
+          echo "is_main=$([ \"${BASE_BRANCH}\" == \"main\" ] && echo \"true\" || echo \"false\")" >> $GITHUB_OUTPUT
+
+      - name: DEBUG: Stop before create_issues
+        if: steps.get_file.outputs.is_main == 'true'
+        run: |
+          echo "DEBUG: Stopping before create_issues step"
+          echo "muted_ya.txt content preview:"
+          head -20 muted_ya.txt || echo "File not found"
+          exit 1
 
       - name: Create issues for muted tests
+        if: steps.get_file.outputs.is_main == 'true'
         id: create_issues
         env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} 
- 
-      - name: Add issues to PR
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=${{ steps.create_issues.outputs.created_issues_file }}
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          python3 .github/scripts/tests/create_new_muted_ya.py create_issues \
+            --file_path=muted_ya.txt \
+            --branch=${{ steps.get_file.outputs.base_branch }}
+          # Script creates created_issues.txt and saves path in GITHUB_OUTPUT
+          if [ -f created_issues.txt ]; then
+            echo "issues_file=created_issues.txt" >> $GITHUB_OUTPUT
+          fi
       
-      - name: Comment PR
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ env.GH_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            
-            const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            const filePath = '${{ steps.create_issues.outputs.created_issues_file }}';
-            const bodyText = fs.readFileSync(filePath, 'utf8');
-            const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
-      
-            github.rest.issues.createComment({
-              issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }},
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: completeBody
-            });
-
-      - name: Send team-specific messages to Telegram
+      - name: Send Telegram notifications
+        if: steps.get_file.outputs.is_main == 'true' && steps.create_issues.outputs.issues_file != ''
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
           TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
-          python .github/scripts/telegram/parse_and_send_team_issues.py \
+          python3 .github/scripts/telegram/parse_and_send_team_issues.py \
             --on-mute-change-update \
-            --file "${{ steps.create_issues.outputs.created_issues_file }}" \
+            --file "created_issues.txt" \
             --bot-token "$TELEGRAM_BOT_TOKEN" \
             --team-channels "$TEAM_CHANNELS" \
             --include-plots \
             --delay 2
+      
+      - name: Comment PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            PR_NUMBER="${{ steps.get_pr_details.outputs.pr_number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          
+          python3 .github/scripts/tests/process_muted_tests_after_merge.py comment-pr \
+            --pr_number="${PR_NUMBER}" \
+            --base_branch="${{ steps.get_file.outputs.base_branch }}" \
+            --issues_file="${{ steps.create_issues.outputs.issues_file || '' }}"

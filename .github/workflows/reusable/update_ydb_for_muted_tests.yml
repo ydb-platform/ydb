@@ -1,0 +1,58 @@
+name: Update YDB for muted tests
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: true
+        type: string
+      build_type:
+        required: true
+        type: string
+        default: 'relwithdebinfo'
+    secrets:
+      CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS:
+        required: true
+      GITHUB_TOKEN:
+        required: true
+
+jobs:
+  update-ydb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ydb[yc] codeowners pandas
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Collect test history data
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --branch=${{ inputs.branch }} --build_type=${{ inputs.build_type }}
+
+      - name: Update muted tests in DB
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ inputs.branch }} --build_type=${{ inputs.build_type }}
+
+      - name: Update test monitor
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ inputs.branch }} --build_type=${{ inputs.build_type }}
+
+      - name: Export GitHub issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
+
+      - name: Update GitHub issue mapping table
+        run: python3 .github/scripts/analytics/github_issue_mapping.py
+
+      - name: Update test_muted_monitor_mart
+        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window
+

@@ -18,6 +18,7 @@ class TVectorWorkloadParams final: public TWorkloadBaseParams {
 public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
+    TWorkloadDataInitializer::TList CreateDataInitializers() const override;
     TString GetWorkloadName() const override;
     void Validate(const ECommandType commandType, int workloadType) override;
 
@@ -25,6 +26,8 @@ public:
 
     void ConfigureCommonOpts(NLastGetopt::TOpts& opts);
     void ConfigureIndexOpts(NLastGetopt::TOpts& opts);
+
+    TVector<TString> GetColumns() const;
 
     TString TableName;
     TString QueryTableName;

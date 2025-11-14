@@ -1,5 +1,6 @@
 * Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
 * Added a simple progress bar for non-interactive stderr.
+* The `ydb workload vector` now supports `import files` to populate table from CSV and parquet
 
 ## 2.27.0 ##
 

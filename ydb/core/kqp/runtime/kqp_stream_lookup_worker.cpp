@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -333,6 +334,11 @@ public:
 
         while (!ReadResults.empty() && !resultStats.SizeLimitExceeded) {
             auto& result = ReadResults.front();
+            if (!result.UnprocessedResultRow && Settings.VectorTopK &&
+                result.ReadResult->Get()->Record.HasStats()) {
+                resultStats.ReadRowsCount += result.ReadResult->Get()->Record.GetStats().GetRows();
+                resultStats.ReadBytesCount += result.ReadResult->Get()->Record.GetStats().GetBytes();
+            }
             for (; result.UnprocessedResultRow < result.ReadResult->Get()->GetRowsCount(); ++result.UnprocessedResultRow) {
                 const auto& resultRow = result.ReadResult->Get()->GetCells(result.UnprocessedResultRow);
                 YQL_ENSURE(resultRow.size() <= Settings.Columns.size(), "Result columns mismatch");
@@ -368,8 +374,10 @@ public:
                 batch.push_back(std::move(row));
                 storageRowSize = std::max(storageRowSize, (i64)8);
 
-                resultStats.ReadRowsCount += 1;
-                resultStats.ReadBytesCount += storageRowSize;
+                if (!Settings.VectorTopK || !result.ReadResult->Get()->Record.HasStats()) {
+                    resultStats.ReadRowsCount += 1;
+                    resultStats.ReadBytesCount += storageRowSize;
+                }
                 resultStats.ResultRowsCount += 1;
                 resultStats.ResultBytesCount += storageRowSize;
             }
@@ -468,6 +476,10 @@ private:
             if (!IsSystemColumn(column.Name)) {
                 record.AddColumns(column.Id);
             }
+        }
+
+        if (Settings.VectorTopK) {
+            *record.MutableVectorTopK() = *Settings.VectorTopK;
         }
 
         YQL_ENSURE(!ranges.empty());
@@ -1252,6 +1264,10 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             typeInfo,
             column.GetTypeInfo().GetPgTypeMod()
         });
+    }
+
+    if (settings.HasVectorTopK()) {
+        preparedSettings.VectorTopK = std::make_unique<NKikimrKqp::TReadVectorTopK>(settings.GetVectorTopK());
     }
 
     switch (settings.GetLookupStrategy()) {

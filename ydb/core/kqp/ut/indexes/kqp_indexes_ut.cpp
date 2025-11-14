@@ -2992,7 +2992,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
 
-    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseSink) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameColumns, UseSink) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
@@ -3331,7 +3331,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseSink) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameColumns, UseSink) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);

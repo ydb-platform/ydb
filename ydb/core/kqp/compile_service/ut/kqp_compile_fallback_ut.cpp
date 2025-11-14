@@ -10,6 +10,13 @@ using namespace NYdb::NTable;
 
 namespace {
 
+    // Helper function to enable debug logging for compile-related services
+    void EnableCompileDebugLogging(TKikimrRunner& kikimr) {
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+    }
+
     // Helper function to test data query execution with different SqlVersion configurations
     void TestDataQueryWithSqlVersion(TMaybe<ui32> sqlVersion, const TString& query) {
         NKikimrConfig::TAppConfig appConfig;
@@ -19,6 +26,8 @@ namespace {
         // If sqlVersion is Nothing(), SqlVersion is not set (defaults to 1)
 
         TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
+        EnableCompileDebugLogging(kikimr);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -32,6 +41,8 @@ namespace {
         appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
 
         TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
+        EnableCompileDebugLogging(kikimr);
+
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -49,6 +60,8 @@ namespace {
         appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
 
         TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
+        EnableCompileDebugLogging(kikimr);
+
         auto queryClient = kikimr.GetQueryClient();
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
 
@@ -71,7 +84,6 @@ Y_UNIT_TEST_SUITE(KqpCompileFallback) {
     // This test verifies the fallback mechanism doesn't break normal operation
     Y_UNIT_TEST(FallbackMechanismWorks) {
         TestDataQueryWithSqlVersion(0, R"(
-            --!syntax_v0
             SELECT * FROM [/Root/KeyValue] LIMIT 1;
         )");
     }

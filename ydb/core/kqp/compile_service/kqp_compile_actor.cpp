@@ -70,6 +70,8 @@ public:
         , ClientAddress(clientAddress)
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
+        , KqpSettings(kqpSettings)
+        , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
         , CompilationTimeout(TDuration::MilliSeconds(tableServiceConfig.GetCompileTimeoutMs()))
         , SplitCtx(std::move(splitCtx))
@@ -90,6 +92,7 @@ public:
 
         ApplyServiceConfig(*Config, tableServiceConfig);
         OriginalSqlVersion = Config->_KqpYqlSyntaxVersion.Get().GetRef();
+        CurrentSqlVersion = OriginalSqlVersion;
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
             ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
@@ -256,7 +259,7 @@ private:
 
         // If database has legacy syntax (SqlVersion = 0), try SqlVersion = 1 first
         if (OriginalSqlVersion == 0 && !TriedFallbackSqlVersion) {
-            Config->_KqpYqlSyntaxVersion = 1;
+            CurrentSqlVersion = 1;
             TriedFallbackSqlVersion = true;
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Trying compilation with SqlVersion = 1 (fallback from legacy syntax)"
                 << ", self: " << ctx.SelfID);
@@ -317,21 +320,50 @@ private:
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
+        // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
+        TKikimrConfiguration::TPtr configToUse = Config;
+        if (CurrentSqlVersion != OriginalSqlVersion) {
+            // Create a new Config with the current SqlVersion
+            // Recreate it with all the same settings but with updated SqlVersion
+            configToUse = MakeIntrusive<TKikimrConfiguration>();
+            configToUse->Init(KqpSettings->DefaultSettings.GetDefaultSettings(), QueryId.Cluster, KqpSettings->Settings, false);
+
+            if (!QueryId.Database.empty()) {
+                configToUse->_KqpTablePathPrefix = QueryId.Database;
+            }
+
+            // Apply service config with updated SqlVersion
+            TTableServiceConfig modifiedTableServiceConfig = TableServiceConfig;
+            modifiedTableServiceConfig.SetSqlVersion(CurrentSqlVersion);
+            ApplyServiceConfig(*configToUse, modifiedTableServiceConfig);
+
+            if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
+                ui32 scriptResultRowsLimit = QueryServiceConfig.GetScriptResultRowsLimit();
+                if (scriptResultRowsLimit > 0) {
+                    configToUse->_ResultRowsLimit = scriptResultRowsLimit;
+                } else {
+                    configToUse->_ResultRowsLimit.Clear();
+                }
+            }
+
+            configToUse->FreezeDefaults();
+        }
+
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), configToUse, true, TempTablesState, FederatedQuerySetup);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
-        Config->FeatureFlags = AppData(ctx)->FeatureFlags;
+        configToUse->FeatureFlags = AppData(ctx)->FeatureFlags;
 
-        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, Config, ModuleResolverState->ModuleResolver,
+        KqpHost = CreateKqpHost(Gateway, QueryId.Cluster, QueryId.Database, configToUse, ModuleResolverState->ModuleResolver,
             FederatedQuerySetup, UserToken, GUCSettings, QueryServiceConfig, ApplicationName, AppData(ctx)->FunctionRegistry,
             false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext);
 
@@ -551,7 +583,7 @@ private:
                 << ", issues: " << kqpResult.Issues().ToString());
 
             // Reset to original SqlVersion = 0
-            Config->_KqpYqlSyntaxVersion = 0;
+            CurrentSqlVersion = 0;
             TriedFallbackSqlVersion = false;
 
             // Recreate KqpHost and Gateway with SqlVersion = 0 to avoid reusing old instances
@@ -645,6 +677,8 @@ private:
     TString ClientAddress;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
+    TKqpSettings::TConstPtr KqpSettings;
+    TTableServiceConfig TableServiceConfig;
     TQueryServiceConfig QueryServiceConfig;
     TDuration CompilationTimeout;
     TInstant StartTime;
@@ -671,6 +705,7 @@ private:
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
     ui16 OriginalSqlVersion;
+    ui16 CurrentSqlVersion;
     bool TriedFallbackSqlVersion;
 };
 

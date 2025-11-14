@@ -109,7 +109,7 @@ namespace NKikimr {
             Current.SyncState = syncState;
             // we send initial request with unordered data protocol
             // If peer doesn't support new protocol or new protocol is disabled on peer, we'll change
-            // the protocol after recieving response
+            // the protocol after receiving response
             FullRecoverInfo = TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
             ++RedirCounter;
         }

@@ -394,7 +394,8 @@ class TestStreamingInYdb(TestYdsBase):
 
         self.create_source(kikimr, sourceName)
 
-        query_name="test_types1"
+        query_name = "test_types1"
+
         def test_type(self, kikimr, type, input, expected_output):
             sql = R'''
                 CREATE STREAMING QUERY `{query_name}` AS

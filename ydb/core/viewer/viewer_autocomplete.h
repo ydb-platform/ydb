@@ -182,6 +182,8 @@ public:
                 return NKikimrViewer::view;
             case TNavigate::KindSysView:
                 return NKikimrViewer::sys_view;
+            case TNavigate::KindStreamingQuery:
+                return NKikimrViewer::streaming_query;
             default:
                 return NKikimrViewer::dir;
         }

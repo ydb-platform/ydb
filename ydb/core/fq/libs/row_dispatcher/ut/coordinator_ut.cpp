@@ -43,6 +43,7 @@ public:
         database.SetEndpoint("YDB_ENDPOINT");
         database.SetDatabase("YDB_DATABASE");
         database.SetToken("");
+        config.SetRebalancingTimeoutSec(1);
 
         Coordinator = Runtime.Register(NewCoordinator(
             LocalRowDispatcherId,
@@ -107,6 +108,11 @@ public:
         NFq::NRowDispatcherProto::TEvGetAddressResponse result;
         result.CopyFrom(eventPtr->Get()->Record);
         return result;
+    }
+
+    void ExpectDistributionReset(NActors::TActorId readActorId) {
+        auto eventPtr = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset>(readActorId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventPtr.Get() != nullptr);
     }
 
     void ProcessNodesManagerRequest(ui64 nodesCount) {
@@ -200,7 +206,7 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
 
     Y_UNIT_TEST_F(WaitNodesConnected, TFixture) {
         ExpectCoordinatorChangesSubscribe();
-        ProcessNodesManagerRequest(4);
+        ProcessNodesManagerRequest(3);
         Ping(RowDispatcher1Id);
 
         MockRequest(ReadActor1, "endpoint", "read_group", "topic1", {0});
@@ -228,6 +234,52 @@ Y_UNIT_TEST_SUITE(CoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(result2.IssuesSize(), 0);
         actorId = ActorIdFromProto(result2.GetPartitions(0).GetActorId());
         UNIT_ASSERT_VALUES_EQUAL(actorId.NodeId(), RowDispatcher2Id.NodeId());
+    }
+
+    Y_UNIT_TEST_F(RebalanceAfterNewNodeConnected, TFixture) {
+        ExpectCoordinatorChangesSubscribe();
+        ProcessNodesManagerRequest(1);
+        TSet<NActors::TActorId> rowDispatcherIds{LocalRowDispatcherId};
+        for (auto id : rowDispatcherIds) {
+            Ping(id);
+        }
+        MockRequest(ReadActor1, "endpoint", "read_group", "topic1", {0});
+        auto rdActor1 = ActorIdFromProto(ExpectResult(ReadActor1).GetPartitions(0).GetActorId());
+        MockRequest(ReadActor2, "endpoint", "read_group", "topic1", {1});
+        auto rdActor2 = ActorIdFromProto(ExpectResult(ReadActor2).GetPartitions(0).GetActorId());
+        UNIT_ASSERT_VALUES_EQUAL(rdActor1, rdActor2);
+
+        Ping(RowDispatcher1Id);
+        ExpectDistributionReset(ReadActor1);
+        ExpectDistributionReset(ReadActor2);
+
+        MockRequest(ReadActor1, "endpoint", "read_group", "topic1", {0});
+        rdActor1 = ActorIdFromProto(ExpectResult(ReadActor1).GetPartitions(0).GetActorId());
+        MockRequest(ReadActor2, "endpoint", "read_group", "topic1", {1});
+        rdActor2 = ActorIdFromProto(ExpectResult(ReadActor2).GetPartitions(0).GetActorId());
+        UNIT_ASSERT(rdActor1 != rdActor2);
+    }
+
+    Y_UNIT_TEST_F(RebalanceAfterNodeDisconnected, TFixture) {
+        ExpectCoordinatorChangesSubscribe();
+        ProcessNodesManagerRequest(3);
+        TSet<NActors::TActorId> rowDispatcherIds{RowDispatcher1Id, RowDispatcher2Id, LocalRowDispatcherId};
+        for (auto id : rowDispatcherIds) {
+            Ping(id);
+        }
+        
+        MockRequest(ReadActor1, "endpoint1", "read_group", "topic1", {0, 1, 2});
+        auto result1 = ExpectResult(ReadActor1);
+        UNIT_ASSERT(result1.PartitionsSize() == 3);
+
+        auto event = new NActors::TEvInterconnect::TEvNodeDisconnected(RowDispatcher2Id.NodeId());
+        Runtime.Send(new NActors::IEventHandle(Coordinator, RowDispatcher2Id, event));
+
+        ExpectDistributionReset(ReadActor1);
+
+        MockRequest(ReadActor1, "endpoint1", "read_group", "topic1", {0, 1, 2});
+        result1 = ExpectResult(ReadActor1);
+        UNIT_ASSERT(result1.PartitionsSize() == 2);
     }
 }
 

@@ -1691,6 +1691,32 @@ void TTupleLayout::Concat(
     }
 }
 
+TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
+    TPackResult flattened;
+    flattened.NTuples = std::accumulate(tuples.begin(), tuples.end(), i64{0},
+                                        [](i64 summ, const auto& packRes) { return summ += packRes.NTuples; });
+
+    i64 totalTuplesSize = std::accumulate(tuples.begin(), tuples.end(), i64{0}, [](i64 summ, const auto& packRes) {
+        return summ += std::ssize(packRes.PackedTuples);
+    });
+    flattened.PackedTuples.reserve(totalTuplesSize);
+
+    i64 totaOverflowlSize =
+        std::accumulate(tuples.begin(), tuples.end(), i64{0},
+                        [](i64 summ, const auto& packRes) { return summ += std::ssize(packRes.Overflow); });
+    flattened.Overflow.reserve(totaOverflowlSize);
+    // todo: assertNoAllocations until the end of a function
+
+    int tupleSize = TotalRowSize;
+    for (const TPackResult& tupleBatch : tuples) {
+        Concat(flattened.PackedTuples, flattened.Overflow,
+                                std::ssize(flattened.PackedTuples) / tupleSize, tupleBatch.PackedTuples.data(),
+                                tupleBatch.Overflow.data(), tupleBatch.PackedTuples.size() / tupleSize,
+                                tupleBatch.Overflow.size());
+    }
+    return flattened;
+
+}
 ui32 TTupleLayout::GetTupleVarSize(const ui8* inTuple) const {
     ui32 result = 0;
     for (const auto& col: VariableColumns) {

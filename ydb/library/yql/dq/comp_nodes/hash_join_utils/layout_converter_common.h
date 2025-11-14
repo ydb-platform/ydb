@@ -9,8 +9,9 @@ struct TSingleTuple {
     const ui8* PackedData;
     const ui8* OverflowBegin;
 };
-
-
+namespace NPackedTuple {
+struct TTupleLayout;
+}
 // Common types used by both IBlockLayoutConverter and IScalarLayoutConverter
 struct TPackResult {
     std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
@@ -50,7 +51,6 @@ struct TPackResult {
     void AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout);
 };
 
-TPackResult Flatten(TMKQLVector<TPackResult> tuples, const NPackedTuple::TTupleLayout* layout);
 
 
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;

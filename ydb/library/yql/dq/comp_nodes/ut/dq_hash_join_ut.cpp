@@ -8,19 +8,34 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-
+#include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 namespace NKikimr::NMiniKQL {
 
 namespace {
 struct TJoinTestData {
     TJoinTestData(){
-        Setup->Alloc.SetLimit(10000);
+        Setup->Alloc.SetLimit(1);
         Setup->Alloc.Ref().SetIncreaseMemoryLimitCallback([&](ui64 limit, ui64 required) {
             auto newLimit = std::max(required, limit);
             Cout << std::format("alloc limit {} -> {}, TotalAllocated_: {}", Setup->Alloc.GetLimit(), newLimit, Setup->Alloc.GetAllocated());
             Cout << Endl;
             Setup->Alloc.SetLimit(newLimit);
         });
+    }
+    // мщшв 
+    auto MakeHardLimitIncreaseMemCallback(ui64 hardLimit) {
+        return [hardLimit, this](ui64 limit, ui64 required) {
+            auto newLimit = std::min(std::max(limit, required), hardLimit);
+            Cout << std::format("hard limit: {}, limit: {}, required: {}, alloc limit {} -> {}, TotalAllocated_: {}", hardLimit, limit, required, Setup->Alloc.GetLimit(), newLimit, Setup->Alloc.GetAllocated()) << Endl;
+            Setup->Alloc.SetLimit(std::min(std::max(limit, required), hardLimit));
+        };
+    }
+    void SetHardLimitIncreaseMemCallback(ui64 hardLimit) {
+        Setup->Alloc.SetMaximumLimitValueReached(true);
+        Cout << std::format("finished sides prep. allocated: {}, used: {}, new limit: {}",Setup->Alloc.GetAllocated(),Setup->Alloc.GetUsed(), hardLimit) << Endl;
+
+        Setup->Alloc.Ref().SetIncreaseMemoryLimitCallback(MakeHardLimitIncreaseMemCallback(hardLimit));
+
     }
     std::unique_ptr<TDqSetup<false, true>> Setup = std::make_unique<TDqSetup<false, true>>();
     EJoinKind Kind;
@@ -31,6 +46,7 @@ struct TJoinTestData {
     TDqUserRenames Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight},
                               {1, EJoinSide::kRight}};
     TypeAndValue Result;
+    std::optional<ui64> JoinMemoryConstraint = std::nullopt;
 };
 
 void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
@@ -71,6 +87,7 @@ TJoinTestData EmptyInnerJoinTestData() {
     td.Left = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
     td.Right = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
     td.Result = ConvertVectorsToTuples(setup, emptyKeys, emptyValues, emptyKeys, emptyValues);
+    
     td.Kind = EJoinKind::Inner;
     return td;
 }
@@ -414,6 +431,41 @@ TJoinTestData InnerJoinRenamesTestData() {
     return td;
 }
 
+TJoinTestData SpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<ui64> leftValues = {13, 14, 15, 16, 17};
+    constexpr int rightSize = 200000;
+    // rightKeys.resize(rightSize);
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for(int index = 0; index < rightSize; ++index) {
+        rightKeys[index] = 2*index+3;
+        rightValues[index] = index;
+    }
+
+
+    TVector<ui64> expectedKeysLeft = {3, 5};
+    TVector<ui64> expectedValuesLeft = {15, 17};
+    TVector<ui64> expectedKeysRight = {3, 5};
+    TVector<ui64> expectedValuesRight = {0, 1};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+
+    constexpr int packedTupleSize = 2*8+5;
+    constexpr ui64 joinMemory = packedTupleSize*(0.5*rightSize);
+    [[maybe_unused]]constexpr ui64 rightSizeBytes = rightSize*packedTupleSize;
+    td.JoinMemoryConstraint = joinMemory;
+    td.Kind = EJoinKind::Inner;
+    return td;
+
+
+}
+
 void Test(TJoinTestData testData, bool blockJoin) {
     FilterRenamesForSemiAndOnlyJoins(testData);
     TJoinDescription descr;
@@ -430,6 +482,10 @@ void Test(TJoinTestData testData, bool blockJoin) {
 
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr);
+    // got->GetContext().
+    if (testData.JoinMemoryConstraint) {
+        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 2_MB + testData.Setup->Alloc.GetLimit());
+    }
     // got->GetContext().SpillerFactory
     // FromWideStream
     if (blockJoin) {
@@ -442,6 +498,7 @@ void Test(TJoinTestData testData, bool blockJoin) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    // Y_UNIT_TEST_Q
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
     }
@@ -507,6 +564,15 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     // }
     Y_UNIT_TEST_TWIN(TestInnerRenamesKind, BlockJoin) {
         Test(InnerJoinRenamesTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestBlockSpilling) {
+        try{
+            Test(SpillingTestData(), true);
+        } catch(...) {
+            Cout << "TestBlockSpilling failed with unknown expection" << Endl;
+            throw;
+        }
     }
 }
 } // namespace NKikimr::NMiniKQL

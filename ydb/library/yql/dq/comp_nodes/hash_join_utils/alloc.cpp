@@ -9,7 +9,7 @@ int MemoryUsagePercent(int totalBytes) {
 }
 
 int FreeMemory() {
-    MKQL_ENSURE(TlsAllocState->GetLimit() > TlsAllocState->GetUsed(), Sprintf("sanity check, limit: %i, alloc: %i", TlsAllocState->GetLimit(), TlsAllocState->GetUsed()));
+    MKQL_ENSURE(TlsAllocState->GetLimit() >= TlsAllocState->GetUsed(), Sprintf("sanity check, limit: %i, alloc: %i", TlsAllocState->GetLimit(), TlsAllocState->GetUsed()));
     return TlsAllocState->GetLimit() - TlsAllocState->GetUsed(); 
 }
 

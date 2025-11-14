@@ -1,5 +1,6 @@
 #pragma once
 #include <library/cpp/threading/future/wait/wait.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/join_defs.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -32,7 +33,8 @@ struct TSpillerSettings {
         return hash & (static_cast<ui32>(Buckets) - 1);
     }
 };
-constexpr TSpillerSettings RuntimeStorageSettings{.Buckets = 128, .BucketSizeBytes = (1<<19), .SpillingPagesAtTime = 3};
+// constexpr TSpillerSettings RuntimeStorageSettings{.Buckets = 128, .BucketSizeBytes = (1<<19), .SpillingPagesAtTime = 3};
+constexpr TSpillerSettings TestStorageSettings{.Buckets = 4, .BucketSizeBytes = (1<<16), .SpillingPagesAtTime = 1};
 
 enum ESpillResult {
     Spilling,
@@ -69,6 +71,23 @@ class TBucketsSpiller {
         }
         return resIndex;
     }
+    int TotalSpilledPages() const {
+        int num = 0;
+        for(auto& bucket: Buckets_) {
+            num += bucket.SpilledPages.has_value() ? bucket.SpilledPages->size() : 0;
+        }
+        return num;
+    }
+    int TotalInMemoryPages() const {
+        int num = 0;
+        for(auto& bucket: Buckets_) {
+            // num += bucket.SpilledPages.has_value() ? bucket.SpilledPages->size() : 0;
+            num += bucket.InMemoryPages.size();
+            MKQL_ENSURE(bucket.BuildingPage.AllocatedBytes() < Settings.BucketSizeBytes, "sanity check");
+            num += bucket.BuildingPage.AllocatedBytes() > 0;
+        }
+        return num;
+    }
 public:
     TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout)
     : Buckets_(Settings.Buckets)
@@ -84,6 +103,7 @@ public:
     }
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition)  {
         while(condition() || SpillingPages_.has_value()) {
+            Cout << std::format("free mem:{}\n", FreeMemory());
             if (SpillingPages_.has_value()) {
                 Cout << "Have spilling pages " << Endl;
                 for(auto& future: *SpillingPages_) {
@@ -98,7 +118,7 @@ public:
                 }
                 SpillingPages_ = std::nullopt;
             } else {
-                Cout << "Dont have spilling pages " << Endl;
+                Cout << std::format("Dont have spilling pages, total pages spilled: {}, in memory: {} ", TotalSpilledPages(), TotalInMemoryPages() ) << Endl;
 
                 while (std::accumulate(Buckets_.begin(), Buckets_.end(), 0, [&](int pages, const TBucket& bucket) {
                     return pages + bucket.IsSpilled() ? std::ssize(bucket.InMemoryPages) : 0;
@@ -124,6 +144,7 @@ public:
                 MKQL_ENSURE(totalSpillingPages == 0, "not enough pages for spilling?");
             }
         }
+        // Cout << 
         MKQL_ENSURE(!condition(), "sanitiy check");
         return ESpillResult::FinishedSpilling;
     }

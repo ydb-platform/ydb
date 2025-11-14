@@ -20,6 +20,7 @@ bool AllInMemory(const TBuckets& buckets) {
 TPackResult GetPage(TFuturePage&& future) {
     std::optional<NYql::TChunkedBuffer> buff = ExtractReadyFuture(std::move(future));
     MKQL_ENSURE(buff.has_value(), "corrupted extract key?");
+    // MKQL_ENSURE(buff->Size() == 3, Sprintf("pack result must have 3 pages, has%i", buff->Size()));
     return Parse(std::move(*buff));
 }
 

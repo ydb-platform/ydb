@@ -112,6 +112,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                     tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
                     Output_.Data.SelectSide(side).PackedTuples, Output_.Data.SelectSide(side).Overflow);
             });
+            Cout << std::format("consumed thing: {}", Output_.NItems) << Endl;
             Output_.NItems++;
         };
     }
@@ -181,7 +182,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;
-        using JoinType = TJoinPackedTuples<TBlockPackedTupleSource, RuntimeStorageSettings>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings>;
 
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,

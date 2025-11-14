@@ -232,12 +232,8 @@ protected:
                 ctx.Error(source->GetPos()) << "JOIN: missing correlation name for source";
                 return false;
             }
-            sources.insert({source->GetLabel(), idx});
+            sources.insert({label, idx});
             ++idx;
-        }
-        if (sources.size() != Sources_.size()) {
-            ctx.Error(expr ? expr->GetPos() : Pos_) << "JOIN: all correlation names must be different";
-            return false;
         }
 
         ui32 pos = 0;

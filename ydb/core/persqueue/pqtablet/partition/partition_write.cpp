@@ -586,6 +586,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     AnswerCurrentWrites(ctx);
     SyncMemoryStateWithKVState(ctx);
+    NotifyEndOffsetChanged();
 
     ChangeScaleStatusIfNeeded(AutopartitioningManager->GetScaleStatus(ScaleStatus));
 

@@ -809,8 +809,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     }
 
     Y_UNIT_TEST(SpaceColor) {
-        return; // Enable test after KIKIMR-12880
-
         TActorTestContext testCtx{{}};
         TVDiskMock vdisk(&testCtx);
 
@@ -825,6 +823,9 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                     TColor::RED,
                     //TColor::BLACK,
                 } ){
+            auto colorName = NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color);
+            Cerr << (TStringBuilder() << "- Testing " << colorName << Endl);
+
             auto pdiskConfig = testCtx.GetPDiskConfig();
             pdiskConfig->SpaceColorBorder = color;
             pdiskConfig->ExpectedSlotCount = 10;
@@ -834,14 +835,19 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
             auto initialSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
                     new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
                     NKikimrProto::OK);
-            for (ui32 i = 0; i < initialSpace->FreeChunks + 1; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(initialSpace->VDiskRawUsage, 0.);
+            UNIT_ASSERT_VALUES_EQUAL(initialSpace->PDiskUsage, 0.);
+
+            for (ui32 i = 0; i < initialSpace->TotalChunks + 1; ++i) {
                 vdisk.ReserveChunk();
             }
             vdisk.CommitReservedChunks();
+
             auto resultSpace = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
                     new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
                     NKikimrProto::OK);
-            UNIT_ASSERT(color == StatusFlagToSpaceColor(resultSpace->StatusFlags));
+            UNIT_ASSERT_VALUES_EQUAL(color, StatusFlagToSpaceColor(resultSpace->StatusFlags));
+            UNIT_ASSERT_GT(resultSpace->VDiskRawUsage, 100.);
             vdisk.DeleteCommitedChunks();
         }
     }

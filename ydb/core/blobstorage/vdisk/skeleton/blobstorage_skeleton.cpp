@@ -2452,6 +2452,8 @@ namespace NKikimr {
                 Config->GroupSizeInUnits = GInfo->GroupSizeInUnits;
                 UpdateWhiteboard(ctx);
 
+                Y_VERIFY(PDiskCtx);
+                Y_VERIFY(PDiskCtx->Dsk);
                 ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvYardResize(
                         PDiskCtx->Dsk->Owner,

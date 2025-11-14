@@ -637,7 +637,7 @@ public:
         } else {
             CreateSessionResponse.Error("FailedToCreateSession");
             NYdb::NIssue::TIssue issue;
-            issue.SetMessage("Failed to create session");
+            issue.SetMessage(TStringBuilder() << "Failed to create session (" << ev->Get()->Record.GetError() << ")");
             issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
             NJson::TJsonValue json;
             TString message;

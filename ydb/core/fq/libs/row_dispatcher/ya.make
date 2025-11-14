@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
     ydb/core/mon
+    ydb/core/mind
 
     ydb/library/actors/core
     ydb/library/security

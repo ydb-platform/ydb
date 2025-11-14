@@ -51,7 +51,7 @@ namespace {
         TMap<TGroupId, TSet<TPageId>> Sticky;
     };
 
-    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message, 
+    void AssertLoadedTheSame(const TPartStore& part, const TTouchEnv& bTree, const TTouchEnv& flat, const TString& message,
             bool allowAdditionalFirstLastPartPages = false, bool allowAdditionalFirstLoadedPage = false, bool allowLastLoadedPageDifference = false) {
 
         TSet<TGroupId> groupIds;
@@ -159,9 +159,9 @@ namespace {
         // these tests are based on comparison of flat and b-tree indexes
         conf.WriteBTreeIndex = true;
         conf.WriteFlatIndex = true;
-        
+
         TPartCook cook(lay, conf);
-        
+
         // making part with key gaps
         const TVector<ui32> secondCells = {1, 3, 4, 6, 7, 8, 10};
         for (ui32 i : xrange<ui32>(0, 40)) {
@@ -306,7 +306,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
     void AssertEqual(const TPartGroupBtreeIndexIter& bTree, EReady bTreeReady, const TPartGroupFlatIndexIter& flat, EReady flatReady, const TString& message, bool allowFirstLastPageDifference = false) {
         // Note: it's possible that B-Tree index don't return Gone status for keys before the first page or keys after the last page
-        if (allowFirstLastPageDifference && flatReady == EReady::Gone && bTreeReady == EReady::Data && 
+        if (allowFirstLastPageDifference && flatReady == EReady::Gone && bTreeReady == EReady::Data &&
                 (bTree.GetRowId() == 0 || bTree.GetNextRowId() == bTree.GetEndRowId())) {
             UNIT_ASSERT_C(bTree.IsValid(), message);
             return;
@@ -408,7 +408,7 @@ Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIter) {
                         for (auto c : key) {
                             message << c.AsValue<ui32>() << " ";
                         }
-                        
+
                         EReady bTreeReady = SeekKey(bTree, bTreeEnv, seek, reverse, key, keyDefaults, message);
                         EReady flatReady = SeekKey(flat, flatEnv, seek, reverse, key, keyDefaults, message);
                         AssertEqual(bTree, bTreeReady, flat, flatReady, message, true);
@@ -476,7 +476,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
     void StickSomePages(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults &keyDefaults, TTouchEnv& bTreeEnv, TTouchEnv& flatEnv) {
         if (params.StickSomePages) {
             TChargeBTreeIndex bTree(&bTreeEnv, part, tags, true);
-            
+
             for (int times = 0; times < 5; times++) {
                 bTree.ICharge::Do(10, 10, keyDefaults, 0, 0);
                 bTreeEnv.LoadTouched();
@@ -488,27 +488,32 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
         }
     }
 
-    void DoChargeRowId(ICharge& charge, TTouchEnv& env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
+    ICharge::TResult DoChargeRowId(ICharge &charge, TTouchEnv &env, const TRowId row1, const TRowId row2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
+        ICharge::TResult result;
+
         Retry([&]() {
-            bool ready = reverse
+            result = reverse
                 ? charge.DoReverse(row2, row1, keyDefaults, itemsLimit, bytesLimit)
                 : charge.Do(row1, row2, keyDefaults, itemsLimit, bytesLimit);
-            return ready ? EReady::Data : EReady::Page;
-        }, env, message, failsAllowed);
-    }
-
-    bool DoChargeKeys(const TPartStore& part, ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
-            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
-        bool overshot = false;
-        Retry([&]() {
-            auto result = reverse
-                ? charge.DoReverse(key1, key2, part.Stat.Rows - 1, 0, keyDefaults, itemsLimit, bytesLimit)
-                : charge.Do(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit);
-            overshot = result.Overshot;
             return result.Ready ? EReady::Data : EReady::Page;
         }, env, message, failsAllowed);
-        return overshot;
+
+        return result;
+    }
+
+    ICharge::TResult DoChargeKeys(const TPartStore& part, ICharge& charge, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
+            bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed = 15) {
+        ICharge::TResult result;
+
+        Retry([&]() {
+            result = reverse
+                ? charge.DoReverse(key1, key2, part.Stat.Rows - 1, 0, keyDefaults, itemsLimit, bytesLimit)
+                : charge.Do(key1, key2, 0, part.Stat.Rows - 1, keyDefaults, itemsLimit, bytesLimit);
+            return result.Ready ? EReady::Data : EReady::Page;
+        }, env, message, failsAllowed);
+
+        return result;
     }
 
     void CheckChargeRowId(TTestParams params, const TPartStore& part, TTagsRef tags, const TKeyCellDefaults *keyDefaults) {
@@ -529,8 +534,30 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         StickSomePages(params, part, tags, *keyDefaults, bTreeEnv, flatEnv);
 
                         TString message = TStringBuilder() << (reverse ? "ChargeRowIdReverse " : "ChargeRowId ") << rowId1 << " " << rowId2 << " items " << itemsLimit;
-                        DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
-                        DoChargeRowId(flat, flatEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+                        const auto treeChargeResult = DoChargeRowId(bTree, bTreeEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+                        const auto flatChargeResult = DoChargeRowId(flat, flatEnv, rowId1, rowId2, itemsLimit, 0, reverse, *keyDefaults, message);
+
+                        // Overshot is more accurate in the B-Tree implementation
+                        if (!itemsLimit || treeChargeResult.Overshot) {
+                            UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.Overshot, flatChargeResult.Overshot, message);
+                        }
+
+                        // The B-Tree implementation ignores the limits when the tree has no levels
+                        if ((itemsLimit == 0) || (part.IndexPages.GetBTree({}).LevelCount == 0)) {
+                            UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.ItemsPrecharged, rowId2 - rowId1 + 1, message);
+                        } else {
+                            // The B-Tree implementation can overcharge items by up to the size
+                            // of two nodes over the specified limit (the node size is 2 in these tests)
+                            TString messageWithValues = TStringBuilder() << message
+                                << " treeChargedItems=" << treeChargeResult.ItemsPrecharged
+                                << " flatChargedItems=" << flatChargeResult.ItemsPrecharged;
+
+                            UNIT_ASSERT_GE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged, messageWithValues);
+                            UNIT_ASSERT_LE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged + 4, messageWithValues);
+                        }
+
+                        UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.BytesPrecharged, treeChargeResult.BytesPrecharged, message);
+
                         AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
                             false, reverse && itemsLimit, !reverse && itemsLimit);
                     }
@@ -573,16 +600,38 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                 }
                                 message << ") items " << itemsLimit;
 
-                                bool bTreeOvershot = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
-                                bool flatOvershot = DoChargeKeys(part, flat, flatEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
-                                
-                                if (!itemsLimit) {
-                                    UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
-                                } else if (bTreeOvershot) {
-                                    // Note: due to implementation details it is possible that b-tree precharge is more precise
-                                    UNIT_ASSERT_VALUES_EQUAL_C(bTreeOvershot, flatOvershot, message);
+                                const auto treeChargeResult = DoChargeKeys(part, bTree, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
+                                const auto flatChargeResult = DoChargeKeys(part, flat, flatEnv, key1, key2, itemsLimit, 0, reverse, *keyDefaults, message);
+
+                                // Overshot is more accurate in the B-Tree implementation
+                                if (!itemsLimit || treeChargeResult.Overshot) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.Overshot, flatChargeResult.Overshot, message);
                                 }
-                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message, 
+
+                                // The B-Tree implementation ignores the limits and keys when the tree has no levels,
+                                // except for the case when the history or the groups are turned on
+                                if ((part.IndexPages.GetBTree({}).LevelCount == 0) && (!params.Groups) && (!params.History)) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(
+                                        treeChargeResult.ItemsPrecharged,
+                                        part.IndexPages.GetBTree({}).GetRowCount(),
+                                        message
+                                    );
+                                // In some cases the flat implementation does not adjust
+                                // the precharged counts based on the precise keys
+                                } else if ((!params.Groups) && (!params.History)) {
+                                    // The B-Tree implementation can overcharge items by up to the size
+                                    // of two nodes over the specified limit (the node size is 2 in these tests)
+                                    TString messageWithValues = TStringBuilder() << message
+                                        << " treeChargedItems=" << treeChargeResult.ItemsPrecharged
+                                        << " flatChargedItems=" << flatChargeResult.ItemsPrecharged;
+
+                                    UNIT_ASSERT_GE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged, messageWithValues);
+                                    UNIT_ASSERT_LE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged + 4, messageWithValues);
+                                }
+
+                                UNIT_ASSERT_VALUES_EQUAL_C(treeChargeResult.BytesPrecharged, treeChargeResult.BytesPrecharged, message);
+
+                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
                                     true, reverse && itemsLimit, !reverse && itemsLimit);
                             }
                         }
@@ -619,7 +668,7 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
                         DoChargeKeys(part, unlimitedCharge, unlimitedEnv, key1, { }, 0, 0, reverse, *keyDefaults, message);
                         DoChargeKeys(part, limitedCharge, limitedEnv, key1, { }, 0, bytesLimit, reverse, *keyDefaults, message);
-                        
+
                         TSet<TGroupId> groupIds;
                         for (const auto &c : {limitedEnv.Loaded, unlimitedEnv.Loaded}) {
                             for (const auto &g : c) {
@@ -806,14 +855,18 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }, env, message, failsAllowed);
     }
 
-    void Charge(const TRun &run, const TVector<TTag> tags, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
+    TChargeResult Charge(const TRun &run, const TVector<TTag> tags, TTouchEnv& env, const TCells key1, const TCells key2, ui64 itemsLimit, ui64 bytesLimit,
             bool reverse, const TKeyCellDefaults &keyDefaults, const TString& message, ui32 failsAllowed) {
+        TChargeResult result;
+
         Retry([&]() {
-            auto ready = reverse
+            result = reverse
                 ? ChargeRangeReverse(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true)
                 : ChargeRange(&env, key1, key2, run, keyDefaults, tags, itemsLimit, bytesLimit, true);
-            return ready ? EReady::Data : EReady::Page;
+            return result.Ready ? EReady::Data : EReady::Page;
         }, env, message, failsAllowed);
+
+        return result;
     }
 
     template<EDirection Direction>
@@ -821,7 +874,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         TWrapPartImpl<Direction> wrap(eggs, run);
         wrap.StopAfter(key2);
         wrap.Make(&env);
-        
+
         if (Seek(wrap, env, key1, seek, TStringBuilder() << message << " Seek " << seek, failsAllowed) != EReady::Data) {
             return;
         }
@@ -956,7 +1009,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             message << c.AsValue<ui32>() << " ";
                         }
                         message << " --> " << steps << " steps ";
-                        
+
                         EReady bTreeReady = Next(bTreeIt, bTreeEnv, message, failsAllowed);
                         EReady flatReady = Next(flatIt, flatEnv, message, failsAllowed);
                         AssertEqual(bTreeIt, bTreeReady, flatIt, flatReady, message);
@@ -1006,7 +1059,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);
 
                             TTouchEnv bTreeEnv, flatEnv;
-                            
+
                             TStringBuilder message = TStringBuilder() << (reverse ? "ChargeReverse " : "Charge ") << "(";
                             for (auto c : key1) {
                                 message << c.AsValue<ui32>() << " ";
@@ -1017,8 +1070,29 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             }
                             message << ") items " << itemsLimit;
 
-                            Charge(btreeRun, tags, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message, failsAllowed);
-                            Charge(flatRun, tags, flatEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message, failsAllowed);
+                            const auto treeChargeResult = Charge(btreeRun, tags, bTreeEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message, failsAllowed);
+                            const auto flatChargeResult = Charge(flatRun, tags, flatEnv, key1, key2, itemsLimit, 0, reverse, *eggs.Scheme->Keys, message, failsAllowed);
+
+                            // The B-Tree implementation ignores the limits and keys when the tree has no levels,
+                            // except for the case when the history or the groups are turned on
+                            if ((part.IndexPages.GetBTree({}).LevelCount == 0) && (!params.Groups) && (!params.History)) {
+                                UNIT_ASSERT_VALUES_EQUAL_C(
+                                    treeChargeResult.ItemsPrecharged,
+                                    part.IndexPages.GetBTree({}).GetRowCount(),
+                                    message
+                                );
+                            // In some cases the flat implementation does not adjust
+                            // the precharged counts based on the precise keys
+                            } else if ((!params.Groups) && (!params.History)) {
+                                // The B-Tree implementation can overcharge items by up to the size
+                                // of two nodes over the specified limit (the node size is 2 in these tests)
+                                TString messageWithValues = TStringBuilder() << message
+                                    << " treeChargedItems=" << treeChargeResult.ItemsPrecharged
+                                    << " flatChargedItems=" << flatChargeResult.ItemsPrecharged;
+
+                                UNIT_ASSERT_GE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged, messageWithValues);
+                                UNIT_ASSERT_LE_C(treeChargeResult.ItemsPrecharged, flatChargeResult.ItemsPrecharged + 4, messageWithValues);
+                            }
 
                             if (!itemsLimit || part.Slices->size() == 1) {
                                 AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,

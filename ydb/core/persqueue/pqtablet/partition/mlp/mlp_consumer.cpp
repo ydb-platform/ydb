@@ -684,6 +684,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         return;
     }
 
+    bool allMessagesAdded = false;
     size_t messageCount = 0;
     auto& response = ev->Get()->Response;
     if (response->GetPartitionResponse().HasCmdReadResult()) {
@@ -697,19 +698,23 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            bool r = Storage->AddMessage(
+            allMessagesAdded = Storage->AddMessage(
                 result.GetOffset(),
                 result.HasSourceId() && !result.GetSourceId().empty(),
                 static_cast<ui32>(Hash(result.GetSourceId())),
                 TInstant::MilliSeconds(result.GetWriteTimestampMS())
             );
-            if (!r) {
+            if (!allMessagesAdded) {
                 break;
             }
             ++messageCount;
         }
 
         LOG_D("Fetched " << messageCount << " messages");
+
+        if (allMessagesAdded) {
+            FetchMessagesIfNeeded();
+        }
 
         if (CurrentStateFunc() == &TConsumerActor::StateWork) {
             ProcessEventQueue();

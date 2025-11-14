@@ -463,7 +463,7 @@ public:
     }
 
     bool StartShards() {
-        const ui32 maxAllowedInFlight = Settings->GetSorted() ? 1 : MaxInFlight;
+        const ui32 maxAllowedInFlight = Settings->GetSorted() || Settings->GetIsBatch() ? 1 : MaxInFlight;
         CA_LOG_D("effective maxinflight " << maxAllowedInFlight << " sorted " << Settings->GetSorted());
         bool isFirst = true;
         while (!PendingShards.Empty() && RunningReads() + 1 <= maxAllowedInFlight) {
@@ -1069,7 +1069,7 @@ public:
         ui64 seqNo = record.GetSeqNo();
         Reads[id].RegisterMessage(msg);
 
-        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0) {
+        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0 && BatchOperationMaxRow.GetCells().empty()) {
             auto cells = msg.GetCells(msg.GetRowsCount() - 1);
             BatchOperationMaxRow = TSerializedCellVec{cells};
         }

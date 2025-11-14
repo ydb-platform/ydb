@@ -263,7 +263,12 @@ private:
         }
 
         auto prepareSettings = PrepareCompilationSettings(ctx);
+        StartCompilationWithSettings(prepareSettings);
+        Continue(ctx);
+        Become(&TKqpCompileActor::CompileState);
+    }
 
+    void StartCompilationWithSettings(IKqpHost::TPrepareSettings& prepareSettings) {
         NCpuTime::TCpuTimer timer(CompileCpuTime);
 
         switch (QueryId.Settings.QueryType) {
@@ -296,9 +301,6 @@ private:
             default:
                 YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
         }
-
-        Continue(ctx);
-        Become(&TKqpCompileActor::CompileState);
     }
 
     void Continue(const TActorContext &ctx) {
@@ -544,7 +546,7 @@ private:
 
         // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
         if (status != Ydb::StatusIds::SUCCESS && TriedFallbackSqlVersion && OriginalSqlVersion == 0) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0"
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0"
                 << ", self: " << ctx.SelfID
                 << ", issues: " << kqpResult.Issues().ToString());
 
@@ -552,41 +554,12 @@ private:
             Config->_KqpYqlSyntaxVersion = 0;
             TriedFallbackSqlVersion = false;
 
-            // Restart compilation with SqlVersion = 0
+            // Recreate KqpHost and Gateway with SqlVersion = 0 to avoid reusing old instances
+            // PrepareCompilationSettings recreates both Gateway and KqpHost with the updated Config
             auto prepareSettings = PrepareCompilationSettings(ctx);
-            NCpuTime::TCpuTimer timer(CompileCpuTime);
 
-            switch (QueryId.Settings.QueryType) {
-                case NKikimrKqp::QUERY_TYPE_SQL_DML:
-                    AsyncCompileResult = KqpHost->PrepareDataQuery(QueryRef, prepareSettings);
-                    break;
-
-                case NKikimrKqp::QUERY_TYPE_AST_DML:
-                    AsyncCompileResult = KqpHost->PrepareDataQueryAst(QueryRef, prepareSettings);
-                    break;
-
-                case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-                case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-                    AsyncCompileResult = KqpHost->PrepareScanQuery(QueryRef, QueryId.IsSql(), prepareSettings);
-                    break;
-
-                case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY:
-                    prepareSettings.ConcurrentResults = false;
-                    AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, SplitExpr.get());
-                    break;
-
-                case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
-                    AsyncCompileResult = KqpHost->PrepareGenericQuery(QueryRef, prepareSettings, SplitExpr.get());
-                    break;
-
-                case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
-                    AsyncCompileResult = KqpHost->PrepareGenericScript(QueryRef, prepareSettings, SplitExpr.get());
-                    break;
-
-                default:
-                    YQL_ENSURE(false, "Unexpected query type: " << QueryId.Settings.QueryType);
-            }
-
+            // Start compilation with the new settings (uses freshly created KqpHost)
+            StartCompilationWithSettings(prepareSettings);
             Continue(ctx);
             return;
         }

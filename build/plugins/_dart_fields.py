@@ -41,7 +41,7 @@ def create_dart_record(field_methods, *args) -> dict[str, str] | None:
             value = field_meth(*args)
             if not value:
                 if getattr(field_meth.__self__, 'required', False):
-                    raise DartValueError(f'dart field {field} must not be empty')
+                    raise DartValueError('dart field must not be empty')
             else:
                 if isinstance(value, dict):
                     # For TsResources field
@@ -52,7 +52,7 @@ def create_dart_record(field_methods, *args) -> dict[str, str] | None:
     except HaltDartConstruction:
         pass
     except DartValueError as e:
-        ymake.report_configure_error(f'Invalid dart field value {e!r}')
+        ymake.report_configure_error(f'Invalid dart field value {e!r}, field {field}')
     except Exception as e:
         ymake.report_configure_error(f'Unexpected error while creating dart record {e!r}, field {field}')
 

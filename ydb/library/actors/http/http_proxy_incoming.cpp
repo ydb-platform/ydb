@@ -14,7 +14,7 @@ public:
     using TBase::SelfId;
     using TBase::Become;
 
-    static constexpr bool RecycleRequests = true;
+    static constexpr bool RecycleRequests = false;
 
     std::shared_ptr<TPrivateEndpointInfo> Endpoint;
     SocketAddressType Address;

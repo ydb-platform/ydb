@@ -186,7 +186,6 @@ namespace NKikimr {
                     Y_VERIFY_S(pres & EmptyFlag, HullCtx->VCtx->VDiskLogPrefix);
                     [[fallthrough]];
                 case NKikimrBlobStorage::PhantomFlags:
-                    Stage = NKikimrBlobStorage::PhantomFlags;
                     pres = ProcessPhantomFlags(data);
                     if (pres & LongProcessing) {
                         return false;
@@ -197,7 +196,18 @@ namespace NKikimr {
                     Y_ABORT("Unexpected case: stage=%d", Stage);
             }
 
-            bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::PhantomFlags;
+            bool finished = false;
+            
+            if (pres & EmptyFlag) {
+                switch (GetProtocol()) {
+                case NKikimrBlobStorage::EFullSyncProtocol::Legacy:
+                    finished = (Stage == NKikimrBlobStorage::Barriers);
+                    break;
+                case NKikimrBlobStorage::EFullSyncProtocol::UnorderedData:
+                    finished = (Stage == NKikimrBlobStorage::PhantomFlags);
+                    break;
+                }
+            }
 
             // Status, SyncState, Data and VDiskID are already set up; set up other
             Result->Record.SetFinished(finished);

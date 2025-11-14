@@ -366,53 +366,54 @@ class YdbCluster:
         errors = []
         warnings = []
         try:
-            nodes = cls.get_cluster_nodes(db_only=True)
-            expected_nodes_count = cls.get_dyn_nodes_count()
-            nodes_count = len(nodes)
-            if expected_nodes_count:
-                LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
-                if nodes_count < expected_nodes_count:
-                    errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
-            ok_node_count = 0
-            node_errors = []
-            for n in nodes:
-                error = _check_node(n)
-                if error:
-                    node_errors.append(error)
-                else:
-                    ok_node_count += 1
-            if ok_node_count < nodes_count:
-                errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
-            paths_to_balance = []
-            if isinstance(balanced_paths, str):
-                paths_to_balance += cls.get_tables(balanced_paths)
-            elif isinstance(balanced_paths, list):
-                for path in balanced_paths:
-                    paths_to_balance += cls.get_tables(path)
-            for p in paths_to_balance:
-                table_nodes = cls.get_cluster_nodes(p)
-                min = None
-                max = None
+            if cls.ydb_mon_port != 0:
+                nodes = cls.get_cluster_nodes(db_only=True)
+                expected_nodes_count = cls.get_dyn_nodes_count()
+                nodes_count = len(nodes)
                 if expected_nodes_count:
-                    if len(table_nodes) < expected_nodes_count:
-                        min = 0
-                for tn in table_nodes:
-                    tablet_count = 0
-                    for tablet in tn.tablets:
-                        if tablet.count > 0 and tablet.state != "Green":
-                            warnings.append(f'Node {tn.host}: {tablet.count} tablets of type {tablet.type} in {tablet.state} state')
-                        if tablet.type in {"ColumnShard", "DataShard"}:
-                            tablet_count += tablet.count
-                    if tablet_count > 0:
-                        if min is None or tablet_count < min:
-                            min = tablet_count
-                        if max is None or tablet_count > max:
-                            max = tablet_count
-                if min is None or max is None:
-                    warnings.append(f'Table {p} has no tablets')
-                elif max - min > 1:
-                    warnings.append(f'Table {p} is not balanced: {min}-{max} shards.')
-                LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
+                    LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
+                    if nodes_count < expected_nodes_count:
+                        errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
+                ok_node_count = 0
+                node_errors = []
+                for n in nodes:
+                    error = _check_node(n)
+                    if error:
+                        node_errors.append(error)
+                    else:
+                        ok_node_count += 1
+                if ok_node_count < nodes_count:
+                    errors.append(f'Only {ok_node_count} from {nodes_count} dynnodes are ok: {",".join(node_errors)}')
+                paths_to_balance = []
+                if isinstance(balanced_paths, str):
+                    paths_to_balance += cls.get_tables(balanced_paths)
+                elif isinstance(balanced_paths, list):
+                    for path in balanced_paths:
+                        paths_to_balance += cls.get_tables(path)
+                for p in paths_to_balance:
+                    table_nodes = cls.get_cluster_nodes(p)
+                    min = None
+                    max = None
+                    if expected_nodes_count:
+                        if len(table_nodes) < expected_nodes_count:
+                            min = 0
+                    for tn in table_nodes:
+                        tablet_count = 0
+                        for tablet in tn.tablets:
+                            if tablet.count > 0 and tablet.state != "Green":
+                                warnings.append(f'Node {tn.host}: {tablet.count} tablets of type {tablet.type} in {tablet.state} state')
+                            if tablet.type in {"ColumnShard", "DataShard"}:
+                                tablet_count += tablet.count
+                        if tablet_count > 0:
+                            if min is None or tablet_count < min:
+                                min = tablet_count
+                            if max is None or tablet_count > max:
+                                max = tablet_count
+                    if min is None or max is None:
+                        warnings.append(f'Table {p} has no tablets')
+                    elif max - min > 1:
+                        warnings.append(f'Table {p} is not balanced: {min}-{max} shards.')
+                    LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
 
             cls.execute_single_result_query("select 1", timeout)
         except BaseException as ex:

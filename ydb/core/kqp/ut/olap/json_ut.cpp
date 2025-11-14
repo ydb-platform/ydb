@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
     )";
     Y_UNIT_TEST_STRING_VARIATOR(BrokenJsonWriting, scriptBrokenJsonWriting) {
         NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
-            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::JsonDocument) } }));
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
         updates.AddRow().Add<int64_t>(1).Add("{\"a\" : \"c}");
         auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
         TString injection = Sprintf(R"(
@@ -253,6 +253,44 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 /Root/ColumnTable
                 %s
                 EXPECT_STATUS:BAD_REQUEST
+        )",
+            arrowString.data());
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();
+    }
+
+    TString scriptUtf8JsonWriting= R"(
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`,
+                    `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`$$true|false$$`, `COLUMNS_LIMIT`=`$$1024|0|1$$`,
+                    `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+        ------
+        %s
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(Utf8JsonWriting, scriptUtf8JsonWriting) {
+        NColumnShard::TTableUpdatesBuilder updates(NArrow::MakeArrowSchema(
+            { { "Col1", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64) }, { "Col2", NScheme::TTypeInfo(NScheme::NTypeIds::Utf8) } }));
+        updates.AddRow().Add<int64_t>(1).Add("{\"a\" : \"c\"}");
+        auto arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(updates.BuildArrow()));
+        TString injection = Sprintf(R"(
+            BULK_UPSERT:
+                /Root/ColumnTable
+                %s
+                EXPECT_STATUS:SUCCESS
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"c\"}"]]]
         )",
             arrowString.data());
         Variator::ToExecutor(Variator::SingleScript(Sprintf(__SCRIPT_CONTENT.c_str(), injection.c_str()))).Execute();

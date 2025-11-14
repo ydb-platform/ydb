@@ -2661,13 +2661,13 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         env.SimulateSleep(runtime, TDuration::Seconds(5));
 
         // Shouldn't exist, should rotate
-        // TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + thirdCdcStreamName), {
-        //     NLs::PathNotExist
-        // });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TestTable/" + thirdCdcStreamName), {
+            NLs::PathNotExist
+        });
 
         auto tableDesc4 = DescribePrivatePath(runtime, "/MyRoot/TestTable", true, true);
         UNIT_ASSERT(tableDesc4.GetPathDescription().HasTable());
         // test crashed, should be just 1 changefeed
-        // UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc4.GetPathDescription().GetTable().CdcStreamsSize(), 1);
     }
 } // TBackupCollectionTests

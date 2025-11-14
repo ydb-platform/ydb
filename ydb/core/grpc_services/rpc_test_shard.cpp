@@ -72,15 +72,7 @@ public:
             TString errorMsg;
             try {
                 auto doc = NFyaml::TDocument::Parse(req->config());
-
-                if (!ValidateYamlConfig(doc.Root(), errorMsg)) {
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    issues.AddIssue(TStringBuilder() << "YAML config validation failed: " << errorMsg);
-                    return false;
-                }
-
-                NKikimrClient::TTestShardControlRequest::TCmdInitialize dummyCmd;
-                if (!ParseYamlConfig(doc.Root(), dummyCmd, errorMsg)) {
+                if (!ParseYamlConfig(doc.Root(), errorMsg)) {
                     status = Ydb::StatusIds::BAD_REQUEST;
                     issues.AddIssue(errorMsg);
                     return false;
@@ -131,8 +123,6 @@ public:
 
         const auto* req = GetProtoRequest();
 
-        SetupHivePipe(HiveId);
-
         std::vector<TString> channels;
         if (req->channels_size() > 0) {
             for (const auto& channel : req->channels()) {
@@ -149,6 +139,8 @@ public:
                 channels.push_back(DomainStoragePools[i % DomainStoragePools.size()]);
             }
         }
+
+        SetupHivePipe(HiveId);
 
         for (ui32 i = 0; i < req->count(); ++i) {
             auto request = MakeHolder<TEvHive::TEvCreateTablet>();
@@ -170,7 +162,7 @@ public:
             NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
         }
 
-        TotalTabletsToCreate = req->count();
+        PendingCreationResults = req->count();
 
         Schedule(TDuration::Seconds(HIVE_TIMEOUT), new TEvents::TEvWakeup());
     }
@@ -209,7 +201,7 @@ private:
             return Reply(Ydb::StatusIds::GENERIC_ERROR, issues, Self()->ActorContext());
         }
 
-        if (CreatedTabletIds.size() == TotalTabletsToCreate) {
+        if (--PendingCreationResults == 0) {
             const auto* req = GetProtoRequest();
             if (!req->config().empty()) {
                 return InitializeTablets();
@@ -218,7 +210,182 @@ private:
         }
     }
 
-    bool ValidateYamlConfig(const NFyaml::TNodeRef& root, TString& errorMsg) {
+    bool ParseWorkloadSection(const NFyaml::TNodeRef& workloadNode, TString& errorMsg) {
+        auto workload = workloadNode.Map();
+        const THashSet<TString> validWorkloadKeys = {"sizes", "write", "restart", "patch_fraction_ppm"};
+        for (const auto& pair : workload) {
+            TString keyStr{pair.Key().Scalar()};
+            if (!validWorkloadKeys.contains(keyStr)) {
+                errorMsg = TStringBuilder() << "Unknown key in 'workload': '" << keyStr
+                    << "'. Valid keys: sizes, write, restart, patch_fraction_ppm";
+                return false;
+            }
+        }
+
+        if (workload.Has("sizes")) {
+            auto sizes = workload.at("sizes");
+            if (sizes.Type() != NFyaml::ENodeType::Sequence) {
+                errorMsg = "'workload.sizes' must be a list";
+                return false;
+            }
+            for (auto& sizeNode : sizes.Sequence()) {
+                auto* s = ParsedInitCmd.AddSizes();
+                auto sizeMap = sizeNode.Map();
+                if (sizeMap.Has("weight")) s->SetWeight(FromString<ui64>(sizeMap.at("weight").Scalar()));
+                if (sizeMap.Has("min")) s->SetMin(FromString<ui32>(sizeMap.at("min").Scalar()));
+                if (sizeMap.Has("max")) s->SetMax(FromString<ui32>(sizeMap.at("max").Scalar()));
+                if (sizeMap.Has("inline")) s->SetInline(FromString<bool>(sizeMap.at("inline").Scalar()));
+            }
+        }
+
+        if (workload.Has("write")) {
+            auto write = workload.at("write");
+            if (write.Type() != NFyaml::ENodeType::Sequence) {
+                errorMsg = "'workload.write' must be a list";
+                return false;
+            }
+            for (auto& writeNode : write.Sequence()) {
+                auto* p = ParsedInitCmd.AddWritePeriods();
+                auto writeMap = writeNode.Map();
+                p->SetWeight(writeMap.Has("weight") ? FromString<ui64>(writeMap.at("weight").Scalar()) : 1);
+                if (writeMap.Has("frequency")) p->SetFrequency(FromString<double>(writeMap.at("frequency").Scalar()));
+                if (writeMap.Has("max_interval_ms")) p->SetMaxIntervalMs(FromString<ui32>(writeMap.at("max_interval_ms").Scalar()));
+            }
+        }
+
+        if (workload.Has("restart")) {
+            auto restart = workload.at("restart");
+            if (restart.Type() != NFyaml::ENodeType::Sequence) {
+                errorMsg = "'workload.restart' must be a list";
+                return false;
+            }
+            for (auto& restartNode : restart.Sequence()) {
+                auto* p = ParsedInitCmd.AddRestartPeriods();
+                auto restartMap = restartNode.Map();
+                p->SetWeight(restartMap.Has("weight") ? FromString<ui64>(restartMap.at("weight").Scalar()) : 1);
+                if (restartMap.Has("frequency")) p->SetFrequency(FromString<double>(restartMap.at("frequency").Scalar()));
+                if (restartMap.Has("max_interval_ms")) p->SetMaxIntervalMs(FromString<ui32>(restartMap.at("max_interval_ms").Scalar()));
+            }
+        }
+
+        if (workload.Has("patch_fraction_ppm")) {
+            ParsedInitCmd.SetPatchRequestsFractionPPM(FromString<ui32>(workload.at("patch_fraction_ppm").Scalar()));
+        }
+
+        return true;
+    }
+
+    bool ParseLimitsSection(const NFyaml::TNodeRef& limitsNode, TString& errorMsg) {
+        auto limits = limitsNode.Map();
+        const THashSet<TString> validLimitsKeys = {"data", "concurrency"};
+        for (const auto& pair : limits) {
+            TString keyStr{pair.Key().Scalar()};
+            if (!validLimitsKeys.contains(keyStr)) {
+                errorMsg = TStringBuilder() << "Unknown key in 'limits': '" << keyStr
+                    << "'. Valid keys: data, concurrency";
+                return false;
+            }
+        }
+
+        if (limits.Has("data")) {
+            auto dataNode = limits.at("data");
+            if (dataNode.Type() != NFyaml::ENodeType::Mapping) {
+                errorMsg = "'limits.data' must be a map";
+                return false;
+            }
+            auto data = dataNode.Map();
+            if (data.Has("min")) ParsedInitCmd.SetMinDataBytes(FromString<ui64>(data.at("min").Scalar()));
+            if (data.Has("max")) ParsedInitCmd.SetMaxDataBytes(FromString<ui64>(data.at("max").Scalar()));
+        }
+
+        if (limits.Has("concurrency")) {
+            auto concNode = limits.at("concurrency");
+            if (concNode.Type() != NFyaml::ENodeType::Mapping) {
+                errorMsg = "'limits.concurrency' must be a map";
+                return false;
+            }
+            auto concurrency = concNode.Map();
+            if (concurrency.Has("writes")) ParsedInitCmd.SetMaxInFlight(FromString<ui32>(concurrency.at("writes").Scalar()));
+            if (concurrency.Has("reads")) ParsedInitCmd.SetMaxReadsInFlight(FromString<ui32>(concurrency.at("reads").Scalar()));
+        }
+
+        return true;
+    }
+
+    bool ParseTimingSection(const NFyaml::TNodeRef& timingNode, TString& errorMsg) {
+        auto timing = timingNode.Map();
+        const THashSet<TString> validTimingKeys = {"delay_start", "reset_on_full", "stall_counter"};
+        for (const auto& pair : timing) {
+            TString keyStr{pair.Key().Scalar()};
+            if (!validTimingKeys.contains(keyStr)) {
+                errorMsg = TStringBuilder() << "Unknown key in 'timing': '" << keyStr
+                    << "'. Valid keys: delay_start, reset_on_full, stall_counter";
+                return false;
+            }
+        }
+
+        if (timing.Has("delay_start")) ParsedInitCmd.SetSecondsBeforeLoadStart(FromString<ui32>(timing.at("delay_start").Scalar()));
+        if (timing.Has("reset_on_full")) ParsedInitCmd.SetResetWritePeriodOnFull(FromString<bool>(timing.at("reset_on_full").Scalar()));
+        if (timing.Has("stall_counter")) ParsedInitCmd.SetStallCounter(FromString<ui32>(timing.at("stall_counter").Scalar()));
+
+        return true;
+    }
+
+    bool ParseValidationSection(const NFyaml::TNodeRef& validationNode, TString& errorMsg) {
+        auto validation = validationNode.Map();
+        const THashSet<TString> validValidationKeys = {"server", "after_bytes"};
+        for (const auto& pair : validation) {
+            TString keyStr{pair.Key().Scalar()};
+            if (!validValidationKeys.contains(keyStr)) {
+                errorMsg = TStringBuilder() << "Unknown key in 'validation': '" << keyStr
+                    << "'. Valid keys: server, after_bytes";
+                return false;
+            }
+        }
+
+        if (validation.Has("server")) {
+            TString serverStr{validation.at("server").Scalar()};
+            if (serverStr.find(':') == TString::npos) {
+                errorMsg = "'validation.server' must be in 'host:port' format";
+                return false;
+            }
+            TStringBuf server{serverStr};
+            TStringBuf host, port;
+            if (server.TrySplit(':', host, port)) {
+                ParsedInitCmd.SetStorageServerHost(TString{host});
+                ParsedInitCmd.SetStorageServerPort(FromString<i32>(port));
+            }
+        }
+        if (validation.Has("after_bytes")) {
+            ParsedInitCmd.SetValidateAfterBytes(FromString<ui64>(validation.at("after_bytes").Scalar()));
+        }
+
+        return true;
+    }
+
+    bool ParseTracingSection(const NFyaml::TNodeRef& tracingNode, TString& errorMsg) {
+        auto tracing = tracingNode.Map();
+        const THashSet<TString> validTracingKeys = {"put_fraction_ppm", "verbosity"};
+        for (const auto& pair : tracing) {
+            TString keyStr{pair.Key().Scalar()};
+            if (!validTracingKeys.contains(keyStr)) {
+                errorMsg = TStringBuilder() << "Unknown key in 'tracing': '" << keyStr
+                    << "'. Valid keys: put_fraction_ppm, verbosity";
+                return false;
+            }
+        }
+
+        if (tracing.Has("put_fraction_ppm")) {
+            ParsedInitCmd.SetPutTraceFractionPPM(FromString<ui32>(tracing.at("put_fraction_ppm").Scalar()));
+        }
+        if (tracing.Has("verbosity")) {
+            ParsedInitCmd.SetPutTraceVerbosity(FromString<ui32>(tracing.at("verbosity").Scalar()));
+        }
+
+        return true;
+    }
+
+    bool ParseYamlConfig(const NFyaml::TNodeRef& root, TString& errorMsg) {
         try {
             if (root.Type() != NFyaml::ENodeType::Mapping) {
                 errorMsg = "Config root must be a YAML map";
@@ -237,325 +404,25 @@ private:
                 }
             }
 
-            if (rootMap.Has("workload")) {
-                auto workloadNode = rootMap.at("workload");
-                if (workloadNode.Type() != NFyaml::ENodeType::Mapping) {
-                    errorMsg = "'workload' must be a map";
-                    return false;
-                }
-                auto workload = workloadNode.Map();
-
-                const THashSet<TString> validWorkloadKeys = {"sizes", "write", "restart", "patch_fraction_ppm"};
-                for (const auto& pair : workload) {
-                    TString keyStr{pair.Key().Scalar()};
-                    if (!validWorkloadKeys.contains(keyStr)) {
-                        errorMsg = TStringBuilder() << "Unknown key in 'workload': '" << keyStr
-                            << "'. Valid keys: sizes, write, restart, patch_fraction_ppm";
-                        return false;
-                    }
+            #define PARSE_YAML_SECTION(sectionName, parserMethod) \
+                if (rootMap.Has(sectionName)) { \
+                    auto node = rootMap.at(sectionName); \
+                    if (node.Type() != NFyaml::ENodeType::Mapping) { \
+                        errorMsg = TStringBuilder() << "'" << sectionName << "' must be a map"; \
+                        return false; \
+                    } \
+                    if (!parserMethod(node, errorMsg)) { \
+                        return false; \
+                    } \
                 }
 
-                if (workload.Has("sizes")) {
-                    auto sizesNode = workload.at("sizes");
-                    if (sizesNode.Type() != NFyaml::ENodeType::Sequence) {
-                        errorMsg = "'workload.sizes' must be a list";
-                        return false;
-                    }
-                    size_t idx = 0;
-                    for (auto& sizeNode : sizesNode.Sequence()) {
-                        if (sizeNode.Type() != NFyaml::ENodeType::Mapping) {
-                            errorMsg = TStringBuilder() << "'workload.sizes[" << idx << "]' must be a map";
-                            return false;
-                        }
-                        auto sizeMap = sizeNode.Map();
-                        const THashSet<TString> validSizeKeys = {"weight", "min", "max", "inline"};
-                        for (const auto& pair : sizeMap) {
-                            TString keyStr{pair.Key().Scalar()};
-                            if (!validSizeKeys.contains(keyStr)) {
-                                errorMsg = TStringBuilder() << "Unknown key in 'workload.sizes[" << idx << "]': '"
-                                    << keyStr << "'. Valid keys: weight, min, max, inline";
-                                return false;
-                            }
-                        }
-                        ++idx;
-                    }
-                }
+            PARSE_YAML_SECTION("workload", ParseWorkloadSection)
+            PARSE_YAML_SECTION("limits", ParseLimitsSection)
+            PARSE_YAML_SECTION("timing", ParseTimingSection)
+            PARSE_YAML_SECTION("validation", ParseValidationSection)
+            PARSE_YAML_SECTION("tracing", ParseTracingSection)
 
-                if (workload.Has("write")) {
-                    auto writeNode = workload.at("write");
-                    if (writeNode.Type() != NFyaml::ENodeType::Sequence) {
-                        errorMsg = "'workload.write' must be a list";
-                        return false;
-                    }
-                    size_t idx = 0;
-                    for (auto& wNode : writeNode.Sequence()) {
-                        if (wNode.Type() != NFyaml::ENodeType::Mapping) {
-                            errorMsg = TStringBuilder() << "'workload.write[" << idx << "]' must be a map";
-                            return false;
-                        }
-                        auto wMap = wNode.Map();
-                        const THashSet<TString> validWriteKeys = {"frequency", "max_interval_ms", "weight"};
-                        for (const auto& pair : wMap) {
-                            TString keyStr{pair.Key().Scalar()};
-                            if (!validWriteKeys.contains(keyStr)) {
-                                errorMsg = TStringBuilder() << "Unknown key in 'workload.write[" << idx << "]': '"
-                                    << keyStr << "'. Valid keys: frequency, max_interval_ms, weight";
-                                return false;
-                            }
-                        }
-                        ++idx;
-                    }
-                }
-
-                if (workload.Has("restart")) {
-                    auto restartNode = workload.at("restart");
-                    if (restartNode.Type() != NFyaml::ENodeType::Sequence) {
-                        errorMsg = "'workload.restart' must be a list";
-                        return false;
-                    }
-                    size_t idx = 0;
-                    for (auto& rNode : restartNode.Sequence()) {
-                        if (rNode.Type() != NFyaml::ENodeType::Mapping) {
-                            errorMsg = TStringBuilder() << "'workload.restart[" << idx << "]' must be a map";
-                            return false;
-                        }
-                        auto rMap = rNode.Map();
-                        const THashSet<TString> validRestartKeys = {"frequency", "max_interval_ms", "weight"};
-                        for (const auto& pair : rMap) {
-                            TString keyStr{pair.Key().Scalar()};
-                            if (!validRestartKeys.contains(keyStr)) {
-                                errorMsg = TStringBuilder() << "Unknown key in 'workload.restart[" << idx << "]': '"
-                                    << keyStr << "'. Valid keys: frequency, max_interval_ms, weight";
-                                return false;
-                            }
-                        }
-                        ++idx;
-                    }
-                }
-
-                if (workload.Has("patch_fraction_ppm")) {
-                    auto patchNode = workload.at("patch_fraction_ppm");
-                    if (patchNode.Type() != NFyaml::ENodeType::Scalar) {
-                        errorMsg = "'workload.patch_fraction_ppm' must be a scalar value";
-                        return false;
-                    }
-                }
-            }
-
-            if (rootMap.Has("limits")) {
-                auto limitsNode = rootMap.at("limits");
-                if (limitsNode.Type() != NFyaml::ENodeType::Mapping) {
-                    errorMsg = "'limits' must be a map";
-                    return false;
-                }
-                auto limits = limitsNode.Map();
-
-                const THashSet<TString> validLimitsKeys = {"data", "concurrency"};
-                for (const auto& pair : limits) {
-                    TString keyStr{pair.Key().Scalar()};
-                    if (!validLimitsKeys.contains(keyStr)) {
-                        errorMsg = TStringBuilder() << "Unknown key in 'limits': '" << keyStr
-                            << "'. Valid keys: data, concurrency";
-                        return false;
-                    }
-                }
-
-                if (limits.Has("data")) {
-                    auto dataNode = limits.at("data");
-                    if (dataNode.Type() != NFyaml::ENodeType::Mapping) {
-                        errorMsg = "'limits.data' must be a map";
-                        return false;
-                    }
-                    auto data = dataNode.Map();
-                    const THashSet<TString> validDataKeys = {"min", "max"};
-                    for (const auto& pair : data) {
-                        TString keyStr{pair.Key().Scalar()};
-                        if (!validDataKeys.contains(keyStr)) {
-                            errorMsg = TStringBuilder() << "Unknown key in 'limits.data': '" << keyStr
-                                << "'. Valid keys: min, max";
-                            return false;
-                        }
-                    }
-                }
-
-                if (limits.Has("concurrency")) {
-                    auto concNode = limits.at("concurrency");
-                    if (concNode.Type() != NFyaml::ENodeType::Mapping) {
-                        errorMsg = "'limits.concurrency' must be a map";
-                        return false;
-                    }
-                    auto conc = concNode.Map();
-                    const THashSet<TString> validConcKeys = {"writes", "reads"};
-                    for (const auto& pair : conc) {
-                        TString keyStr{pair.Key().Scalar()};
-                        if (!validConcKeys.contains(keyStr)) {
-                            errorMsg = TStringBuilder() << "Unknown key in 'limits.concurrency': '" << keyStr
-                                << "'. Valid keys: writes, reads";
-                            return false;
-                        }
-                    }
-                }
-            }
-
-            if (rootMap.Has("timing")) {
-                auto timingNode = rootMap.at("timing");
-                if (timingNode.Type() != NFyaml::ENodeType::Mapping) {
-                    errorMsg = "'timing' must be a map";
-                    return false;
-                }
-                auto timing = timingNode.Map();
-
-                const THashSet<TString> validTimingKeys = {"delay_start", "reset_on_full", "stall_counter"};
-                for (const auto& pair : timing) {
-                    TString keyStr{pair.Key().Scalar()};
-                    if (!validTimingKeys.contains(keyStr)) {
-                        errorMsg = TStringBuilder() << "Unknown key in 'timing': '" << keyStr
-                            << "'. Valid keys: delay_start, reset_on_full, stall_counter";
-                        return false;
-                    }
-                }
-            }
-
-            if (rootMap.Has("validation")) {
-                auto validationNode = rootMap.at("validation");
-                if (validationNode.Type() != NFyaml::ENodeType::Mapping) {
-                    errorMsg = "'validation' must be a map";
-                    return false;
-                }
-                auto validation = validationNode.Map();
-
-                const THashSet<TString> validValidationKeys = {"server", "after_bytes"};
-                for (const auto& pair : validation) {
-                    TString keyStr{pair.Key().Scalar()};
-                    if (!validValidationKeys.contains(keyStr)) {
-                        errorMsg = TStringBuilder() << "Unknown key in 'validation': '" << keyStr
-                            << "'. Valid keys: server, after_bytes";
-                        return false;
-                    }
-                }
-            }
-
-            if (rootMap.Has("tracing")) {
-                auto tracingNode = rootMap.at("tracing");
-                if (tracingNode.Type() != NFyaml::ENodeType::Mapping) {
-                    errorMsg = "'tracing' must be a map";
-                    return false;
-                }
-                auto tracing = tracingNode.Map();
-
-                const THashSet<TString> validTracingKeys = {"put_fraction_ppm", "verbosity"};
-                for (const auto& pair : tracing) {
-                    TString keyStr{pair.Key().Scalar()};
-                    if (!validTracingKeys.contains(keyStr)) {
-                        errorMsg = TStringBuilder() << "Unknown key in 'tracing': '" << keyStr
-                            << "'. Valid keys: put_fraction_ppm, verbosity";
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        } catch (const std::exception& e) {
-            errorMsg = TStringBuilder() << "YAML validation error: " << e.what();
-            return false;
-        }
-    }
-
-    bool ParseYamlConfig(const NFyaml::TNodeRef& root, NKikimrClient::TTestShardControlRequest::TCmdInitialize& initCmd, TString& errorMsg) {
-        auto rootMap = root.Map();
-        try {
-            if (rootMap.Has("workload")) {
-                auto workload = rootMap.at("workload").Map();
-
-                if (workload.Has("sizes")) {
-                    auto sizes = workload.at("sizes");
-                    for (auto& sizeNode : sizes.Sequence()) {
-                        auto* s = initCmd.AddSizes();
-                        auto sizeMap = sizeNode.Map();
-                        if (sizeMap.Has("weight")) s->SetWeight(FromString<ui64>(sizeMap.at("weight").Scalar()));
-                        if (sizeMap.Has("min")) s->SetMin(FromString<ui32>(sizeMap.at("min").Scalar()));
-                        if (sizeMap.Has("max")) s->SetMax(FromString<ui32>(sizeMap.at("max").Scalar()));
-                        if (sizeMap.Has("inline")) s->SetInline(FromString<bool>(sizeMap.at("inline").Scalar()));
-                    }
-                }
-
-                if (workload.Has("write")) {
-                    auto write = workload.at("write");
-                    for (auto& writeNode : write.Sequence()) {
-                        auto* p = initCmd.AddWritePeriods();
-                        auto writeMap = writeNode.Map();
-                        p->SetWeight(writeMap.Has("weight") ? FromString<ui64>(writeMap.at("weight").Scalar()) : 1);
-                        if (writeMap.Has("frequency")) p->SetFrequency(FromString<double>(writeMap.at("frequency").Scalar()));
-                        if (writeMap.Has("max_interval_ms")) p->SetMaxIntervalMs(FromString<ui32>(writeMap.at("max_interval_ms").Scalar()));
-                    }
-                }
-
-                if (workload.Has("restart")) {
-                    auto restart = workload.at("restart");
-                    for (auto& restartNode : restart.Sequence()) {
-                        auto* p = initCmd.AddRestartPeriods();
-                        auto restartMap = restartNode.Map();
-                        p->SetWeight(restartMap.Has("weight") ? FromString<ui64>(restartMap.at("weight").Scalar()) : 1);
-                        if (restartMap.Has("frequency")) p->SetFrequency(FromString<double>(restartMap.at("frequency").Scalar()));
-                        if (restartMap.Has("max_interval_ms")) p->SetMaxIntervalMs(FromString<ui32>(restartMap.at("max_interval_ms").Scalar()));
-                    }
-                }
-
-                if (workload.Has("patch_fraction_ppm")) {
-                    initCmd.SetPatchRequestsFractionPPM(FromString<ui32>(workload.at("patch_fraction_ppm").Scalar()));
-                }
-            }
-
-            if (rootMap.Has("limits")) {
-                auto limits = rootMap.at("limits").Map();
-
-                if (limits.Has("data")) {
-                    auto data = limits.at("data").Map();
-                    if (data.Has("min")) initCmd.SetMinDataBytes(FromString<ui64>(data.at("min").Scalar()));
-                    if (data.Has("max")) initCmd.SetMaxDataBytes(FromString<ui64>(data.at("max").Scalar()));
-                }
-
-                if (limits.Has("concurrency")) {
-                    auto concurrency = limits.at("concurrency").Map();
-                    if (concurrency.Has("writes")) initCmd.SetMaxInFlight(FromString<ui32>(concurrency.at("writes").Scalar()));
-                    if (concurrency.Has("reads")) initCmd.SetMaxReadsInFlight(FromString<ui32>(concurrency.at("reads").Scalar()));
-                }
-            }
-
-            if (rootMap.Has("timing")) {
-                auto timing = rootMap.at("timing").Map();
-                if (timing.Has("delay_start")) initCmd.SetSecondsBeforeLoadStart(FromString<ui32>(timing.at("delay_start").Scalar()));
-                if (timing.Has("reset_on_full")) initCmd.SetResetWritePeriodOnFull(FromString<bool>(timing.at("reset_on_full").Scalar()));
-                if (timing.Has("stall_counter")) initCmd.SetStallCounter(FromString<ui32>(timing.at("stall_counter").Scalar()));
-            }
-
-            if (rootMap.Has("validation")) {
-                auto validation = rootMap.at("validation").Map();
-                if (validation.Has("server")) {
-                    TString serverStr{validation.at("server").Scalar()};
-                    TStringBuf server{serverStr};
-                    TStringBuf host, port;
-                    if (server.TrySplit(':', host, port)) {
-                        initCmd.SetStorageServerHost(TString{host});
-                        initCmd.SetStorageServerPort(FromString<i32>(port));
-                    } else {
-                        initCmd.SetStorageServerHost(serverStr);
-                    }
-                }
-                if (validation.Has("after_bytes")) {
-                    initCmd.SetValidateAfterBytes(FromString<ui64>(validation.at("after_bytes").Scalar()));
-                }
-            }
-
-            if (rootMap.Has("tracing")) {
-                auto tracing = rootMap.at("tracing").Map();
-                if (tracing.Has("put_fraction_ppm")) {
-                    initCmd.SetPutTraceFractionPPM(FromString<ui32>(tracing.at("put_fraction_ppm").Scalar()));
-                }
-                if (tracing.Has("verbosity")) {
-                    initCmd.SetPutTraceVerbosity(FromString<ui32>(tracing.at("verbosity").Scalar()));
-                }
-            }
+            #undef PARSE_YAML_SECTION
 
             return true;
         } catch (const std::exception& e) {
@@ -565,18 +432,6 @@ private:
     }
 
     void InitializeTablets() {
-        const auto* req = GetProtoRequest();
-
-        NKikimrClient::TTestShardControlRequest::TCmdInitialize initCmd;
-        TString errorMsg;
-
-        auto doc = NFyaml::TDocument::Parse(req->config());
-        if (!ParseYamlConfig(doc.Root(), initCmd, errorMsg)) {
-            NYql::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Unexpected error parsing YAML config: " << errorMsg);
-            return Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, Self()->ActorContext());
-        }
-
         for (ui64 tabletId : CreatedTabletIds) {
             NTabletPipe::TClientConfig pipeConfig;
             pipeConfig.RetryPolicy = {.RetryLimitCount = 3u};
@@ -588,24 +443,23 @@ private:
 
             auto request = MakeHolder<NTestShard::TEvControlRequest>();
             request->Record.SetTabletId(tabletId);
-            *request->Record.MutableInitialize() = initCmd;
+            *request->Record.MutableInitialize() = ParsedInitCmd;
 
             NTabletPipe::SendData(SelfId(), pipeId, request.Release());
         }
 
-        TotalTabletsToInitialize = CreatedTabletIds.size();
+        PendingInitResponses = CreatedTabletIds.size();
     }
 
     void Handle(NTestShard::TEvControlResponse::TPtr& /*ev*/) {
-        ++InitializedTabletsCount;
-
-        if (InitializedTabletsCount == TotalTabletsToInitialize) {
+        if (--PendingInitResponses == 0) {
             ReplySuccess();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
+            CleanupPipes();
             NYql::TIssues issues;
             issues.AddIssue("Failed to connect to tablet pipe");
             return Reply(Ydb::StatusIds::UNAVAILABLE, issues, Self()->ActorContext());
@@ -613,26 +467,27 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/) {
+        CleanupPipes();
         NYql::TIssues issues;
         issues.AddIssue("Tablet pipe destroyed unexpectedly");
         return Reply(Ydb::StatusIds::UNAVAILABLE, issues, Self()->ActorContext());
     }
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
-        if (CreatedTabletIds.size() == TotalTabletsToCreate &&
-            InitializedTabletsCount == TotalTabletsToInitialize) {
+        if (PendingCreationResults == 0 && PendingInitResponses == 0) {
             return;
         }
 
         NYql::TIssues issues;
-        if (CreatedTabletIds.size() < TotalTabletsToCreate) {
+        if (PendingCreationResults > 0) {
             issues.AddIssue(TStringBuilder()
                 << "Timeout waiting for tablet creation from Hive. "
                 << "Hive may not be able to allocate storage groups for the specified channels. "
-                << "Received " << CreatedTabletIds.size() << " tablet IDs, but expected "
-                << TotalTabletsToCreate << " tablets.");
+                << "Still waiting for " << PendingCreationResults << " tablet creation results.");
         } else {
-            issues.AddIssue("Timeout during tablet initialization");
+            issues.AddIssue(TStringBuilder()
+                << "Timeout during tablet initialization. "
+                << "Still waiting for " << PendingInitResponses << " initialization responses.");
         }
 
         return Reply(Ydb::StatusIds::TIMEOUT, issues, Self()->ActorContext());
@@ -647,24 +502,28 @@ private:
         ReplyWithResult(Ydb::StatusIds::SUCCESS, result, Self()->ActorContext());
     }
 
-    void PassAway() override {
+    void CleanupPipes() {
         for (auto& [tabletId, pipeId] : TestShardPipes) {
             if (pipeId) {
                 NTabletPipe::CloseClient(Self()->SelfId(), pipeId);
             }
         }
         TestShardPipes.clear();
+    }
+
+    void PassAway() override {
+        CleanupPipes();
         TBase::PassAway();
     }
 
 private:
     TPathId SubdomainKey;
     std::vector<TString> DomainStoragePools;
-    ui32 TotalTabletsToCreate = 0;
-    ui32 TotalTabletsToInitialize = 0;
-    ui32 InitializedTabletsCount = 0;
+    ui32 PendingCreationResults = 0;
+    ui32 PendingInitResponses = 0;
     std::vector<ui64> CreatedTabletIds;
     THashMap<ui64, TActorId> TestShardPipes;
+    NKikimrClient::TTestShardControlRequest::TCmdInitialize ParsedInitCmd;
 };
 
 class TDeleteTestShardRequest : public TTestShardRequestBase<TDeleteTestShardRequest, TEvDeleteTestShardRequest, Ydb::TestShard::DeleteTestShardRequest>
@@ -760,15 +619,15 @@ public:
             return Reply(Ydb::StatusIds::GENERIC_ERROR, issues, Self()->ActorContext());
         }
 
-        LookedUpTabletIds.push_back(record.GetTabletID());
+        TabletIdToOwnerIdx[record.GetTabletID()] = record.GetOwnerIdx();
 
-        if (LookedUpTabletIds.size() == TotalTabletsToLookup) {
+        if (TabletIdToOwnerIdx.size() == TotalTabletsToLookup) {
             RequestTabletsInfo();
         }
     }
 
     void RequestTabletsInfo() {
-        for (ui64 tabletId : LookedUpTabletIds) {
+        for (const auto& [tabletId, _] : TabletIdToOwnerIdx) {
             auto request = MakeHolder<TEvHive::TEvRequestHiveInfo>();
             request->Record.SetTabletID(tabletId);
             NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
@@ -812,22 +671,24 @@ public:
             return Reply(Ydb::StatusIds::PRECONDITION_FAILED, issues, Self()->ActorContext());
         }
 
-        ValidatedTabletIds.push_back(tablet.GetTabletID());
+        ++ValidatedCount;
 
-        if (ValidatedTabletIds.size() == LookedUpTabletIds.size()) {
+        if (ValidatedCount == TotalTabletsToLookup) {
             DeleteTablets();
         }
     }
 
     void DeleteTablets() {
-        for (ui64 tabletId : ValidatedTabletIds) {
-            auto request = MakeHolder<TEvHive::TEvDeleteTablet>();
-            auto& record = request->Record;
-            record.SetShardOwnerId(0);
-            record.AddTabletID(tabletId);
-            NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
-            ++PendingRequests;
+        auto request = MakeHolder<TEvHive::TEvDeleteTablet>();
+        auto& record = request->Record;
+        record.SetShardOwnerId(0);
+
+        for (const auto& [_, ownerIdx] : TabletIdToOwnerIdx) {
+            record.AddShardLocalIdx(ownerIdx);
         }
+
+        NTabletPipe::SendData(SelfId(), HivePipeClient, request.Release());
+        PendingRequests = 1;
     }
 
     STATEFN(StateFunc) {
@@ -880,9 +741,9 @@ private:
 private:
     TPathId SubdomainKey;
     ui32 TotalTabletsToLookup = 0;
+    ui32 ValidatedCount = 0;
     ui32 PendingRequests = 0;
-    std::vector<ui64> LookedUpTabletIds;
-    std::vector<ui64> ValidatedTabletIds;
+    THashMap<ui64, ui64> TabletIdToOwnerIdx;
 };
 
 

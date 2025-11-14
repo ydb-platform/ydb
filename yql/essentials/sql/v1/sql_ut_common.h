@@ -5151,6 +5151,18 @@ Y_UNIT_TEST(SelectJoinEmptyCorrNames) {
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:45: Error: At least one correlation name is required in join\n");
 }
 
+Y_UNIT_TEST(SelectJoinSameTables) {
+    NYql::TAstParseResult res = SqlToYql("Select a.key FROM plato.Input JOIN plato.Input ON Input.key == Input.subkey\n");
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:61: Error: JOIN: different correlation names are required for joined tables\n");
+}
+
+Y_UNIT_TEST(SelectJoinSameCorrLabels) {
+    NYql::TAstParseResult res = SqlToYql("Select a.key FROM plato.Input as a JOIN plato.Input1 as a ON a.key == a.subkey\n");
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:68: Error: JOIN: different correlation names are required for joined tables\n");
+}
+
 Y_UNIT_TEST(SelectJoinSameCorrNames) {
     NYql::TAstParseResult res = SqlToYql("SELECT Input.key FROM plato.Input JOIN plato.Input1 ON Input.key == Input.subkey\n");
     UNIT_ASSERT(!res.Root);

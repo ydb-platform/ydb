@@ -1,7 +1,5 @@
 #pragma once
 
-#include "kqp_node_state.h"
-
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor_factory.h>
 
 #include <ydb/core/kqp/common/kqp_event_ids.h>
@@ -18,15 +16,12 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
-namespace NYql {
-namespace NDq {
+namespace NYql::NDq {
     struct TComputeRuntimeSettings;
     struct TComputeMemoryLimits;
-} // namespace NDq
-} // namespace NYql
+} // namespace NYql::NDq
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 struct TKqpNodeEvents {
     enum EKqpNodeEvents {
@@ -72,34 +67,10 @@ struct TEvKqpNode {
         NKikimrKqp::TEvCancelKqpTasksResponse, TKqpNodeEvents::EvCancelKqpTasksResponse> {};
 };
 
-
-struct TNodeServiceState : public NKikimr::NKqp::NComputeActor::IKqpNodeState {
-    static constexpr ui64 BucketsCount = 64;
-
-    const TActorSystem* ActorSystem = nullptr;
-
-public:
-    explicit TNodeServiceState(const TActorSystem* actorSystem)
-        : ActorSystem(actorSystem)
-    {}
-
-    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) override {
-        auto& bucket = GetStateBucketByTx(txId);
-        bucket.RemoveTask(txId, taskId, success, ActorSystem);
-    }
-
-    NKqpNode::TState& GetStateBucketByTx(ui64 txId) {
-        return Buckets[txId % Buckets.size()];
-    }
-
-    std::array<NKqpNode::TState, BucketsCount> Buckets;
-};
-
 NActors::IActor* CreateKqpNodeService(const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
     std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
     std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory> caFactory,
     TIntrusivePtr<TKqpCounters> counters, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory = nullptr,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

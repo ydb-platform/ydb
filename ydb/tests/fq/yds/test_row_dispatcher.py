@@ -347,33 +347,33 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}']
         filter = "time > 101;"
         expected = ['102']
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` > 101)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`time` > 101)')
         filter = 'data = "hello2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`data` = \\"hello2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`data` = \\"hello2\\")')
         filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS NOT DISTINCT FROM \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS NOT DISTINCT FROM \\"event2\\")')
         filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS DISTINCT FROM \\"event1\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS DISTINCT FROM \\"event1\\")')
         filter = 'event IN ("event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"event2\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"event2\\"))')
         filter = 'event NOT IN ("event1", "event3")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (`event` IN (\\"event1\\", \\"event3\\")))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (NOT (`event` IN (\\"event1\\", \\"event3\\")))')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"1\\"')
         filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`event` IS DISTINCT FROM `data`) AND (`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`event` IS DISTINCT FROM `data`) AND (`event` IN (\\"1\\"')
         filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF((`event` = \\"event2\\"), (`event` IS DISTINCT FROM `data`), FALSE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: IF((`event` = \\"event2\\"), (`event` IS DISTINCT FROM `data`), FALSE)')
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = 'event LIKE "event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: StartsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -389,49 +389,49 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005, "nested": ["abc", "key"]}']
         expected = ['102']
         filter = 'data = "hello2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`data` = \\"hello2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`data` = \\"hello2\\")')
         filter = 'flag'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `flag`')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: `flag`')
         filter = 'time * (field2 - field1) != 0'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`time` * (`field2` - `field1`)) <> 0)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`time` * (`field2` - `field1`)) <> 0)')
         filter = '(field1 % field2) / 5 = 1'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (((`field1` % `field2`) / 5) = 1)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (((`field1` % `field2`) / 5) = 1)')
         filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS NOT DISTINCT FROM \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS NOT DISTINCT FROM \\"event2\\")')
         filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS DISTINCT FROM \\"event1\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IS DISTINCT FROM \\"event1\\")')
         filter = ' field1 IS DISTINCT FROM field2'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`field1` IS DISTINCT FROM `field2`)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`field1` IS DISTINCT FROM `field2`)')
         filter = 'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`time` = 102) OR (`field2` IS NOT DISTINCT FROM 1005))')
         filter = 'event IN ("event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"event2\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"event2\\"))')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (`event` IN (\\"1\\"')
         filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN (\\"1\\"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((`event` IS DISTINCT FROM `data`) AND COALESCE((`event` IN (\\"1\\"')
         filter = ' IF(event == "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF(COALESCE((`event` = \\"event2\\"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: IF(COALESCE((`event` = \\"event2\\"), FALSE), (`event` IS DISTINCT FROM `data`), FALSE)')
         filter = ' COALESCE(event = "event2", TRUE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE((`event` = \\"event2\\"), TRUE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: COALESCE((`event` = \\"event2\\"), TRUE)')
         filter = ' COALESCE(event = "event2", data = "hello2", TRUE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE((`event` = \\"event2\\"), (`data` = \\"hello2\\"), TRUE)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: COALESCE((`event` = \\"event2\\"), (`data` = \\"hello2\\"), TRUE)')
         filter = " event ?? '' REGEXP @@e.*e.*t2@@"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\")')
         filter = " event ?? '' NOT REGEXP @@e.*e.*t1@@"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t1\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t1\\"))')
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String?) REGEXP \\".*abc.*\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: (CAST(`nested` AS String?) REGEXP \\".*abc.*\\")')
         filter = 'event LIKE "event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE StartsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: StartsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE EndsWith(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: EndsWith(`event`, \\"event2\\")')
         filter = 'event LIKE "%event2%"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE String::Contains(`event`, \\"event2\\")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: String::Contains(`event`, \\"event2\\")')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):
@@ -533,7 +533,7 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
 
         issues = str(client.describe_query(query_id).result.query.transient_issue)
-        assert "Row dispatcher will use the predicate: WHERE (`event_class` =" in issues, "Incorrect Issues: " + issues
+        assert "Row dispatcher will use the predicate: (`event_class` =" in issues, "Incorrect Issues: " + issues
 
     @yq_v1
     def test_start_new_query(self, kikimr, client):
@@ -1183,7 +1183,7 @@ class TestPqRowDispatcher(TestYdsBase):
     @pytest.mark.parametrize("use_binding", [False, True], ids=["with_option", "bindings"])
     def test_json_errors(self, kikimr, client, use_binding):
         connection_response = client.create_yds_connection(YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True)
-        self.init_topics("test_json_errors", create_input=True, create_output=True, partitions_count=1)
+        self.init_topics(f"test_json_errors_{use_binding}", create_input=True, create_output=True, partitions_count=1)
 
         time_type = ydb_value.Column(name="time", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.INT32))
         data_type = ydb_value.Column(name="data", type=ydb_value.Type(type_id=ydb_value.Type.PrimitiveTypeId.STRING))

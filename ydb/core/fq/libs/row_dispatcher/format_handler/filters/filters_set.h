@@ -18,7 +18,7 @@ public:
     virtual void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) = 0;
     virtual void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) = 0;
 
-    virtual TStatus AddPrograms(IProcessedDataConsumer::TPtr consumer, std::unordered_map<TString, IProgramHolder::TPtr> programHolders) = 0;
+    virtual TStatus AddPrograms(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) = 0;
     virtual void RemoveProgram(NActors::TActorId clientId) = 0;
 
     virtual void FillStatistics(TFiltersStatistic&) = 0;

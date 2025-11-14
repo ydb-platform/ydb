@@ -267,10 +267,10 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (Ctx_.YqlSelectMode != EYqlSelectMode::Disable) {
-                if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
-                    Error() << "YqlSelect is not available before 2025.04";
-                    return false;
-                }
+                //if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
+                //    Error() << "YqlSelect is not available before 2025.04";
+                //    return false;
+                //}
 
                 const auto stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
                 if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {

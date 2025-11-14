@@ -199,6 +199,7 @@ namespace {
         }
         return true;
     }
+    constexpr ui64 RollbackMessageCookie = 1;
 }
 
 
@@ -771,12 +772,11 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            TxManager->SetError(ev->Get()->Record.GetOrigin());
-            
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
             } else {
+                TxManager->SetError(ev->Get()->Record.GetOrigin());
                 RuntimeError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -2194,12 +2194,12 @@ public:
                 hFunc(TEvKqpBuffer::TEvRollback, Handle);
                 hFunc(TEvBufferWrite, Handle);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false)("StateWrite: unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
-            ReplyMemoryLimitErrorAndDie();
+            ReplyMemoryLimitError();
         } catch (...) {
-            ReplyCurrentExceptionErrorAndDie();
+            ReplyCurrentExceptionError();
         }
     }
 
@@ -2208,12 +2208,12 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false)("StateWaitTasks: unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
-            ReplyMemoryLimitErrorAndDie();
+            ReplyMemoryLimitError();
         } catch (...) {
-            ReplyCurrentExceptionErrorAndDie();
+            ReplyCurrentExceptionError();
         }
     }
 
@@ -2222,12 +2222,12 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpBuffer::TEvTerminate, Handle);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false)("StateFlush: unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
-            ReplyMemoryLimitErrorAndDie();
+            ReplyMemoryLimitError();
         } catch (...) {
-            ReplyCurrentExceptionErrorAndDie();
+            ReplyCurrentExceptionError();
         }
     }
 
@@ -2245,12 +2245,12 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false)("StatePrepare: unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
-            ReplyMemoryLimitErrorAndDie();
+            ReplyMemoryLimitError();
         } catch (...) {
-            ReplyCurrentExceptionErrorAndDie();
+            ReplyCurrentExceptionError();
         }
     }
 
@@ -2267,17 +2267,48 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
             default:
-                AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
+                AFL_ENSURE(false)("StateCommit: unknown message", ev->GetTypeRewrite());
             }
         } catch (const TMemoryLimitExceededException&) {
-            ReplyMemoryLimitErrorAndDie();
+            ReplyMemoryLimitError();
         } catch (...) {
-            ReplyCurrentExceptionErrorAndDie();
+            ReplyCurrentExceptionError();
         }
     }
 
-    void ReplyMemoryLimitErrorAndDie() {
-        ReplyErrorAndDie(
+    STFUNC(StateRollback) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, HandleRollback);
+                hFunc(TEvPipeCache::TEvDeliveryProblem, HandleRollback);
+
+            default:
+                CA_LOG_W("StateRollback: unknown message " << ev->GetTypeRewrite());
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyMemoryLimitError();
+        } catch (...) {
+            ReplyCurrentExceptionError();
+        }
+    }
+
+    STFUNC(StateError) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqpBuffer::TEvTerminate, Handle);
+                hFunc(TEvKqpBuffer::TEvRollback, Handle);
+
+            default:
+                CA_LOG_W("StateRollback: unknown message " << ev->GetTypeRewrite());
+            }
+        } catch (...) {
+            ReplyCurrentExceptionError();
+        }
+    }
+
+    void ReplyMemoryLimitError() {
+        ReplyError(
             NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
             NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
             TStringBuilder() << "Memory limit exception"
@@ -2285,8 +2316,8 @@ public:
             {});
     }
 
-    void ReplyCurrentExceptionErrorAndDie() {
-        ReplyErrorAndDie(
+    void ReplyCurrentExceptionError() {
+        ReplyError(
             NYql::NDqProto::StatusIds::INTERNAL_ERROR,
             NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
             CurrentExceptionMessage(),
@@ -2343,7 +2374,7 @@ public:
                 if (writeActor->GetTableId().SchemaVersion != tableId.SchemaVersion) {
                     CA_LOG_E("Scheme changed for table `"
                         << tablePath << "`.");
-                    ReplyErrorAndDie(
+                    ReplyError(
                         NYql::NDqProto::StatusIds::SCHEME_ERROR,
                         NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
                         TStringBuilder() << "Scheme changed. Table: `"
@@ -2495,6 +2526,10 @@ public:
     }
 
     bool Process() {
+        if (CurrentStateFunc() == &TThis::StateError || CurrentStateFunc() == &TThis::StateRollback) {
+            return false;
+        }
+
         ProcessRequestQueue();
         ProcessTasks();
         if (!ProcessFlush()) {
@@ -2555,6 +2590,14 @@ public:
         TVector<ui64> finishedCookies;
         for (auto& [cookie, writeTask] : WriteTasks) {
             writeTask.Process();
+            if (writeTask.IsError()) {
+                ReplyError(
+                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                    TStringBuilder() << writeTask.GetError(),
+                    {});
+                return false;
+            }
             if (writeTask.IsFinished()) {
                 finishedCookies.push_back(cookie);
             }
@@ -2581,7 +2624,7 @@ public:
 
     bool ProcessFlush() {
         if (!EnableStreamWrite && GetTotalFreeSpace() <= 0) {
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Out of buffer memory. Used " << GetTotalMemory()
@@ -2635,11 +2678,11 @@ public:
         });
 
         if (!TxManager->NeedCommit()) {
-            RollbackAndDie(std::move(traceId));
+            Rollback(std::move(traceId), /* waitForResult */ true);
         } else if (TxManager->BrokenLocks()) {
             NYql::TIssues issues;
             issues.AddIssue(*TxManager->GetLockIssue());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 std::move(issues));
             return;
@@ -2683,7 +2726,7 @@ public:
         if (!Process()) {
             return false;
         }
-        SendToExternalShards(false);
+        SendToExternalShards();
         SendToTopics(false);
         return true;
     }
@@ -2724,13 +2767,25 @@ public:
         SendCommitToCoordinator();
     }
 
-    void Rollback(NWilson::TTraceId traceId) noexcept {
+    void Rollback(NWilson::TTraceId traceId, bool waitForResult) noexcept {
+        AFL_ENSURE(CurrentStateFunc() != &TThis::StateRollback);
+        AFL_ENSURE(!TxManager->IsRollBack());
+        Become(&TThis::StateRollback);
         try {
             Counters->BufferActorRollbacks->Inc();
             UpdateTracingState("RollBack", std::move(traceId));
 
             CA_LOG_D("Start rollback");
-            SendToExternalShards(true);
+            const auto& shardsToRollback = TxManager->StartRollback();
+
+            if (shardsToRollback.empty() && waitForResult) {
+                OnRollbackFinished();
+                return;
+            }
+
+            for (const ui64 shardId : shardsToRollback) {
+                SendToExternalShard(shardId, /* isRollback */ true);
+            }
         } catch (...) {
             CA_LOG_E("Failed to rollback transaction. Error: " << CurrentExceptionMessage() << ".");
         }
@@ -2742,21 +2797,21 @@ public:
         }
     }
 
-    void SendToExternalShards(bool isRollback) {
-        THashSet<ui64> shards = TxManager->GetShards();
-        if (!isRollback) {
-            ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
-                for (const auto& shardId : actor->GetShardsIds()) {
-                    shards.erase(shardId);
-                }
-            });
-        }
+    void SendToExternalShards() {
+        auto shards = TxManager->GetShards();
+
+        // Exclude shards prepared by write actors
+        ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            for (const auto& shardId : actor->GetShardsIds()) {
+                shards.erase(shardId);
+            }
+        });
 
         for (const ui64 shardId : shards) {
             if (TxManager->GetLocks(shardId).empty()) {
                 continue;
             }
-            SendToExternalShard(shardId, isRollback);
+            SendToExternalShard(shardId, /* isRollback */ false);
         }
     }
 
@@ -2777,8 +2832,9 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "BufferActor");
 
+        const auto rollbackCookie = isRollback ? RollbackMessageCookie : 0;
         SendTime[shardId] = TInstant::Now();
-        CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
+        CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isRollback=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
                 TStringBuilder builder;
@@ -2787,7 +2843,7 @@ public:
                 }
                 return builder;
             }()
-            << ", Size=" << 0 << ", Cookie=" << 0
+            << ", Size=" << 0 << ", Cookie=" << rollbackCookie
             << ", OperationsCount=" << 0 << ", IsFinal=" << 1
             << ", Attempts=" << 0);
 
@@ -2795,7 +2851,7 @@ public:
             NKikimr::MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            0,
+            isRollback ? RollbackMessageCookie : 0,
             BufferWriteActorStateSpan.GetTraceId());
     }
 
@@ -2880,7 +2936,7 @@ public:
         for (const auto& shardInfo : commitInfo.ShardsInfo) {
             auto& item = *affectedSet.Add();
             item.SetTabletId(shardInfo.ShardId);
-            Y_ABORT_UNLESS(shardInfo.AffectedFlags != 0);
+            AFL_ENSURE(shardInfo.AffectedFlags != 0);
             item.SetFlags(shardInfo.AffectedFlags);
         }
 
@@ -2970,7 +3026,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
                 TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
-                ReplyErrorAndDie(
+                ReplyError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                     TStringBuilder() << "Failed to plan transaction, status: " << res->GetStatus(),
@@ -2980,7 +3036,7 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusUnknown:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAborted:
                 TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
-                ReplyErrorAndDie(
+                ReplyError(
                     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                     NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                     TStringBuilder() << "Unexpected TEvProposeTransactionStatus status: " << res->GetStatus(),
@@ -3041,7 +3097,7 @@ public:
             CA_LOG_E("Got ABORTED ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
                 GetPQErrorMessage(event, "Aborted proposal status for PQ. "),
@@ -3051,7 +3107,7 @@ public:
             CA_LOG_E("Got BAD REQUEST ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
                 GetPQErrorMessage(event, "Bad request proposal status for PQ. "),
@@ -3061,7 +3117,7 @@ public:
             CA_LOG_E("Got OVERLOADED ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
                 GetPQErrorMessage(event, "Overloaded proposal status for PQ. "),
@@ -3071,7 +3127,7 @@ public:
             CA_LOG_E("Got CANCELLED ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::CANCELLED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED,
                 GetPQErrorMessage(event, "Cancelled proposal status for PQ. "),
@@ -3081,7 +3137,7 @@ public:
             CA_LOG_E("Got undefined ProposeTransactionResult for PQ."
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << ".");
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 GetPQErrorMessage(event, "Undefined proposal status for PQ. "),
@@ -3100,7 +3156,7 @@ public:
             return;
         }
 
-        ReplyErrorAndDie(
+        ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder()
@@ -3118,7 +3174,7 @@ public:
             return;
         }
 
-        ReplyErrorAndDie(
+        ReplyError(
             NYql::NDqProto::StatusIds::UNDETERMINED,
             NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
             TStringBuilder()
@@ -3129,7 +3185,7 @@ public:
     void Handle(TEvDataShard::TEvProposeTransactionRestart::TPtr& ev) {
         CA_LOG_D("Got transaction restart event from tabletId: " << ev->Get()->Record.GetTabletId());
         if (!HandleTransactionRestart(TxManager, ev)) {
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder()
@@ -3152,7 +3208,7 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
-        ReplyErrorAndDie(
+        ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
@@ -3172,7 +3228,7 @@ public:
             return;
         }
 
-        ReplyErrorAndDie(
+        ReplyError(
             NYql::NDqProto::StatusIds::UNAVAILABLE,
             NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
@@ -3184,7 +3240,7 @@ public:
 
         if (Coordinator == ev->Get()->TabletId) {
             if (ev->Get()->NotDelivered) {
-                ReplyErrorAndDie(
+                ReplyError(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                     TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message to coordinator.",
@@ -3197,7 +3253,7 @@ public:
                 return;
             }
 
-            ReplyErrorAndDie(
+            ReplyError(
                     NYql::NDqProto::StatusIds::UNDETERMINED,
                     NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                     TStringBuilder() << "State of operation is unknown. Failed to deviler message to coordinator.",
@@ -3215,16 +3271,27 @@ public:
             return;
         }
 
-        ReplyErrorAndDie(
+        ReplyError(
             NYql::NDqProto::StatusIds::UNDETERMINED,
             NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
             TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
             {});
     }
 
+    void HandleRollback(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        if (Coordinator == ev->Get()->TabletId) {
+            return;
+        }
+
+        OnRolledback(ev->Get()->TabletId);
+    }
+
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
-        CancelProposal();
-        Rollback(BufferWriteActorSpan.GetTraceId());
+        if (!TxManager->IsRollBack()) {
+            CancelProposal();
+            Rollback(BufferWriteActorSpan.GetTraceId(), /* waitForResult */ false);
+        }
         PassAway();
     }
 
@@ -3262,6 +3329,11 @@ public:
         Process();
     }
 
+    void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
+        ExecuterActorId = ev->Get()->ExecuterActorId;
+        Rollback(std::move(ev->TraceId), /* waitForResult */ true);
+    }
+
     void OnAllTasksFinised() {
         AFL_ENSURE(AfterWaitTasksState);
         auto afterWaitTasksState = std::move(*AfterWaitTasksState);
@@ -3272,19 +3344,6 @@ public:
         } else {
             Flush(std::move(afterWaitTasksState.TraceId));
         }
-    }
-
-    void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
-        ExecuterActorId = ev->Get()->ExecuterActorId;
-        RollbackAndDie(std::move(ev->TraceId));
-    }
-
-    void RollbackAndDie(NWilson::TTraceId traceId) {
-        Rollback(std::move(traceId));
-        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-            BuildStats()
-        });
-        PassAway();
     }
 
     void HandlePrepare(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -3344,6 +3403,27 @@ public:
         }
     }
 
+    void HandleRollback(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        CA_LOG_D("Recv EvWriteResult (external) from ShardID=" << ev->Get()->Record.GetOrigin()
+            << ", Status=" << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())
+            << ", TxId=" << ev->Get()->Record.GetTxId()
+            << ", Locks= " << [&]() {
+                TStringBuilder builder;
+                for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+                    builder << lock.ShortDebugString();
+                }
+                return builder;
+            }()
+            << ", Cookie=" << ev->Cookie);
+
+        TxManager->AddParticipantNode(ev->Sender.NodeId());
+
+        if (RollbackMessageCookie == ev->Cookie
+                || ev->Get()->GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+            OnRolledback(ev->Get()->Record.GetOrigin());
+        }
+    }
+
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
         if (seqNo == ExternalShardIdToOverloadSeqNo.at(shardId)) {
             CA_LOG_D("Retry Overloaded ShardID=" << shardId);
@@ -3381,7 +3461,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::UNSPECIFIED,
                 NYql::TIssuesIds::DEFAULT_ERROR,
                 TStringBuilder() << "Unspecified error. " << GetPathes(ev->Get()->Record.GetOrigin()) << ". "
@@ -3398,7 +3478,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
                 TStringBuilder() << "Operation aborted.",
@@ -3411,7 +3491,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder() << "Wrong shard state. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
@@ -3424,7 +3504,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 TStringBuilder() << "Internal error while executing transaction.",
@@ -3437,7 +3517,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
                 TStringBuilder() << "Disk space exhausted. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
@@ -3451,7 +3531,7 @@ public:
                 << " Ignored this error."
                 << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. "
@@ -3466,7 +3546,7 @@ public:
                 << " Ignored this error."
                 << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
                 TStringBuilder() << "Kikimr cluster or one of its subsystems is overloaded."
@@ -3481,7 +3561,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::CANCELLED,
                 NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED,
                 TStringBuilder() << "Operation cancelled.",
@@ -3494,7 +3574,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::BAD_REQUEST,
                 NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
                 TStringBuilder() << "Bad request. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
@@ -3507,7 +3587,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::SCHEME_ERROR,
                 NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
                 TStringBuilder() << "Scheme changed. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
@@ -3522,7 +3602,7 @@ public:
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::ABORTED,
                 NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
                 TStringBuilder()
@@ -3537,7 +3617,7 @@ public:
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
             TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
+            ReplyError(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION,
                 TStringBuilder() << "Constraint violated. " << GetPathes(ev->Get()->Record.GetOrigin()) << ".",
@@ -3640,7 +3720,7 @@ public:
                 << ", coordinator selected at propose result: " << preparedInfo.Coordinator);
 
             TxProxyMon->TxResultAborted->Inc();
-            ReplyErrorAndDie(NYql::NDqProto::StatusIds::CANCELLED,
+            ReplyError(NYql::NDqProto::StatusIds::CANCELLED,
                 NKikimrIssues::TIssuesIds::TX_DECLINED_IMPLICIT_COORDINATOR,
                 "Unable to choose coordinator.");
             return;
@@ -3648,7 +3728,7 @@ public:
         if (TxManager->ConsumePrepareTransactionResult(std::move(preparedInfo))) {
             OnOperationFinished(Counters->BufferActorPrepareLatencyHistogram);
             TxManager->StartExecute();
-            Y_ABORT_UNLESS(GetTotalMemory() == 0);
+            AFL_ENSURE(GetTotalMemory() == 0);
             DistributedCommit();
             return;
         }
@@ -3663,10 +3743,26 @@ public:
                 BuildStats()
             });
             ExecuterActorId = {};
-            Y_ABORT_UNLESS(GetTotalMemory() == 0);
+            AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
             return;
         }
+    }
+
+    void OnRolledback(ui64 shardId) {
+        if (TxManager->ConsumeRollbackResult(shardId)) {
+            OnRollbackFinished();
+        }
+    }
+
+    void OnRollbackFinished() {
+        CA_LOG_D("RolledBack TxId=" << TxId.value_or(0));
+        OnOperationFinished(Counters->BufferActorRollbackLatencyHistogram);
+        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+            BuildStats()
+        });
+        ExecuterActorId = {};
+        PassAway();
     }
 
     void OnMessageAcknowledged(ui64) override {
@@ -3701,18 +3797,18 @@ public:
             BuildStats()
         });
         ExecuterActorId = {};
-        Y_ABORT_UNLESS(GetTotalMemory() == 0);
+        AFL_ENSURE(GetTotalMemory() == 0);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues) override {
-        ReplyErrorAndDie(statusCode, id, message, subIssues);
+        ReplyError(statusCode, id, message, subIssues);
     }
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) override {
-        ReplyErrorAndDie(statusCode, std::move(issues));
+        ReplyError(statusCode, std::move(issues));
     }
 
-    void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, auto id, const TString& message, const NYql::TIssues& subIssues = {}) {
+    void ReplyError(NYql::NDqProto::StatusIds::StatusCode statusCode, auto id, const TString& message, const NYql::TIssues& subIssues = {}) {
         BufferWriteActorStateSpan.EndError(message);
 
         NYql::TIssue issue(message);
@@ -3724,13 +3820,12 @@ public:
         NYql::TIssues issues;
         issues.AddIssue(std::move(issue));
 
-        ReplyErrorAndDieImpl(statusCode, std::move(issues));
+        ReplyErrorImpl(statusCode, std::move(issues));
     }
 
-    void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
+    void ReplyError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
         BufferWriteActorStateSpan.EndError(issues.ToOneLineString());
-
-        ReplyErrorAndDieImpl(statusCode, std::move(issues));
+        ReplyErrorImpl(statusCode, std::move(issues));
     }
 
     void UpdateTracingState(const char* name, std::optional<NWilson::TTraceId> traceId) {
@@ -3750,20 +3845,18 @@ public:
         });
     }
 
-    void ReplyErrorAndDieImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
+    void ReplyErrorImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
         CA_LOG_E("statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". Issue=" << issues.ToString() << ". sessionActorId=" << SessionActorId << ".");
 
-        Y_ABORT_UNLESS(!HasError);
-        HasError = true;
-
+        TxManager->SetError();
         CancelProposal();
-        Rollback(BufferWriteActorSpan.GetTraceId());
+        Become(&TKqpBufferWriteActor::StateError);
+
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,
             std::move(issues),
             BuildStats()
         });
-        PassAway();
     }
 
     TString GetPathes(ui64 shardId) const {
@@ -3866,7 +3959,6 @@ private:
     THashMap<ui64, TKqpWriteTask> WriteTasks;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
-    bool HasError = false;
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;
 
     struct TAckMessage {

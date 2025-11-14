@@ -141,12 +141,14 @@ namespace NKikimr {
         }
 
         virtual ui32 ProcessPhantomFlags(TString* data) = 0;
+        virtual NKikimrBlobStorage::EFullSyncProtocol GetProtocol() = 0;
 
         bool RunStages() {
             if (!Result) {
                 Result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId,
                         SyncState, CurrentEvent->Get()->Record.GetCookie(), TActivationContext::Now(),
-                        IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel());
+                        IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, CurrentEvent->GetChannel(),
+                        GetProtocol());
                 LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
             }
 
@@ -194,7 +196,18 @@ namespace NKikimr {
                     Y_ABORT("Unexpected case: stage=%d", Stage);
             }
 
-            bool finished = (bool)(pres & EmptyFlag) && Stage == NKikimrBlobStorage::PhantomFlags;
+            bool finished = false;
+            
+            if (pres & EmptyFlag) {
+                switch (GetProtocol()) {
+                case NKikimrBlobStorage::EFullSyncProtocol::Legacy:
+                    finished = (Stage == NKikimrBlobStorage::Barriers);
+                    break;
+                case NKikimrBlobStorage::EFullSyncProtocol::UnorderedData:
+                    finished = (Stage == NKikimrBlobStorage::PhantomFlags);
+                    break;
+                }
+            }
 
             // Status, SyncState, Data and VDiskID are already set up; set up other
             Result->Record.SetFinished(finished);
@@ -273,6 +286,10 @@ namespace NKikimr {
 
         ui32 ProcessPhantomFlags(TString*) override {
             return EmptyFlag;
+        }
+
+        NKikimrBlobStorage::EFullSyncProtocol GetProtocol() override {
+            return NKikimrBlobStorage::EFullSyncProtocol::Legacy;
         }
     
         STRICT_STFUNC(StateFunc,
@@ -376,6 +393,10 @@ namespace NKikimr {
             }
 
             return result;
+        }
+
+        NKikimrBlobStorage::EFullSyncProtocol GetProtocol() override {
+            return NKikimrBlobStorage::EFullSyncProtocol::UnorderedData;
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {

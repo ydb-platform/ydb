@@ -2015,7 +2015,8 @@ namespace NKikimr {
                     Config->SyncLogMaxMemAmount,
                     Config->MaxResponseSize,
                     Db->SyncLogFirstLsnToKeep,
-                    Config->BaseInfo.ReadOnly);
+                    Config->BaseInfo.ReadOnly,
+                    Config->EnablePhantomFlagStorage);
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
             ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 

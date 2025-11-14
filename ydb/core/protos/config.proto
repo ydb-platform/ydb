@@ -1750,6 +1750,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 EnablePhantomFlagStorage = 38 [(ControlOptions) = {
+            Description: "Enable new FullSync protocol which allows to send PhantomFlags",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {

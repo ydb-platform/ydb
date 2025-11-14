@@ -11,7 +11,7 @@ namespace NKikimr::NColumnShard::NBackup {
 
 class TRowWriter : public NArrow::IRowWriter {
 public:
-    TRowWriter(TVector<TSerializedCellVec>& rows);
+    explicit TRowWriter(TVector<TSerializedCellVec>& rows);
     void AddRow(const TConstArrayRef<TCell>& cells) override;
 private:
     TVector<TSerializedCellVec>& Rows;

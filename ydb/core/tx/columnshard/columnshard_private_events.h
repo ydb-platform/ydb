@@ -388,8 +388,14 @@ struct TEvPrivate {
     };
 
     // *** Backup ***
+    /*
+    1. TEvBackupExportRecordBatch -> Uploader
+    2. TEvBackupExportRecordBatchResult | TEvBackupExportError <- Uploader
+    ----
+    3. TEvBackupExportState - internal message for iscan iface
+    */
     struct TEvBackupExportRecordBatch: public TEventLocal<TEvBackupExportRecordBatch, EvBackupExportRecordBatch> {
-        TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
             : Data(data)
             , IsLast(isLast) {
         }
@@ -399,7 +405,7 @@ struct TEvPrivate {
     };
 
     struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {
-        TEvBackupExportRecordBatchResult(bool isFinish)
+        explicit TEvBackupExportRecordBatchResult(bool isFinish)
             : IsFinish(isFinish) {
         }
 
@@ -407,7 +413,7 @@ struct TEvPrivate {
     };
 
     struct TEvBackupExportState: public TEventLocal<TEvBackupExportState, EvBackupExportState> {
-        TEvBackupExportState(NTable::EScan state)
+        explicit TEvBackupExportState(NTable::EScan state)
             : State(state) {
         }
 
@@ -415,7 +421,7 @@ struct TEvPrivate {
     };
 
     struct TEvBackupExportError: public TEventLocal<TEvBackupExportError, EvBackupExportError> {
-        TEvBackupExportError(const TString& errorMessage)
+        explicit TEvBackupExportError(const TString& errorMessage)
             : ErrorMessage(errorMessage) {
         }
 

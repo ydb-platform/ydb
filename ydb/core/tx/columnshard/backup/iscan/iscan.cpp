@@ -49,7 +49,7 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
                 return TConclusionStatus::Fail("Exports to YT do not support compression");
             }
             if (exportFactory) {
-                std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToYt(backupTask, tableColumns)).swap(exp);
+                exp = std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToYt(backupTask, tableColumns));
             } else {
                 return TConclusionStatus::Fail("Exports to YT are disabled");
             }
@@ -60,7 +60,7 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
                 return TConclusionStatus::Fail(TStringBuilder() << "Unsupported compression codec: " << backupTask.GetCompression().GetCodec());
             }
             if (exportFactory) {
-                std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToS3(backupTask, tableColumns)).swap(exp);
+                exp = std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToS3(backupTask, tableColumns));
             } else {
                 return TConclusionStatus::Fail("Exports to S3 are disabled");
             }
@@ -92,10 +92,25 @@ public:
     };
 
     struct TCurrentBatchItem {
-        ui64 CurrentPosition = 0;
-        TVector<TSerializedCellVec> CurrentBatch;
+        ui64 Position = 0;
+        TVector<TSerializedCellVec> Batch;
         bool IsLast = false;
         bool NeedResult = false;
+        
+        void Clear() {
+            Batch.clear();
+            Position = 0;
+            IsLast = false;
+            NeedResult = true;
+        }
+        
+        TSerializedCellVec& GetRow() {
+            return Batch[Position];
+        }
+        
+        bool HasMoreRows() const {
+            return Position < Batch.size();
+        }
     };
 
     TUploaderActor(const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, const TActorId& subscriberActorId, ui64 txId)
@@ -162,7 +177,11 @@ public:
     }
 
     void SendResult(bool isFinal) {
-        if (CurrentBatch.CurrentPosition >= CurrentBatch.CurrentBatch.size() && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
+        if (isFinal) {
+            AFL_VERIFY(!CurrentBatch.HasMoreRows() && CurrentBatch.NeedResult);
+        }
+        
+        if (!CurrentBatch.HasMoreRows()  && (isFinal || !CurrentBatch.IsLast) && CurrentBatch.NeedResult) {
             Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
             if (isFinal) {
                 Exporter->Finish(NTable::EStatus::Done);
@@ -179,19 +198,17 @@ public:
         }
 
         while (true) {
-            if (DataQueue.empty() && CurrentBatch.CurrentPosition >= CurrentBatch.CurrentBatch.size()) {
+            if (DataQueue.empty() && !CurrentBatch.HasMoreRows() ) {
                 return;
             }
-            if (CurrentBatch.CurrentPosition >= CurrentBatch.CurrentBatch.size()) {
+            if (!CurrentBatch.HasMoreRows()) {
                 auto batch = DataQueue.front();
                 DataQueue.pop();
                 SendResult(false);
 
                 if (!batch.Data) {
-                    CurrentBatch.CurrentBatch.clear();
-                    CurrentBatch.CurrentPosition = 0;
+                    CurrentBatch.Clear();
                     CurrentBatch.IsLast = batch.IsLast;
-                    CurrentBatch.NeedResult = true;
                     SendResult(false);
                     continue;
                 }
@@ -201,26 +218,32 @@ public:
                     Fail(result.GetErrorMessage());
                     return;
                 }
-
-                CurrentBatch.CurrentBatch = result.DetachResult();
-                CurrentBatch.CurrentPosition = 0;
+                
+                CurrentBatch.Clear();
                 CurrentBatch.IsLast = batch.IsLast;
-                CurrentBatch.NeedResult = true;
+                CurrentBatch.Batch = result.DetachResult();
             }
-
-            while (CurrentBatch.CurrentPosition < CurrentBatch.CurrentBatch.size()) {
-                auto row = CurrentBatch.CurrentBatch[CurrentBatch.CurrentPosition];
-                NTable::TRowState rowState(row.GetCells().size());
-                int i = 0;
-                for (const auto& cell: row.GetCells()) {
-                    rowState.Set(i++, { NTable::ECellOp::Set, NTable::ELargeObj::Inline }, cell);
-                }
-                auto result = Exporter->Feed({}, rowState);
-                CurrentBatch.CurrentPosition++;
-                if (result == NTable::EScan::Sleep) {
-                    LastState = NTable::EScan::Sleep;
-                    return;
-                }
+            
+            FeedRowsToExporter();
+            if (LastState == NTable::EScan::Sleep) {
+                return;
+            }
+        }
+    }
+    
+    void FeedRowsToExporter() {
+        while (CurrentBatch.HasMoreRows()) {
+            auto& row = CurrentBatch.GetRow();
+            NTable::TRowState rowState(row.GetCells().size());
+            int i = 0;
+            for (const auto& cell: row.GetCells()) {
+                rowState.Set(i++, { NTable::ECellOp::Set, NTable::ELargeObj::Inline }, cell);
+            }
+            auto result = Exporter->Feed({}, rowState);
+            CurrentBatch.Position++;
+            if (result == NTable::EScan::Sleep) {
+                LastState = NTable::EScan::Sleep;
+                return;
             }
         }
     }
@@ -237,7 +260,7 @@ public:
     }
 
     void MarkAsLast() {
-        if (CurrentBatch.CurrentPosition < CurrentBatch.CurrentBatch.size()) {
+        if (CurrentBatch.HasMoreRows()) {
             return;
         }
         if (!DataQueue.empty()) {
@@ -265,6 +288,8 @@ private:
         }
         return columnTypes;
     }
+    
+
 
 private:
     TCurrentBatchItem CurrentBatch;

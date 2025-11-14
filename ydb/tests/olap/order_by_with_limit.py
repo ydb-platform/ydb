@@ -4,6 +4,7 @@ import yatest.common
 import ydb
 import random
 import string
+import datetime
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -18,7 +19,7 @@ class TestOrderBy(object):
 
     @classmethod
     def setup_class(cls):
-        random.seed(0xBEDD)
+        random.seed(0xBEDA)
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
@@ -105,13 +106,16 @@ class TestOrderBy(object):
 
             assert keys == answer, keys
 
-    def random_string(self):
+    def random_char(self):
         characters = string.ascii_letters + string.digits
-        result_string = ''.join(random.choice(characters) for i in range(1000))
+        return random.choice(characters)
+
+    def random_string(self, size: int):
+        result_string = ''.join(self.random_char() for i in range(size))
         return result_string
 
     def gen_portion(self, start_idx: int, portion_size: int, start: str):
-        return [{"id": i, "value": start + self.random_string()} for i in range(start_idx, start_idx + portion_size)]
+        return [{"id": i, "value": start + self.random_string(1000)} for i in range(start_idx, start_idx + portion_size)]
 
     def test_fetch_race(self):
         test_dir = f"{self.ydb_client.database}/{self.test_name}"
@@ -198,3 +202,47 @@ class TestOrderBy(object):
 
         assert len(result) == 3
         assert result == [(1, True), (2, True), (3, True)]
+
+    def test_stress_sorting(self):
+        test_dir = f"{self.ydb_client.database}/{self.test_name}"
+        table_path = f"{test_dir}/table"
+
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                time Timestamp NOT NULL,
+                uniq Utf8 NOT NULL,
+                class Utf8 NOT NULL,
+                value Utf8,
+                PRIMARY KEY(time, class, uniq),
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+            )
+            """
+        )
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("time", ydb.PrimitiveType.Timestamp)
+        column_types.add_column("class", ydb.PrimitiveType.Utf8)
+        column_types.add_column("uniq", ydb.PrimitiveType.Utf8)
+        column_types.add_column("value", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+
+        portions = [[{ "time" : datetime.datetime.fromtimestamp(1234567890)
+                     , "class" : self.random_char()
+                     , "uniq" : self.random_string(20)
+                     , "value" : self.random_char()
+                     }] for _ in range(10000)]
+
+        for portion in portions:
+            self.ydb_client.bulk_upsert(table_path, column_types, portion)
+
+        result_sets = self.ydb_client.query(
+            f"""
+            select * from `{table_path}`
+            order by time, class, uniq limit 1000
+            """
+        )
+
+        assert len(result_sets[0].rows) == 1000

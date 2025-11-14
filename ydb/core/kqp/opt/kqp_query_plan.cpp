@@ -2304,7 +2304,9 @@ private:
             lookupOps.AppendValue(std::move(lookupOp));
             lookupPlan["Operators"] = std::move(lookupOps);
 
-            newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
+	        if (plan.GetMapSafe().contains("Plans")) {
+                newPlans.AppendValue(ReconstructImpl(plan.GetMapSafe().at("Plans").GetArraySafe()[0], 0));
+            }
 
             newPlans.AppendValue(std::move(lookupPlan));
 

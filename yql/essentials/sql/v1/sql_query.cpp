@@ -267,6 +267,11 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
+                if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
+                    Error() << "YqlSelect is not available before 2025.04";
+                    return false;
+                }
+
                 const auto stmt = core.GetAlt_sql_stmt_core2().GetRule_select_stmt1();
                 if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
                     blocks.emplace_back(std::move(*result));
@@ -665,6 +670,28 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (Ctx_.ParallelModeCount > 0) {
                 Error() << humanStatementName << " statement is not supported in parallel mode";
                 return false;
+            }
+
+            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
+                const auto langVer = GetMaxLangVersion();
+                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
+                    Error() << "YqlSelect is not available before "
+                            << FormatLangVersion(langVer);
+                    return false;
+                }
+
+                const auto stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
+                if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
+                    blocks.emplace_back(std::move(*result));
+                    break;
+                } else if (
+                    result.error() == EYqlSelectError::Unsupported &&
+                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
+                {
+                    Error() << "Translation of the statement "
+                            << "to YqlSelect was forced, but unsupported";
+                    return false;
+                }
             }
 
             Ctx_.BodyPart();

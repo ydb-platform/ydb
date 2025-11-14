@@ -1694,20 +1694,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientCon
                 << "one of topics is deleted, tablet " << msg->TabletId, ctx);
         }
 
-        // TODO: remove it
         return CloseSession(PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, TStringBuilder()
             << "unable to connect to one of topics, tablet " << msg->TabletId, ctx);
-
-#if 0
-        ProcessBalancerDead(msg->TabletId, ctx); // returns false if actor died
-        return;
-#endif
     }
 }
 
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-    ProcessBalancerDead(ev->Get()->TabletId, ctx);
+    ProcessBalancerDead(ev->Get()->TabletId, ev->Sender, ctx);
 }
 
 template <bool UseMigrationProtocol>
@@ -1771,9 +1765,14 @@ TActorId TReadSessionActor<UseMigrationProtocol>::CreatePipeClient(ui64 tabletId
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId, const TActorContext& ctx) {
+void TReadSessionActor<UseMigrationProtocol>::ProcessBalancerDead(ui64 tabletId, const TActorId& pipe, const TActorContext& ctx) {
     for (auto& [topicName, topic] : Topics) {
         if (topic->TabletID == tabletId) {
+            if (topic->PipeClient != pipe) {
+                // Other pipe. Events was reordered
+                break;
+            }
+
             LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " balancer dead, restarting all from topic"
                 << ": topic# " << topic->FullConverter->GetPrintableString());
 

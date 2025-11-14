@@ -325,7 +325,7 @@ private:
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
     TActorId CreatePipeClient(ui64 tabletId, const TActorContext& ctx);
-    void ProcessBalancerDead(ui64 tabletId, const TActorContext& ctx);
+    void ProcessBalancerDead(ui64 tabletId, const TActorId& pipe, const TActorContext& ctx);
 
     void RunAuthActor(const TActorContext& ctx);
     void RecheckACL(const TActorContext& ctx);

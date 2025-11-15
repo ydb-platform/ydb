@@ -706,7 +706,8 @@ public:
         ythrow yexception() << "unimplemented";
     }
 
-    void Push(TDqSerializedBatch&& data) override {
+    void Push(TDqSerializedBatch&& data, TMaybe<TInstant> watermark) override {
+        Y_DEBUG_ABORT_UNLESS(watermark.Empty());
         try {
             return Delegate->Push(std::move(data));
         } catch (...) {
@@ -715,8 +716,9 @@ public:
     }
 
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_UNUSED(batch);
+        Y_DEBUG_ABORT_UNLESS(watermark.Empty());
         ythrow yexception() << "unimplemented";
     }
 
@@ -874,7 +876,7 @@ public:
         }
     }
 
-    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) override {
+    void Push(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space, TMaybe<TInstant> /* watermark */) override {
         auto inputType = GetInputType();
         TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, PackerVersion);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, inputType);
@@ -882,7 +884,7 @@ public:
     }
 
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& /* watermark */) override {
         Y_UNUSED(batch);
         ythrow yexception() << "unimplemented";
     }

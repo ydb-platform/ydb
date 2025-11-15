@@ -638,7 +638,9 @@ void TKqpPlanner::PrepareCheckpoints() {
     if (!CheckpointCoordinatorId) {
         return;
     }
-    TasksGraph.BuildCheckpointingAndWatermarksMode(true, false);
+
+    const auto enableWatermarks = AppData()->FeatureFlags.GetEnableWatermarks();
+    TasksGraph.BuildCheckpointingAndWatermarksMode(true, enableWatermarks);
 
     bool hasStreamingIngress = false;
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();

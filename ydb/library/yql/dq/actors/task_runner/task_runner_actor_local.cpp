@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -338,7 +339,7 @@ private:
         auto channelId = ev->Get()->ChannelId;
         auto inputChannel = TaskRunner->GetInputChannel(channelId);
         if (ev->Get()->Data) {
-            inputChannel->Push(std::move(*ev->Get()->Data));
+            inputChannel->Push(std::move(*ev->Get()->Data), Nothing());
         }
         const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
@@ -371,7 +372,7 @@ private:
         bool finish) override
     {
         auto source = TaskRunner->GetSource(index);
-        source->Push(std::move(batch), space);
+        source->Push(std::move(batch), space, Nothing());
         if (finish) {
             source->Finish();
         }

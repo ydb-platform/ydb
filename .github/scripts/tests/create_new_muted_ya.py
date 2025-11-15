@@ -178,6 +178,8 @@ def aggregate_test_data(all_data, period_days):
     
     # Helper function to convert date to days if needed
     def to_days(date_value):
+        if date_value is None:
+            return -1
         if isinstance(date_value, datetime.date):
             return (date_value - base_date).days
         return date_value
@@ -190,7 +192,16 @@ def aggregate_test_data(all_data, period_days):
     processed_count = 0
     total_count = len(all_data)
     
-    for test in all_data:
+    # Сортируем записи по дате, чтобы история состояний формировалась в хронологическом порядке
+    sorted_data = sorted(
+        all_data,
+        key=lambda test: (
+            to_days(test.get('date_window')),
+            test.get('full_name') or ''
+        )
+    )
+    
+    for test in sorted_data:
         processed_count += 1
         # Показываем прогресс каждые 1000 записей или каждые 10%
         if processed_count % 10000 == 0 or processed_count % max(1, total_count // 10) == 0:
@@ -264,7 +275,7 @@ def aggregate_test_data(all_data, period_days):
                         date_obj = base_date + datetime.timedelta(days=date)
                     else:
                         date_obj = date
-                    date_str = date_obj.strftime('%m-%d')
+                    date_str = date_obj.strftime('%Y-%m-%d')
                     state_with_dates.append(f"{state}({date_str})")
                 else:
                     state_with_dates.append(state)

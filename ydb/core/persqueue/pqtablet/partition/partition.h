@@ -1241,6 +1241,7 @@ private:
     void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
 
     void InitializeMLPConsumers();
+    void NotifyEndOffsetChanged();
 
     struct TMLPConsumerInfo {
         TActorId ActorId;
@@ -1255,6 +1256,7 @@ private:
         TEvPQ::TEvGetMLPConsumerStateRequest::TPtr
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
+    ui64 LastNotifiedEndOffset = 0;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

@@ -27,7 +27,7 @@ class TExtractJoinExpressionsRule : public IRule {
  */
 class TInlineScalarSubplanRule : public IRule {
   public:
-    TInlineScalarSubplanRule() : IRule("Inline scalar subplan") {}
+    TInlineScalarSubplanRule() : IRule("Inline scalar subplan", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -36,9 +36,9 @@ class TInlineScalarSubplanRule : public IRule {
  * Push down a non-projecting map operator
  * Currently only pushes below joins that are immediately below
  */
-class TPushMapRule : public TSimplifiedRule {
+class TPushMapRule : public ISimplifiedRule {
   public:
-    TPushMapRule() : TSimplifiedRule("Push map operator") {}
+    TPushMapRule() : ISimplifiedRule("Push map operator", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -47,9 +47,9 @@ class TPushMapRule : public TSimplifiedRule {
  * Push down filter through joins, adding join conditions to the join operator and potentially
  * converting left join into inner join
  */
-class TPushFilterRule : public TSimplifiedRule {
+class TPushFilterRule : public ISimplifiedRule {
   public:
-    TPushFilterRule() : TSimplifiedRule("Push filter") {}
+    TPushFilterRule() : ISimplifiedRule("Push filter", ERuleProperties::RequireParents) {}
 
     virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -59,7 +59,7 @@ class TPushFilterRule : public TSimplifiedRule {
  */
 class TAssignStagesRule : public IRule {
   public:
-    TAssignStagesRule() : IRule("Assign stages") {}
+    TAssignStagesRule() : IRule("Assign stages", ERuleProperties::RequireParents) {}
 
     virtual bool TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -67,8 +67,21 @@ class TAssignStagesRule : public IRule {
 extern TRuleBasedStage RuleStage1;
 extern TRuleBasedStage RuleStage2;
 
-class TRenameStage : public ISinglePassStage {
+/**
+ * Separate global stage to remove extra renames and project out unneeded columns
+ */
+class TRenameStage : public IRBOStage {
   public:
+    TRenameStage();
+    virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
+};
+
+/**
+ * Separate global constant folding stage
+ */
+class TConstantFoldingStage : public IRBOStage {
+  public:
+    TConstantFoldingStage();
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 };
 

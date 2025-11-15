@@ -543,17 +543,29 @@ private:
 
 } // anonymous
 
-using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TReplicationTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TTransferTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>;
 
 namespace NOperation {
 
 template <>
-std::optional<TString> GetTargetName<TTag>(TTag, const TTxTransaction& tx) {
+std::optional<TString> GetTargetName<TReplicationTag>(TReplicationTag, const TTxTransaction& tx) {
     return tx.GetReplication().GetName();
 }
 
 template <>
-bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
+bool SetName<TReplicationTag>(TReplicationTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+template <>
+std::optional<TString> GetTargetName<TTransferTag>(TTransferTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name) {
     tx.MutableReplication()->SetName(name);
     return true;
 }

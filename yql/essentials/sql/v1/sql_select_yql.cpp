@@ -33,6 +33,29 @@ public:
         return Build(partial);
     }
 
+    TResult<TNodePtr> Build(const TRule_values_stmt& rule) {
+        TYqlValuesArgs values;
+
+        Token(rule.GetToken1());
+        const auto& rows = rule.GetRule_values_source_row_list2();
+
+        if (auto result = Build(rows.GetRule_values_source_row1())) {
+            values.Rows.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& row : rows.GetBlock2()) {
+            if (auto result = Build(row.GetRule_values_source_row2())) {
+                values.Rows.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+
+        return BuildYqlValues(Ctx_.Pos(), std::move(values));
+    }
+
 private:
     TResult<TNodePtr> Build(const TRule_select_kind_partial& rule) {
         TYqlSelectArgs select;
@@ -429,19 +452,10 @@ private:
             return Unsupported("table_hints");
         }
 
-        if (cluster.Empty()) {
-            Ctx_.Error() << "No cluster name given and no default cluster is selected";
-            return std::unexpected(EYqlSelectError::Error);
-        }
-
-        if (cluster.GetLiteral() == nullptr) {
-            return Unsupported("not literal cluster");
-        }
-
-        return Build(rule.GetBlock3(), std::move(service), *cluster.GetLiteral());
+        return Build(rule.GetBlock3(), std::move(service), std::move(cluster));
     }
 
-    TResult<TNodePtr> Build(const TRule_table_ref::TBlock3& block, TString service, TString cluster) {
+    TResult<TNodePtr> Build(const TRule_table_ref::TBlock3& block, TString service, TDeferredAtom cluster) {
         switch (block.GetAltCase()) {
             case TRule_table_ref_TBlock3::kAlt1:
                 return Build(block.GetAlt1().GetRule_table_key1(), std::move(service), std::move(cluster));
@@ -454,7 +468,16 @@ private:
         }
     }
 
-    TResult<TNodePtr> Build(const TRule_table_key& rule, TString service, TString cluster) {
+    TResult<TNodePtr> Build(const TRule_table_key& rule, TString service, TDeferredAtom cluster) {
+        if (cluster.Empty()) {
+            Ctx_.Error() << "No cluster name given and no default cluster is selected";
+            return std::unexpected(EYqlSelectError::Error);
+        }
+
+        if (cluster.GetLiteral() == nullptr) {
+            return Unsupported("not literal cluster");
+        }
+
         if (rule.HasBlock2()) {
             return Unsupported("(VIEW view_name)");
         }
@@ -463,34 +486,11 @@ private:
 
         TYqlTableRefArgs args = {
             .Service = std::move(service),
-            .Cluster = std::move(cluster),
+            .Cluster = *cluster.GetLiteral(),
             .Key = std::move(key),
         };
 
         return BuildYqlTableRef(Ctx_.Pos(), std::move(args));
-    }
-
-    TResult<TNodePtr> Build(const TRule_values_stmt& rule) {
-        TYqlValuesArgs values;
-
-        Token(rule.GetToken1());
-        const auto& rows = rule.GetRule_values_source_row_list2();
-
-        if (auto result = Build(rows.GetRule_values_source_row1())) {
-            values.Rows.emplace_back(std::move(*result));
-        } else {
-            return std::unexpected(result.error());
-        }
-
-        for (const auto& row : rows.GetBlock2()) {
-            if (auto result = Build(row.GetRule_values_source_row2())) {
-                values.Rows.emplace_back(std::move(*result));
-            } else {
-                return std::unexpected(result.error());
-            }
-        }
-
-        return BuildYqlValues(Ctx_.Pos(), std::move(values));
     }
 
     TResult<TVector<TNodePtr>> Build(const TRule_values_source_row& rule) {
@@ -564,9 +564,13 @@ private:
         TSqlExpression sqlExpr(Ctx_, Mode_);
         sqlExpr.ProduceYqlColumnRef();
 
-        TNodePtr expr = sqlExpr.Build(rule);
+        TNodePtr expr = sqlExpr.BuildSourceOrNode(rule);
         if (!expr) {
             return std::unexpected(EYqlSelectError::Error);
+        }
+
+        if (TSourcePtr source = MoveOutIfSource(expr)) {
+            return Unsupported("select_subexpr");
         }
 
         return expr;
@@ -621,7 +625,7 @@ private:
 
     template <class T = TNodePtr>
     TResult<T> Unsupported(TStringBuf message) {
-        if (Ctx_.YqlSelectMode == EYqlSelectMode::Force) {
+        if (Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force) {
             Error() << "YqlSelect unsupported: " << message;
         }
 
@@ -633,6 +637,18 @@ TYqlSelectResult BuildYqlSelect(
     TContext& ctx,
     NSQLTranslation::ESqlMode mode,
     const NSQLv1Generated::TRule_select_stmt& rule)
+{
+    if (auto result = TYqlSelect(ctx, mode).Build(rule)) {
+        return BuildYqlStatement(std::move(*result));
+    } else {
+        return result;
+    }
+}
+
+TYqlSelectResult BuildYqlSelect(
+    TContext& ctx,
+    NSQLTranslation::ESqlMode mode,
+    const NSQLv1Generated::TRule_values_stmt& rule)
 {
     if (auto result = TYqlSelect(ctx, mode).Build(rule)) {
         return BuildYqlStatement(std::move(*result));

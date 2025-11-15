@@ -298,16 +298,19 @@ void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
     ypathExt->set_target_path(TProtobufString(path));
 }
 
-void RewriteRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
+bool MaybeRewriteRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
 {
     auto* ypathExt = header->MutableExtension(NYTree::NProto::TYPathHeaderExt::ypath_header_ext);
-    if (path != ypathExt->target_path()) {
-        if (!ypathExt->has_original_target_path()) {
-            ypathExt->set_original_target_path(ypathExt->target_path());
-        }
-
-        ypathExt->set_target_path(TProtobufString(path));
+    if (path == ypathExt->target_path()) {
+        return false;
     }
+
+    if (!ypathExt->has_original_target_path()) {
+        ypathExt->set_original_target_path(ypathExt->target_path());
+    }
+
+    ypathExt->set_target_path(TProtobufString(path));
+    return true;
 }
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header)

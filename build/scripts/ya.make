@@ -61,6 +61,7 @@ ELSEIF (PYTHON3)
         copy_to_dir.py
         cpp_flatc_wrapper.py
         decimal_md5.py
+        docs_manifest.py
         docs_proto_wrapper.py
         error.py
         extract_asrc.py

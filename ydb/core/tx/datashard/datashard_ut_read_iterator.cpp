@@ -5695,6 +5695,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         idx->set_vector_dimension(2);
         auto readResult1 = helper.SendRead("table-vector", request1.release());
         UNIT_ASSERT(readResult1->Record.GetFinished());
+        UNIT_ASSERT(readResult1->Record.GetStats().GetRows() == 17);
+        UNIT_ASSERT(readResult1->Record.GetStats().GetBytes() == 544);
         CheckResult(helper.Tables.at("table-vector").UserTable, *readResult1, {
             {TCell::Make(16), TCell("\xF0\x10\x02", 3)},
             {TCell::Make(15), TCell("\xE0\x20\x02", 3)},

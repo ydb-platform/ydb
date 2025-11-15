@@ -20,7 +20,8 @@ NActors::IActor* CreateConsumerActor(
     ui32 partitionId,
     const NActors::TActorId& partitionActorId,
     const NKikimrPQ::TPQTabletConfig_TConsumer& config,
-    const std::optional<TDuration> retentionPeriod
+    const std::optional<TDuration> retentionPeriod,
+    ui64 partitionEndOffset
 );
 
 } // namespace NKikimr::NPQ::NMLP

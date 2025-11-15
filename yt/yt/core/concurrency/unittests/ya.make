@@ -35,6 +35,7 @@ SRCS(
     scheduled_executor_ut.cpp
     scheduler_ut.cpp
     suspendable_action_queue_ut.cpp
+    suspendable_invoker_ut.cpp
     thread_affinity_ut.cpp
     thread_pool_poller_ut.cpp
     thread_pool_ut.cpp

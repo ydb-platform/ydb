@@ -109,6 +109,20 @@ T DeserializeMapKey(TStringBuf value)
     }
 }
 
+template <class T>
+TString SerializeMapKey(const T& value)
+{
+    if constexpr (TEnumTraits<T>::IsEnum) {
+        return FormatEnum(value);
+    } else if constexpr (std::is_same_v<T, TGuid>) {
+        return ToString(value);
+    } else if constexpr (TStrongTypedefTraits<T>::IsStrongTypedef) {
+        return SerializeMapKey<typename TStrongTypedefTraits<T>::TUnderlying>(value.Underlying());
+    } else {
+        return ToString(value);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -577,7 +591,7 @@ inline void PostprocessRecursive(
         PostprocessRecursive(
             value,
             [&pathGetter, &key = key] {
-                return pathGetter() + "/" + NYPath::ToYPathLiteral(key);
+                return pathGetter() + "/" + NYPath::ToYPathLiteral(SerializeMapKey(key));
             });
     }
 }

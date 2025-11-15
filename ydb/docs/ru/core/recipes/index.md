@@ -7,3 +7,4 @@
 * [{#T}](../yql/reference/recipes/index.md)
 * [{#T}](transfer/index.md)
 * [{#T}](./import-export-column-tables.md)
+* [{#T}](./streaming.md)

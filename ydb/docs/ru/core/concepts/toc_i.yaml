@@ -49,3 +49,7 @@ items:
   include:
     path: federated_query/toc_p.yaml
     mode: link
+- name: Стриминговые запросы
+  include:
+    path: streaming_query/toc_p.yaml
+    mode: link

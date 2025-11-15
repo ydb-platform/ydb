@@ -1,4 +1,4 @@
-#include <ydb/core/ymq/actor/attributes_md5.h>
+#include <ydb/core/ymq/attributes/attributes_md5.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

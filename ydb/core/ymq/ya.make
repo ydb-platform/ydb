@@ -1,5 +1,6 @@
 RECURSE(
     actor
+    attributes
     base
     http
     queues

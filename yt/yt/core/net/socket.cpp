@@ -271,7 +271,7 @@ SOCKET CreateUnixClientSocket()
     return clientSocket;
 }
 
-SOCKET CreateUdpSocket()
+SOCKET CreateUdpSocket(int family)
 {
     int type = SOCK_DGRAM;
 
@@ -280,7 +280,7 @@ SOCKET CreateUdpSocket()
     type |= SOCK_NONBLOCK;
 #endif
 
-    SOCKET udpSocket = socket(AF_INET6, type, 0);
+    SOCKET udpSocket = socket(family, type, 0);
     if (udpSocket == INVALID_SOCKET) {
         auto lastError = LastSystemError();
         THROW_ERROR_EXCEPTION(

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.31.0)
+VERSION(0.32.0)
 
 LICENSE(Apache-2.0 AND BSD-3-Clause AND LicenseRef-scancode-unknown-license-reference AND MIT AND "MIT OR Apache-2.0")
 

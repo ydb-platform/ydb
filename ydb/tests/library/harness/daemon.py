@@ -133,11 +133,14 @@ class Daemon(object):
             wait=False,
             core_pattern=self.__core_pattern,
         )
+
+        # Close output files after passing to subprocess - file descriptors are already duplicated
+        self.__close_output_files()
+
         wait_for(self.is_alive, self.__timeout)
 
         if not self.is_alive():
             self.__check_before_fail()
-            self.__close_output_files()
             raise DaemonError(
                 "Unexpectedly finished on start",
                 exit_code=self.__daemon.exit_code,

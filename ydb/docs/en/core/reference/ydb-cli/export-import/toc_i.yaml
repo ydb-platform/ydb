@@ -13,3 +13,5 @@ items:
   href: import-s3.md
 - name: Importing data from a file to an existing table
   href: import-file.md
+- name: Backup collections
+  href: ../../../maintenance/manual/backup-collections.md

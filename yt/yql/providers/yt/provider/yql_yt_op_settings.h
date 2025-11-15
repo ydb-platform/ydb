@@ -25,7 +25,7 @@ enum class EYtWriteMode: ui32 {
     Create          /* "create" */,
     CreateIfNotExists /* "create_if_not_exists" */,
     Alter           /* "alter" */,
-
+    Upsert          /* "upsert" */,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

@@ -730,12 +730,24 @@ public:
                     auto table = maybeTable.Cast();
                     auto tableName = table.Name().Value();
                     auto tableCluster = table.Cluster().StringValue();
+                    auto epoch = TEpochInfo::Parse(table.Epoch().Ref());
+                    auto isDynamic = TYtTableBaseInfo::GetMeta(table) -> IsDynamic;
+
+                    if (isDynamic && epoch > 0) {
+                        const bool useNativeDyntableRead = State_->Configuration->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);
+                        if (!useNativeDyntableRead) {
+                            ctx.AddError(TIssue(ctx.GetPosition(table.Pos()), TStringBuilder() <<
+                                "Read of dynamic table \"" << tableName << "\" is not supported after commit without native dyntable read. Please add PRAGMA yt.UseNativeDynamicTableRead;"));
+                            return TStatus::Error;
+                        }
+                    }
+
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous) || !tableName.StartsWith("tmp/")) {
                             const TYtTableDescription& tableDesc = State_->TablesData->GetTable(tableCluster,
                                 TString{tableName},
-                                TEpochInfo::Parse(table.Epoch().Ref()));
+                                epoch);
 
                             if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), tableCluster, tableName,
                                 NYql::HasSetting(table.Settings().Ref(), EYtSettingType::WithQB), State_->AnonymousLabels, ctx)) {

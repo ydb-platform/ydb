@@ -463,14 +463,37 @@ private:
             return TStatus::Error;
         }
 
-        if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
+        const bool enableDynamicTablesWrite = State_->Configuration->_EnableDynamicTablesWrite.Get(cluster).GetOrElse(false);
+        bool notFlowDynamic = meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow;
+        if (notFlowDynamic) {
+            if (!enableDynamicTablesWrite) {
+                ctx.AddError(TIssue(pos, TStringBuilder() <<
+                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
+                return TStatus::Error;
+            }
+
+            if (mode != EYtWriteMode::Upsert && mode != EYtWriteMode::Renew) {
+                ctx.AddError(TIssue(pos, TStringBuilder() <<
+                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is supported only by UPSERT or INSERT WITH TRUNCATE"));
+                return TStatus::Error;
+            }
+        }
+        if (mode == EYtWriteMode::Upsert && !notFlowDynamic) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
-                "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
+                "Modification of static table " << outTableInfo.Name.Quote() << " is supported only by INSERT"));
             return TStatus::Error;
         }
 
-        const bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append && mode != EYtWriteMode::RenewKeepMeta);
-        bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append || mode == EYtWriteMode::RenewKeepMeta || description.IsReplaced);
+        bool insertWithTruncateIntoDynamicTable = (mode == EYtWriteMode::Renew && notFlowDynamic);
+        bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append
+            && mode != EYtWriteMode::Upsert
+            && !insertWithTruncateIntoDynamicTable
+            && mode != EYtWriteMode::RenewKeepMeta);
+        bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append
+            || mode == EYtWriteMode::RenewKeepMeta
+            || mode == EYtWriteMode::Upsert
+            || insertWithTruncateIntoDynamicTable
+            || description.IsReplaced);
 
         if (monotonicKeys && initialWrite && replaceMeta) {
             ctx.AddError(TIssue(pos, TStringBuilder()
@@ -715,8 +738,9 @@ private:
                 if (nextDescription.RowSpecSortReady) {
                     const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
                     for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                        const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
-                        const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
+                        const bool hasSortChanges = notFlowDynamic ? false : nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
+                        const bool breaksSorting = !notFlowDynamic && (hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false));
+
                         if (monotonicKeys) {
                             if (breaksSorting) {
                                 ctx.AddError(TIssue(pos, TStringBuilder()
@@ -750,7 +774,12 @@ private:
                                     warning << "unordered";
                                 }
                             } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
-                                warning << "Result table content will have non unique keys";
+                                if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
+                                    nextDescription.RowSpec->UniqueKeys = true;
+                                    warning << "Result write to dynamic table " << outTableInfo.Name.Quote() << " may fail because of non unique keys";
+                                } else {
+                                    warning << "Result table content will have non unique keys";
+                                }
                             }
 
                             if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {

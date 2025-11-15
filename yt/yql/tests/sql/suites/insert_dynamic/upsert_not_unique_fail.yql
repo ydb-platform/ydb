@@ -1,0 +1,10 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+/* ytfile can not - result error is yt specific */
+/* custom error:Execution of node: YtPublish!, Failed jobs limit exceeded: Duplicate key [0#"x"]*/
+use plato;
+
+upsert into Output (key)
+values ("x"), ("x");

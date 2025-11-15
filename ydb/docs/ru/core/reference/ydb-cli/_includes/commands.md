@@ -22,7 +22,7 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
-admin cluster bootstrap | Автоматическая инициализация автоматически собранного [кластера](../../../concepts/glossary.md#cluster)
+admin cluster bootstrap | Инициализация автоматически подготовленного [кластера](../../../concepts/glossary.md#cluster)
 [admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
 [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Возвращение [pile](../../../concepts/glossary.md#pile) в [кластер](../../../concepts/glossary.md#cluster) после обслуживания или восстановления
@@ -31,15 +31,15 @@ admin cluster bootstrap | Автоматическая инициализаци�
 [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Получение текущей динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
 [admin cluster config generate](../commands/configuration/cluster/generate.md) | Генерация динамической конфигурации из статической конфигурации запуска
 [admin cluster config replace](../commands/configuration/cluster/replace.md) | Замена динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
-admin cluster config resolve | Разрешение конфигурации [кластера](../../../concepts/glossary.md#cluster)
+admin cluster config resolve | Вычисление итоговой динамической конфигурации [кластера](../../../concepts/glossary.md#cluster) на основе базовой конфигурации и селекторов переопределения
 admin cluster config version | Отображение версии конфигурации [кластера](../../../concepts/glossary.md#cluster) на узлах
 [admin cluster dump](../export-import/tools-dump.md#cluster) | Выгрузка метаданных кластера в файловую систему
 [admin cluster restore](../export-import/tools-restore.md#cluster) | Восстановление метаданных кластера из файловой системы
 admin database config fetch | Получение текущей динамической конфигурации [базы данных](../../../concepts/glossary.md#database)
 admin database config generate | Генерация динамической конфигурации [базы данных](../../../concepts/glossary.md#database) из статической конфигурации запуска
 admin database config replace | Замена динамической конфигурации [базы данных](../../../concepts/glossary.md#database)
-admin database config resolve | Разрешение конфигурации [базы данных](../../../concepts/glossary.md#database)
-admin database config version | Отображение версии конфигурации [базы данных](../../../concepts/glossary.md#database) на узлах
+admin database config resolve | Вычисление итоговой динамической конфигурации [базы данных](../../../concepts/glossary.md#database) на основе базовой конфигурации и селекторов переопределения
+admin database config version | Отображение версии конфигурации [базы данных](../../../concepts/glossary.md#database)
 [admin database dump](../export-import/tools-dump.md#db) | Выгрузка метаданных и данных базы данных в файловую систему
 [admin database restore](../export-import/tools-restore.md#db) | Восстановление метаданных и данных базы данных из файловой системы
 [admin node config init](../commands/configuration/node/init.md) | Инициализация конфигурации [узла](../../../concepts/glossary.md#node)
@@ -55,7 +55,7 @@ auth get-token | Получение [аутентификационного то
 [config profile set](../profile/activate.md) | Активация [профиля](../profile/index.md)
 [config profile update](../profile/create.md) | Обновление существующего [профиля](../profile/index.md)
 debug latency | Проверка базовой задержки с переменным количеством параллельных запросов
-debug ping | Проверка доступности YDB
+debug ping | Проверка доступности {{ ydb-short-name }}
 [discovery list](../commands/discovery-list.md) | Список эндпоинтов
 [discovery whoami](../commands/discovery-whoami.md) | Проверка аутентификации
 [export s3](../export-import/export-s3.md) | Экспорт данных в хранилище S3
@@ -117,65 +117,65 @@ topic consumer describe | Описание [читателя](../../../concepts/
 [update](../commands/service.md) | Обновление {{ ydb-short-name }} CLI
 [version](../commands/service.md) | Вывод информации о версии {{ ydb-short-name }} CLI
 {% endif %}
-[workload clickbench init](../workload-click-bench.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки
-[workload clickbench import files](../workload-click-bench.md#load) | Загрузка набора данных Clickbench из файлов
-[workload clickbench run](../workload-click-bench.md#run) | Выполнение бенчмарка
-[workload clickbench clean](../workload-click-bench.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
-[workload kv init](../workload-kv.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для Key-Value нагрузки
-[workload kv run insert](../workload-kv.md#insert-kv) | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table)
-[workload kv run mixed](../workload-kv.md#mixed-kv) | Одновременная вставка и чтение кортежей с проверкой успешности чтения записанных данных
-[workload kv run read-rows](../workload-kv.md#read-rows-kv) | Создание ReadRows запросов, возвращающих строки по точному совпадению [первичного ключа](../../../concepts/glossary.md#primary-key)
-[workload kv run select](../workload-kv.md#select-kv) | Создание SELECT запросов, возвращающих строки по точному совпадению [первичного ключа](../../../concepts/glossary.md#primary-key)
-[workload kv run upsert](../workload-kv.md#upsert-kv) | Вставка кортежей (key1, key2, ... keyK, value1, value2, ... valueN) в [таблицу](../../../concepts/glossary.md#table)
-[workload kv clean](../workload-kv.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации Key-Value нагрузки
-workload log init| Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для Log-нагрузки
-workload log import generator | Генератор случайных логов
-workload log run bulk_upsert | Массовый upsert случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени
-workload log run delete | Удаление случайных строк из [таблицы](../../../concepts/glossary.md#table) около текущего времени
-workload log run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени
-workload log run select | SELECT некоторых агрегированных запросов
-workload log run upsert | Upsert случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени
-workload log clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации Log-нагрузки
-workload mixed init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для Mixed нагрузки
-workload mixed run bulk_upsert | Массовый upsert случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени
-workload mixed run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени
-workload mixed run select | Выборка случайных строк из [таблицы](../../../concepts/glossary.md#table)
-workload mixed run upsert | Обновление случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени
-workload mixed clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации Mixed нагрузки
-workload query clean | Удаление [таблиц](../../../concepts/glossary.md#table), используемых для нагрузочного тестирования
-workload query import | Заполнение [таблиц](../../../concepts/glossary.md#table) данными
-workload query init | Инициализация [таблиц](../../../concepts/glossary.md#table) и их конфигураций
-[workload query run](../commands/workload/index.md#subcommands) | Запуск нагрузочного тестирования
-[workload stock clean](../commands/workload/stock.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
-[workload stock init](../commands/workload/stock.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки
-[workload stock run add-rand-order](../commands/workload/stock.md#insert-random-order) | Вставка заказов со случайным ID без их обработки
-[workload stock run put-rand-order](../commands/workload/stock.md#submit-random-order) | Отправка случайных заказов с обработкой
-[workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Отправка заказов с одинаковыми продуктами с обработкой
-[workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | SELECT заказов случайного клиента
-[workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | SELECT заказов 10000-го клиента
-[workload topic clean](../workload-topic.md#clean) | Удаление [топика](../../../concepts/glossary.md#topic), созданного на этапе инициализации
-[workload topic init](../workload-topic.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) для нагрузки
-[workload topic run full](../workload-topic.md#run-full) | Полная нагрузка
-[workload topic run read](../workload-topic.md#run-read) | Нагрузка на чтение
-[workload topic run write](../workload-topic.md#run-write) | Нагрузка на запись
-[workload tpcc check](../workload-tpcc.md#consistency_check) | Проверка согласованности данных TPC-C
-[workload tpcc clean](../workload-tpcc.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных бенчмарком
-[workload tpcc import](../workload-tpcc.md#load) | Заполнение [таблиц](../../../concepts/glossary.md#table) начальными данными бенчмарка
-[workload tpcc init](../workload-tpcc.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для бенчмарка
-[workload tpcc run](../workload-tpcc.md#run) | Запуск бенчмарка
-[workload tpcds clean](../workload-tpcds.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
-[workload tpcds import generator](../workload-tpcds.md#load) | Генерация набора данных TPC-DS с помощью встроенного генератора
-[workload tpcds init](../workload-tpcds.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки
-[workload tpcds run](../workload-tpcds.md#run) | Выполнение бенчмарка
-[workload tpch clean](../workload-tpch.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
-[workload tpch import generator](../workload-tpch.md#load) | Генерация набора данных TPC-H с помощью встроенного генератора
-[workload tpch init](../workload-tpch.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки
-[workload tpch run](../workload-tpch.md#run) | Выполнение бенчмарка
-[workload transfer topic-to-table clean](../workload-transfer.md#clean) | Удаление объектов, созданных на этапе инициализации
-[workload transfer topic-to-table init](../workload-transfer.md#init) | Создание и инициализация объектов
-[workload transfer topic-to-table run](../workload-transfer.md#run) | Запуск нагрузки
-[workload vector clean](../commands/workload/index.md#subcommands) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
-[workload vector init](../commands/workload/index.md#subcommands) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки
-[workload vector run select](../commands/workload/index.md#subcommands) | Получение топ-K векторов
-[workload vector run upsert](../commands/workload/index.md#subcommands) | Upsert векторных строк в [таблицу](../../../concepts/glossary.md#table)
+[workload clickbench init](../workload-click-bench.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для нагрузки `Clickbench`
+[workload clickbench import files](../workload-click-bench.md#load) | Загрузка набора данных `Clickbench` из файлов
+[workload clickbench run](../workload-click-bench.md#run) | Выполнение бенчмарка `Clickbench`
+[workload clickbench clean](../workload-click-bench.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации нагрузки `Clickbench`
+[workload kv init](../workload-kv.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Key-Value` нагрузки
+[workload kv run upsert](../workload-kv.md#upsert-kv) | Вставка случайных кортежей в [таблицу](../../../concepts/glossary.md#table) при помощи конструкции `UPSERT` в `Key-Value` нагрузке
+[workload kv run insert](../workload-kv.md#insert-kv) | Вставка случайных кортежей в [таблицу](../../../concepts/glossary.md#table) при помощи конструкции `INSERT` в `Key-Value` нагрузке
+[workload kv run mixed](../workload-kv.md#mixed-kv) | Одновременная вставка и чтение кортежей с проверкой успешности чтения записанных данных в `Key-Value` нагрузке
+[workload kv run read-rows](../workload-kv.md#read-rows-kv) | Выполнение ReadRows запросов, возвращающих строки по точному совпадению [первичного ключа](../../../concepts/glossary.md#primary-key) в `Key-Value` нагрузке
+[workload kv run select](../workload-kv.md#select-kv) | Выборка данных, возвращающих строки по точному совпадению [первичного ключа](../../../concepts/glossary.md#primary-key) в `Key-Value` нагрузке
+[workload kv clean](../workload-kv.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Key-Value` нагрузки
+workload log init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Log` нагрузки
+workload log import generator | Генератор случайных данных в `Log` нагрузке
+workload log run bulk_upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
+workload log run delete | Удаление случайных строк из [таблицы](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
+workload log run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `INSERT`
+workload log run upsert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `INSERT`
+workload log run select | Выполнение набора аналитических запросов для анализа логов: подсчет записей, агрегация по уровням, сервисам и компонентам, анализ метаданных и временные диапазоны в `Log` нагрузке
+workload log clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Log` нагрузки
+workload mixed init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Mixed` нагрузки
+workload mixed run bulk_upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени с помощью команды `BULK_UPSERT` в `Mixed` нагрузке
+workload mixed run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени с помощью команды `INSERT` в `Mixed` нагрузке
+workload mixed run upsert | Обновление случайных строк в [таблице](../../../concepts/glossary.md#table) около текущего времени с помощью команды `UPSERT` в `Mixed` нагрузке
+workload mixed run select | Выборка случайных строк из [таблицы](../../../concepts/glossary.md#table) в `Mixed` нагрузке
+workload mixed clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Mixed` нагрузки
+workload query init | Инициализация [таблиц](../../../concepts/glossary.md#table) и их конфигураций для `Query` нагрузки
+workload query import | Заполнение [таблиц](../../../concepts/glossary.md#table) данными для `Query` нагрузки
+workload query run | Запуск нагрузочного тестирования `Query` нагрузки
+workload query clean | Удаление [таблиц](../../../concepts/glossary.md#table), используемых для `Query` нагрузки
+[workload stock init](../commands/workload/stock.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Stock` нагрузки
+[workload stock run add-rand-order](../commands/workload/stock.md#insert-random-order) | Вставка заказов со случайным ID без их обработки в `Stock` нагрузке
+[workload stock run put-rand-order](../commands/workload/stock.md#submit-random-order) | Отправка случайных заказов с обработкой в `Stock` нагрузке
+[workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Отправка заказов с одинаковыми продуктами в `Stock` нагрузке
+[workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Выборка заказов случайного клиента в `Stock` нагрузке
+[workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Выборка заказов 10000-го клиента в `Stock` нагрузке
+[workload stock clean](../commands/workload/stock.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
+[workload topic init](../workload-topic.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) для `Topic` нагрузки
+[workload topic run full](../workload-topic.md#run-full) | Выполнение полной нагрузки на [топик](../../../concepts/glossary.md#topic) с одновременным чтением и записью сообщений в `Topic` нагрузке
+[workload topic run read](../workload-topic.md#run-read) | Выполнение нагрузки на чтение сообщений из [топика](../../../concepts/glossary.md#topic) в `Topic` нагрузке
+[workload topic run write](../workload-topic.md#run-write) | Выполнение нагрузки на запись сообщений в [топик](../../../concepts/glossary.md#topic) в `Topic` нагрузке
+[workload topic clean](../workload-topic.md#clean) | Удаление [топика](../../../concepts/glossary.md#topic), созданного на этапе инициализации `Topic` нагрузки
+[workload tpcc init](../workload-tpcc.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для бенчмарка `TPC-C`
+[workload tpcc import](../workload-tpcc.md#load) | Заполнение [таблиц](../../../concepts/glossary.md#table) начальными данными бенчмарка `TPC-C`
+[workload tpcc check](../workload-tpcc.md#consistency_check) | Проверка согласованности данных `TPC-C`
+[workload tpcc run](../workload-tpcc.md#run) | Запуск бенчмарка `TPC-C`
+[workload tpcc clean](../workload-tpcc.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных бенчмарком `TPC-C`
+[workload tpcds init](../workload-tpcds.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для бенчмарка  `TPC-DS`
+[workload tpcds import generator](../workload-tpcds.md#load) | Генерация набора данных `TPC-DS` с помощью встроенного генератора
+[workload tpcds run](../workload-tpcds.md#run) | Выполнение бенчмарка `TPC-DS`
+[workload tpcds clean](../workload-tpcds.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `TPC-DS`
+[workload tpch init](../workload-tpch.md#init) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для бенчмарка `TPC-H`
+[workload tpch import generator](../workload-tpch.md#load) | Генерация набора данных `TPC-H` с помощью встроенного генератора
+[workload tpch run](../workload-tpch.md#run) | Выполнение бенчмарка `TPC-H`
+[workload tpch clean](../workload-tpch.md#cleanup) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `TPC-H`
+[workload transfer topic-to-table init](../workload-transfer.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) с консьюмерами и [таблиц](../../../concepts/glossary.md#table) для нагрузки на передачу данных из топика в таблицу
+[workload transfer topic-to-table run](../workload-transfer.md#run) | Запуск нагрузки с чтением сообщений из [топика](../../../concepts/glossary.md#topic) и записью в [таблицу](../../../concepts/glossary.md#table) в транзакциях
+[workload transfer topic-to-table clean](../workload-transfer.md#clean) | Удаление [топика](../../../concepts/glossary.md#topic) и [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
+[workload vector init](../commands/workload/index.md#subcommands) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Vector` нагрузки
+[workload vector run select](../commands/workload/index.md#subcommands) | Получение топ-K векторов в `Vector` нагрузке
+[workload vector run upsert](../commands/workload/index.md#subcommands) | Upsert векторных строк в [таблицу](../../../concepts/glossary.md#table) в `Vector` нагрузке
+[workload vector clean](../commands/workload/index.md#subcommands) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Vector` нагрузки
 [yql](../yql.md) | Выполнение YQL-скрипта с поддержкой стриминга (команда устарела, используйте [`ydb sql`](../sql.md))

@@ -9,10 +9,10 @@ class TBuildFilterTaskExecutor: public std::enable_shared_from_this<TBuildFilter
 private:
     inline static const ui64 BATCH_PORTIONS_COUNT_SOFT_LIMIT = 10;
 
-    TIntervalsInterator Portions;
+    TIntervalsIterator Portions;
 
 public:
-    TBuildFilterTaskExecutor(TIntervalsInterator&& portions)
+    TBuildFilterTaskExecutor(TIntervalsIterator&& portions)
         : Portions(std::move(portions))
     {
     }

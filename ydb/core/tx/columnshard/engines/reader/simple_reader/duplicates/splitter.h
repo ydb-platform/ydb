@@ -70,7 +70,7 @@ public:
     }
 };
 
-class TIntervalsInterator {
+class TIntervalsIterator {
     friend class TIntervalsIteratorBuilder;
 
 private:
@@ -111,13 +111,13 @@ private:
 
 private:
     YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
-    std::set<TPortionSpan, TIntervalsInterator::TPortionSpan::TComparatorByLeftBorder> Portions;
-    std::set<TPortionSpan, TIntervalsInterator::TPortionSpan::TComparatorByRightBorder> CurrentPortions;
+    std::set<TPortionSpan, TIntervalsIterator::TPortionSpan::TComparatorByLeftBorder> Portions;
+    std::set<TPortionSpan, TIntervalsIterator::TPortionSpan::TComparatorByRightBorder> CurrentPortions;
     ui64 NextInterval = 0;
 
 private:
-    TIntervalsInterator(
-        std::vector<TIntervalInfo>&& intervals, std::set<TPortionSpan, TIntervalsInterator::TPortionSpan::TComparatorByLeftBorder>&& portions)
+    TIntervalsIterator(
+        std::vector<TIntervalInfo>&& intervals, std::set<TPortionSpan, TIntervalsIterator::TPortionSpan::TComparatorByLeftBorder>&& portions)
         : Intervals(std::move(intervals))
         , Portions(std::move(portions))
     {
@@ -177,7 +177,7 @@ public:
 class TIntervalsIteratorBuilder {
 private:
     std::vector<TIntervalInfo> Intervals;
-    std::set<TIntervalsInterator::TPortionSpan, TIntervalsInterator::TPortionSpan::TComparatorByLeftBorder> Portions;
+    std::set<TIntervalsIterator::TPortionSpan, TIntervalsIterator::TPortionSpan::TComparatorByLeftBorder> Portions;
     THashMap<ui64, ui64> FirstIntervalByTrailingPortionId;
 
 public:
@@ -204,16 +204,16 @@ public:
         }
     }
 
-    TIntervalsInterator Build() {
+    TIntervalsIterator Build() {
         for (const auto& [portion, firstInterval] : FirstIntervalByTrailingPortionId) {
             AFL_VERIFY(Portions.emplace(portion, firstInterval, Intervals.size() - 1).second);
         }
         FirstIntervalByTrailingPortionId.clear();
 
-        return TIntervalsInterator(std::move(Intervals), std::move(Portions));
+        return TIntervalsIterator(std::move(Intervals), std::move(Portions));
     }
 
-    static TIntervalsInterator BuildFromSplitter(
+    static TIntervalsIterator BuildFromSplitter(
         const TColumnDataSplitter& splitter, const std::vector<ui32>& intervalIdxs, const ui64 basePortionId) {
         TIntervalsIteratorBuilder builder;
         auto intervalIt = intervalIdxs.begin();

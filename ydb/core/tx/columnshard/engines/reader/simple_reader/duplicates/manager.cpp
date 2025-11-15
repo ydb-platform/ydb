@@ -91,7 +91,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     return;
 }
 
-TIntervalsInterator TDuplicateManager::StartIntervalProcessing(
+TIntervalsIterator TDuplicateManager::StartIntervalProcessing(
     const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor) {
     const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetSourceId());
     THashMap<ui64, TSortableBorders> materializedBorders;
@@ -158,7 +158,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     ("source", constructor->GetRequest()->Get()->GetSourceId())("intersecting_portions", intersectingPortions.size());
     AFL_VERIFY(intersectingPortions.size());
 
-    TIntervalsInterator intervalsIterator = StartIntervalProcessing(intersectingPortions, constructor);
+    TIntervalsIterator intervalsIterator = StartIntervalProcessing(intersectingPortions, constructor);
 
     if (!intervalsIterator.IsDone()) {
         THashMap<ui64, TPortionInfo::TConstPtr> portionsToFetch;

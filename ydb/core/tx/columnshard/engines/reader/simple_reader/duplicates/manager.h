@@ -203,7 +203,7 @@ private:
         return result;
     }
 
-    TIntervalsInterator StartIntervalProcessing(
+    TIntervalsIterator StartIntervalProcessing(
         const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor);
 
 public:

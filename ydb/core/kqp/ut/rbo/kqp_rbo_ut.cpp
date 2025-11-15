@@ -609,6 +609,21 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 SET TablePathPrefix = "/Root/";
                 select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from t1 group by t1.b order by sumExpr0;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from t1 group by t1.b + 1 order by sum0;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.c) as sum0, t1.b + 1, t1.c + 2 from t1 group by t1.b + 1, t1.c + 2 order by sum0;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.c + 2) as sum0 from t1 group by t1.b + t1.a order by sum0;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -625,7 +640,10 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
             R"([["4";"4"];["6";"6"]])",
             R"([["0";"4"];["1";"3"]])",
-            R"([["10";"8"];["15";"12"]])"
+            R"([["10";"8"];["15";"12"]])",
+            R"([["4";"10"];["6";"15"]])",
+            R"([["4";"2";"4"];["6";"3";"4"]])",
+            R"([["4"];["8"];["8"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

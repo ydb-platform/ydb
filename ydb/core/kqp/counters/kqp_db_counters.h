@@ -77,6 +77,8 @@ namespace NKqp {
     XX(DB_KQP_COMPILE_REQ_INVALIDATE, CompileRequestsInvalidate) \
     XX(DB_KQP_COMPILE_REQ_REJECTED, CompileRequestsRejected) \
     XX(DB_KQP_COMPILE_REQ_TIMEOUT, CompileRequestsTimeout) \
+    XX(DB_KQP_COMPILE_ENFORCE_CONFIG_SUCCESS, CompileEnforceConfigSuccess) \
+    XX(DB_KQP_COMPILE_ENFORCE_CONFIG_FAILED, CompileEnforceConfigFailed) \
     XX(DB_KQP_COMPILE_TOTAL, CompileTotal) \
     XX(DB_KQP_COMPILE_ERRORS, CompileErrors) \
     XX(DB_KQP_DEPRECATED1, &DeprecatedCounter) \

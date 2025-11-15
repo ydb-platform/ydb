@@ -437,4 +437,6 @@ message TTableServiceConfig {
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
 };

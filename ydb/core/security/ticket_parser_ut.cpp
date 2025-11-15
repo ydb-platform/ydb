@@ -166,6 +166,141 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT(result->Token->IsExist("group1"));
     }
 
+    Y_UNIT_TEST(LoginGoodWithDelayUpdateSecurityState) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        authConfig.SetDomainLoginOnly(false);
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        {
+            NLogin::TLoginProvider loginProviderDb1;
+            loginProviderDb1.Audience = "/Root/Db1";
+            loginProviderDb1.RotateKeys();
+
+            TActorId sender = runtime->AllocateEdgeActor();
+
+            loginProviderDb1.CreateGroup({.Group = "group1"});
+            loginProviderDb1.CreateUser({.User = "user1", .Password = "password1"});
+            loginProviderDb1.AddGroupMembership({.Group = "group1", .Member = "user1"});
+
+
+            auto loginResponse = loginProviderDb1.LoginUser({.User = "user1", .Password = "password1"});
+
+            UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
+
+            // Send token without type
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = loginResponse.Token, .Database = "/Root/Db1"})), 0);
+            Sleep(TDuration::Seconds(1));
+            // Send update security state in 1 second after send TEvAuthorizeTicket
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb1.GetSecurityState())), 0);
+
+            TAutoPtr<IEventHandle> handle;
+
+            TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT(result->Error.empty());
+            UNIT_ASSERT(result->Token != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
+            UNIT_ASSERT(result->Token->IsExist("group1"));
+        }
+
+        {
+            NLogin::TLoginProvider loginProviderDb2;
+            loginProviderDb2.Audience = "/Root/Db2";
+            loginProviderDb2.RotateKeys();
+
+            TActorId sender = runtime->AllocateEdgeActor();
+
+            loginProviderDb2.CreateGroup({.Group = "group1"});
+            loginProviderDb2.CreateUser({.User = "user1", .Password = "password1"});
+            loginProviderDb2.AddGroupMembership({.Group = "group1", .Member = "user1"});
+
+
+            auto loginResponse = loginProviderDb2.LoginUser({.User = "user1", .Password = "password1"});
+
+            UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
+
+            // Send token with type Login
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = "Login " + loginResponse.Token, .Database = "/Root/Db2"})), 0);
+            Sleep(TDuration::Seconds(1));
+            // Send update security state in 1 second after send TEvAuthorizeTicket
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb2.GetSecurityState())), 0);
+
+            TAutoPtr<IEventHandle> handle;
+
+            TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT(result->Error.empty());
+            UNIT_ASSERT(result->Token != nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "user1");
+            UNIT_ASSERT(result->Token->IsExist("group1"));
+        }
+    }
+
+    Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
+        using namespace Tests;
+        TPortManager tp;
+        ui16 kikimrPort = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        NKikimrProto::TAuthConfig authConfig;
+        authConfig.SetUseBlackBox(false);
+        authConfig.SetUseLoginProvider(true);
+        authConfig.SetDomainLoginOnly(false);
+        auto settings = TServerSettings(kikimrPort, authConfig);
+        settings.SetDomainName("Root");
+        settings.CreateTicketParser = NKikimr::CreateTicketParser;
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+        server.GetRuntime()->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+        TClient client(settings);
+        NClient::TKikimr kikimr(client.GetClientConfig());
+        client.InitRootScheme();
+        TTestActorRuntime* runtime = server.GetRuntime();
+
+        NLogin::TLoginProvider loginProviderDb1;
+        loginProviderDb1.Audience = "/Root/Db1";
+        loginProviderDb1.RotateKeys();
+
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        loginProviderDb1.CreateGroup({.Group = "group1"});
+        loginProviderDb1.CreateUser({.User = "user1", .Password = "password1"});
+        loginProviderDb1.AddGroupMembership({.Group = "group1", .Member = "user1"});
+
+
+        auto loginResponse = loginProviderDb1.LoginUser({.User = "user1", .Password = "password1"});
+
+        UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
+
+        // Send token without type
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({.Ticket = loginResponse.Token, .Database = "/Root/Db1"})), 0);
+        // Do no send update security state
+        // runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(loginProviderDb1.GetSecurityState())), 0);
+
+        TAutoPtr<IEventHandle> handle;
+
+        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        UNIT_ASSERT(!result->Error.empty());
+        UNIT_ASSERT(result->Token == nullptr);
+        UNIT_ASSERT_EQUAL_C(result->Error.Message, "Login state is not available", result->Error);
+        UNIT_ASSERT_EQUAL_C(result->Error.Retryable, false, result->Error.Retryable);
+    }
+
+
     Y_UNIT_TEST(LoginBad) {
         using namespace Tests;
         TPortManager tp;

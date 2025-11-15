@@ -25,24 +25,23 @@
  *
  ***************************************************************************/
 
-#include "curl_setup.h"
+#include "../curl_setup.h"
 
 #if !defined(CURL_DISABLE_IMAP) || !defined(CURL_DISABLE_SMTP) ||       \
   !defined(CURL_DISABLE_POP3) || \
   (!defined(CURL_DISABLE_LDAP) && defined(USE_OPENLDAP))
 
 #include <curl/curl.h>
-#include "urldata.h"
+#include "../urldata.h"
 
-#include "vauth/vauth.h"
-#include "warnless.h"
-#include "strtok.h"
-#include "sendf.h"
-#include "curl_printf.h"
+#include "vauth.h"
+#include "../curlx/warnless.h"
+#include "../sendf.h"
+#include "../curl_printf.h"
 
 /* The last #include files should be: */
-#include "curl_memory.h"
-#include "memdebug.h"
+#include "../curl_memory.h"
+#include "../memdebug.h"
 
 /*
  * Curl_auth_create_plain_message()
@@ -75,8 +74,8 @@ CURLcode Curl_auth_create_plain_message(const char *authzid,
   plen = strlen(passwd);
 
   /* Compute binary message length. Check for overflows. */
-  if((zlen > SIZE_T_MAX/4) || (clen > SIZE_T_MAX/4) ||
-     (plen > (SIZE_T_MAX/2 - 2)))
+  if((zlen > SIZE_MAX/4) || (clen > SIZE_MAX/4) ||
+     (plen > (SIZE_MAX/2 - 2)))
     return CURLE_OUT_OF_MEMORY;
   plainlen = zlen + clen + plen + 2;
 
@@ -100,39 +99,38 @@ CURLcode Curl_auth_create_plain_message(const char *authzid,
  * Curl_auth_create_login_message()
  *
  * This is used to generate an already encoded LOGIN message containing the
- * user name or password ready for sending to the recipient.
+ * username or password ready for sending to the recipient.
  *
  * Parameters:
  *
- * valuep  [in]     - The user name or user's password.
+ * valuep  [in]     - The username or user's password.
  * out     [out]    - The result storage.
  *
- * Returns CURLE_OK on success.
+ * Returns void.
  */
-CURLcode Curl_auth_create_login_message(const char *valuep, struct bufref *out)
+void Curl_auth_create_login_message(const char *valuep, struct bufref *out)
 {
   Curl_bufref_set(out, valuep, strlen(valuep), NULL);
-  return CURLE_OK;
 }
 
 /*
  * Curl_auth_create_external_message()
  *
  * This is used to generate an already encoded EXTERNAL message containing
- * the user name ready for sending to the recipient.
+ * the username ready for sending to the recipient.
  *
  * Parameters:
  *
- * user    [in]     - The user name.
+ * user    [in]     - The username.
  * out     [out]    - The result storage.
  *
- * Returns CURLE_OK on success.
+ * Returns void.
  */
-CURLcode Curl_auth_create_external_message(const char *user,
-                                           struct bufref *out)
+void Curl_auth_create_external_message(const char *user,
+                                       struct bufref *out)
 {
   /* This is the same formatting as the login message */
-  return Curl_auth_create_login_message(user, out);
+  Curl_auth_create_login_message(user, out);
 }
 
 #endif /* if no users */

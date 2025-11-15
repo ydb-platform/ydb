@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: trio
-Version: 0.31.0
+Version: 0.32.0
 Summary: A friendly Python library for async concurrency and I/O
 Author-email: "Nathaniel J. Smith" <njs@pobox.com>
 License-Expression: MIT OR Apache-2.0
@@ -18,14 +18,14 @@ Classifier: Operating System :: Microsoft :: Windows
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: System :: Networking
 Classifier: Typing :: Typed
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: LICENSE.APACHE2
@@ -133,7 +133,7 @@ demonstration of implementing the "Happy Eyeballs" algorithm in an
 older library versus Trio.
 
 **Cool, but will it work on my system?** Probably! As long as you have
-some kind of Python 3.9-or-better (CPython or `currently maintained versions of
+some kind of Python 3.10-or-better (CPython or `currently maintained versions of
 PyPy3 <https://doc.pypy.org/en/latest/faq.html#which-python-versions-does-pypy-implement>`__
 are both fine), and are using Linux, macOS, Windows, or FreeBSD, then Trio
 will work. Other environments might work too, but those

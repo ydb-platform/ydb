@@ -182,8 +182,8 @@ private:
 
 public:
     void AppendInterval(const TIntervalBorder& begin, const TIntervalBorder& end, const THashSet<ui64>& portions) {
-        AFL_VERIFY(Intervals.empty() || Intervals.front().GetEnd().IsEquivalent(begin) || Intervals.front().GetEnd() < begin)(
-                                                                                          "last", Intervals.front().GetEnd().DebugString())(
+        AFL_VERIFY(Intervals.empty() || Intervals.back().GetEnd().IsEquivalent(begin) || Intervals.back().GetEnd() < begin)(
+                                                                                          "last", Intervals.back().GetEnd().DebugString())(
                                                                                           "new", begin.DebugString());
         const ui64 currentIntervalIdx = Intervals.size();
         Intervals.emplace_back(begin, end, portions);

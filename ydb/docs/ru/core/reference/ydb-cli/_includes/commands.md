@@ -26,7 +26,7 @@ admin cluster bootstrap | Инициализация автоматически 
 [admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
 [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Возвращение [pile](../../../concepts/glossary.md#pile) в [кластер](../../../concepts/glossary.md#cluster) после обслуживания или восстановления
-[admin cluster bridge switchover](../commands/bridge/switchover.md) | Плановая смена PRIMARY [pile](../../../concepts/glossary.md#pile)
+[admin cluster bridge switchover](../commands/bridge/switchover.md) | Плановая смена `PRIMARY` [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge takedown](../commands/bridge/takedown.md) | Вывод [pile](../../../concepts/glossary.md#pile) из [кластера](../../../concepts/glossary.md#cluster) для обслуживания
 [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Получение текущей динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
 [admin cluster config generate](../commands/configuration/cluster/generate.md) | Генерация динамической конфигурации из статической конфигурации запуска
@@ -133,7 +133,7 @@ workload log import generator | Генератор случайных данны
 workload log run bulk_upsert | Массовая вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
 workload log run delete | Удаление случайных строк из [таблицы](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке
 workload log run insert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `INSERT`
-workload log run upsert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `INSERT`
+workload log run upsert | Вставка случайных строк в [таблицу](../../../concepts/glossary.md#table) около текущего времени в `Log` нагрузке с помощью команды `UPSERT`
 workload log run select | Выполнение набора аналитических запросов для анализа логов: подсчет записей, агрегация по уровням, сервисам и компонентам, анализ метаданных и временные диапазоны в `Log` нагрузке
 workload log clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Log` нагрузки
 workload mixed init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Mixed` нагрузки
@@ -174,8 +174,8 @@ workload query clean | Удаление [таблиц](../../../concepts/glossar
 [workload transfer topic-to-table init](../workload-transfer.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) с консьюмерами и [таблиц](../../../concepts/glossary.md#table) для нагрузки на передачу данных из топика в таблицу
 [workload transfer topic-to-table run](../workload-transfer.md#run) | Запуск нагрузки с чтением сообщений из [топика](../../../concepts/glossary.md#topic) и записью в [таблицу](../../../concepts/glossary.md#table) в транзакциях
 [workload transfer topic-to-table clean](../workload-transfer.md#clean) | Удаление [топика](../../../concepts/glossary.md#topic) и [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации
-[workload vector init](../commands/workload/index.md#subcommands) | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Vector` нагрузки
-[workload vector run select](../commands/workload/index.md#subcommands) | Получение топ-K векторов в `Vector` нагрузке
-[workload vector run upsert](../commands/workload/index.md#subcommands) | Upsert векторных строк в [таблицу](../../../concepts/glossary.md#table) в `Vector` нагрузке
-[workload vector clean](../commands/workload/index.md#subcommands) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Vector` нагрузки
+workload vector init | Создание и инициализация [таблиц](../../../concepts/glossary.md#table) для `Vector` нагрузки
+workload vector run select | Получение топ-K векторов в `Vector` нагрузке
+workload vector run upsert | Upsert векторных строк в [таблицу](../../../concepts/glossary.md#table) в `Vector` нагрузке
+workload vector clean | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Vector` нагрузки
 [yql](../yql.md) | Выполнение YQL-скрипта с поддержкой стриминга (команда устарела, используйте [`ydb sql`](../sql.md))

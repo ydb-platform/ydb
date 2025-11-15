@@ -46,7 +46,7 @@ namespace {
         const auto opId = TOperationId(item.WaitTxId, FirstSubTxId);
         if (item.WaitTxId != InvalidTxId && ss->TxInFlight.contains(opId)) {
             const auto& txState = ss->TxInFlight.at(opId);
-            if (txState.TxType != TTxState::TxBackup) {
+            if (txState.TxType != TTxState::TxRestore) {
                 return;
             }
 
@@ -54,6 +54,10 @@ namespace {
             itemProgress.set_parts_completed(txState.Shards.size() - txState.ShardsInProgress.size());
             *itemProgress.mutable_start_time() = SecondsToProtoTimeStamp(txState.StartTime.Seconds());
         } else {
+            if (!ss->Tables.contains(item.DstPathId)) {
+                return;
+            }
+
             auto table = ss->Tables.at(item.DstPathId);
             auto it = table->RestoreHistory.end();
             if (item.WaitTxId != InvalidTxId) {
@@ -132,6 +136,9 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
         break;
 
     case TImportInfo::EState::Done:
+        for (ui32 itemIdx : xrange(importInfo.Items.size())) {
+            FillItemProgress(this, importInfo, itemIdx, *import.AddItemsProgress());
+        }
         import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
         break;
 

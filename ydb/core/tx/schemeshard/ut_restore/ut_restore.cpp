@@ -16,6 +16,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/util/aws.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
@@ -4337,6 +4338,86 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::PRECONDITION_FAILED);
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
+    }
+
+    Y_UNIT_TEST(CheckItemProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.UpdateCurrentTime(TInstant::Now());
+        ui64 txId = 100;
+
+        TBlockEvents<NWrappers::NExternalStorage::TEvGetObjectRequest> blockPartition01(runtime, [](const NWrappers::NExternalStorage::TEvGetObjectRequest::TPtr& ev) {
+            return ev->Get()->Request.GetKey() == "/data_01.csv";
+        });
+
+        const auto data = GenerateTestData(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            partition_at_keys {
+                split_points {
+                    type { tuple_type { elements { optional_type { item { type_id: UTF8 } } } } }
+                    value { items { text_value: "b" } }
+                }
+            }
+            primary_key: "key"
+        )", {{"a", 1}, {"b", 1}});
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("get object request into 01 partition", [&]{ return blockPartition01.size() >= 1; });
+        bool isCompleted = false;
+
+        while (!isCompleted) {
+            const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+            const auto entry = desc.GetResponse().GetEntry();
+
+            const auto item = entry.GetItemsProgress(0);
+            if (item.parts_completed() > 0) {
+                isCompleted = true;
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
+                UNIT_ASSERT(item.has_start_time());
+            } else {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        blockPartition01.Stop();
+        blockPartition01.Unblock();
+
+        env.TestWaitNotification(runtime, txId);
+
+        const auto desc = TestGetImport(runtime, txId, "/MyRoot");
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+
+        const auto& item = entry.GetItemsProgress(0);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 2);
+        UNIT_ASSERT(item.has_start_time());
+        UNIT_ASSERT(item.has_end_time());
     }
 
     Y_UNIT_TEST(UidAsIdempotencyKey) {

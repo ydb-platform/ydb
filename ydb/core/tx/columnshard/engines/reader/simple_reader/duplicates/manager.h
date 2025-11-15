@@ -4,6 +4,7 @@
 #include "context.h"
 #include "events.h"
 #include "private_events.h"
+#include "splitter.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
@@ -56,6 +57,55 @@ private:
         }
     };
 
+    class TIntervalInFlightInfo {
+    private:
+        THashMap<ui64, std::vector<TIntervalFilterCallback>> SubscribersByPortion;
+        std::shared_ptr<TJobStatus> Job;
+
+    public:
+        TIntervalInFlightInfo() = default;
+
+        void SetJob(const std::shared_ptr<TJobStatus>& job) {
+            AFL_VERIFY(!Job);
+            AFL_VERIFY(job);
+            Job = job;
+        }
+
+        void AddSubscriber(ui64 portionId, TIntervalFilterCallback&& callback) {
+            AFL_VERIFY(SubscribersByPortion.emplace(portionId, std::vector<TIntervalFilterCallback>({std::move(callback)})).second);
+        }
+
+        bool OnFilterReady(const ui64 portionId, const NArrow::TColumnFilter& filter) {
+            if (auto findPortion = SubscribersByPortion.find(portionId); findPortion != SubscribersByPortion.end()) {
+                for (auto&& subscriber : findPortion->second) {
+                    subscriber.OnFilterReady(filter);
+                }
+                SubscribersByPortion.erase(findPortion);
+                return true;
+            }
+            return false;
+        }
+        void OnError(const TString& error) {
+            for (auto&& [_, subscribers] : SubscribersByPortion) {
+                for (auto&& subscriber : subscribers) {
+                    subscriber.OnError(error);
+                }
+            }
+            SubscribersByPortion.clear();
+        }
+
+        bool IsDone() const {
+            return SubscribersByPortion.empty();
+        }
+
+        void ValidateProgress() const {
+            if (!SubscribersByPortion.empty()) {
+                AFL_VERIFY(Job);
+                AFL_VERIFY(!Job->IsDone());
+            }
+        }
+    };
+
 private:
     inline static const ui64 FILTER_CACHE_SIZE = 10000000;  // 10 MiB
     inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
@@ -71,7 +121,7 @@ private:
 
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
     TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
-    THashMap<TIntervalBordersView, THashMap<ui64, std::vector<TIntervalFilterCallback>>> IntervalsInFlight;
+    THashMap<TIntervalBordersView, TIntervalInFlightInfo> IntervalsInFlight;
     ui64 ExpectedIntersectionCount = 0;
 
 private:
@@ -95,6 +145,11 @@ private:
     }
 
     bool IsExclusiveInterval(const NArrow::TSimpleRow& begin, const NArrow::TSimpleRow& end) const;
+    void ValidateInFlightProgress() const {
+        for (const auto& [_, inFlight] : IntervalsInFlight) {
+            inFlight.ValidateProgress();
+        }
+    }
 
 private:
     STATEFN(StateMain) {
@@ -116,12 +171,8 @@ private:
     }
 
     void AbortAndPassAway(const TString& reason) {
-        for (auto& [_, callbacksByPortion] : IntervalsInFlight) {
-            for (auto& [_, callbacks] : callbacksByPortion) {
-                for (auto& callback : callbacks) {
-                    callback.OnError(reason);
-                }
-            }
+        for (auto& [_, info] : IntervalsInFlight) {
+            info.OnError(reason);
         }
         PassAway();
     }
@@ -152,8 +203,8 @@ private:
         return result;
     }
 
-    void StartIntervalProcessing(const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor,
-        THashSet<ui64>& portionIdsToFetch, std::vector<TIntervalInfo>& intervalsToBuild);
+    TIntervalsIterator StartIntervalProcessing(
+        const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor);
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

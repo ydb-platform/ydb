@@ -1,7 +1,6 @@
 #pragma once
 
 #include "events.h"
-#include "splitter.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -128,54 +127,99 @@ public:
     }
 };
 
-class TBuildFilterContext: NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, TMoveOnly {
+class TJobStatus {
+public:
+    class TResultInFlightGuard: public TMoveOnly {
+    private:
+        std::shared_ptr<TJobStatus> Owner;
+
+    public:
+        TResultInFlightGuard(const std::shared_ptr<TJobStatus>& owner)
+            : Owner(owner)
+        {
+            AFL_VERIFY(Owner);
+            Owner->ResultsInFlight.Inc();
+        }
+
+        TResultInFlightGuard(TResultInFlightGuard&& other) = default;
+        TResultInFlightGuard& operator=(TResultInFlightGuard&& other) = default;
+
+        ~TResultInFlightGuard() {
+            if (Owner) {
+                Owner->ResultsInFlight.Dec();
+            }
+        }
+    };
+
+private:
+    std::atomic_bool IsDoneFlag = false;
+    TAtomicCounter ResultsInFlight;
+
+public:
+    bool IsDone() const {
+        return IsDoneFlag.load() && !ResultsInFlight.Val();
+    }
+
+    void OnDone() {
+        AFL_VERIFY(!IsDoneFlag.exchange(true));
+    }
+};
+
+class TBuildFilterContext: public NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, public TMoveOnly {
 private:
     using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
     using TPortionIndex = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_READONLY_DEF(TActorId, Owner);
-    YDB_READONLY_DEF(std::shared_ptr<TFilterAccumulator>, Context);
-    YDB_READONLY_DEF(TPortionIndex, RequiredPortions);
-    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
+    YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
+    TSnapshot MaxVersion;
+    TPortionIndex RequiredPortions;
     YDB_READONLY_DEF(TFieldByColumn, Columns);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, SnapshotSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
     YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
+    YDB_READONLY_DEF(std::shared_ptr<TJobStatus>, Status);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
 
 public:
-    TBuildFilterContext(const TActorId owner, const std::shared_ptr<TFilterAccumulator>& context, TPortionIndex&& portions,
-        std::vector<TIntervalInfo>&& intervals, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
-        const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
+    TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TSnapshot& maxVersion,
+        TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
+        const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
         : Owner(owner)
-        , Context(context)
+        , AbortionFlag(abortionFlag)
+        , MaxVersion(maxVersion)
         , RequiredPortions(std::move(portions))
-        , Intervals(std::move(intervals))
         , Columns(columns)
         , PKSchema(pkSchema)
+        , SnapshotSchema(snapshotSchema)
         , ColumnDataManager(columnDataManager)
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
         , RequestGuard(std::move(requestGuard))
+        , Status(std::make_shared<TJobStatus>())
         , SelfMemory(contextMemory)
     {
         AFL_VERIFY(Owner);
-        AFL_VERIFY(Context);
         AFL_VERIFY(RequiredPortions.size());
-        AFL_VERIFY(Intervals.size());
         AFL_VERIFY(Columns.size());
+        AFL_VERIFY(PKSchema);
+        AFL_VERIFY(SnapshotSchema);
         AFL_VERIFY(ColumnDataManager);
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(Counters);
         AFL_VERIFY(SelfMemory);
-        for (ui64 i = 1; i < Intervals.size(); ++i) {
-            AFL_VERIFY_DEBUG(
-                Intervals[i - 1].GetEnd() < Intervals[i].GetBegin() || Intervals[i - 1].GetEnd().IsEquivalent(Intervals[i].GetBegin()));
-        }
+    }
+
+    TBuildFilterContext(TBuildFilterContext&& other) = default;
+    TBuildFilterContext& operator=(TBuildFilterContext&& other) = default;
+
+    TJobStatus::TResultInFlightGuard MakeResultInFlightGuard() const {
+        return TJobStatus::TResultInFlightGuard(Status);
     }
 
     std::set<ui32> GetFetchingColumnIds() const {
@@ -188,9 +232,13 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << '{';
-        sb << "intervals=" << Intervals.size() << ';';
-        sb << '}';
+        sb << "{";
+        sb << "portions=[";
+        for (const auto& [id, _] : RequiredPortions) {
+            sb << id << ";";
+        }
+        sb << "]";
+        sb << "}";
         return sb;
     }
 
@@ -199,8 +247,23 @@ public:
                (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
     }
     ui64 GetDataSize() const {
-        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr)) + Intervals.capacity() * sizeof(TIntervalInfo) +
-               Context->GetDataSize();
+        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
+    }
+
+    TPortionInfo::TConstPtr GetPortion(const ui64 portionId) const {
+        auto* findPortion = RequiredPortions.FindPtr(portionId);
+        AFL_VERIFY(findPortion)("id", portionId)("context", DebugString());
+        return *findPortion;
+    }
+
+    const TSnapshot& GetMaxVersion() const {
+        return MaxVersion;
+    }
+
+    ~TBuildFilterContext() {
+        if (Status) {
+            Status->OnDone();
+        }
     }
 };
 

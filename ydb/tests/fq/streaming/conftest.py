@@ -32,7 +32,7 @@ class YdbClient:
         return self.session_pool.execute_with_retries_async(statement)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def kikimr(request):
 
     class Kikimr:

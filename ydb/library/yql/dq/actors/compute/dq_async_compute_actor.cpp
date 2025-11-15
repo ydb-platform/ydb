@@ -383,7 +383,7 @@ private:
                 html << "DqOutputChannel.OutputType: " << (channel->GetOutputType() ? channel->GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
 
                 const auto& pushStats = channel->GetPushStats();
-                dumpOutputStats("DqOutputChannel.PushStats."sv, pushStats);
+                dumpAsyncStats("DqOutputChannel.PushStats."sv, pushStats);
 
                 const auto& popStats = channel->GetPopStats();
                 html << "DqOutputChannel.PopStats.ChannelId: " << popStats.ChannelId << "<br />";
@@ -413,7 +413,7 @@ private:
                 html << "DqOutputBuffer.HasData: " << buffer.HasData() << "<br />";
 
                 const auto& pushStats = buffer.GetPushStats();
-                dumpOutputStats("DqOutputBuffer.PushStats."sv, pushStats);
+                dumpAsyncStats("DqOutputBuffer.PushStats."sv, pushStats);
 
                 const auto& popStats = buffer.GetPopStats();
                 dumpOutputStats("DqOutputBuffer.PopStats."sv, popStats);

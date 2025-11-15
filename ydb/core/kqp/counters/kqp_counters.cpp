@@ -743,6 +743,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     YdbGroup = GetServiceCounters(counters, "ydb");
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
     WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
+    ChannelGroup = KqpGroup->GetSubgroup("subsystem", "compute_channels");
 
     Init();
 
@@ -924,6 +925,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     return WorkloadManagerGroup;
 }
 
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetChannelCounters() const {
+    return ChannelGroup;
+}
 
 void TKqpCounters::ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportProxyForwardedRequest();

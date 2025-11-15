@@ -12,6 +12,10 @@
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
+#include <ydb/library/actors/core/log.h>
+
+#define LOGA_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_CHANNELS, stream)
+
 namespace NYql::NDq {
 
 using namespace NKikimr;
@@ -25,7 +29,7 @@ class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamVal
     using TBase = TComputationValue<TDqInputUnionStreamValue<IsWide>>;
 public:
     TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-        TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed)
+        TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed, ui32& channelId)
         : TBase(memInfo)
         , Inputs(std::move(inputs))
         , Alive(Inputs.size())
@@ -33,11 +37,15 @@ public:
         , Stats(stats)
         , StartTs(startTs)
         , InputConsumed(inputConsumed)
+        , ChannelId(channelId)
     {}
 
 private:
     NUdf::EFetchStatus Fetch(NKikimr::NUdf::TUnboxedValue& result) final {
         MKQL_ENSURE(!IsWide, "Using Fetch() on wide input");
+        if (ChannelId) {
+            LOGA_D("TDqInputUnionStreamValue::Fetch, " << ChannelId);
+        }
         if (Batch.empty()) {
             auto status = FindBuffer();
             switch (status) {
@@ -79,6 +87,9 @@ private:
                     }
                     [[fallthrough]];
                 case NUdf::EFetchStatus::Yield:
+                    if (ChannelId) {
+                        LOGA_D("TDqInputUnionStreamValue::WideFetch, ChannelId=" << ChannelId << ", status=" << (int)status);
+                    }
                     return status;
             }
         }
@@ -95,6 +106,9 @@ private:
             StartTs = Now();
         }
         InputConsumed = true;
+        if (ChannelId) {
+            LOGA_D("TDqInputUnionStreamValue::WideFetch, ChannelId=" << ChannelId << ", status=" << (int)NUdf::EFetchStatus::Ok);
+        }
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -129,6 +143,7 @@ private:
     TDqMeteringStats::TInputStatsMeter Stats;
     TInstant& StartTs;
     bool& InputConsumed;
+    ui32& ChannelId;
 };
 
 template<bool IsWide>
@@ -785,18 +800,18 @@ void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue*
 }
 
 NUdf::TUnboxedValue CreateInputUnionValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
-    const NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed)
+    const NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats, TInstant& startTs, bool& inputConsumed, ui32& channelId)
 {
     ValidateInputTypes(type, inputs);
     if (type->IsMulti()) {
-        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed);
+        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed, channelId);
     }
-    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputConsumed);
+    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputConsumed, channelId);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TType* type, TVector<IDqInput::TPtr>&& inputs,
     TVector<TSortColumnInfo>&& sortCols, const NKikimr::NMiniKQL::THolderFactory& factory, TDqMeteringStats::TInputStatsMeter stats,
-    TInstant& startTs, bool& inputConsumed, NUdf::IPgBuilder* pgBuilder)
+    TInstant& startTs, bool& inputConsumed, ui32& channelId, NUdf::IPgBuilder* pgBuilder)
 {
     ValidateInputTypes(type, inputs);
     YQL_ENSURE(!inputs.empty());
@@ -805,7 +820,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(const NKikimr::NMiniKQL::TTyp
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputConsumed, channelId);
             }
             return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputConsumed, pgBuilder);
         }

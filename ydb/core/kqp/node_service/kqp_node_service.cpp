@@ -509,6 +509,19 @@ private:
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
+
+        const TCgiParameters &cgi = ev->Get()->Request.GetParams();
+        auto caId = cgi.Get("ca");
+        if (caId) {
+            for (auto& bucket : State_->Buckets) {
+                TActorId id;
+                if (bucket.FindCaId(caId, id)) {
+                    TActivationContext::Send(ev->Forward(id));
+                    return;
+                }
+            }
+        }
+
         TStringStream str;
         HTML(str) {
             PRE() {

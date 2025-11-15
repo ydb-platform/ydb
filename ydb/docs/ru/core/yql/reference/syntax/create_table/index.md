@@ -14,12 +14,12 @@
 
 {% endif %}
 
+```yql
     CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
+        column2 type2 column_option_list
         ...
         columnN typeN,
-{% if feature_secondary_index == true %}
         INDEX `<index_name>`
           [GLOBAL|LOCAL]
           [UNIQUE]
@@ -29,22 +29,52 @@
           [COVER ( <cover_columns> )]
           [WITH ( <parameter_name> = <parameter_value>[, ...])]
         ...
-{% endif %}
-{% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),
         FAMILY column_family ( family_options, ... )
-{% else %}
         ...
-{% endif %}
     )
-{% if feature_map_tables %}
     WITH ( key = value, ... )
     [AS SELECT ...]
-{% endif %}
+```
+
+### Примечание про `column_option_list`
+
+`column_option_list` - список опций для колонки. Для указания этих опций существует два синтаксиса:
+
+1. `option_1 option_2 ... option_n`;
+2. `(option_1, option_2, ..., option_n)`.
+
+Возможные значения опций:
+
+* `NOT NULL` — колонка не может содержать `NULL`.
+* `FAMILY column_family` — указывает, что данная колонка принадлежит [группе колонок](./family.md).
+* `DEFAULT value` — значение по умолчанию для колонки.
+
+Важно: конструкция `DEFAULT false NOT NULL` недопустима. Если Вам требуется указать несколько опций, включая `DEFAULT`, то следует использовать либо синтаксис со скобками, либо указывать опцию `DEFAULT` последней.
+
+### Примеры
+
+```yql
+CREATE TABLE tbl (
+    k Uint64,
+    v Bool (DEFAULT false, NOT NULL),
+    PRIMARY KEY (k)
+);
+```
+
+```yql
+CREATE TABLE tbl (
+    k Uint64,
+    v Bool NOT NULL DEFAULT false,
+    PRIMARY KEY (k)
+);
+```
 
 {% if oss == true and backend_name == "YDB" %}
 
 {% if feature_olap_tables %}
+
+## Типы таблиц
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 

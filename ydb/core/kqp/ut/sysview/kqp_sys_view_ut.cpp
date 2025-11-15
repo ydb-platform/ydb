@@ -564,6 +564,54 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         CompareYson(expected, StreamResultToYson(it));
     }
 
+    Y_UNIT_TEST(NodesOrderByDesc) {
+        // Test to reproduce issue #12585: ORDER BY DESC doesn't work for sys views
+        // The sys view actors ignore the direction flag and don't guarantee order
+        TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        ui32 offset = kikimr.GetTestServer().GetRuntime()->GetNodeId(0);
+
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT NodeId, Host
+            FROM `/Root/.sys/nodes`
+            ORDER BY NodeId DESC
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Collect all results
+        TVector<ui32> nodeIds;
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto nodeId = parser.ColumnParser("NodeId").GetOptionalUint32().value();
+            nodeIds.push_back(nodeId);
+        }
+
+        // Verify we got all 5 nodes
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds.size(), 5);
+
+        // Verify results are in descending order (this should fail if the bug exists)
+        // According to issue #12585, sys view actors ignore the direction flag
+        // and don't guarantee order, so this assertion should fail
+        for (size_t i = 1; i < nodeIds.size(); ++i) {
+            UNIT_ASSERT_C(nodeIds[i - 1] >= nodeIds[i],
+                TStringBuilder() << "Results not in descending order: "
+                << "nodeIds[" << (i - 1) << "] = " << nodeIds[i - 1]
+                << " < nodeIds[" << i << "] = " << nodeIds[i]
+                << ". ORDER BY DESC is being ignored by sys view actors.");
+        }
+
+        // Verify exact expected order: offset+4, offset+3, offset+2, offset+1, offset
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[0], offset + 4);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[1], offset + 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[2], offset + 2);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[3], offset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[4], offset);
+    }
+
     Y_UNIT_TEST(QueryStatsSimple) {
         auto checkTable = [&] (const TStringBuf tableName) {
             TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
@@ -920,15 +968,15 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 );
             )").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues());
-            
+
             auto insertResult = session.ExecuteDataQuery(R"(
                 INSERT INTO TestTable (Key, Value) VALUES
                 (42, "val"), (NULL, "val1");
                 )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
         }
-        
-    
+
+
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString query = R"(
             SELECT * FROM TestTable WHERE Key in [42, NULL];

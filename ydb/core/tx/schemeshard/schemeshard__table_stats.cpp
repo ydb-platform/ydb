@@ -156,11 +156,14 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     Y_UNUSED(pools);
 
     for (const auto& channelStats : tableStats.GetChannels()) {
-        const auto& channelBind = bindings[channelStats.GetChannel()];
-        const auto& poolKind = channelBind.GetStoragePoolKind();
-        auto& [dataSize, indexSize] = newStats.StoragePoolsStats[poolKind];
-        dataSize += channelStats.GetDataSize();
-        indexSize += channelStats.GetIndexSize();
+        const ui32 channel = channelStats.GetChannel();
+        if (channel < bindings.size()) {
+            const auto& channelBind = bindings[channel];
+            const auto& poolKind = channelBind.GetStoragePoolKind();
+            auto& [dataSize, indexSize] = newStats.StoragePoolsStats[poolKind];
+            dataSize += channelStats.GetDataSize();
+            indexSize += channelStats.GetIndexSize();
+        }
     }
 
     newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();

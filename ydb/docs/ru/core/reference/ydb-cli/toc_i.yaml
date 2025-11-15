@@ -120,6 +120,8 @@ items:
       href: commands/discovery-list.md
     - name: Проверка аутентификации
       href: commands/discovery-whoami.md
+    - name: Получение токена аутентификации
+      href: auth-get-token.md
     - name: Просмотр параметров соединения
       href: commands/config-info.md
     - name: Вывод версии YDB CLI

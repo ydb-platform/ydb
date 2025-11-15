@@ -27,4 +27,4 @@ feature_flags:
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
-
+| `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |

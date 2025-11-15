@@ -48,7 +48,6 @@ import attr
 
 from hypothesis._settings import note_deprecation
 from hypothesis.control import (
-    RandomSeeder,
     cleanup,
     current_build_context,
     deprecate_random_in_strategy,
@@ -72,6 +71,7 @@ from hypothesis.internal.charmap import (
 )
 from hypothesis.internal.compat import (
     Concatenate,
+    EllipsisType,
     ParamSpec,
     bit_count,
     ceil,
@@ -142,14 +142,6 @@ from hypothesis.strategies._internal.utils import cacheable, defines_strategy
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import RepresentationPrinter
 
-if sys.version_info >= (3, 10):
-    from types import EllipsisType as EllipsisType
-elif typing.TYPE_CHECKING:  # pragma: no cover
-    from builtins import ellipsis as EllipsisType
-
-else:
-    EllipsisType = type(Ellipsis)  # pragma: no cover
-
 
 @cacheable
 @defines_strategy(force_reusable_values=True)
@@ -203,13 +195,17 @@ def sampled_from(
     that behaviour, use ``sampled_from(seq) if seq else nothing()``.
     """
     values = check_sample(elements, "sampled_from")
-    try:
-        if isinstance(elements, type) and issubclass(elements, enum.Enum):
-            repr_ = f"sampled_from({elements.__module__}.{elements.__name__})"
-        else:
-            repr_ = f"sampled_from({elements!r})"
-    except Exception:  # pragma: no cover
-        repr_ = None
+    force_repr = None
+    # check_sample converts to tuple unconditionally, but we want to preserve
+    # square braces for list reprs.
+    # This will not cover custom sequence implementations which return different
+    # braces (or other, more unusual things) for their reprs, but this is a tradeoff
+    # between repr accuracy and greedily-evaluating all sequence reprs (at great
+    # cost for large sequences).
+    force_repr_braces = ("[", "]") if isinstance(elements, list) else None
+    if isinstance(elements, type) and issubclass(elements, enum.Enum):
+        force_repr = f"sampled_from({elements.__module__}.{elements.__name__})"
+
     if isclass(elements) and issubclass(elements, enum.Flag):
         # Combinations of enum.Flag members (including empty) are also members.  We generate these
         # dynamically, because static allocation takes O(2^n) memory.  LazyStrategy is used for the
@@ -244,7 +240,7 @@ def sampled_from(
                 .flatmap(lambda r: sets(sampled_from(flags), min_size=r, max_size=r))
                 .map(lambda s: elements(reduce(operator.or_, s))),
             ]
-        return LazyStrategy(one_of, args=inner, kwargs={}, force_repr=repr_)
+        return LazyStrategy(one_of, args=inner, kwargs={}, force_repr=force_repr)
     if not values:
         if (
             isinstance(elements, type)
@@ -260,7 +256,9 @@ def sampled_from(
         raise InvalidArgument("Cannot sample from a length-zero sequence.")
     if len(values) == 1:
         return just(values[0])
-    return SampledFromStrategy(values, repr_)
+    return SampledFromStrategy(
+        values, force_repr=force_repr, force_repr_braces=force_repr_braces
+    )
 
 
 @cacheable
@@ -549,8 +547,9 @@ def fixed_dictionaries(
             check_strategy(v, f"optional[{k!r}]")
         if type(mapping) != type(optional):
             raise InvalidArgument(
-                "Got arguments of different types: mapping=%s, optional=%s"
-                % (nicerepr(type(mapping)), nicerepr(type(optional)))
+                f"Got arguments of different types: "
+                f"mapping={nicerepr(type(mapping))}, "
+                f"optional={nicerepr(type(optional))}"
             )
         if set(mapping) & set(optional):
             raise InvalidArgument(
@@ -983,8 +982,16 @@ def randoms(
     )
 
 
+class RandomSeeder:
+    def __init__(self, seed):
+        self.seed = seed
+
+    def __repr__(self):
+        return f"RandomSeeder({self.seed!r})"
+
+
 class RandomModule(SearchStrategy):
-    def do_draw(self, data):
+    def do_draw(self, data: ConjectureData) -> RandomSeeder:
         # It would be unsafe to do run this method more than once per test case,
         # because cleanup() runs tasks in FIFO order (at time of writing!).
         # Fortunately, the random_module() strategy wraps us in shared(), so
@@ -1015,14 +1022,20 @@ def random_module() -> SearchStrategy[RandomSeeder]:
     return shared(RandomModule(), key="hypothesis.strategies.random_module()")
 
 
-class BuildsStrategy(SearchStrategy):
-    def __init__(self, target, args, kwargs):
+class BuildsStrategy(SearchStrategy[Ex]):
+    def __init__(
+        self,
+        target: Callable[..., Ex],
+        args: tuple[SearchStrategy[Any], ...],
+        kwargs: dict[str, SearchStrategy[Any]],
+    ):
+        super().__init__()
         self.target = target
         self.args = args
         self.kwargs = kwargs
 
-    def do_draw(self, data):
-        args = [data.draw(a) for a in self.args]
+    def do_draw(self, data: ConjectureData) -> Ex:
+        args = [data.draw(s) for s in self.args]
         kwargs = {k: data.draw(v) for k, v in self.kwargs.items()}
         try:
             obj = self.target(*args, **kwargs)
@@ -1058,7 +1071,7 @@ class BuildsStrategy(SearchStrategy):
         current_build_context().record_call(obj, self.target, args, kwargs)
         return obj
 
-    def validate(self):
+    def do_validate(self) -> None:
         tuples(*self.args).validate()
         fixed_dictionaries(self.kwargs).validate()
 
@@ -1140,6 +1153,9 @@ def builds(
                     # and `...` contains recursion on `cls`.  See
                     # https://github.com/HypothesisWorks/hypothesis/issues/3026
                     kwargs[kw] = deferred(lambda t=t: from_type(t))  # type: ignore
+
+    # validated by handling all EllipsisType in the to_infer case
+    kwargs = cast(dict[str, SearchStrategy], kwargs)
     return BuildsStrategy(target, args, kwargs)
 
 
@@ -1148,17 +1164,16 @@ def builds(
 def from_type(thing: type[T]) -> SearchStrategy[T]:
     """Looks up the appropriate search strategy for the given type.
 
-    ``from_type`` is used internally to fill in missing arguments to
-    :func:`~hypothesis.strategies.builds` and can be used interactively
+    |st.from_type| is used internally to fill in missing arguments to
+    |st.builds| and can be used interactively
     to explore what strategies are available or to debug type resolution.
 
-    You can use :func:`~hypothesis.strategies.register_type_strategy` to
+    You can use |st.register_type_strategy| to
     handle your custom types, or to globally redefine certain strategies -
     for example excluding NaN from floats, or use timezone-aware instead of
     naive time and datetime strategies.
 
-    The resolution logic may be changed in a future version, but currently
-    tries these five options:
+    |st.from_type| looks up a strategy in the following order:
 
     1. If ``thing`` is in the default lookup mapping or user-registered lookup,
        return the corresponding strategy.  The default lookup covers all types
@@ -1170,14 +1185,14 @@ def from_type(thing: type[T]) -> SearchStrategy[T]:
        other elements in the lookup.
     4. Finally, if ``thing`` has type annotations for all required arguments,
        and is not an abstract class, it is resolved via
-       :func:`~hypothesis.strategies.builds`.
+       |st.builds|.
     5. Because :mod:`abstract types <python:abc>` cannot be instantiated,
        we treat abstract types as the union of their concrete subclasses.
        Note that this lookup works via inheritance but not via
        :obj:`~python:abc.ABCMeta.register`, so you may still need to use
-       :func:`~hypothesis.strategies.register_type_strategy`.
+       |st.register_type_strategy|.
 
-    There is a valuable recipe for leveraging ``from_type()`` to generate
+    There is a valuable recipe for leveraging |st.from_type| to generate
     "everything except" values from a specified type. I.e.
 
     .. code-block:: python
@@ -1190,9 +1205,9 @@ def from_type(thing: type[T]) -> SearchStrategy[T]:
             )
 
     For example, ``everything_except(int)`` returns a strategy that can
-    generate anything that ``from_type()`` can ever generate, except for
-    instances of :class:`python:int`, and excluding instances of types
-    added via :func:`~hypothesis.strategies.register_type_strategy`.
+    generate anything that |st.from_type| can ever generate, except for
+    instances of |int|, and excluding instances of types
+    added via |st.register_type_strategy|.
 
     This is useful when writing tests which check that invalid input is
     rejected in a certain way.
@@ -1784,6 +1799,7 @@ def recursive(
 
 class PermutationStrategy(SearchStrategy):
     def __init__(self, values):
+        super().__init__()
         self.values = values
 
     def do_draw(self, data):
@@ -1814,6 +1830,7 @@ def permutations(values: Sequence[T]) -> SearchStrategy[list[T]]:
 
 class CompositeStrategy(SearchStrategy):
     def __init__(self, definition, args, kwargs):
+        super().__init__()
         self.definition = definition
         self.args = args
         self.kwargs = kwargs
@@ -1831,12 +1848,13 @@ class DrawFn(Protocol):
 
     .. code-block:: python
 
+        def draw(strategy: SearchStrategy[Ex], label: object = None) -> Ex: ...
+
         @composite
         def list_and_index(draw: DrawFn) -> tuple[int, str]:
-            i = draw(integers())  # type inferred as 'int'
-            s = draw(text())  # type inferred as 'str'
+            i = draw(integers())  # type of `i` inferred as 'int'
+            s = draw(text())  # type of `s` inferred as 'str'
             return i, s
-
     """
 
     def __init__(self):
@@ -2158,20 +2176,18 @@ def uuids(
 
 class RunnerStrategy(SearchStrategy):
     def __init__(self, default):
+        super().__init__()
         self.default = default
 
     def do_draw(self, data):
-        runner = getattr(data, "hypothesis_runner", not_set)
-        if runner is not_set:
+        if data.hypothesis_runner is not_set:
             if self.default is not_set:
                 raise InvalidArgument(
                     "Cannot use runner() strategy with no "
                     "associated runner or explicit default."
                 )
-            else:
-                return self.default
-        else:
-            return runner
+            return self.default
+        return data.hypothesis_runner
 
 
 @defines_strategy(force_reusable_values=True)
@@ -2210,6 +2226,7 @@ class DataObject:
         return "data(...)"
 
     def draw(self, strategy: SearchStrategy[Ex], label: Any = None) -> Ex:
+        """Like :obj:`~hypothesis.strategies.DrawFn`."""
         check_strategy(strategy, "strategy")
         self.count += 1
         desc = f"Draw {self.count}{'' if label is None else f' ({label})'}"
@@ -2322,7 +2339,7 @@ def register_type_strategy(
     """Add an entry to the global type-to-strategy lookup.
 
     This lookup is used in :func:`~hypothesis.strategies.builds` and
-    :func:`@given <hypothesis.given>`.
+    |@given|.
 
     :func:`~hypothesis.strategies.builds` will be used automatically for
     classes with type annotations on ``__init__`` , so you only need to

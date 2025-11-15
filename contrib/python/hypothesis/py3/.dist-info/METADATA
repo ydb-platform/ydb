@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: hypothesis
-Version: 6.130.13
+Version: 6.136.2
 Summary: A library for property-based testing
 Author-email: "David R. MacIver and Zac Hatfield-Dodds" <david@drmaciver.com>
 License-Expression: MPL-2.0
@@ -61,8 +61,8 @@ Requires-Dist: dpcontracts>=0.4; extra == "dpcontracts"
 Provides-Extra: redis
 Requires-Dist: redis>=3.0.0; extra == "redis"
 Provides-Extra: crosshair
-Requires-Dist: hypothesis-crosshair>=0.0.20; extra == "crosshair"
-Requires-Dist: crosshair-tool>=0.0.85; extra == "crosshair"
+Requires-Dist: hypothesis-crosshair>=0.0.23; extra == "crosshair"
+Requires-Dist: crosshair-tool>=0.0.88; extra == "crosshair"
 Provides-Extra: zoneinfo
 Requires-Dist: tzdata>=2025.2; (sys_platform == "win32" or sys_platform == "emscripten") and extra == "zoneinfo"
 Provides-Extra: django
@@ -72,10 +72,10 @@ Requires-Dist: watchdog>=4.0.0; extra == "watchdog"
 Provides-Extra: all
 Requires-Dist: black>=19.10b0; extra == "all"
 Requires-Dist: click>=7.0; extra == "all"
-Requires-Dist: crosshair-tool>=0.0.85; extra == "all"
+Requires-Dist: crosshair-tool>=0.0.88; extra == "all"
 Requires-Dist: django>=4.2; extra == "all"
 Requires-Dist: dpcontracts>=0.4; extra == "all"
-Requires-Dist: hypothesis-crosshair>=0.0.20; extra == "all"
+Requires-Dist: hypothesis-crosshair>=0.0.23; extra == "all"
 Requires-Dist: lark>=0.10.1; extra == "all"
 Requires-Dist: libcst>=0.3.16; extra == "all"
 Requires-Dist: numpy>=1.19.3; extra == "all"

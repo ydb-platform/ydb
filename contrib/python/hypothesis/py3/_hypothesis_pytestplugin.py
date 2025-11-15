@@ -203,8 +203,7 @@ else:
             yield
             return
 
-        from hypothesis import core
-        from hypothesis.internal.detection import is_hypothesis_test
+        from hypothesis import core, is_hypothesis_test
 
         # See https://github.com/pytest-dev/pytest/issues/9159
         core.pytest_shows_exceptiongroups = (
@@ -306,6 +305,9 @@ else:
                 item.hypothesis_statistics = describe_statistics(stats)
 
             with collector.with_value(note_statistics):
+                # NOTE: For compatibility with Python 3.9's LL(1)
+                # parser, this is written as a nested with-statement,
+                # instead of a compound one.
                 with with_reporter(store):
                     with current_pytest_item.with_value(item):
                         yield
@@ -383,9 +385,9 @@ else:
                 stats = report.__dict__.get(STATS_KEY)
                 if stats and print_stats:
                     terminalreporter.write_line(stats + "\n\n")
-                fex = report.__dict__.get(FAILING_EXAMPLES_KEY)
-                if fex:
-                    failing_examples.append(json.loads(fex))
+                examples = report.__dict__.get(FAILING_EXAMPLES_KEY)
+                if examples:
+                    failing_examples.append(json.loads(examples))
 
         from hypothesis.internal.observability import _WROTE_TO
 
@@ -415,7 +417,7 @@ else:
         if "hypothesis" not in sys.modules:
             return
 
-        from hypothesis.internal.detection import is_hypothesis_test
+        from hypothesis import is_hypothesis_test
 
         for item in items:
             if isinstance(item, pytest.Function) and is_hypothesis_test(item.obj):
@@ -433,7 +435,7 @@ else:
 
     def _ban_given_call(self, function):
         if "hypothesis" in sys.modules:
-            from hypothesis.internal.detection import is_hypothesis_test
+            from hypothesis import is_hypothesis_test
 
             if is_hypothesis_test(function):
                 raise RuntimeError(

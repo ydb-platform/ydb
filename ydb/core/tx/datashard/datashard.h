@@ -14,6 +14,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <util/string/builder.h>
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -28,6 +29,17 @@ class RecordBatch;
 namespace NKikimr {
 
 namespace NDataShard {
+inline TString TraceIdSuffix(const NWilson::TSpan& span) {
+    if (span) {
+        return TStringBuilder() << " trace_id=" << span.GetTraceId().GetHexTraceId();
+    }
+    return {};
+}
+
+inline TString TraceIdSuffix(const NWilson::TSpan* span) {
+    return span ? TraceIdSuffix(*span) : TString();
+}
+
     using TShardState = NKikimrTxDataShard::EDatashardState;
 
     struct TTxFlags {

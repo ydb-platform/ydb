@@ -346,7 +346,8 @@ public:
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
         , Arena(arena)
-        , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId
+            << ". trace_id=" << NWilson::TTraceId(traceId).GetHexTraceId() << ". ")
         , ComputeActorId(computeActorId)
         , InputIndex(inputIndex)
         , TypeEnv(typeEnv)

@@ -13,12 +13,14 @@ TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOp
 
 bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProgressTransaction::Execute at " << Self->TabletID());
+                "TTxProgressTransaction::Execute at " << Self->TabletID()
+                << TraceIdSuffix(ActiveOp ? &ActiveOp->OperationSpan : nullptr));
 
     if (!Self->IsStateActive()) {
         Self->IncCounter(COUNTER_TX_PROGRESS_SHARD_INACTIVE);
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Progress tx at non-ready tablet " << Self->TabletID() << " state " << Self->State);
+            "Progress tx at non-ready tablet " << Self->TabletID() << " state " << Self->State
+            << TraceIdSuffix(ActiveOp ? &ActiveOp->OperationSpan : nullptr));
         Y_ENSURE(!ActiveOp, "Unexpected ActiveOp at inactive shard " << Self->TabletID());
         Self->PlanQueue.Reset(ctx);
         return true;
@@ -45,14 +47,16 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
         if (!ActiveOp) {
             Self->IncCounter(COUNTER_TX_PROGRESS_IDLE);
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "No tx to execute at " << Self->TabletID() << " TxInFly " << Self->TxInFly());
+                        "No tx to execute at " << Self->TabletID() << " TxInFly " << Self->TxInFly()
+                        << TraceIdSuffix(ActiveOp ? &ActiveOp->OperationSpan : nullptr));
             return true;
         }
 
         Y_ENSURE(!ActiveOp->IsInProgress(),
                     "GetNextActiveOp returned in-progress operation "
                     << ActiveOp->GetKind() << " " << *ActiveOp << " (unit "
-                    << ActiveOp->GetCurrentUnit() << ") at " << Self->TabletID());
+                    << ActiveOp->GetCurrentUnit() << ") at " << Self->TabletID()
+                    << TraceIdSuffix(ActiveOp ? &ActiveOp->OperationSpan : nullptr));
         ActiveOp->IncrementInProgress();
 
         if (ActiveOp->OperationSpan) {
@@ -99,7 +103,8 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
         default:
             Y_ENSURE(false, "unexpected execution status " << status << " for operation "
-                    << *ActiveOp << " " << ActiveOp->GetKind() << " at " << Self->TabletID());
+                    << *ActiveOp << " " << ActiveOp->GetKind() << " at " << Self->TabletID()
+                    << TraceIdSuffix(ActiveOp ? &ActiveOp->OperationSpan : nullptr));
     }
 
     if (WaitComplete || !CompleteList.empty()) {
@@ -116,7 +121,8 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
 
 void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProgressTransaction::Complete at " << Self->TabletID());
+                "TTxProgressTransaction::Complete at " << Self->TabletID()
+                << TraceIdSuffix(ActiveOp ? &ActiveOp->OperationSpan : nullptr));
 
     if (ActiveOp) {
         Y_ENSURE(!ActiveOp->GetExecutionPlan().empty());

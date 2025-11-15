@@ -30,7 +30,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                                                            const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProposeTransactionBase::Execute at " << Self->TabletID());
+                "TTxProposeTransactionBase::Execute at " << Self->TabletID()
+                << TraceIdSuffix(Op ? &Op->OperationSpan : nullptr));
 
     if (!Acked) {
         // Ack event on the first execute (this will schedule the next event if any)
@@ -127,7 +128,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
             default:
                 Y_ENSURE(false, "unexpected execution status " << status << " for operation "
-                        << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
+                        << *Op << " " << Op->GetKind() << " at " << Self->TabletID()
+                        << TraceIdSuffix(Op ? &Op->OperationSpan : nullptr));
         }
 
         if (WaitComplete || !CompleteList.empty()) {
@@ -149,7 +151,8 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProposeTransactionBase::Complete at " << Self->TabletID());
+                "TTxProposeTransactionBase::Complete at " << Self->TabletID()
+                << TraceIdSuffix(Op ? &Op->OperationSpan : nullptr));
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());

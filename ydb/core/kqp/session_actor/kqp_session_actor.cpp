@@ -243,6 +243,9 @@ public:
             << "ActorState: " << CurrentStateFuncName() << ", ";
         if (Y_LIKELY(QueryState)) {
             result << "TraceId: " << QueryState->UserRequestContext->TraceId << ", ";
+            if (QueryState->KqpSessionSpan) {
+                result << "trace_id=" << QueryState->KqpSessionSpan.GetTraceId().GetHexTraceId() << ", ";
+            }
         }
         return result;
     }

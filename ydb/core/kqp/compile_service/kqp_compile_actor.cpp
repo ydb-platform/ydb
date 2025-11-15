@@ -198,6 +198,7 @@ private:
             << ", self: " << SelfId()
             << ", owner: " << Owner
             << ", success: " << GetYdbStatus(result)
+            << TraceField()
             << ", issues: " << result.Issues().ToOneLineString());
 
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
@@ -260,15 +261,16 @@ private:
         Counters->ReportCompileStart(DbCounters);
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "traceId: verbosity = "
-            << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id = "
-            << std::to_string(CompileActorSpan.GetTraceId().GetTraceId()));
+            << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id="
+            << CompileActorSpan.GetTraceId().GetHexTraceId());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
             << ", self: " << ctx.SelfID
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
             << ", text: \"" << EscapeC(QueryId.Text) << "\""
-            << ", startTime: " << StartTime);
+            << ", startTime: " << StartTime
+            << TraceField());
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
@@ -417,7 +419,8 @@ private:
 
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
-            << "Built the replay message " << message);
+            << "Built the replay message " << message
+            << TraceField());
 
         ReplayMessage = std::move(message);
     }
@@ -427,6 +430,7 @@ private:
         ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
             << ", self: " << SelfId()
             << ", owner: " << Owner
+            << TraceField()
             << ", status: " << KqpCompileResult->Status
             << ", issues: " << KqpCompileResult->Issues.ToString()
             << ", uid: " << KqpCompileResult->Uid);
@@ -468,6 +472,7 @@ private:
     void InternalError(const TString message) {
         ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
             << ", self: " << SelfId()
+            << TraceField()
             << ", message: " << message);
 
 
@@ -495,6 +500,7 @@ private:
             if (!astStatements[statementId].Ast || !astStatements[statementId].Ast->IsOk() || !astStatements[statementId].Ast->Root) {
                 ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Get parsing result with error"
                     << ", self: " << SelfId()
+                    << TraceField()
                     << ", owner: " << Owner
                     << ", statement id: " << statementId);
 
@@ -512,6 +518,7 @@ private:
 
         ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send parsing result"
             << ", self: " << SelfId()
+            << TraceField()
             << ", owner: " << Owner
             << ", statements size: " << astStatements.size());
 
@@ -603,7 +610,8 @@ private:
 
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation successful"
                 << ", self: " << ctx.SelfID
-                << ", duration: " << duration);
+                << ", duration: " << duration
+                << TraceField());
         } else {
             if (kqpResult.PreparingQuery) {
                 FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, false);
@@ -611,6 +619,7 @@ private:
 
             LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
                 << ", self: " << ctx.SelfID
+                << TraceField()
                 << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
                 << ", issues: " << kqpResult.Issues().ToString());
             Counters->ReportCompileError(DbCounters);
@@ -625,7 +634,8 @@ private:
             << ", cluster: " << QueryId.Cluster
             << ", database: " << QueryId.Database
             << ", text: \"" << EscapeC(QueryId.Text) << "\""
-            << ", startTime: " << StartTime);
+            << ", startTime: " << StartTime
+            << TraceField());
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
         return ReplyError(Ydb::StatusIds::TIMEOUT, {issue});
@@ -645,6 +655,12 @@ private:
     }
 
 private:
+    TString TraceField() const {
+        if (CompileActorSpan) {
+            return TStringBuilder() << ", trace_id=" << CompileActorSpan.GetTraceId().GetHexTraceId();
+        }
+        return {};
+    }
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;

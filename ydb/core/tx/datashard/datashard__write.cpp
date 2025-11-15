@@ -125,7 +125,8 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
                 break;
 
             default:
-                Y_ENSURE(false, "unexpected execution status " << status << " for operation " << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
+                Y_ENSURE(false, "unexpected execution status " << status << " for operation " << *Op << " " << Op->GetKind() << " at " << Self->TabletID()
+                    << TraceIdSuffix(Op ? &Op->OperationSpan : nullptr));
         }
 
         if (WaitComplete || !CompleteList.empty()) {
@@ -147,7 +148,8 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
 }
 
 void TDataShard::TTxWrite::Complete(const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID());
+    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxWrite complete: at tablet# " << Self->TabletID()
+        << TraceIdSuffix(Op ? &Op->OperationSpan : nullptr));
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());

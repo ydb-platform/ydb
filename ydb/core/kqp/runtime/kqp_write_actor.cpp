@@ -490,6 +490,9 @@ public:
 
     void SetParentTraceId(NWilson::TTraceId traceId) {
         ParentTraceId = std::move(traceId);
+        if (ParentTraceId) {
+            LogPrefix = TStringBuilder() << LogPrefix << ", trace_id=" << ParentTraceId.GetHexTraceId();
+        }
     }
 
     bool IsClosed() const {
@@ -1958,7 +1961,8 @@ public:
         NKikimrKqp::TKqpTableSinkSettings&& settings,
         NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args,
         TIntrusivePtr<TKqpCounters> counters)
-        : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
+        : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId
+            << ". trace_id=" << NWilson::TTraceId(args.TraceId).GetHexTraceId() << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
         , OutputIndex(args.OutputIndex)

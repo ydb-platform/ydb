@@ -51,6 +51,8 @@
 #include <ydb/library/actors/async/wait_for_event.h>
 
 #include <util/generic/size_literals.h>
+#include <type_traits>
+#include <utility>
 
 
 LWTRACE_USING(KQP_PROVIDER);
@@ -58,13 +60,34 @@ LWTRACE_USING(KQP_PROVIDER);
 namespace NKikimr {
 namespace NKqp {
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
-#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << stream)
+namespace NPrivate {
+    template <typename T, typename = void>
+    struct TTraceFieldHelper {
+        static TString Get(const T*) {
+            return {};
+        }
+    };
+
+    template <typename T>
+    struct TTraceFieldHelper<T, std::void_t<decltype(std::declval<const T>().TraceField())>> {
+        static TString Get(const T* self) {
+            return self->TraceField();
+        }
+    };
+
+    template <typename T>
+    TString TraceFieldForLog(const T* self) {
+        return TTraceFieldHelper<T>::Get(self);
+    }
+}
+
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext,  NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
+#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext,   NKikimrServices::KQP_EXECUTER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << NKikimr::NKqp::NPrivate::TraceFieldForLog(this) << stream)
 
 using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
@@ -203,6 +226,12 @@ public:
     }
 
 protected:
+    TString TraceField() const {
+        if (ExecuterSpan) {
+            return TStringBuilder() << "trace_id=" << ExecuterSpan.GetTraceId().GetHexTraceId() << ". ";
+        }
+        return {};
+    }
     [[nodiscard]]
     bool HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();

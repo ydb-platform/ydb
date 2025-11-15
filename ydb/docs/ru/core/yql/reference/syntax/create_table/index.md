@@ -14,33 +14,24 @@
 
 {% endif %}
 
-    CREATE [TEMP | TEMPORARY] TABLE table_name (
-        column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
-        ...
-        columnN typeN,
-{% if feature_secondary_index == true %}
-        INDEX `<index_name>`
-          [GLOBAL|LOCAL]
-          [UNIQUE]
-          [SYNC|ASYNC]
-          [USING <index_type>]
-          ON ( <index_columns> )
-          [COVER ( <cover_columns> )]
-          [WITH ( <parameter_name> = <parameter_value>[, ...])]
-        ...
-{% endif %}
-{% if feature_map_tables %}
-        PRIMARY KEY ( column, ... ),
-        FAMILY column_family ( family_options, ... )
-{% else %}
-        ...
-{% endif %}
-    )
-{% if feature_map_tables %}
-    WITH ( key = value, ... )
-    [AS SELECT ...]
-{% endif %}
+```yql
+CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] table_name (
+  column_name column_data_type [FAMILY <family_name>] [NOT] NULL,
+    INDEX `<index_name>`
+      GLOBAL
+      [UNIQUE]
+      [SYNC|ASYNC]
+      [USING <index_type>]
+      ON ( <index_columns> )
+      [COVER ( <cover_columns> )]
+      [WITH ( <parameter_name> = <parameter_value>[, ...])]
+  PRIMARY KEY ( <column>[, ...]),
+  FAMILY column_family ( family_options[, ...])
+)
+[WITH (<setting_name> = <setting_value>[, ...])]
+
+[AS SELECT ...]
+```
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -73,6 +64,32 @@ WITH (
 При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
+
+## Параметры
+
+### IF NOT EXISTS
+
+Не считать ошибкой, если таблица с таким именем уже существует. Заметьте, что нет никакой гарантии, что существующая таблица как-то соотносится с той, которая могла бы быть создана.
+
+### table_name
+
+Имя создаваемой таблицы.
+
+### column_name
+
+Имя столбца, создаваемого в новой таблице.
+
+### column_data_type
+
+Тип данных столбца. Полный список типов данных, которые поддерживает {{ ydb-short-name }} доступен в разделе [Типы данных](../../types/index.md).
+
+### NULL
+
+Данный столбец может содержать значения NULL (по умолчанию).
+
+### NOT NULL
+
+Данный столбец не принимает значения NULL.
 
 ## Примеры создания таблиц
 

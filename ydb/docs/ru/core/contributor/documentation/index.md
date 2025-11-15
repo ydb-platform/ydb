@@ -19,3 +19,4 @@
 - [Документация GitHub](https://docs.github.com/en)
 - [Документация Git](https://git-scm.com/doc)
 - [{#T}](guide-to-public-material.md)
+- [{#T}](cli-command-documentation.md)

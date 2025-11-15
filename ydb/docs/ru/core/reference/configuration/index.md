@@ -15,6 +15,7 @@
 || [{#T}](blob_storage_config.md) | Нет | Конфигурация статической группы кластера для системных таблеток ||
 || [{#T}](bridge_config.md) | Нет | Конфигурация [режима bridge](../../concepts/bridge.md) ||
 || [{#T}](client_certificate_authorization.md) | Нет | Аутентификация с помощью клиентских сертификатов ||
+|| [{#T}](cms_config.md) | Нет | Конфигурация Cluster Management System (CMS) ||
 || [{#T}](domains_config.md) | Нет | Конфигурация домена кластера, включая Blob Storage и State Storage ||
 || [{#T}](feature_flags.md) | Нет | Функциональные флаги для включения или отключения определённых возможностей {{ ydb-short-name }} ||
 || [{#T}](healthcheck_config.md) | Нет | Пороговые значения и таймауты сервиса Health Check ||

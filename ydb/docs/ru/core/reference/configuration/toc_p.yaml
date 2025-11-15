@@ -9,6 +9,8 @@ items:
   href: bridge_config.md
 - name: client_certificate_authorization
   href: client_certificate_authorization.md
+- name: cms_config
+  href: cms_config.md
 - name: domains_config
   href: domains_config.md
 - name: feature_flags

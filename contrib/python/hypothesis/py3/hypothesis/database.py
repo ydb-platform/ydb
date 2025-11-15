@@ -9,6 +9,7 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import abc
+import errno
 import json
 import os
 import struct
@@ -145,10 +146,62 @@ if "sphinx" in sys.modules:
 
 
 class ExampleDatabase(metaclass=_EDMeta):
-    """An abstract base class for storing examples in Hypothesis' internal format.
+    """
+    A Hypothesis database, for use in |settings.database|.
 
-    An ExampleDatabase maps each ``bytes`` key to many distinct ``bytes``
-    values, like a ``Mapping[bytes, set[bytes]]``.
+    Hypothesis automatically saves failures to the database set in
+    |settings.database|. The next time the test is run, Hypothesis will replay
+    any failures from the database in |settings.database| for that test (in
+    |Phase.reuse|).
+
+    The database is best thought of as a cache that you never need to invalidate.
+    Entries may be transparently dropped when upgrading your Hypothesis version
+    or changing your test. Do not rely on the database for correctness; to ensure
+    Hypothesis always tries an input, use |@example|.
+
+    A Hypothesis database is a simple mapping of bytes to sets of bytes. Hypothesis
+    provides several concrete database subclasses. To write your own database class,
+    see :doc:`/how-to/custom-database`.
+
+    Change listening
+    ----------------
+
+    An optional extension to |ExampleDatabase| is change listening. On databases
+    which support change listening, calling |ExampleDatabase.add_listener| adds
+    a function as a change listener, which will be called whenever a value is
+    added, deleted, or moved inside the database. See |ExampleDatabase.add_listener|
+    for details.
+
+    All databases in Hypothesis support change listening. Custom database classes
+    are not required to support change listening, though they will not be compatible
+    with features that require change listening until they do so.
+
+    .. note::
+
+        While no Hypothesis features currently require change listening, change
+        listening is required by `HypoFuzz <https://hypofuzz.com/>`_.
+
+    Database methods
+    ----------------
+
+    Required methods:
+
+    * |ExampleDatabase.save|
+    * |ExampleDatabase.fetch|
+    * |ExampleDatabase.delete|
+
+    Optional methods:
+
+    * |ExampleDatabase.move|
+
+    Change listening methods:
+
+    * |ExampleDatabase.add_listener|
+    * |ExampleDatabase.remove_listener|
+    * |ExampleDatabase.clear_listeners|
+    * |ExampleDatabase._start_listening|
+    * |ExampleDatabase._stop_listening|
+    * |ExampleDatabase._broadcast_change|
     """
 
     def __init__(self) -> None:
@@ -158,7 +211,7 @@ class ExampleDatabase(metaclass=_EDMeta):
     def save(self, key: bytes, value: bytes) -> None:
         """Save ``value`` under ``key``.
 
-        If this value is already present for this key, silently do nothing.
+        If ``value`` is already present in ``key``, silently do nothing.
         """
         raise NotImplementedError(f"{type(self).__name__}.save")
 
@@ -169,16 +222,18 @@ class ExampleDatabase(metaclass=_EDMeta):
 
     @abc.abstractmethod
     def delete(self, key: bytes, value: bytes) -> None:
-        """Remove this value from this key.
+        """Remove ``value`` from ``key``.
 
-        If this value is not present, silently do nothing.
+        If ``value`` is not present in ``key``, silently do nothing.
         """
         raise NotImplementedError(f"{type(self).__name__}.delete")
 
     def move(self, src: bytes, dest: bytes, value: bytes) -> None:
-        """Move ``value`` from key ``src`` to key ``dest``. Equivalent to
-        ``delete(src, value)`` followed by ``save(src, value)``, but may
-        have a more efficient implementation.
+        """
+        Move ``value`` from key ``src`` to key ``dest``.
+
+        Equivalent to ``delete(src, value)`` followed by ``save(src, value)``,
+        but may have a more efficient implementation.
 
         Note that ``value`` will be inserted at ``dest`` regardless of whether
         it is currently present at ``src``.
@@ -190,7 +245,24 @@ class ExampleDatabase(metaclass=_EDMeta):
         self.save(dest, value)
 
     def add_listener(self, f: ListenerT, /) -> None:
-        """Add a change listener."""
+        """
+        Add a change listener. ``f`` will be called whenever a value is saved,
+        deleted, or moved in the database.
+
+        ``f`` can be called with two different event values:
+
+        * ``("save", (key, value))``
+        * ``("delete", (key, value))``
+
+        where ``key`` and ``value`` are both ``bytes``.
+
+        There is no ``move`` event. Instead, a move is broadcasted as a
+        ``delete`` event followed by a ``save`` event.
+
+        For the ``delete`` event, ``value`` may be ``None``. This might occur if
+        the database knows that a deletion has occurred in ``key``, but does not
+        know what value was deleted.
+        """
         had_listeners = bool(self._listeners)
         self._listeners.append(f)
         if not had_listeners:
@@ -198,8 +270,9 @@ class ExampleDatabase(metaclass=_EDMeta):
 
     def remove_listener(self, f: ListenerT, /) -> None:
         """
-        Remove a change listener. If the listener is not present, silently do
-        nothing.
+        Removes ``f`` from the list of change listeners.
+
+        If ``f`` is not in the list of change listeners, silently do nothing.
         """
         if f not in self._listeners:
             return
@@ -217,16 +290,20 @@ class ExampleDatabase(metaclass=_EDMeta):
     def _broadcast_change(self, event: ListenerEventT) -> None:
         """
         Called when a value has been either added to or deleted from a key in
-        the underlying database store. event_type is one of "save" or "delete".
+        the underlying database store. The possible values for ``event`` are:
 
-        ``value`` may be ``None`` for ``event_type == "delete"``, which indicates
-        we don't know what value was deleted from the database.
+        * ``("save", (key, value))``
+        * ``("delete", (key, value))``
 
-        Note that you should not assume you are the only reference to the underlying
-        database store. For example, if two DirectoryBasedExampleDatabase reference
-        the same directory, _broadcast_change should be called whenever a file is
-        added or removed from the directory, even if that database was not responsible
-        for changing the file.
+        ``value`` may be ``None`` for the ``delete`` event, indicating we know
+        that some value was deleted under this key, but not its exact value.
+
+        Note that you should not assume your instance is the only reference to
+        the underlying database store. For example, if two instances of
+        |DirectoryBasedExampleDatabase| reference the same directory,
+        _broadcast_change should be called whenever a file is added or removed
+        from the directory, even if that database was not responsible for
+        changing the file.
         """
         for listener in self._listeners:
             listener(event)
@@ -237,9 +314,10 @@ class ExampleDatabase(metaclass=_EDMeta):
         have any change listeners. Intended to allow databases to wait to start
         expensive listening operations until necessary.
 
-        _start_listening and _stop_listening are guaranteed to alternate, so you
-        do not need to handle the case of multiple consecutive _start_listening
-        calls without an intermediate _stop_listening call.
+        ``_start_listening`` and ``_stop_listening`` are guaranteed to alternate,
+        so you do not need to handle the case of multiple consecutive
+        ``_start_listening`` calls without an intermediate ``_stop_listening``
+        call.
         """
         warnings.warn(
             f"{self.__class__} does not support listening for changes",
@@ -251,9 +329,10 @@ class ExampleDatabase(metaclass=_EDMeta):
         """
         Called whenever no change listeners remain on the database.
 
-        _stop_listening and _start_listening are guaranteed to alternate, so you
-        do not need to handle the case of multiple consecutive _stop_listening
-        calls without an intermediate _start_listening call.
+        ``_stop_listening`` and ``_start_listening`` are guaranteed to alternate,
+        so you do not need to handle the case of multiple consecutive
+        ``_stop_listening`` calls without an intermediate ``_start_listening``
+        call.
         """
         warnings.warn(
             f"{self.__class__} does not support stopping listening for changes",
@@ -263,7 +342,8 @@ class ExampleDatabase(metaclass=_EDMeta):
 
 
 class InMemoryExampleDatabase(ExampleDatabase):
-    """A non-persistent example database, implemented in terms of a dict of sets.
+    """A non-persistent example database, implemented in terms of an in-memory
+    dictionary.
 
     This can be useful if you call a test function several times in a single
     session, or for testing other database implementations, but because it
@@ -276,6 +356,9 @@ class InMemoryExampleDatabase(ExampleDatabase):
 
     def __repr__(self) -> str:
         return f"InMemoryExampleDatabase({self.data!r})"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, InMemoryExampleDatabase) and self.data is other.data
 
     def fetch(self, key: bytes) -> Iterable[bytes]:
         yield from self.data.get(key, ())
@@ -317,7 +400,7 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
 
     Each test corresponds to a directory, and each example to a file within that
     directory.  While the contents are fairly opaque, a
-    ``DirectoryBasedExampleDatabase`` can be shared by checking the directory
+    |DirectoryBasedExampleDatabase| can be shared by checking the directory
     into version control, for example with the following ``.gitignore``::
 
         # Ignore files cached by Hypothesis...
@@ -327,8 +410,7 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
 
     Note however that this only makes sense if you also pin to an exact version of
     Hypothesis, and we would usually recommend implementing a shared database with
-    a network datastore - see :class:`~hypothesis.database.ExampleDatabase`, and
-    the :class:`~hypothesis.database.MultiplexedDatabase` helper.
+    a network datastore - see |ExampleDatabase|, and the |MultiplexedDatabase| helper.
     """
 
     # we keep a database entry of the full values of all the database keys.
@@ -345,6 +427,11 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
     def __repr__(self) -> str:
         return f"DirectoryBasedExampleDatabase({self.path!r})"
 
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, DirectoryBasedExampleDatabase) and self.path == other.path
+        )
+
     def _key_path(self, key: bytes) -> Path:
         try:
             return self.keypaths[key]
@@ -360,11 +447,16 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
         kp = self._key_path(key)
         if not kp.is_dir():
             return
-        for path in os.listdir(kp):
-            try:
-                yield (kp / path).read_bytes()
-            except OSError:
-                pass
+
+        try:
+            for path in os.listdir(kp):
+                try:
+                    yield (kp / path).read_bytes()
+                except OSError:
+                    pass
+        except OSError:  # pragma: no cover
+            # the `kp` directory might have been deleted in the meantime
+            pass
 
     def save(self, key: bytes, value: bytes) -> None:
         key_path = self._key_path(key)
@@ -390,7 +482,14 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
                 os.close(fd)
                 try:
                     tmppath.rename(path)
-                except OSError:  # pragma: no cover
+                except OSError as err:  # pragma: no cover
+                    if err.errno == errno.EXDEV:
+                        # Can't rename across filesystem boundaries, see e.g.
+                        # https://github.com/HypothesisWorks/hypothesis/issues/4335
+                        try:
+                            path.write_bytes(tmppath.read_bytes())
+                        except OSError:
+                            pass
                     tmppath.unlink()
                 assert not tmppath.exists()
         except OSError:  # pragma: no cover
@@ -418,7 +517,19 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
         try:
             self._value_path(key, value).unlink()
         except OSError:
+            return
+
+        # try deleting the key dir, which will only succeed if the dir is empty
+        # (i.e. ``value`` was the last value in this key).
+        try:
+            self._key_path(key).rmdir()
+        except OSError:
             pass
+        else:
+            # if the deletion succeeded, also delete this key entry from metakeys.
+            # (if this key happens to be the metakey itself, this deletion will
+            # fail; that's ok and faster than checking for this rare case.)
+            self.delete(self._metakeys_name, key)
 
     def _start_listening(self) -> None:
         try:
@@ -461,7 +572,13 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
                 key_hash = value_path.parent.name
 
                 if key_hash == _metakeys_hash:
-                    hash_to_key[value_path.name] = value_path.read_bytes()
+                    try:
+                        hash_to_key[value_path.name] = value_path.read_bytes()
+                    except OSError:  # pragma: no cover
+                        # this might occur if all the values in a key have been
+                        # deleted and DirectoryBasedExampleDatabase removes its
+                        # metakeys entry (which is `value_path` here`).
+                        pass
                     return
 
                 key = hash_to_key.get(key_hash)
@@ -511,6 +628,12 @@ class DirectoryBasedExampleDatabase(ExampleDatabase):
                 _broadcast_change(("delete", (k1, value)))
                 _broadcast_change(("save", (k2, value)))
 
+        # If we add a listener to a DirectoryBasedExampleDatabase whose database
+        # directory doesn't yet exist, the watchdog observer will not fire any
+        # events, even after the directory gets created.
+        #
+        # Ensure the directory exists before starting the observer.
+        self.path.mkdir(exist_ok=True, parents=True)
         self._observer = Observer()
         self._observer.schedule(
             Handler(),
@@ -547,6 +670,9 @@ class ReadOnlyDatabase(ExampleDatabase):
 
     def __repr__(self) -> str:
         return f"ReadOnlyDatabase({self._wrapped!r})"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, ReadOnlyDatabase) and self._wrapped == other._wrapped
 
     def fetch(self, key: bytes) -> Iterable[bytes]:
         yield from self._wrapped.fetch(key)
@@ -598,6 +724,11 @@ class MultiplexedDatabase(ExampleDatabase):
 
     def __repr__(self) -> str:
         return "MultiplexedDatabase({})".format(", ".join(map(repr, self._wrapped)))
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, MultiplexedDatabase) and self._wrapped == other._wrapped
+        )
 
     def fetch(self, key: bytes) -> Iterable[bytes]:
         seen = set()
@@ -744,6 +875,15 @@ class GitHubArtifactDatabase(ExampleDatabase):
         return (
             f"GitHubArtifactDatabase(owner={self.owner!r}, "
             f"repo={self.repo!r}, artifact_name={self.artifact_name!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, GitHubArtifactDatabase)
+            and self.owner == other.owner
+            and self.repo == other.repo
+            and self.artifact_name == other.artifact_name
+            and self.path == other.path
         )
 
     def _prepare_for_io(self) -> None:
@@ -970,14 +1110,21 @@ class BackgroundWriteDatabase(ExampleDatabase):
         super().__init__()
         self._db = db
         self._queue: Queue[tuple[str, tuple[bytes, ...]]] = Queue()
-        self._thread = Thread(target=self._worker, daemon=True)
-        self._thread.start()
-        # avoid an unbounded timeout during gc. 0.1 should be plenty for most
-        # use cases.
-        weakref.finalize(self, self._join, 0.1)
+        self._thread: Optional[Thread] = None
+
+    def _ensure_thread(self):
+        if self._thread is None:
+            self._thread = Thread(target=self._worker, daemon=True)
+            self._thread.start()
+            # avoid an unbounded timeout during gc. 0.1 should be plenty for most
+            # use cases.
+            weakref.finalize(self, self._join, 0.1)
 
     def __repr__(self) -> str:
         return f"BackgroundWriteDatabase({self._db!r})"
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, BackgroundWriteDatabase) and self._db == other._db
 
     def _worker(self) -> None:
         while True:
@@ -996,12 +1143,15 @@ class BackgroundWriteDatabase(ExampleDatabase):
         return self._db.fetch(key)
 
     def save(self, key: bytes, value: bytes) -> None:
+        self._ensure_thread()
         self._queue.put(("save", (key, value)))
 
     def delete(self, key: bytes, value: bytes) -> None:
+        self._ensure_thread()
         self._queue.put(("delete", (key, value)))
 
     def move(self, src: bytes, dest: bytes, value: bytes) -> None:
+        self._ensure_thread()
         self._queue.put(("move", (src, dest, value)))
 
     def _start_listening(self) -> None:
@@ -1050,8 +1200,8 @@ def _unpack_uleb128(buffer: bytes) -> tuple[int, int]:
     return (i + 1, value)
 
 
-def choices_to_bytes(ir: Iterable[ChoiceT], /) -> bytes:
-    """Serialize a list of IR elements to a bytestring.  Inverts choices_from_bytes."""
+def choices_to_bytes(choices: Iterable[ChoiceT], /) -> bytes:
+    """Serialize a list of choices to a bytestring.  Inverts choices_from_bytes."""
     # We use a custom serialization format for this, which might seem crazy - but our
     # data is a flat sequence of elements, and standard tools like protobuf or msgpack
     # don't deal well with e.g. nonstandard bit-pattern-NaNs, or invalid-utf8 unicode.
@@ -1059,33 +1209,33 @@ def choices_to_bytes(ir: Iterable[ChoiceT], /) -> bytes:
     # We simply encode each element with a metadata byte, if needed a uint16 size, and
     # then the payload bytes.  For booleans, the payload is inlined into the metadata.
     parts = []
-    for elem in ir:
-        if isinstance(elem, bool):
+    for choice in choices:
+        if isinstance(choice, bool):
             # `000_0000v` - tag zero, low bit payload.
-            parts.append(b"\1" if elem else b"\0")
+            parts.append(b"\1" if choice else b"\0")
             continue
 
         # `tag_ssss [uint16 size?] [payload]`
-        if isinstance(elem, float):
+        if isinstance(choice, float):
             tag = 1 << 5
-            elem = struct.pack("!d", elem)
-        elif isinstance(elem, int):
+            choice = struct.pack("!d", choice)
+        elif isinstance(choice, int):
             tag = 2 << 5
-            elem = elem.to_bytes(1 + elem.bit_length() // 8, "big", signed=True)
-        elif isinstance(elem, bytes):
+            choice = choice.to_bytes(1 + choice.bit_length() // 8, "big", signed=True)
+        elif isinstance(choice, bytes):
             tag = 3 << 5
         else:
-            assert isinstance(elem, str)
+            assert isinstance(choice, str)
             tag = 4 << 5
-            elem = elem.encode(errors="surrogatepass")
+            choice = choice.encode(errors="surrogatepass")
 
-        size = len(elem)
+        size = len(choice)
         if size < 0b11111:
             parts.append((tag | size).to_bytes(1, "big"))
         else:
             parts.append((tag | 0b11111).to_bytes(1, "big"))
             parts.append(_pack_uleb128(size))
-        parts.append(elem)
+        parts.append(choice)
 
     return b"".join(parts)
 

@@ -11,7 +11,7 @@
 import copy
 import re
 import warnings
-from functools import lru_cache, partial
+from functools import cache, lru_cache, partial
 from typing import Optional
 
 from hypothesis.errors import HypothesisWarning, InvalidArgument
@@ -32,7 +32,7 @@ from hypothesis.vendor.pretty import pretty
 
 
 # Cache size is limited by sys.maxunicode, but passing None makes it slightly faster.
-@lru_cache(maxsize=None)
+@cache
 def _check_is_single_character(c):
     # In order to mitigate the performance cost of this check, we use a shared cache,
     # even at the cost of showing the culprit strategy in the error message.
@@ -50,6 +50,7 @@ class OneCharStringStrategy(SearchStrategy[str]):
     def __init__(
         self, intervals: IntervalSet, force_repr: Optional[str] = None
     ) -> None:
+        super().__init__()
         assert isinstance(intervals, IntervalSet)
         self.intervals = intervals
         self._force_repr = force_repr
@@ -75,6 +76,7 @@ class OneCharStringStrategy(SearchStrategy[str]):
         )
         if codec is not None:
             intervals &= charmap.intervals_from_codec(codec)
+
         _arg_repr = ", ".join(
             f"{k}={v!r}"
             for k, v in [
@@ -85,7 +87,8 @@ class OneCharStringStrategy(SearchStrategy[str]):
                 ("exclude_characters", exclude_characters),
                 ("include_characters", include_characters),
             ]
-            if v not in (None, "", set(charmap.categories()) - {"Cs"})
+            if v not in (None, "")
+            and not (k == "categories" and set(v) == set(charmap.categories()) - {"Cs"})
         )
         if not intervals:
             raise InvalidArgument(
@@ -156,9 +159,9 @@ _nonempty_and_content_names = (
 class TextStrategy(ListStrategy[str]):
     def do_draw(self, data):
         # if our element strategy is OneCharStringStrategy, we can skip the
-        # ListStrategy draw and jump right to our nice IR string draw.
+        # ListStrategy draw and jump right to data.draw_string.
         # Doing so for user-provided element strategies is not correct in
-        # general, as they may define a different distribution than our IR.
+        # general, as they may define a different distribution than data.draw_string.
         elems = unwrap_strategies(self.element_strategy)
         if isinstance(elems, OneCharStringStrategy):
             return data.draw_string(
@@ -347,6 +350,7 @@ def _identifier_characters():
 
 class BytesStrategy(SearchStrategy):
     def __init__(self, min_size: int, max_size: Optional[int]):
+        super().__init__()
         self.min_size = min_size
         self.max_size = (
             max_size if max_size is not None else COLLECTION_DEFAULT_MAX_SIZE

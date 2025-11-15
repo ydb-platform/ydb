@@ -122,6 +122,23 @@ class FlakyFailure(ExceptionGroup, Flaky):
                 group[i] = err
         return ExceptionGroup.__new__(cls, msg, group)
 
+    # defining `derive` is required for `split` to return an instance of FlakyFailure
+    # instead of ExceptionGroup. See https://github.com/python/cpython/issues/119287
+    # and https://docs.python.org/3/library/exceptions.html#BaseExceptionGroup.derive
+    def derive(self, excs):
+        return type(self)(self.message, excs)
+
+
+class FlakyBackendFailure(FlakyFailure):
+    """
+    A failure was reported by an :ref:`alternative backend <alternative-backends>`,
+    but this failure did not reproduce when replayed under the Hypothesis backend.
+
+    When an alternative backend reports a failure, Hypothesis first replays it
+    under the standard Hypothesis backend to check for flakiness. If the failure
+    does not reproduce, Hypothesis raises this exception.
+    """
+
 
 class InvalidArgument(_Trimmable, TypeError):
     """Used to indicate that the arguments to a Hypothesis function were in
@@ -202,12 +219,15 @@ def __getattr__(name: str) -> Any:
 
 
 class DeadlineExceeded(_Trimmable):
-    """Raised when an individual test body has taken too long to run."""
+    """
+    Raised when an input takes too long to run, relative to the |settings.deadline|
+    setting.
+    """
 
     def __init__(self, runtime: timedelta, deadline: timedelta) -> None:
         super().__init__(
-            "Test took %.2fms, which exceeds the deadline of %.2fms"
-            % (runtime.total_seconds() * 1000, deadline.total_seconds() * 1000)
+            f"Test took {runtime.total_seconds() * 1000:.2f}ms, which exceeds "
+            f"the deadline of {deadline.total_seconds() * 1000:.2f}ms"
         )
         self.runtime = runtime
         self.deadline = deadline
@@ -252,16 +272,15 @@ CannotProceedScopeT = Literal["verified", "exhausted", "discard_test_case", "oth
 
 
 class BackendCannotProceed(HypothesisException):
-    """UNSTABLE API
+    """
+    Raised by alternative backends when a |PrimitiveProvider| cannot proceed.
+    This is expected to occur inside one of the ``.draw_*()`` methods, or for
+    symbolic execution perhaps in |PrimitiveProvider.realize|.
 
-    Raised by alternative backends when the PrimitiveProvider cannot proceed.
-    This is expected to occur inside one of the `.draw_*()` methods, or for
-    symbolic execution perhaps in `.realize(...)`.
-
-    The optional `scope` argument can enable smarter integration:
+    The optional ``scope`` argument can enable smarter integration:
 
         verified:
-            Do not request further test cases from this backend.  We _may_
+            Do not request further test cases from this backend.  We *may*
             generate more test cases with other backends; if one fails then
             Hypothesis will report unsound verification in the backend too.
 

@@ -16,7 +16,7 @@ import sys
 import tempfile
 import unicodedata
 from collections.abc import Iterable
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Optional
 
@@ -133,7 +133,7 @@ def charmap() -> dict[CategoryName, IntervalsT]:
             k: tuple(tuple(pair) for pair in pairs) for k, pairs in tmp_charmap.items()
         }
         # each value is a tuple of 2-tuples (that is, tuples of length 2)
-        # and that both elements of that tuple are integers.
+        # and both elements of that tuple are integers.
         for vs in _charmap.values():
             ints = list(sum(vs, ()))
             assert all(isinstance(x, int) for x in ints)
@@ -144,7 +144,7 @@ def charmap() -> dict[CategoryName, IntervalsT]:
     return _charmap
 
 
-@lru_cache(maxsize=None)
+@cache
 def intervals_from_codec(codec_name: str) -> IntervalSet:  # pragma: no cover
     """Return an IntervalSet of characters which are part of this codec."""
     assert codec_name == codecs.lookup(codec_name).name

@@ -803,6 +803,7 @@ public:
             TSession* session = GetSession(options);
 
             auto publish = TYtPublish(node);
+            auto dstIsDynamic = TYtTableBaseInfo::GetMeta(publish.Publish())->IsDynamic;
 
             EYtWriteMode mode = EYtWriteMode::Renew;
             if (const auto modeSetting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode)) {
@@ -889,10 +890,15 @@ public:
 
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
+                NYT::TNode destAttrs = NYT::TNode::CreateMap();
                 TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
+                }
+                if (dstIsDynamic && NFs::Exists(destFilePath + ".attr")) {
+                    TIFStream input(destFilePath + ".attr");
+                    destAttrs = NYT::NodeFromYsonStream(&input);
                 }
 
                 const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
@@ -904,7 +910,14 @@ public:
                         columnGroupsSpec = NYT::NodeFromYsonString(setting->Tail().Content());
                     }
                 }
-                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
+
+                if (dstIsDynamic) {
+                    attrs["schema"] = destAttrs["schema"];
+                    attrs["_yql_dynamic"] = true;
+                    if (destAttrs.HasKey("_yql_dynamic_native_read")) {
+                        attrs["_yql_dynamic_native_read"] = destAttrs["_yql_dynamic_native_read"];
+                    }
+                } else if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
                     attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, columnGroupsSpec).ToNode();
                 }
 

@@ -1,0 +1,9 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+/* custom error:Modification of static table "Output" is supported only by INSERT*/
+use plato;
+
+upsert into Output
+select "x" as key;

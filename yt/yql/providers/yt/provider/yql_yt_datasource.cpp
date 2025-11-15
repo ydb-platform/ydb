@@ -515,7 +515,7 @@ public:
                 TStringBuf intent;
                 if (tableDesc.Intents & TYtTableIntent::Drop) {
                     intent = "drop";
-                } else if (tableDesc.Intents & (TYtTableIntent::Override | TYtTableIntent::Append)) {
+                } else if (tableDesc.Intents & (TYtTableIntent::Override | TYtTableIntent::Append | TYtTableIntent::Upsert)) {
                     intent = "modify";
                 } else if (tableDesc.Intents & TYtTableIntent::Flush) {
                     intent = "flush";

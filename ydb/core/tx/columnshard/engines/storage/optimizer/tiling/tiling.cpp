@@ -16,6 +16,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/types.h>
 
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
 struct TSettings {
@@ -175,8 +177,11 @@ struct TAccumulator {
     TInstant LastCompaction = {};
     bool TimeExceeded = false;
 
+    mutable ITilingCounter Counter;
+
     explicit TAccumulator(ui32 level)
-        : Level(level)
+        : Level(level),
+        Counter(level, false)
     {}
 
     bool Empty() const {
@@ -236,6 +241,7 @@ struct TAccumulator {
     }
 
     void Add(const TPortionInfo::TPtr& p) {
+        Counter.AddPortion(p);
         if (Portions.empty()) {
             LastCompaction = TInstant::Now();
         }
@@ -251,6 +257,7 @@ struct TAccumulator {
         auto it = Portions.find(id);
         if (it != Portions.end()) {
             TotalBlobBytes -= it->second->GetTotalBlobBytes();
+            Counter.RemovePortion(it->second);
             Portions.erase(it);
         }
     }
@@ -281,10 +288,13 @@ struct TLevel {
     TPortionMap Compacting;
     bool CheckCompactions = true;
 
+    mutable TTilingLevelCounter Counter;
+
     TLevel* Next = nullptr;
 
     TLevel(ui32 level)
-        : Level(level)
+        : Level(level),
+        Counter(level)
     {}
 
     bool Empty() const {
@@ -295,14 +305,17 @@ struct TLevel {
         CheckCompactions = true;
     }
 
-    bool NeedCompaction(const TSettings& settings) const {
+    bool NeedCompaction(const TSettings& settings) {
         if (Portions.size() < 2) {
             return false;
         }
-        return Intersections.GetMaxCount() >= i32(settings.Factor);
+        auto intersections = Intersections.GetMaxCount();
+        Counter.SetIntersections(intersections);
+        return intersections >= i32(settings.Factor);
     }
 
     void Add(const TPortionInfo::TPtr& p) {
+        Counter.AddPortion(p);
         Remove(p->GetPortionId());
         Portions[p->GetPortionId()] = p;
         TotalBlobBytes += p->GetTotalBlobBytes();
@@ -320,6 +333,7 @@ struct TLevel {
             const auto& p = it->second;
             Intersections.Remove(p->GetPortionId());
             TotalBlobBytes -= p->GetTotalBlobBytes();
+            Counter.RemovePortion(it->second);
             Portions.erase(it);
             CheckCompactions = true;
         }
@@ -577,7 +591,7 @@ private:
     std::shared_ptr<TColumnEngineChanges> GetCompactLevelTask(
             const std::shared_ptr<TGranuleMeta>& granule,
             const std::shared_ptr<NDataLocks::TManager>& locksManager,
-            ui32 level) const {
+            ui32 level) const{
         if (!NeedLevelCompaction(level)) {
             return nullptr;
         }
@@ -641,23 +655,26 @@ private:
     }
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override {
-        // Check compactions, top to bottom
-        for (size_t level = 0; level < Max(Accumulator.size(), Levels.size()); ++level) {
+        // Check compactions, bottom to top
+        std::shared_ptr<TColumnEngineChanges> result;
+        for (size_t level = Max(Accumulator.size(), Levels.size()) - 1; level >= 0; --level) {
             if (level < Accumulator.size()) {
-                if (auto result = GetCompactAccumulatorTask(granule, locksManager, level)) {
-                    return { result };
+                if (auto task = GetCompactAccumulatorTask(granule, locksManager, level)) {
+                    result = task;
                 }
             }
             if (level < Levels.size()) {
-                if (auto result = GetCompactLevelTask(granule, locksManager, level)) {
-                    return { result };
+                if (auto task = GetCompactLevelTask(granule, locksManager, level)) {
+                    result = task;
                 }
             }
         }
-
-        // Nothing to compact
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: nothing to compact");
-        return {};
+        if (!result) {
+            // Nothing to compact
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "tiling compaction: nothing to compact");
+            return {};
+        }
+        return {result};
     }
 
     void DoActualize(const TInstant currentInstant) override {

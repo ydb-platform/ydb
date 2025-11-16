@@ -9,9 +9,9 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import math
-from collections.abc import Generator
+from collections.abc import Generator, Set
 from random import Random
-from typing import TYPE_CHECKING, AbstractSet, Final, Optional, Union, cast
+from typing import TYPE_CHECKING, Final, TypeAlias, cast
 
 import attr
 
@@ -43,11 +43,9 @@ from hypothesis.internal.floats import (
 )
 
 if TYPE_CHECKING:
-    from typing import TypeAlias
-
     from hypothesis.vendor.pretty import RepresentationPrinter
 
-ChildrenCacheValueT: "TypeAlias" = tuple[
+ChildrenCacheValueT: TypeAlias = tuple[
     Generator[ChoiceT, None, None], list[ChoiceT], set[ChoiceT]
 ]
 
@@ -124,7 +122,7 @@ class Conclusion:
     """Represents a transition to a finished state."""
 
     status: Status = attr.ib()
-    interesting_origin: Optional[InterestingOrigin] = attr.ib()
+    interesting_origin: InterestingOrigin | None = attr.ib()
 
     def _repr_pretty_(self, p: "RepresentationPrinter", cycle: bool) -> None:
         assert cycle is False
@@ -220,7 +218,7 @@ def compute_max_children(
         # or downwards with our full 128 bit generation, but only half of these
         # (plus one for the case of generating zero) result in a probe in the
         # direction we want. ((2**128 - 1) // 2) + 1 == 2 ** 127
-        assert (min_value is None) ^ (max_value is None)
+        assert (min_value is None) != (max_value is None)
         return 2**127
     elif choice_type == "boolean":
         constraints = cast(BooleanConstraints, constraints)
@@ -410,7 +408,7 @@ class TreeNode:
     #
     # Stored as None if no indices have been forced, purely for space saving
     # reasons (we force quite rarely).
-    __forced: Optional[set[int]] = attr.ib(default=None, init=False)
+    __forced: set[int] | None = attr.ib(default=None, init=False)
 
     # What happens next after drawing these nodes. (conceptually, "what is the
     # child/children of the last node stored here").
@@ -421,7 +419,7 @@ class TreeNode:
     # - Conclusion (ConjectureData.conclude_test was called here)
     # - Killed (this branch is valid and may even have children, but should not
     #   be explored when generating novel prefixes)
-    transition: Union[None, Branch, Conclusion, Killed] = attr.ib(default=None)
+    transition: None | Branch | Conclusion | Killed = attr.ib(default=None)
 
     # A tree node is exhausted if every possible sequence of draws below it has
     # been explored. We only update this when performing operations that could
@@ -431,7 +429,7 @@ class TreeNode:
     is_exhausted: bool = attr.ib(default=False, init=False)
 
     @property
-    def forced(self) -> AbstractSet[int]:
+    def forced(self) -> Set[int]:
         if not self.__forced:
             return EMPTY
         return self.__forced
@@ -528,7 +526,7 @@ class TreeNode:
         assert cycle is False
         indent = 0
         for i, (choice_type, constraints, value) in enumerate(
-            zip(self.choice_types, self.constraints, self.values)
+            zip(self.choice_types, self.constraints, self.values, strict=True)
         ):
             with p.indent(indent):
                 if i > 0:
@@ -730,6 +728,7 @@ class DataTree:
                     current_node.choice_types,
                     current_node.constraints,
                     current_node.values,
+                    strict=True,
                 )
             ):
                 if i in current_node.forced:
@@ -769,55 +768,55 @@ class DataTree:
                     # We've now found a value that is allowed to
                     # vary, so what follows is not fixed.
                     return tuple(prefix)
-            else:
-                assert not isinstance(current_node.transition, (Conclusion, Killed))
-                if current_node.transition is None:
-                    return tuple(prefix)
-                branch = current_node.transition
-                assert isinstance(branch, Branch)
 
-                attempts = 0
-                while True:
-                    if attempts <= 10:
-                        try:
-                            node_value = self._draw(
-                                branch.choice_type, branch.constraints, random=random
-                            )
-                        except StopTest:  # pragma: no cover
-                            attempts += 1
-                            continue
-                    else:
-                        node_value = self._draw_from_cache(
-                            branch.choice_type,
-                            branch.constraints,
-                            key=id(branch),
-                            random=random,
-                        )
+            assert not isinstance(current_node.transition, (Conclusion, Killed))
+            if current_node.transition is None:
+                return tuple(prefix)
+            branch = current_node.transition
+            assert isinstance(branch, Branch)
+
+            attempts = 0
+            while True:
+                if attempts <= 10:
                     try:
-                        child = branch.children[node_value]
-                    except KeyError:
-                        append_choice(branch.choice_type, node_value)
-                        return tuple(prefix)
-                    if not child.is_exhausted:
-                        append_choice(branch.choice_type, node_value)
-                        current_node = child
-                        break
-                    attempts += 1
-                    self._reject_child(
+                        node_value = self._draw(
+                            branch.choice_type, branch.constraints, random=random
+                        )
+                    except StopTest:  # pragma: no cover
+                        attempts += 1
+                        continue
+                else:
+                    node_value = self._draw_from_cache(
                         branch.choice_type,
                         branch.constraints,
-                        child=node_value,
                         key=id(branch),
+                        random=random,
                     )
+                try:
+                    child = branch.children[node_value]
+                except KeyError:
+                    append_choice(branch.choice_type, node_value)
+                    return tuple(prefix)
+                if not child.is_exhausted:
+                    append_choice(branch.choice_type, node_value)
+                    current_node = child
+                    break
+                attempts += 1
+                self._reject_child(
+                    branch.choice_type,
+                    branch.constraints,
+                    child=node_value,
+                    key=id(branch),
+                )
 
-                    # We don't expect this assertion to ever fire, but coverage
-                    # wants the loop inside to run if you have branch checking
-                    # on, hence the pragma.
-                    assert (  # pragma: no cover
-                        attempts != 1000
-                        or len(branch.children) < branch.max_children
-                        or any(not v.is_exhausted for v in branch.children.values())
-                    )
+                # We don't expect this assertion to ever fire, but coverage
+                # wants the loop inside to run if you have branch checking
+                # on, hence the pragma.
+                assert (  # pragma: no cover
+                    attempts != 1000
+                    or len(branch.children) < branch.max_children
+                    or any(not v.is_exhausted for v in branch.children.values())
+                )
 
     def rewrite(self, choices):
         """Use previously seen ConjectureData objects to return a tuple of
@@ -852,7 +851,7 @@ class DataTree:
         try:
             while True:
                 for i, (choice_type, constraints, previous) in enumerate(
-                    zip(node.choice_types, node.constraints, node.values)
+                    zip(node.choice_types, node.constraints, node.values, strict=True)
                 ):
                     v = draw(
                         choice_type,
@@ -1140,7 +1139,7 @@ class TreeRecordingObserver(DataObserver):
         self._trail.append(self._current_node)
 
     def conclude_test(
-        self, status: Status, interesting_origin: Optional[InterestingOrigin]
+        self, status: Status, interesting_origin: InterestingOrigin | None
     ) -> None:
         """Says that ``status`` occurred at node ``node``. This updates the
         node if necessary and checks for consistency."""

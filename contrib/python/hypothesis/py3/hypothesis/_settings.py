@@ -27,7 +27,6 @@ from typing import (
     ClassVar,
     Optional,
     TypeVar,
-    Union,
 )
 
 from hypothesis.errors import (
@@ -142,18 +141,47 @@ class HealthCheckMeta(EnumMeta):
 
 @unique
 class HealthCheck(Enum, metaclass=HealthCheckMeta):
-    """Arguments for :attr:`~hypothesis.settings.suppress_health_check`.
+    """
+    A |HealthCheck| is proactively raised by Hypothesis when Hypothesis detects
+    that your test has performance problems, which may result in less rigorous
+    testing than you expect. For example, if your test takes a long time to generate
+    inputs, or filters away too many  inputs using |assume| or |filter|, Hypothesis
+    will raise a corresponding health check.
 
-    Each member of this enum is a specific health check to suppress.
+    A health check is a proactive warning, not an error. We encourage suppressing
+    health checks where you have evaluated they will not pose a problem, or where
+    you have evaluated that fixing the underlying issue is not worthwhile.
 
-    Hypothesis' health checks are designed to detect and warn you about performance
-    problems where your tests are slow, inefficient, or generating very large examples.
+    With the exception of |HealthCheck.function_scoped_fixture| and
+    |HealthCheck.differing_executors|, all health checks warn about performance
+    problems, not correctness errors.
 
-    If this is expected, e.g. when generating large arrays or dataframes, you can selectively
-    disable them with the :obj:`~hypothesis.settings.suppress_health_check` setting.
-    The argument for this parameter is a list with elements drawn from any of
-    the class-level attributes of the HealthCheck class.
-    Using a value of ``list(HealthCheck)`` will disable all health checks.
+    Disabling health checks
+    -----------------------
+
+    Health checks can be disabled by |settings.suppress_health_check|. To suppress
+    all health checks, you can pass ``suppress_health_check=list(HealthCheck)``.
+
+    .. seealso::
+
+        See also the :doc:`/how-to/suppress-healthchecks` how-to.
+
+    Correctness health checks
+    -------------------------
+
+    Some health checks report potential correctness errors, rather than performance
+    problems.
+
+    * |HealthCheck.function_scoped_fixture| indicates that a function-scoped
+      pytest fixture is used by an |@given| test. Many Hypothesis users expect
+      function-scoped fixtures to reset once per input, but they actually reset once
+      per test. We proactively raise |HealthCheck.function_scoped_fixture| to
+      ensure you have considered this case.
+    * |HealthCheck.differing_executors| indicates that the same |@given| test has
+      been executed multiple times with multiple distinct executors.
+
+    We recommend treating these particular health checks with more care, as
+    suppressing them may result in an unsound test.
     """
 
     def __repr__(self) -> str:
@@ -186,14 +214,21 @@ class HealthCheck(Enum, metaclass=HealthCheckMeta):
     internal reasons."""
 
     too_slow = 3
-    """Check for when your data generation is extremely slow and likely to hurt
-    testing."""
+    """
+    Check for when input generation is very slow. Since Hypothesis generates 100
+    (by default) inputs per test execution, a slowdown in generating each input
+    can result in very slow tests overall.
+    """
 
     return_value = 5
     """Deprecated; we always error if a test returns a non-None value."""
 
     large_base_example = 7
-    """Checks if the natural example to shrink towards is very large."""
+    """
+    Checks if the smallest natural input to your test is very large. This makes
+    it difficult for Hypothesis to generate good inputs, especially when trying to
+    shrink failing inputs.
+    """
 
     not_a_test_method = 8
     """Deprecated; we always error if |@given| is applied
@@ -255,11 +290,30 @@ class duration(datetime.timedelta):
         return f"timedelta(milliseconds={int(ms) if ms == int(ms) else ms!r})"
 
 
+# see https://adamj.eu/tech/2020/03/09/detect-if-your-tests-are-running-on-ci
+# initially from https://github.com/tox-dev/tox/blob/e911788a/src/tox/util/ci.py
+_CI_VARS = {
+    "CI": None,  # various, including GitHub Actions, Travis CI, and AppVeyor
+    # see https://github.com/tox-dev/tox/issues/3442
+    "__TOX_ENVIRONMENT_VARIABLE_ORIGINAL_CI": None,
+    "TF_BUILD": "true",  # Azure Pipelines
+    "bamboo.buildKey": None,  # Bamboo
+    "BUILDKITE": "true",  # Buildkite
+    "CIRCLECI": "true",  # Circle CI
+    "CIRRUS_CI": "true",  # Cirrus CI
+    "CODEBUILD_BUILD_ID": None,  # CodeBuild
+    "GITHUB_ACTIONS": "true",  # GitHub Actions
+    "GITLAB_CI": None,  # GitLab CI
+    "HEROKU_TEST_RUN_ID": None,  # Heroku CI
+    "TEAMCITY_VERSION": None,  # TeamCity
+}
+
+
 def is_in_ci() -> bool:
-    # GitHub Actions, Travis CI and AppVeyor have "CI"
-    # Azure Pipelines has "TF_BUILD"
-    # GitLab CI has "GITLAB_CI"
-    return "CI" in os.environ or "TF_BUILD" in os.environ or "GITLAB_CI" in os.environ
+    return any(
+        key in os.environ and (value is None or os.environ[key] == value)
+        for key, value in _CI_VARS.items()
+    )
 
 
 default_variable = DynamicVariable[Optional["settings"]](None)
@@ -332,8 +386,8 @@ def _validate_suppress_health_check(suppressions):
 
 
 def _validate_deadline(
-    x: Union[int, float, datetime.timedelta, None],
-) -> Optional[duration]:
+    x: int | float | datetime.timedelta | None,
+) -> duration | None:
     if x is None:
         return x
     invalid_deadline_error = InvalidArgument(
@@ -438,15 +492,17 @@ class settings(metaclass=settingsMeta):
     settings objects created after the profile was made active, but not in existing
     settings objects.
 
+    .. _builtin-profiles:
+
     Built-in profiles
     -----------------
 
     While you can register additional profiles with |settings.register_profile|,
     Hypothesis comes with two built-in profiles: ``default`` and ``ci``.
 
-    The ``default`` profile is active by default, unless one of the ``CI``,
-    ``TF_BUILD``, or ``GITLAB_CI`` environment variables are set (to any value),
-    in which case the ``CI`` profile will be active by default.
+    By default, the ``default`` profile is active. If the ``CI`` environment
+    variable is set to any value, the ``ci`` profile is active by default. Hypothesis
+    also automatically detects various vendor-specific CI environment variables.
 
     The attributes of the currently active settings profile can be retrieved with
     ``settings()`` (so ``settings().max_examples`` is the currently active default
@@ -460,7 +516,7 @@ class settings(metaclass=settingsMeta):
             "default",
             max_examples=100,
             derandomize=False,
-            database=not_set,  # see settings.database for details
+            database=not_set,  # see settings.database for the default database
             verbosity=Verbosity.normal,
             phases=tuple(Phase),
             stateful_step_count=50,
@@ -494,7 +550,7 @@ class settings(metaclass=settingsMeta):
     """
 
     _profiles: ClassVar[dict[str, "settings"]] = {}
-    _current_profile: ClassVar[Optional[str]] = None
+    _current_profile: ClassVar[str | None] = None
 
     def __init__(
         self,
@@ -512,7 +568,7 @@ class settings(metaclass=settingsMeta):
         stateful_step_count: int = not_set,  # type: ignore
         report_multiple_bugs: bool = not_set,  # type: ignore
         suppress_health_check: Collection["HealthCheck"] = not_set,  # type: ignore
-        deadline: Union[int, float, datetime.timedelta, None] = not_set,  # type: ignore
+        deadline: int | float | datetime.timedelta | None = not_set,  # type: ignore
         print_blob: bool = not_set,  # type: ignore
         backend: str = not_set,  # type: ignore
     ) -> None:
@@ -574,7 +630,7 @@ class settings(metaclass=settingsMeta):
         )
         self._deadline = (
             self._fallback.deadline  # type: ignore
-            if deadline is not_set
+            if deadline is not_set  # type: ignore
             else _validate_deadline(deadline)
         )
         self._print_blob = (
@@ -792,7 +848,18 @@ class settings(metaclass=settingsMeta):
     @property
     def suppress_health_check(self):
         """
-        A list of |HealthCheck| items to disable.
+        Suppress the given |HealthCheck| exceptions. Those health checks will not
+        be raised by Hypothesis. To suppress all health checks, you can pass
+        ``suppress_health_check=list(HealthCheck)``.
+
+        Health checks are proactive warnings, not correctness errors, so we
+        encourage suppressing health checks where you have evaluated they will
+        not pose a problem, or where you have evaluated that fixing the underlying
+        issue is not worthwhile.
+
+        .. seealso::
+
+            See also the :doc:`/how-to/suppress-healthchecks` how-to.
         """
         return self._suppress_health_check
 
@@ -863,7 +930,7 @@ class settings(metaclass=settingsMeta):
                     )
                 setattr(test, attr_name, True)
                 _test.TestCase.settings = self
-                return test  # type: ignore
+                return test
             else:
                 raise InvalidArgument(
                     "@settings(...) can only be used as a decorator on "
@@ -958,6 +1025,20 @@ class settings(metaclass=settingsMeta):
         check_type(str, name, "name")
         settings._current_profile = name
         default_variable.value = settings.get_profile(name)
+
+    @staticmethod
+    def get_current_profile_name() -> str:
+        """
+        The name of the current settings profile. For example:
+
+        .. code-block:: python
+
+            >>> settings.load_profile("myprofile")
+            >>> settings.get_current_profile_name()
+            'myprofile'
+        """
+        assert settings._current_profile is not None
+        return settings._current_profile
 
 
 @contextlib.contextmanager

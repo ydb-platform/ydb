@@ -10,10 +10,10 @@
 
 import dataclasses
 import sys
-import threading
+from collections.abc import Callable
 from functools import partial
-from inspect import signature
-from typing import TYPE_CHECKING, Callable
+from typing import TypeAlias, TypeVar
+from weakref import WeakValueDictionary
 
 import attr
 
@@ -22,49 +22,29 @@ from hypothesis.internal.floats import clamp, float_to_int
 from hypothesis.internal.reflection import proxies
 from hypothesis.vendor.pretty import pretty
 
-if TYPE_CHECKING:
-    from hypothesis.strategies._internal.strategies import SearchStrategy, T
+T = TypeVar("T")
+ValueKey: TypeAlias = tuple[type, object]
+# (fn, args, kwargs)
+StrategyCacheKey: TypeAlias = tuple[
+    object, tuple[ValueKey, ...], frozenset[tuple[str, ValueKey]]
+]
 
-_strategies: dict[str, Callable[..., "SearchStrategy"]] = {}
-
-
-class FloatKey:
-    def __init__(self, f):
-        self.value = float_to_int(f)
-
-    def __eq__(self, other):
-        return isinstance(other, FloatKey) and (other.value == self.value)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        return hash(self.value)
+_all_strategies: WeakValueDictionary[str, Callable] = WeakValueDictionary()
+# note: LRUReusedCache is already thread-local internally
+_STRATEGY_CACHE = LRUReusedCache[StrategyCacheKey, object](1024)
 
 
-def convert_value(v):
+def convert_value(v: object) -> ValueKey:
     if isinstance(v, float):
-        return FloatKey(v)
+        return (float, float_to_int(v))
     return (type(v), v)
 
 
-_CACHE = threading.local()
-
-
-def get_cache() -> LRUReusedCache:
-    try:
-        return _CACHE.STRATEGY_CACHE
-    except AttributeError:
-        _CACHE.STRATEGY_CACHE = LRUReusedCache(1024)
-        return _CACHE.STRATEGY_CACHE
-
-
 def clear_cache() -> None:
-    cache = get_cache()
-    cache.clear()
+    _STRATEGY_CACHE.clear()
 
 
-def cacheable(fn: "T") -> "T":
+def cacheable(fn: T) -> T:
     from hypothesis.control import _current_build_context
     from hypothesis.strategies._internal.strategies import SearchStrategy
 
@@ -79,17 +59,15 @@ def cacheable(fn: "T") -> "T":
         except TypeError:
             return fn(*args, **kwargs)
         cache_key = (fn, tuple(map(convert_value, args)), frozenset(kwargs_cache_key))
-        cache = get_cache()
         try:
-            if cache_key in cache:
-                return cache[cache_key]
+            if cache_key in _STRATEGY_CACHE:
+                return _STRATEGY_CACHE[cache_key]
         except TypeError:
             return fn(*args, **kwargs)
         else:
             result = fn(*args, **kwargs)
             if not isinstance(result, SearchStrategy) or result.is_cacheable:
-                result._is_singleton = True
-                cache[cache_key] = result
+                _STRATEGY_CACHE[cache_key] = result
             return result
 
     cached_strategy.__clear_cache = clear_cache  # type: ignore
@@ -101,7 +79,7 @@ def defines_strategy(
     force_reusable_values: bool = False,
     try_non_lazy: bool = False,
     never_lazy: bool = False,
-) -> Callable[["T"], "T"]:
+) -> Callable[[T], T]:
     """Returns a decorator for strategy functions.
 
     If ``force_reusable_values`` is True, the returned strategy will be marked
@@ -120,7 +98,7 @@ def defines_strategy(
     def decorator(strategy_definition):
         """A decorator that registers the function as a strategy and makes it
         lazily evaluated."""
-        _strategies[strategy_definition.__name__] = signature(strategy_definition)
+        _all_strategies[strategy_definition.__name__] = strategy_definition
 
         if never_lazy:
             assert not try_non_lazy
@@ -158,13 +136,7 @@ def defines_strategy(
     return decorator
 
 
-def to_jsonable(obj: object, *, avoid_realization: bool) -> object:
-    """Recursively convert an object to json-encodable form.
-
-    This is not intended to round-trip, but rather provide an analysis-ready
-    format for observability.  To avoid side affects, we pretty-print all but
-    known types.
-    """
+def _to_jsonable(obj: object, *, avoid_realization: bool, seen: set[int]) -> object:
     if isinstance(obj, (str, int, float, bool, type(None))):
         # We convert integers of 2**63 to floats, to avoid crashing external
         # utilities with a 64 bit integer cap (notable, sqlite). See
@@ -181,7 +153,13 @@ def to_jsonable(obj: object, *, avoid_realization: bool) -> object:
     if avoid_realization:
         return "<symbolic>"
 
-    recur = partial(to_jsonable, avoid_realization=avoid_realization)
+    obj_id = id(obj)
+    if obj_id in seen:
+        return pretty(obj, cycle=True)
+
+    recur = partial(
+        _to_jsonable, avoid_realization=avoid_realization, seen=seen | {obj_id}
+    )
     if isinstance(obj, (list, tuple, set, frozenset)):
         if isinstance(obj, tuple) and hasattr(obj, "_asdict"):
             return recur(obj._asdict())  # treat namedtuples as dicts
@@ -218,3 +196,13 @@ def to_jsonable(obj: object, *, avoid_realization: bool) -> object:
 
     # If all else fails, we'll just pretty-print as a string.
     return pretty(obj)
+
+
+def to_jsonable(obj: object, *, avoid_realization: bool) -> object:
+    """Recursively convert an object to json-encodable form.
+
+    This is not intended to round-trip, but rather provide an analysis-ready
+    format for observability.  To avoid side affects, we pretty-print all but
+    known types.
+    """
+    return _to_jsonable(obj, avoid_realization=avoid_realization, seen=set())

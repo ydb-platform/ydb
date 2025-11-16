@@ -11,15 +11,16 @@
 import importlib
 import inspect
 import math
+import threading
 import time
 from collections import defaultdict
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
-from random import Random, getrandbits
-from typing import Callable, Final, List, Literal, NoReturn, Optional, Union, cast
+from random import Random
+from typing import Literal, NoReturn, cast
 
 from hypothesis import HealthCheck, Phase, Verbosity, settings as Settings
 from hypothesis._settings import local_settings, note_deprecation
@@ -67,14 +68,18 @@ from hypothesis.internal.conjecture.providers import (
 from hypothesis.internal.conjecture.shrinker import Shrinker, ShrinkPredicateT, sort_key
 from hypothesis.internal.escalation import InterestingOrigin
 from hypothesis.internal.healthcheck import fail_health_check
-from hypothesis.internal.observability import Observation, with_observation_callback
+from hypothesis.internal.observability import Observation, with_observability_callback
 from hypothesis.reporting import base_report, report
+
+# In most cases, the following constants are all Final. However, we do allow users
+# to monkeypatch all of these variables, which means we cannot annotate them as
+# Final or mypyc will inline them and render monkeypatching useless.
 
 #: The maximum number of times the shrinker will reduce the complexity of a failing
 #: input before giving up. This avoids falling down a trap of exponential (or worse)
 #: complexity, where the shrinker appears to be making progress but will take a
 #: substantially long time to finish completely.
-MAX_SHRINKS: Final[int] = 500
+MAX_SHRINKS: int = 500
 
 # If the shrinking phase takes more than five minutes, abort it early and print
 # a warning.   Many CI systems will kill a build after around ten minutes with
@@ -86,7 +91,7 @@ MAX_SHRINKS: Final[int] = 500
 #: for before giving up. This is across all shrinks for the same failure, so even
 #: if the shrinker successfully reduces the complexity of a single failure several
 #: times, it will stop when it hits |MAX_SHRINKING_SECONDS| of total time taken.
-MAX_SHRINKING_SECONDS: Final[int] = 300
+MAX_SHRINKING_SECONDS: int = 300
 
 #: The maximum amount of entropy a single test case can use before giving up
 #: while making random choices during input generation.
@@ -94,9 +99,14 @@ MAX_SHRINKING_SECONDS: Final[int] = 300
 #: The "unit" of one |BUFFER_SIZE| does not have any defined semantics, and you
 #: should not rely on it, except that a linear increase |BUFFER_SIZE| will linearly
 #: increase the amount of entropy a test case can use during generation.
-BUFFER_SIZE: Final[int] = 8 * 1024
-CACHE_SIZE: Final[int] = 10000
-MIN_TEST_CALLS: Final[int] = 10
+BUFFER_SIZE: int = 8 * 1024
+CACHE_SIZE: int = 10000
+MIN_TEST_CALLS: int = 10
+
+# we use this to isolate Hypothesis from interacting with the global random,
+# to make it easier to reason about our global random warning logic easier (see
+# deprecate_random_in_strategy).
+_random = Random()
 
 
 def shortlex(s):
@@ -108,7 +118,7 @@ class HealthCheckState:
     valid_examples: int = field(default=0)
     invalid_examples: int = field(default=0)
     overrun_examples: int = field(default=0)
-    draw_times: "defaultdict[str, List[float]]" = field(
+    draw_times: defaultdict[str, list[float]] = field(
         default_factory=lambda: defaultdict(list)
     )
 
@@ -164,9 +174,12 @@ class RunIsComplete(Exception):
     pass
 
 
-def _get_provider(backend: str) -> Union[type, PrimitiveProvider]:
-    mname, cname = AVAILABLE_PROVIDERS[backend].rsplit(".", 1)
-    provider_cls = getattr(importlib.import_module(mname), cname)
+def _get_provider(backend: str) -> PrimitiveProvider | type[PrimitiveProvider]:
+    provider_cls = AVAILABLE_PROVIDERS[backend]
+    if isinstance(provider_cls, str):
+        module_name, class_name = provider_cls.rsplit(".", 1)
+        provider_cls = getattr(importlib.import_module(module_name), class_name)
+
     if provider_cls.lifetime == "test_function":
         return provider_cls(None)
     elif provider_cls.lifetime == "test_case":
@@ -208,7 +221,7 @@ StatisticsDict = TypedDict(
 )
 
 
-def choice_count(choices: Sequence[Union[ChoiceT, ChoiceTemplate]]) -> Optional[int]:
+def choice_count(choices: Sequence[ChoiceT | ChoiceTemplate]) -> int | None:
     count = 0
     for choice in choices:
         if isinstance(choice, ChoiceTemplate):
@@ -274,23 +287,25 @@ class ConjectureRunner:
         self,
         test_function: Callable[[ConjectureData], None],
         *,
-        settings: Optional[Settings] = None,
-        random: Optional[Random] = None,
-        database_key: Optional[bytes] = None,
+        settings: Settings | None = None,
+        random: Random | None = None,
+        database_key: bytes | None = None,
         ignore_limits: bool = False,
+        thread_overlap: dict[int, bool] | None = None,
     ) -> None:
         self._test_function: Callable[[ConjectureData], None] = test_function
         self.settings: Settings = settings or Settings()
         self.shrinks: int = 0
-        self.finish_shrinking_deadline: Optional[float] = None
+        self.finish_shrinking_deadline: float | None = None
         self.call_count: int = 0
         self.misaligned_count: int = 0
         self.valid_examples: int = 0
         self.invalid_examples: int = 0
         self.overrun_examples: int = 0
-        self.random: Random = random or Random(getrandbits(128))
-        self.database_key: Optional[bytes] = database_key
+        self.random: Random = random or Random(_random.getrandbits(128))
+        self.database_key: bytes | None = database_key
         self.ignore_limits: bool = ignore_limits
+        self.thread_overlap = {} if thread_overlap is None else thread_overlap
 
         # Global dict of per-phase statistics, and a list of per-call stats
         # which transfer to the global dict at the end of each phase.
@@ -300,17 +315,13 @@ class ConjectureRunner:
 
         self.interesting_examples: dict[InterestingOrigin, ConjectureResult] = {}
         # We use call_count because there may be few possible valid_examples.
-        self.first_bug_found_at: Optional[int] = None
-        self.last_bug_found_at: Optional[int] = None
+        self.first_bug_found_at: int | None = None
+        self.last_bug_found_at: int | None = None
 
-        # At runtime, the keys are only ever type `InterestingOrigin`, but can be `None` during tests.
-        self.shrunk_examples: set[Optional[InterestingOrigin]] = set()
-
-        self.health_check_state: Optional[HealthCheckState] = None
-
+        self.shrunk_examples: set[InterestingOrigin] = set()
+        self.health_check_state: HealthCheckState | None = None
         self.tree: DataTree = DataTree()
-
-        self.provider: Union[type, PrimitiveProvider] = _get_provider(
+        self.provider: PrimitiveProvider | type[PrimitiveProvider] = _get_provider(
             self.settings.backend
         )
 
@@ -323,29 +334,29 @@ class ConjectureRunner:
         # is only marginally useful at present, but speeds up local development
         # because it means that large targets will be quickly surfaced in your
         # testing.
-        self.pareto_front: Optional[ParetoFront] = None
+        self.pareto_front: ParetoFront | None = None
         if self.database_key is not None and self.settings.database is not None:
             self.pareto_front = ParetoFront(self.random)
             self.pareto_front.on_evict(self.on_pareto_evict)
 
         # We want to be able to get the ConjectureData object that results
-        # from running a buffer without recalculating, especially during
+        # from running a choice sequence without recalculating, especially during
         # shrinking where we need to know about the structure of the
         # executed test case.
         self.__data_cache = LRUReusedCache[
-            tuple[ChoiceKeyT, ...], Union[ConjectureResult, _Overrun]
+            tuple[ChoiceKeyT, ...], ConjectureResult | _Overrun
         ](CACHE_SIZE)
 
         self.reused_previously_shrunk_test_case: bool = False
 
-        self.__pending_call_explanation: Optional[str] = None
+        self.__pending_call_explanation: str | None = None
         self._backend_found_failure: bool = False
         self._backend_exceeded_deadline: bool = False
         self._switch_to_hypothesis_provider: bool = False
 
         self.__failed_realize_count: int = 0
         # note unsound verification by alt backends
-        self._verified_by: Optional[str] = None
+        self._verified_by: str | None = None
 
     @contextmanager
     def _with_switch_to_hypothesis_provider(
@@ -380,8 +391,6 @@ class ConjectureRunner:
             self._current_phase = phase
             yield
         finally:
-            # We ignore the mypy type error here. Because `phase` is a string literal and "-phase" is a string literal
-            # as well, the concatenation will always be valid key in the dictionary.
             self.statistics[phase + "-phase"] = {  # type: ignore
                 "duration-seconds": time.perf_counter() - start_time,
                 "test-cases": list(self.stats_per_test_case),
@@ -429,11 +438,11 @@ class ConjectureRunner:
 
     def cached_test_function(
         self,
-        choices: Sequence[Union[ChoiceT, ChoiceTemplate]],
+        choices: Sequence[ChoiceT | ChoiceTemplate],
         *,
         error_on_discard: bool = False,
-        extend: Union[int, Literal["full"]] = 0,
-    ) -> Union[ConjectureResult, _Overrun]:
+        extend: int | Literal["full"] = 0,
+    ) -> ConjectureResult | _Overrun:
         """
         If ``error_on_discard`` is set to True this will raise ``ContainsDiscard``
         in preference to running the actual test function. This is to allow us
@@ -469,7 +478,7 @@ class ConjectureRunner:
         # The reason is we don't expect simulate_test_function to explore new choices
         # and write back to the tree, so we don't want the overhead of the
         # TreeRecordingObserver tracking those calls.
-        trial_observer: Optional[DataObserver] = DataObserver()
+        trial_observer: DataObserver | None = DataObserver()
         if error_on_discard:
             trial_observer = DiscardObserver()
 
@@ -500,8 +509,7 @@ class ConjectureRunner:
                 pass
 
         data = self.new_conjecture_data(choices, max_choices=max_length)
-        # note that calling test_function caches `data` for us, for both an ir
-        # tree key and a buffer key.
+        # note that calling test_function caches `data` for us.
         self.test_function(data)
         return data.as_result()
 
@@ -754,45 +762,101 @@ class ConjectureRunner:
         if state.overrun_examples == max_overrun_draws:
             fail_health_check(
                 self.settings,
-                "Examples routinely exceeded the max allowable size. "
-                f"({state.overrun_examples} examples overran while generating "
-                f"{state.valid_examples} valid ones). Generating examples this large "
-                "will usually lead to bad results. You could try setting max_size "
-                "parameters on your collections and turning max_leaves down on "
-                "recursive() calls.",
+                "Generated inputs routinely consumed more than the maximum "
+                f"allowed entropy: {state.valid_examples} inputs were generated "
+                f"successfully, while {state.overrun_examples} inputs exceeded the "
+                f"maximum allowed entropy during generation."
+                "\n\n"
+                f"Testing with inputs this large tends to be slow, and to produce "
+                "failures that are both difficult to shrink and difficult to understand. "
+                "Try decreasing the amount of data generated, for example by "
+                "decreasing the minimum size of collection strategies like "
+                "st.lists()."
+                "\n\n"
+                "If you expect the average size of your input to be this large, "
+                "you can disable this health check with "
+                "@settings(suppress_health_check=[HealthCheck.data_too_large]). "
+                "See "
+                "https://hypothesis.readthedocs.io/en/latest/reference/api.html#hypothesis.HealthCheck "
+                "for details.",
                 HealthCheck.data_too_large,
             )
         if state.invalid_examples == max_invalid_draws:
             fail_health_check(
                 self.settings,
-                "It looks like your strategy is filtering out a lot of data. Health "
-                f"check found {state.invalid_examples} filtered examples but only "
-                f"{state.valid_examples} good ones. This will make your tests much "
-                "slower, and also will probably distort the data generation quite a "
-                "lot. You should adapt your strategy to filter less. This can also "
-                "be caused by a low max_leaves parameter in recursive() calls",
+                "It looks like this test is filtering out a lot of inputs. "
+                f"{state.valid_examples} inputs were generated successfully, "
+                f"while {state.invalid_examples} inputs were filtered out. "
+                "\n\n"
+                "An input might be filtered out by calls to assume(), "
+                "strategy.filter(...), or occasionally by Hypothesis internals."
+                "\n\n"
+                "Applying this much filtering makes input generation slow, since "
+                "Hypothesis must discard inputs which are filtered out and try "
+                "generating it again. It is also possible that applying this much "
+                "filtering will distort the domain and/or distribution of the test, "
+                "leaving your testing less rigorous than expected."
+                "\n\n"
+                "If you expect this many inputs to be filtered out during generation, "
+                "you can disable this health check with "
+                "@settings(suppress_health_check=[HealthCheck.filter_too_much]). See "
+                "https://hypothesis.readthedocs.io/en/latest/reference/api.html#hypothesis.HealthCheck "
+                "for details.",
                 HealthCheck.filter_too_much,
             )
 
-        draw_time = state.total_draw_time
-
         # Allow at least the greater of one second or 5x the deadline.  If deadline
         # is None, allow 30s - the user can disable the healthcheck too if desired.
+        draw_time = state.total_draw_time
         draw_time_limit = 5 * (self.settings.deadline or timedelta(seconds=6))
-        if draw_time > max(1.0, draw_time_limit.total_seconds()):
+        if (
+            draw_time > max(1.0, draw_time_limit.total_seconds())
+            # we disable HealthCheck.too_slow under concurrent threads, since
+            # cpython may switch away from a thread for arbitrarily long.
+            and not self.thread_overlap.get(threading.get_ident(), False)
+        ):
+            extra_str = []
+            if state.invalid_examples:
+                extra_str.append(f"{state.invalid_examples} invalid inputs")
+            if state.overrun_examples:
+                extra_str.append(
+                    f"{state.overrun_examples} inputs which exceeded the "
+                    "maximum allowed entropy"
+                )
+            extra_str = ", and ".join(extra_str)
+            extra_str = f" ({extra_str})" if extra_str else ""
+
             fail_health_check(
                 self.settings,
-                "Data generation is extremely slow: Only produced "
-                f"{state.valid_examples} valid examples in {draw_time:.2f} seconds "
-                f"({state.invalid_examples} invalid ones and {state.overrun_examples} "
-                "exceeded maximum size). Try decreasing size of the data you're "
-                "generating (with e.g. max_size or max_leaves parameters)."
-                + state.timing_report(),
+                "Input generation is slow: Hypothesis only generated "
+                f"{state.valid_examples} valid inputs after {draw_time:.2f} "
+                f"seconds{extra_str}."
+                "\n" + state.timing_report() + "\n\n"
+                "This could be for a few reasons:"
+                "\n"
+                "1. This strategy could be generating too much data per input. "
+                "Try decreasing the amount of data generated, for example by "
+                "decreasing the minimum size of collection strategies like "
+                "st.lists()."
+                "\n"
+                "2. Some other expensive computation could be running during input "
+                "generation. For example, "
+                "if @st.composite or st.data() is interspersed with an expensive "
+                "computation, HealthCheck.too_slow is likely to trigger. If this "
+                "computation is unrelated to input generation, move it elsewhere. "
+                "Otherwise, try making it more efficient, or disable this health "
+                "check if that is not possible."
+                "\n\n"
+                "If you expect input generation to take this long, you can disable "
+                "this health check with "
+                "@settings(suppress_health_check=[HealthCheck.too_slow]). See "
+                "https://hypothesis.readthedocs.io/en/latest/reference/api.html#hypothesis.HealthCheck "
+                "for details.",
                 HealthCheck.too_slow,
             )
 
     def save_choices(
-        self, choices: Sequence[ChoiceT], sub_key: Optional[bytes] = None
+        self, choices: Sequence[ChoiceT], sub_key: bytes | None = None
     ) -> None:
         if self.settings.database is not None:
             key = self.sub_key(sub_key)
@@ -805,7 +869,7 @@ class ConjectureRunner:
         if self.settings.database is not None and self.database_key is not None:
             self.settings.database.move(self.database_key, self.secondary_key, buffer)
 
-    def sub_key(self, sub_key: Optional[bytes]) -> Optional[bytes]:
+    def sub_key(self, sub_key: bytes | None) -> bytes | None:
         if self.database_key is None:
             return None
         if sub_key is None:
@@ -813,11 +877,11 @@ class ConjectureRunner:
         return b".".join((self.database_key, sub_key))
 
     @property
-    def secondary_key(self) -> Optional[bytes]:
+    def secondary_key(self) -> bytes | None:
         return self.sub_key(b"secondary")
 
     @property
-    def pareto_key(self) -> Optional[bytes]:
+    def pareto_key(self) -> bytes | None:
         return self.sub_key(b"pareto")
 
     def debug(self, message: str) -> None:
@@ -828,7 +892,7 @@ class ConjectureRunner:
     def report_debug_info(self) -> bool:
         return self.settings.verbosity >= Verbosity.debug
 
-    def debug_data(self, data: Union[ConjectureData, ConjectureResult]) -> None:
+    def debug_data(self, data: ConjectureData | ConjectureResult) -> None:
         if not self.report_debug_info:
             return
 
@@ -858,28 +922,24 @@ class ConjectureRunner:
             # and the provider opted-in to observations
             and self.provider.add_observability_callback
         ):
-            return with_observation_callback(on_observation)
+            return with_observability_callback(on_observation)
         return nullcontext()
 
     def run(self) -> None:
-        with local_settings(self.settings):
-            # NOTE: For compatibility with Python 3.9's LL(1)
-            # parser, this is written as a nested with-statement,
-            # instead of a compound one.
-            with self.observe_for_provider():
-                try:
-                    self._run()
-                except RunIsComplete:
-                    pass
-                for v in self.interesting_examples.values():
-                    self.debug_data(v)
-                self.debug(
-                    "Run complete after %d examples (%d valid) and %d shrinks"
-                    % (self.call_count, self.valid_examples, self.shrinks)
-                )
+        with local_settings(self.settings), self.observe_for_provider():
+            try:
+                self._run()
+            except RunIsComplete:
+                pass
+            for v in self.interesting_examples.values():
+                self.debug_data(v)
+            self.debug(
+                f"Run complete after {self.call_count} examples "
+                f"({self.valid_examples} valid) and {self.shrinks} shrinks"
+            )
 
     @property
-    def database(self) -> Optional[ExampleDatabase]:
+    def database(self) -> ExampleDatabase | None:
         if self.database_key is None:
             return None
         return self.settings.database
@@ -1065,16 +1125,22 @@ class ConjectureRunner:
         ):
             fail_health_check(
                 self.settings,
-                "The smallest natural example for your test is extremely "
+                "The smallest natural input for this test is very "
                 "large. This makes it difficult for Hypothesis to generate "
-                "good examples, especially when trying to reduce failing ones "
-                "at the end. Consider reducing the size of your data if it is "
-                "of a fixed size. You could also fix this by improving how "
-                "your data shrinks (see https://hypothesis.readthedocs.io/en/"
-                "latest/data.html#shrinking for details), or by introducing "
-                "default values inside your strategy. e.g. could you replace "
-                "some arguments with their defaults by using "
-                "one_of(none(), some_complex_strategy)?",
+                "good inputs, especially when trying to shrink failing inputs."
+                "\n\n"
+                "Consider reducing the amount of data generated by the strategy. "
+                "Also consider introducing small alternative values for some "
+                "strategies. For example, could you "
+                "mark some arguments as optional by replacing `some_complex_strategy`"
+                "with `st.none() | some_complex_strategy`?"
+                "\n\n"
+                "If you are confident that the size of the smallest natural input "
+                "to your test cannot be reduced, you can suppress this health check "
+                "with @settings(suppress_health_check=[HealthCheck.large_base_example]). "
+                "See "
+                "https://hypothesis.readthedocs.io/en/latest/reference/api.html#hypothesis.HealthCheck "
+                "for details.",
                 HealthCheck.large_base_example,
             )
 
@@ -1215,9 +1281,7 @@ class ConjectureRunner:
                 self._current_phase = "target"
                 self.optimise_targets()
 
-    def generate_mutations_from(
-        self, data: Union[ConjectureData, ConjectureResult]
-    ) -> None:
+    def generate_mutations_from(self, data: ConjectureData | ConjectureResult) -> None:
         # A thing that is often useful but rarely happens by accident is
         # to generate the same value at multiple different points in the
         # test case.
@@ -1447,10 +1511,10 @@ class ConjectureRunner:
 
     def new_conjecture_data(
         self,
-        prefix: Sequence[Union[ChoiceT, ChoiceTemplate]],
+        prefix: Sequence[ChoiceT | ChoiceTemplate],
         *,
-        observer: Optional[DataObserver] = None,
-        max_choices: Optional[int] = None,
+        observer: DataObserver | None = None,
+        max_choices: int | None = None,
     ) -> ConjectureData:
         provider = (
             HypothesisProvider if self._switch_to_hypothesis_provider else self.provider
@@ -1508,7 +1572,7 @@ class ConjectureRunner:
                 self.shrink(example, lambda d: d.status == Status.INTERESTING)
                 return
 
-            def predicate(d: Union[ConjectureResult, _Overrun]) -> bool:
+            def predicate(d: ConjectureResult | _Overrun) -> bool:
                 if d.status < Status.INTERESTING:
                     return False
                 d = cast(ConjectureResult, d)
@@ -1550,23 +1614,23 @@ class ConjectureRunner:
 
     def shrink(
         self,
-        example: Union[ConjectureData, ConjectureResult],
-        predicate: Optional[ShrinkPredicateT] = None,
-        allow_transition: Optional[
-            Callable[[Union[ConjectureData, ConjectureResult], ConjectureData], bool]
-        ] = None,
-    ) -> Union[ConjectureData, ConjectureResult]:
+        example: ConjectureData | ConjectureResult,
+        predicate: ShrinkPredicateT | None = None,
+        allow_transition: (
+            Callable[[ConjectureData | ConjectureResult, ConjectureData], bool] | None
+        ) = None,
+    ) -> ConjectureData | ConjectureResult:
         s = self.new_shrinker(example, predicate, allow_transition)
         s.shrink()
         return s.shrink_target
 
     def new_shrinker(
         self,
-        example: Union[ConjectureData, ConjectureResult],
-        predicate: Optional[ShrinkPredicateT] = None,
-        allow_transition: Optional[
-            Callable[[Union[ConjectureData, ConjectureResult], ConjectureData], bool]
-        ] = None,
+        example: ConjectureData | ConjectureResult,
+        predicate: ShrinkPredicateT | None = None,
+        allow_transition: (
+            Callable[[ConjectureData | ConjectureResult, ConjectureData], bool] | None
+        ) = None,
     ) -> Shrinker:
         return Shrinker(
             self,

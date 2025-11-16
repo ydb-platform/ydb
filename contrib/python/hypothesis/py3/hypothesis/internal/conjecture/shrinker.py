@@ -10,9 +10,15 @@
 
 import math
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    TypeAlias,
+    cast,
+)
 
 from hypothesis.internal.conjecture.choice import (
     ChoiceNode,
@@ -53,11 +59,10 @@ from hypothesis.internal.floats import MAX_PRECISE_INTEGER
 
 if TYPE_CHECKING:
     from random import Random
-    from typing import TypeAlias
 
     from hypothesis.internal.conjecture.engine import ConjectureRunner
 
-ShrinkPredicateT: "TypeAlias" = Callable[[Union[ConjectureResult, _Overrun]], bool]
+ShrinkPredicateT: TypeAlias = Callable[[ConjectureResult | _Overrun], bool]
 
 
 def sort_key(nodes: Sequence[ChoiceNode]) -> tuple[int, tuple[int, ...]]:
@@ -87,7 +92,7 @@ def sort_key(nodes: Sequence[ChoiceNode]) -> tuple[int, tuple[int, ...]]:
 @dataclass
 class ShrinkPass:
     function: Any
-    name: Optional[str] = None
+    name: str | None = None
     last_prefix: Any = ()
 
     # some execution statistics
@@ -263,12 +268,12 @@ class Shrinker:
     def __init__(
         self,
         engine: "ConjectureRunner",
-        initial: Union[ConjectureData, ConjectureResult],
-        predicate: Optional[ShrinkPredicateT],
+        initial: ConjectureData | ConjectureResult,
+        predicate: ShrinkPredicateT | None,
         *,
-        allow_transition: Optional[
-            Callable[[Union[ConjectureData, ConjectureResult], ConjectureData], bool]
-        ],
+        allow_transition: (
+            Callable[[ConjectureData | ConjectureResult, ConjectureData], bool] | None
+        ),
         explain: bool,
         in_target_phase: bool = False,
     ):
@@ -320,7 +325,7 @@ class Shrinker:
 
         # Because the shrinker is also used to `pareto_optimise` in the target phase,
         # we sometimes want to allow extending buffers instead of aborting at the end.
-        self.__extend: Union[Literal["full"], int] = "full" if in_target_phase else 0
+        self.__extend: Literal["full"] | int = "full" if in_target_phase else 0
         self.should_explain = explain
 
     @derived_value  # type: ignore
@@ -353,7 +358,7 @@ class Shrinker:
 
     def cached_test_function(
         self, nodes: Sequence[ChoiceNode]
-    ) -> tuple[bool, Optional[Union[ConjectureResult, _Overrun]]]:
+    ) -> tuple[bool, ConjectureResult | _Overrun | None]:
         nodes = nodes[: len(self.nodes)]
 
         if startswith(nodes, self.nodes):
@@ -518,7 +523,9 @@ class Shrinker:
                     and endswith(result.nodes, nodes[end:])
                 ):
                     # Turns out this was a variable-length part, so grab the infix...
-                    for span1, span2 in zip(shrink_target.spans, result.spans):
+                    for span1, span2 in zip(
+                        shrink_target.spans, result.spans, strict=False
+                    ):
                         assert span1.start == span2.start
                         assert span1.start <= start
                         assert span1.label == span2.label
@@ -551,7 +558,7 @@ class Shrinker:
                     # However, it's really hard to write a simple and reliable covering
                     # test, because of our `seen_passing_buffers` check above.
                     break  # pragma: no cover
-                elif self.__predicate(result):  # pragma: no branch
+                if self.__predicate(result):  # pragma: no branch
                     n_same_failures += 1
                     if n_same_failures >= 100:
                         self.shrink_target.slice_comments[(start, end)] = note
@@ -582,7 +589,7 @@ class Shrinker:
                     "The test sometimes passed when commented parts were varied together."
                 )
                 break  # Test passed, this param can't vary freely.
-            elif self.__predicate(result):  # pragma: no branch
+            if self.__predicate(result):  # pragma: no branch
                 n_same_failures_together += 1
                 if n_same_failures_together >= 100:
                     self.shrink_target.slice_comments[(0, 0)] = (
@@ -890,24 +897,28 @@ class Shrinker:
             self.distinct_labels, lambda l: len(self.spans_by_label[l]) >= 2
         )
 
-        ls = self.spans_by_label[label]
-        i = chooser.choose(range(len(ls) - 1))
-        ancestor = ls[i]
+        spans = self.spans_by_label[label]
+        i = chooser.choose(range(len(spans) - 1))
+        ancestor = spans[i]
 
-        if i + 1 == len(ls) or ls[i + 1].start >= ancestor.end:
+        if i + 1 == len(spans) or spans[i + 1].start >= ancestor.end:
             return
 
         @self.cached(label, i)
         def descendants():
             lo = i + 1
-            hi = len(ls)
+            hi = len(spans)
             while lo + 1 < hi:
                 mid = (lo + hi) // 2
-                if ls[mid].start >= ancestor.end:
+                if spans[mid].start >= ancestor.end:
                     hi = mid
                 else:
                     lo = mid
-            return [t for t in ls[i + 1 : hi] if t.choice_count < ancestor.choice_count]
+            return [
+                span
+                for span in spans[i + 1 : hi]
+                if span.choice_count < ancestor.choice_count
+            ]
 
         descendant = chooser.choose(descendants, lambda ex: ex.choice_count > 0)
 
@@ -991,7 +1002,7 @@ class Shrinker:
                     st.nodes,
                     [
                         offset_node(node, sign * (n + v))
-                        for node, v in zip(changed, ints)
+                        for node, v in zip(changed, ints, strict=False)
                     ],
                 )
             )
@@ -1021,13 +1032,13 @@ class Shrinker:
         assert sort_key(new_target.nodes) < sort_key(prev_target.nodes)
 
         if len(prev_nodes) != len(new_nodes) or any(
-            n1.type != n2.type for n1, n2 in zip(prev_nodes, new_nodes)
+            n1.type != n2.type for n1, n2 in zip(prev_nodes, new_nodes, strict=True)
         ):
             # should we check constraints are equal as well?
             self.__all_changed_nodes = set()
         else:
             assert len(prev_nodes) == len(new_nodes)
-            for i, (n1, n2) in enumerate(zip(prev_nodes, new_nodes)):
+            for i, (n1, n2) in enumerate(zip(prev_nodes, new_nodes, strict=True)):
                 assert n1.type == n2.type
                 if not choice_equal(n1.value, n2.value):
                     self.__all_changed_nodes.add(i)
@@ -1347,12 +1358,23 @@ class Shrinker:
             and node1.index < node.index <= node1.index + 4,
         )
 
-        m: Union[int, float] = node1.value
-        n: Union[int, float] = node2.value
+        m: int | float = node1.value
+        n: int | float = node2.value
 
         def boost(k: int) -> bool:
-            if k > m:
+            # floats always shrink towards 0
+            shrink_towards = (
+                node1.constraints["shrink_towards"] if node1.type == "integer" else 0
+            )
+            if k > abs(m - shrink_towards):
                 return False
+
+            # We are trying to move node1 (m) closer to shrink_towards, and node2
+            # (n) farther away from shrink_towards. If m is below shrink_towards,
+            # we want to add to m and subtract from n, and vice versa if above
+            # shrink_towards.
+            if m < shrink_towards:
+                k = -k
 
             try:
                 v1 = m - k
@@ -1364,7 +1386,7 @@ class Shrinker:
 
             # if we've increased node2 to the point that we're past max precision,
             # give up - things have become too unstable.
-            if node1.type == "float" and v2 >= MAX_PRECISE_INTEGER:
+            if node1.type == "float" and abs(v2) >= MAX_PRECISE_INTEGER:
                 return False
 
             return self.consider_new_nodes(
@@ -1700,7 +1722,7 @@ class Shrinker:
                             v,
                             st.nodes[spans[i].start : spans[i].end],
                         )
-                        for (u, v), i in zip(endpoints, indices)
+                        for (u, v), i in zip(endpoints, indices, strict=True)
                     ],
                 )
             ),

@@ -12,9 +12,9 @@ import inspect
 import math
 import random
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
-from typing import Any, Callable, NoReturn, Optional, Union
+from typing import Any, NoReturn, Optional
 from weakref import WeakKeyDictionary
 
 from hypothesis import Verbosity, settings
@@ -22,7 +22,7 @@ from hypothesis._settings import note_deprecation
 from hypothesis.errors import InvalidArgument, UnsatisfiedAssumption
 from hypothesis.internal.compat import BaseExceptionGroup
 from hypothesis.internal.conjecture.data import ConjectureData
-from hypothesis.internal.observability import TESTCASE_CALLBACKS
+from hypothesis.internal.observability import observability_enabled
 from hypothesis.internal.reflection import get_pretty_function_description
 from hypothesis.internal.validation import check_type
 from hypothesis.reporting import report, verbose_report
@@ -62,9 +62,9 @@ def assume(condition: object) -> bool:
             since="2023-09-25",
             has_codemod=False,
         )
-    if TESTCASE_CALLBACKS or not condition:
+    if observability_enabled() or not condition:
         where = _calling_function_location("assume", inspect.currentframe())
-        if TESTCASE_CALLBACKS and currently_in_test_context():
+        if observability_enabled() and currently_in_test_context():
             counts = current_build_context().data._observability_predicates[where]
             counts.update_count(condition=bool(condition))
         if not condition:
@@ -155,6 +155,7 @@ class BuildContext:
         self,
         obj: object,
         func: object,
+        *,
         args: Sequence[object],
         kwargs: dict[str, object],
     ) -> None:
@@ -237,7 +238,7 @@ def note(value: object) -> None:
         report(value)
 
 
-def event(value: str, payload: Union[str, int, float] = "") -> None:
+def event(value: str, payload: str | int | float = "") -> None:
     """Record an event that occurred during this test. Statistics on the number of test
     runs with each event will be reported at the end if you run Hypothesis in
     statistics reporting mode.
@@ -271,7 +272,7 @@ def _event_to_string(event, allowed_types=str):
     return result
 
 
-def target(observation: Union[int, float], *, label: str = "") -> Union[int, float]:
+def target(observation: int | float, *, label: str = "") -> int | float:
     """Calling this function with an ``int`` or ``float`` observation gives it feedback
     with which to guide our search for inputs that will cause an error, in
     addition to all the usual heuristics.  Observations must always be finite.

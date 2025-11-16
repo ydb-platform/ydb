@@ -21,18 +21,15 @@ from enum import IntEnum
 from functools import lru_cache, reduce
 from os import sep
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TypeAlias
 
 from hypothesis._settings import Phase, Verbosity
 from hypothesis.internal.compat import PYPY
 from hypothesis.internal.escalation import is_hypothesis_file
 
-if TYPE_CHECKING:
-    from typing import TypeAlias
-
-Location: "TypeAlias" = tuple[str, int]
-Branch: "TypeAlias" = tuple[Optional[Location], Location]
-Trace: "TypeAlias" = set[Branch]
+Location: TypeAlias = tuple[str, int]
+Branch: TypeAlias = tuple[Location | None, Location]
+Trace: TypeAlias = set[Branch]
 
 
 @functools.cache
@@ -47,7 +44,7 @@ def should_trace_file(fname: str) -> bool:
 # tool_id = 1 is designated for coverage, but we intentionally choose a
 # non-reserved tool id so we can co-exist with coverage tools.
 MONITORING_TOOL_ID = 3
-if sys.version_info[:2] >= (3, 12):
+if hasattr(sys, "monitoring"):
     MONITORING_EVENTS = {sys.monitoring.events.LINE: "trace_line"}
 
 
@@ -63,19 +60,17 @@ class Tracer:
 
     def __init__(self, *, should_trace: bool) -> None:
         self.branches: Trace = set()
-        self._previous_location: Optional[Location] = None
+        self._previous_location: Location | None = None
         self._tried_and_failed_to_trace = False
         self._should_trace = should_trace and self.can_trace()
 
     @staticmethod
     def can_trace() -> bool:
-        return (
-            (sys.version_info[:2] < (3, 12) and sys.gettrace() is None)
-            or (
-                sys.version_info[:2] >= (3, 12)
-                and sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
-            )
-        ) and not PYPY
+        if PYPY:
+            return False
+        if hasattr(sys, "monitoring"):
+            return sys.monitoring.get_tool(MONITORING_TOOL_ID) is None
+        return sys.gettrace() is None
 
     def trace(self, frame, event, arg):
         try:
@@ -107,7 +102,7 @@ class Tracer:
         if not self._should_trace:
             return self
 
-        if sys.version_info[:2] < (3, 12):
+        if not hasattr(sys, "monitoring"):
             sys.settrace(self.trace)
             return self
 
@@ -130,7 +125,7 @@ class Tracer:
         if not self._should_trace:
             return
 
-        if sys.version_info[:2] < (3, 12):
+        if not hasattr(sys, "monitoring"):
             sys.settrace(None)
             return
 
@@ -156,8 +151,9 @@ UNHELPFUL_LOCATIONS = (
     # Quite rarely, the first AFNP line is in Pytest's internals.
     "/_pytest/**",
     "/pluggy/_*.py",
-    # used by pytest for failure formatting in the terminal
-    "/pygments/lexer.py",
+    # used by pytest for failure formatting in the terminal.
+    # seen: pygments/lexer.py, pygments/formatters/, pygments/filter.py.
+    "/pygments/*",
     # used by pytest for failure formatting
     "/difflib.py",
     "/reprlib.py",

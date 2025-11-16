@@ -53,7 +53,7 @@ private:
 
 public:
     TKqpBufferLookupActor(TKqpBufferTableLookupSettings&& settings)
-        : Settings(std::move(settings)) 
+        : Settings(std::move(settings))
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
@@ -127,7 +127,7 @@ public:
         TLookupSettings settings {
             .TablePath = Settings.TablePath,
             .TableId = Settings.TableId,
-            
+
             .AllowNullKeysPrefixSize = 0,
             .KeepRowsOrder = false,
             .LookupStrategy = NKqpProto::EStreamLookupStrategy::LOOKUP,
@@ -201,7 +201,7 @@ public:
                 );
             }
         }
-    
+
         AFL_ENSURE(CookieToLookupState.emplace(
                 cookie,
                 TLookupState{
@@ -236,7 +236,7 @@ public:
         for (const auto& key : keys) {
             worker->AddInputRow(key);
         }
-        
+
         StartLookupTask(cookie, state, true, immediateFail);
     }
 
@@ -299,7 +299,7 @@ public:
 
         Settings.TxManager->AddShard(shardId, false, worker->GetTablePath());
         Settings.TxManager->AddAction(shardId, IKqpTransactionManager::EAction::READ);
-        
+
         if (Settings.MvccSnapshot) {
             record.MutableSnapshot()->SetStep(Settings.MvccSnapshot->GetStep());
             record.MutableSnapshot()->SetTxId(Settings.MvccSnapshot->GetTxId());
@@ -475,7 +475,11 @@ public:
         AFL_ENSURE(read.LastSeqNo < record.GetSeqNo());
         read.LastSeqNo = record.GetSeqNo();
 
-        if (record.GetFinished()) {
+        // Save values before potentially erasing the read state
+        const bool failOnUniqueCheck = read.FailOnUniqueCheck;
+        const bool finished = record.GetFinished();
+
+        if (finished) {
             --lookupState.ReadsInflight;
             ReadIdToState.erase(readIt);
         } else {
@@ -509,7 +513,7 @@ public:
             CA_LOG_D("TEvReadAck was sent to shard: " << shardId);
         }
 
-        if (read.FailOnUniqueCheck && record.GetRowCount() != 0) {
+        if (failOnUniqueCheck && record.GetRowCount() != 0) {
             return RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
@@ -529,7 +533,7 @@ public:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
         ShardToState.at(ev->Get()->TabletId).HasPipe = false;
-        
+
         TVector<ui64> toRetry;
         for (const auto& [readId, readState] : ReadIdToState) {
             if (readState.ShardId == ev->Get()->TabletId && !readState.Blocked) {
@@ -580,7 +584,7 @@ public:
             << ", shardId: " << failedRead.ShardId);
 
         failedRead.Blocked = true;
-        
+
         auto delay = CalcDelay(shardState.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             --lookupState.ReadsInflight;
@@ -628,7 +632,7 @@ public:
         ReadRowsCount = 0;
         ReadBytesCount = 0;
     }
-    
+
 private:
     TKqpBufferTableLookupSettings Settings;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
@@ -668,7 +672,7 @@ private:
 
 }
 
-std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings) { 
+std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings) {
     auto* ptr = new TKqpBufferLookupActor(std::move(settings));
     return {ptr, ptr};
 }

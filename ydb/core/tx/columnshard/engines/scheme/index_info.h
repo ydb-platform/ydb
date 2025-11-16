@@ -110,7 +110,7 @@ private:
             AFL_VERIFY(result.ok());
             arrowType = result.ValueUnsafe();
         }
-        auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull, md);
+        auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
         if (cache) {
             return cache->GetOrInsertField(f);
         } else {

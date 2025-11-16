@@ -63,25 +63,18 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
 
     auto settings = GetReadTableSettings(input, isReadTableRanges);
 
-    ui64 pointPrefix = 0;
-    if (input.Maybe<TKqpReadTableRanges>()) {
-        auto prompt = TKqpReadTableExplainPrompt::Parse(input.Maybe<TKqpReadTableRanges>().Cast().ExplainPrompt());
-        if (prompt.ExpectedMaxRanges.Defined() && *prompt.ExpectedMaxRanges == 1) {
-            pointPrefix = prompt.PointPrefixLen;
-        }
-    } else if (input.Maybe<TKqpReadTable>()) {
-        pointPrefix = settings.PointPrefixLen;
-    }
-
-    if (!kqpCtx.Config->EnablePointPredicateSortAutoSelectIndex){
-        pointPrefix = 0;
-    }
-
-    if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields, pointPrefix)) {
+    if (!IsSortKeyPrimary(keySelector, tableDesc, passthroughFields)) {
         return node;
     }
 
     if (direction == ESortDirection::Reverse) {
+        // For sys views, we need to set reverse flag even if UseSource returns false
+        // because sys view actors can handle reverse direction
+        bool isSysView = tableDesc.Metadata->Kind == EKikimrTableKind::SysView;
+        if (isSysView) {
+            return node;
+        }
+
         if (!UseSource(kqpCtx, tableDesc) && kqpCtx.IsScanQuery()) {
             return node;
         }
@@ -165,7 +158,7 @@ TExprBase KqpBuildTopStageRemoveSort(
     TExprContext& ctx, 
     IOptimizationContext& /* optCtx */, 
     TTypeAnnotationContext& typeCtx,
-    const TParentsMap& parentsMap,
+    const TParentsMap& parentsMap, 
     bool allowStageMultiUsage,
     bool ruleEnabled
 ) {
@@ -201,7 +194,7 @@ TExprBase KqpBuildTopStageRemoveSort(
     }
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
-
+    
     if (!inputStats || !inputStats->SortColumns) {
         return node;
     }
@@ -263,4 +256,3 @@ TExprBase KqpBuildTopStageRemoveSort(
 }
 
 } // namespace NKikimr::NKqp::NOpt
-

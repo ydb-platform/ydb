@@ -214,47 +214,14 @@ public:
     NJson::TJsonValue DebugJson(const ui64 position) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
-        for (ui32 i = 0; i < Fields.size(); ++i) {
-            auto& field = Fields[i];
-            TString typeStr = field->type()->ToString();
-            if (auto&& md = field->metadata()) {
-                for (int k = 0; k < md->size(); ++k) {
-                    if (md->key(k) == "ydb_type") {
-                        typeStr = TString(md->value(k));
-                        break;
-                    }
-                }
-            }
-
-            TStringBuilder sb;
-            sb << field->name() << ": " << typeStr;
-            jsonFields.AppendValue(sb);
+        for (auto&& i : Fields) {
+            jsonFields.AppendValue(i->ToString());
         }
 
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
-            if (!scalar || !scalar->is_valid) {
-                jsonColumn["value"] = "NULL";
-            } else {
-                bool handled = false;
-                if (const auto& md = Fields[i]->metadata()) {
-                    for (int k = 0; k < md->size(); ++k) {
-                        if (md->key(k) == "ydb_type" && md->value(k) == "Bool") {
-                            const TString s = scalar->ToString();
-                            const bool boolValue = (s == "1" || s == "true" || s == "True" || s == "\\u0001");
-                            jsonColumn["value"] = boolValue ? "true" : "false";
-                            handled = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!handled) {
-                    jsonColumn["value"] = PositionAddress[i].DebugString(position);
-                }
-            }
+            jsonColumn["value"] = PositionAddress[i].DebugString(position);
         }
 
         return result;
@@ -281,24 +248,8 @@ public:
                 if (!scalar || !scalar->is_valid) {
                     jsonColumn["value"] = "NULL";
                 } else {
-                    bool boolValue = false;
-                    switch (scalar->type->id()) {
-                        case arrow::Type::BOOL:
-                            boolValue = static_cast<const arrow::BooleanScalar&>(*scalar).value;
-                            break;
-                        case arrow::Type::UINT8:
-                            boolValue = static_cast<const arrow::UInt8Scalar&>(*scalar).value != 0;
-                            break;
-                        case arrow::Type::INT8:
-                            boolValue = static_cast<const arrow::Int8Scalar&>(*scalar).value != 0;
-                            break;
-                        default: {
-                            const auto s = scalar->ToString();
-                            boolValue = (s == "1" || s == "true" || s == "True");
-                            break;
-                        }
-                    }
-
+                    const auto s = scalar->ToString();
+                    bool boolValue = (s == "1" || s == "true" || s == "True");
                     jsonColumn["value"] = boolValue ? "true" : "false";
                 }
             } else {

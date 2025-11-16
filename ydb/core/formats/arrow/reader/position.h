@@ -224,14 +224,6 @@ public:
                         break;
                     }
                 }
-            } else {
-                auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
-                if (scalar && scalar->is_valid) {
-                    const TString s = scalar->ToString();
-                    if (s == "0" || s == "1" || s == "\\u0000" || s == "\\u0001" || s == "true" || s == "false" || s == "True" || s == "False") {
-                        typeStr = "Bool";
-                    }
-                }
             }
 
             TStringBuilder sb;
@@ -260,14 +252,7 @@ public:
                 }
 
                 if (!handled) {
-                    const TString s = scalar->ToString();
-                    if (s == "0" || s == "\\u0000" || s == "false" || s == "False") {
-                        jsonColumn["value"] = "false";
-                    } else if (s == "1" || s == "\\u0001" || s == "true" || s == "True") {
-                        jsonColumn["value"] = "true";
-                    } else {
-                        jsonColumn["value"] = s;
-                    }
+                    jsonColumn["value"] = PositionAddress[i].DebugString(position);
                 }
             }
         }

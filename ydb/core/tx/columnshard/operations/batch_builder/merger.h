@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/library/conclusion/status.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NOlap {
 

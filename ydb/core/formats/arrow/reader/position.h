@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -213,14 +214,113 @@ public:
     NJson::TJsonValue DebugJson(const ui64 position) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
-        for (auto&& i : Fields) {
-            jsonFields.AppendValue(i->ToString());
+        for (ui32 i = 0; i < Fields.size(); ++i) {
+            auto& field = Fields[i];
+            TString typeStr = field->type()->ToString();
+            if (auto&& md = field->metadata()) {
+                for (int k = 0; k < md->size(); ++k) {
+                    if (md->key(k) == "ydb_type") {
+                        typeStr = TString(md->value(k));
+                        break;
+                    }
+                }
+            } else {
+                auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
+                if (scalar && scalar->is_valid) {
+                    const TString s = scalar->ToString();
+                    if (s == "0" || s == "1" || s == "\\u0000" || s == "\\u0001" || s == "true" || s == "false" || s == "True" || s == "False") {
+                        typeStr = "Bool";
+                    }
+                }
+            }
+
+            TStringBuilder sb;
+            sb << field->name() << ": " << typeStr;
+            jsonFields.AppendValue(sb);
         }
+
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            jsonColumn["value"] = PositionAddress[i].DebugString(position);
+            auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
+            if (!scalar || !scalar->is_valid) {
+                jsonColumn["value"] = "NULL";
+            } else {
+                bool handled = false;
+                if (const auto& md = Fields[i]->metadata()) {
+                    for (int k = 0; k < md->size(); ++k) {
+                        if (md->key(k) == "ydb_type" && md->value(k) == "Bool") {
+                            const TString s = scalar->ToString();
+                            const bool boolValue = (s == "1" || s == "true" || s == "True" || s == "\\u0001");
+                            jsonColumn["value"] = boolValue ? "true" : "false";
+                            handled = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!handled) {
+                    const TString s = scalar->ToString();
+                    if (s == "0" || s == "\\u0000" || s == "false" || s == "False") {
+                        jsonColumn["value"] = "false";
+                    } else if (s == "1" || s == "\\u0001" || s == "true" || s == "True") {
+                        jsonColumn["value"] = "true";
+                    } else {
+                        jsonColumn["value"] = s;
+                    }
+                }
+            }
         }
+
+        return result;
+    }
+
+    NJson::TJsonValue DebugJson(const ui64 position, const std::vector<NScheme::TTypeInfo>& pkTypes) const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
+        for (ui32 i = 0; i < Fields.size(); ++i) {
+            if (i < pkTypes.size()) {
+                TStringBuilder sb;
+                sb << Fields[i]->name() << ": " << NScheme::TypeName(pkTypes[i]);
+                jsonFields.AppendValue(sb);
+            } else {
+                jsonFields.AppendValue(Fields[i]->ToString());
+            }
+        }
+
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
+            jsonColumn["name"] = Fields[i]->name();
+            if (i < pkTypes.size() && pkTypes[i].GetTypeId() == NScheme::NTypeIds::Bool) {
+                auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
+                if (!scalar || !scalar->is_valid) {
+                    jsonColumn["value"] = "NULL";
+                } else {
+                    bool boolValue = false;
+                    switch (scalar->type->id()) {
+                        case arrow::Type::BOOL:
+                            boolValue = static_cast<const arrow::BooleanScalar&>(*scalar).value;
+                            break;
+                        case arrow::Type::UINT8:
+                            boolValue = static_cast<const arrow::UInt8Scalar&>(*scalar).value != 0;
+                            break;
+                        case arrow::Type::INT8:
+                            boolValue = static_cast<const arrow::Int8Scalar&>(*scalar).value != 0;
+                            break;
+                        default: {
+                            const auto s = scalar->ToString();
+                            boolValue = (s == "1" || s == "true" || s == "True");
+                            break;
+                        }
+                    }
+
+                    jsonColumn["value"] = boolValue ? "true" : "false";
+                }
+            } else {
+                jsonColumn["value"] = PositionAddress[i].DebugString(position);
+            }
+        }
+
         return result;
     }
 

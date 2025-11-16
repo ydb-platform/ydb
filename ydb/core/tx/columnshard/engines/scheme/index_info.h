@@ -12,6 +12,7 @@
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
@@ -21,6 +22,7 @@
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/key_value_metadata.h>
 
 namespace arrow {
 class Array;
@@ -110,8 +112,12 @@ private:
             AFL_VERIFY(result.ok());
             arrowType = result.ValueUnsafe();
         }
-
-        auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
+        const TString ydbTypeName = NScheme::TypeName(column.PType, column.PTypeMod);
+        auto md = std::make_shared<arrow::KeyValueMetadata>(
+            std::vector<std::string>{ "ydb_type" },
+            std::vector<std::string>{ std::string(ydbTypeName.c_str()) }
+        );
+        auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull, md);
         if (cache) {
             return cache->GetOrInsertField(f);
         } else {

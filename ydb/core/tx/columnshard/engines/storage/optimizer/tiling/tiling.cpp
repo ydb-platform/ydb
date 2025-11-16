@@ -658,13 +658,13 @@ private:
         // Check compactions, bottom to top
         std::shared_ptr<TColumnEngineChanges> result;
         for (size_t level = Max(Accumulator.size(), Levels.size()) - 1; level >= 0; --level) {
-            if (level < Accumulator.size()) {
-                if (auto task = GetCompactAccumulatorTask(granule, locksManager, level)) {
+            if (level < Levels.size()) {
+                if (auto task = GetCompactLevelTask(granule, locksManager, level)) {
                     result = task;
                 }
             }
-            if (level < Levels.size()) {
-                if (auto task = GetCompactLevelTask(granule, locksManager, level)) {
+            if (level < Accumulator.size()) {
+                if (auto task = GetCompactAccumulatorTask(granule, locksManager, level)) {
                     result = task;
                 }
             }

@@ -10,7 +10,6 @@ ITilingCounter::ITilingCounter(ui32 i, bool isLevel): TBase("TilingLevelCounter"
     BlobBytes = TBase::GetValue("BlobBytes/" + name);
     RawBytes = TBase::GetValue("RawBytes/" + name);
     RecordsCount = TBase::GetValue("RecordsCount/" + name);
-    // IntersectionsCount = TBase::GetValue("IntersectionsCount/" + name);
 }
 
 void ITilingCounter::AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {

@@ -7,6 +7,7 @@ PROTO_NAMESPACE(yt)
 SRCS(
     attribute_filter_ut.cpp
     attributes_ut.cpp
+    complex_key_map.cpp
     lazy_ypath_service_ut.cpp
     options_ut.cpp
     resolver_ut.cpp

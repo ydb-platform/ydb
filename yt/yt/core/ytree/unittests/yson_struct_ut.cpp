@@ -1,3 +1,5 @@
+#include "complex_key_map.h"
+
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/yson/writer.h>
@@ -4208,6 +4210,45 @@ TEST(TYsonStructTest, YsonStructLiteMoveAssign)
         EXPECT_EQ(dst.X, 9);
         EXPECT_FALSE(dst.GetMeta()->GetParameterMap().contains("y"));
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestYsonStructWithMap
+    : public TYsonStruct
+{
+    std::map<TString, TString> Map;
+    std::map<TTestComplexKey, TString> ComplexMap;
+    TTestComplexKey ComplexKey;
+
+    REGISTER_YSON_STRUCT(TTestYsonStructWithMap);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("map", &TThis::Map)
+            .Default();
+        registrar.Parameter("complex_map", &TThis::ComplexMap)
+            .Default();
+        registrar.Parameter("complex_key", &TThis::ComplexKey)
+            .Default();
+    }
+};
+
+using TTestYsonStructWithMapPtr = TIntrusivePtr<TTestYsonStructWithMap>;
+
+TEST(TYsonStructTest, Map)
+{
+    auto ysonStruct = New<TTestYsonStructWithMap>();
+    ysonStruct->Map["abc"] = "def";
+    ysonStruct->ComplexMap[{"abc", "def"}] = "ghi";
+    ysonStruct->ComplexKey = {"abc", "def"};
+
+    auto node = ConvertToNode(ysonStruct);
+    auto fromNode = ConvertTo<TTestYsonStructWithMapPtr>(node);
+    EXPECT_EQ(fromNode->Map, ysonStruct->Map);
+    EXPECT_EQ(fromNode->ComplexMap, ysonStruct->ComplexMap);
+    EXPECT_EQ(fromNode->ComplexKey, ysonStruct->ComplexKey);
+    EXPECT_EQ(*fromNode, *ysonStruct);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

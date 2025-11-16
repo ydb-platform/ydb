@@ -42,10 +42,7 @@ def belongs_to(package: ModuleType) -> Callable[[str], bool]:
         except KeyError:
             pass
         try:
-            if not filepath.startswith("<frozen "):
-                Path(filepath).resolve().relative_to(root)
-            else:
-                raise ValueError
+            Path(filepath).resolve().relative_to(root)
             result = True
         except Exception:
             result = False
@@ -125,7 +122,7 @@ class InterestingOrigin(NamedTuple):
             filename, lineno, *_ = traceback.extract_tb(tb)[-1]
         seen = (*seen, exception)
         make = partial(cls.from_exception, seen=seen)
-        context: "InterestingOrigin | tuple[()]" = ()
+        context: InterestingOrigin | tuple[()] = ()
         if exception.__context__ is not None and exception.__context__ not in seen:
             context = make(exception.__context__)
         return cls(

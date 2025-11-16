@@ -88,7 +88,6 @@ from keyword import iskeyword as _iskeyword
 from string import ascii_lowercase
 from textwrap import dedent, indent
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     DefaultDict,
@@ -105,7 +104,7 @@ import black
 
 from hypothesis import Verbosity, find, settings, strategies as st
 from hypothesis.errors import InvalidArgument, SmallSearchSpaceWarning
-from hypothesis.internal.compat import get_type_hints
+from hypothesis.internal.compat import EllipsisType, get_type_hints
 from hypothesis.internal.reflection import get_signature, is_mock
 from hypothesis.internal.validation import check_type
 from hypothesis.provisional import domains
@@ -121,14 +120,6 @@ from hypothesis.strategies._internal.strategies import (
     SampledFromStrategy,
 )
 from hypothesis.strategies._internal.types import _global_type_lookup, is_generic_type
-
-if sys.version_info >= (3, 10):
-    from types import EllipsisType as EllipsisType
-elif TYPE_CHECKING:
-    from builtins import ellipsis as EllipsisType
-else:
-    EllipsisType = type(Ellipsis)
-
 
 IMPORT_SECTION = """
 # This test code was written by the `hypothesis.extra.ghostwriter` module
@@ -696,9 +687,11 @@ def _valid_syntax_repr(strategy):
                     elems.append(s)
                     seen.add(repr(s))
             strategy = st.one_of(elems or st.nothing())
-        # Trivial special case because the wrapped repr for text() is terrible.
+        # hardcode some special cases for nicer reprs
         if strategy == st.text().wrapped_strategy:
             return set(), "text()"
+        if strategy == st.from_type(type):
+            return set(), "from_type(type)"
         # Remove any typevars; we don't exploit them so they're just clutter here
         if (
             isinstance(strategy, LazyStrategy)

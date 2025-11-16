@@ -15,7 +15,17 @@ from collections.abc import Hashable, Iterable, Iterator, Sequence
 from enum import IntEnum
 from functools import cached_property
 from random import Random
-from typing import TYPE_CHECKING, Any, NoReturn, Optional, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    NoReturn,
+    Optional,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
 import attr
 
@@ -59,7 +69,10 @@ from hypothesis.internal.floats import (
     sign_aware_lte,
 )
 from hypothesis.internal.intervalsets import IntervalSet
+from hypothesis.internal.observability import PredicateCounts
 from hypothesis.reporting import debug_report
+from hypothesis.utils.conventions import not_set
+from hypothesis.utils.threading import ThreadLocal
 
 if TYPE_CHECKING:
     from typing import TypeAlias
@@ -95,6 +108,9 @@ MisalignedAt: "TypeAlias" = tuple[
 ]
 
 TOP_LABEL = calc_label_from_name("top")
+MAX_DEPTH = 100
+
+threadlocal = ThreadLocal(global_test_counter=int)
 
 
 class ExtraInformation:
@@ -137,7 +153,7 @@ def structural_coverage(label: int) -> StructuralCoverageTag:
 
 # This cache can be quite hot and so we prefer LRUCache over LRUReusedCache for
 # performance. We lose scan resistance, but that's probably fine here.
-POOLED_CONSTRAINTS_CACHE = LRUCache(4096)
+POOLED_CONSTRAINTS_CACHE: LRUCache[tuple[Any, ...], ChoiceConstraintsT] = LRUCache(4096)
 
 
 class Span:
@@ -260,16 +276,16 @@ class SpanProperty:
         """Rerun the test case with this visitor and return the
         results of ``self.finish()``."""
         for record in self.spans.trail:
-            if record == TrailType.CHOICE:
+            if record == TrailType.STOP_SPAN_DISCARD:
+                self.__pop(discarded=True)
+            elif record == TrailType.STOP_SPAN_NO_DISCARD:
+                self.__pop(discarded=False)
+            elif record == TrailType.CHOICE:
                 self.choice_count += 1
-            elif record >= TrailType.START_SPAN:
-                self.__push(record - TrailType.START_SPAN)
             else:
-                assert record in (
-                    TrailType.STOP_SPAN_DISCARD,
-                    TrailType.STOP_SPAN_NO_DISCARD,
-                )
-                self.__pop(discarded=record == TrailType.STOP_SPAN_DISCARD)
+                # everything after TrailType.CHOICE is the label of a span start.
+                self.__push(record - TrailType.CHOICE - 1)
+
         return self.finish()
 
     def __push(self, label_index: int) -> None:
@@ -300,8 +316,10 @@ class SpanProperty:
 class TrailType(IntEnum):
     STOP_SPAN_DISCARD = 1
     STOP_SPAN_NO_DISCARD = 2
-    START_SPAN = 3
-    CHOICE = calc_label_from_name("ir draw record")
+    CHOICE = 3
+    # every trail element larger than TrailType.CHOICE is the label of a span
+    # start, offset by its index. So the first span label is stored as 4, the
+    # second as 5, etc, regardless of its actual integer label.
 
 
 class SpanRecord:
@@ -334,7 +352,7 @@ class SpanRecord:
         except KeyError:
             i = self.__index_of_labels.setdefault(label, len(self.labels))
             self.labels.append(label)
-        self.trail.append(TrailType.START_SPAN + i)
+        self.trail.append(TrailType.CHOICE + 1 + i)
 
     def stop_span(self, *, discard: bool) -> None:
         if discard:
@@ -520,11 +538,6 @@ class _Overrun:
 
 Overrun = _Overrun()
 
-global_test_counter = 0
-
-
-MAX_DEPTH = 100
-
 
 class DataObserver:
     """Observer class for recording the behaviour of a
@@ -657,9 +670,8 @@ class ConjectureData:
         self.output = ""
         self.status = Status.VALID
         self.frozen = False
-        global global_test_counter
-        self.testcounter = global_test_counter
-        global_test_counter += 1
+        self.testcounter = threadlocal.global_test_counter
+        threadlocal.global_test_counter += 1
         self.start_time = time.perf_counter()
         self.gc_start_time = gc_cumulative_time()
         self.events: dict[str, Union[str, int, float]] = {}
@@ -700,13 +712,14 @@ class ConjectureData:
         self.arg_slices: set[tuple[int, int]] = set()
         self.slice_comments: dict[tuple[int, int], str] = {}
         self._observability_args: dict[str, Any] = {}
-        self._observability_predicates: defaultdict = defaultdict(
-            lambda: {"satisfied": 0, "unsatisfied": 0}
+        self._observability_predicates: defaultdict[str, PredicateCounts] = defaultdict(
+            PredicateCounts
         )
         self._sampled_from_all_strategies_elements_message: Optional[
             tuple[str, object]
         ] = None
-        self._shared_strategy_draws: dict[Hashable, Any] = {}
+        self._shared_strategy_draws: dict[Hashable, tuple[int, Any]] = {}
+        self.hypothesis_runner = not_set
 
         self.expected_exception: Optional[BaseException] = None
         self.expected_traceback: Optional[str] = None
@@ -737,7 +750,65 @@ class ConjectureData:
     #
     # `observe` formalizes this. The choice will only be written to the choice
     # sequence if observe is True.
-    def _draw(self, choice_type, constraints, *, observe, forced):
+
+    @overload
+    def _draw(
+        self,
+        choice_type: Literal["integer"],
+        constraints: IntegerConstraints,
+        *,
+        observe: bool,
+        forced: Optional[int],
+    ) -> int: ...
+
+    @overload
+    def _draw(
+        self,
+        choice_type: Literal["float"],
+        constraints: FloatConstraints,
+        *,
+        observe: bool,
+        forced: Optional[float],
+    ) -> float: ...
+
+    @overload
+    def _draw(
+        self,
+        choice_type: Literal["string"],
+        constraints: StringConstraints,
+        *,
+        observe: bool,
+        forced: Optional[str],
+    ) -> str: ...
+
+    @overload
+    def _draw(
+        self,
+        choice_type: Literal["bytes"],
+        constraints: BytesConstraints,
+        *,
+        observe: bool,
+        forced: Optional[bytes],
+    ) -> bytes: ...
+
+    @overload
+    def _draw(
+        self,
+        choice_type: Literal["boolean"],
+        constraints: BooleanConstraints,
+        *,
+        observe: bool,
+        forced: Optional[bool],
+    ) -> bool: ...
+
+    def _draw(
+        self,
+        choice_type: ChoiceTypeT,
+        constraints: ChoiceConstraintsT,
+        *,
+        observe: bool,
+        forced: Optional[ChoiceT],
+    ) -> ChoiceT:
         # this is somewhat redundant with the length > max_length check at the
         # end of the function, but avoids trying to use a null self.random when
         # drawing past the node of a ConjectureData.for_choices data.
@@ -776,8 +847,10 @@ class ConjectureData:
         # bring that back (ABOVE the choice sequence layer) in the future.
         #
         # See https://github.com/HypothesisWorks/hypothesis/issues/3926.
-        if choice_type == "float" and math.isnan(value):
-            value = int_to_float(float_to_int(value))
+        if choice_type == "float":
+            assert isinstance(value, float)
+            if math.isnan(value):
+                value = int_to_float(float_to_int(value))
 
         if observe:
             was_forced = forced is not None
@@ -850,16 +923,25 @@ class ConjectureData:
         *,
         allow_nan: bool = True,
         smallest_nonzero_magnitude: float = SMALLEST_SUBNORMAL,
-        # TODO: consider supporting these float widths at the IR level in the
-        # future.
+        # TODO: consider supporting these float widths at the choice sequence
+        # level in the future.
         # width: Literal[16, 32, 64] = 64,
-        # exclude_min and exclude_max handled higher up,
         forced: Optional[float] = None,
         observe: bool = True,
     ) -> float:
         assert smallest_nonzero_magnitude > 0
         assert not math.isnan(min_value)
         assert not math.isnan(max_value)
+
+        if smallest_nonzero_magnitude == 0.0:  # pragma: no cover
+            raise FloatingPointError(
+                "Got allow_subnormal=True, but we can't represent subnormal floats "
+                "right now, in violation of the IEEE-754 floating-point "
+                "specification.  This is usually because something was compiled with "
+                "-ffast-math or a similar option, which sets global processor state.  "
+                "See https://simonbyrne.github.io/notes/fastmath/ for a more detailed "
+                "writeup - and good luck!"
+            )
 
         if forced is not None:
             assert allow_nan or not math.isnan(forced)
@@ -931,7 +1013,34 @@ class ConjectureData:
         constraints: BooleanConstraints = self._pooled_constraints("boolean", {"p": p})
         return self._draw("boolean", constraints, observe=observe, forced=forced)
 
-    def _pooled_constraints(self, choice_type, constraints):
+    @overload
+    def _pooled_constraints(
+        self, choice_type: Literal["integer"], constraints: IntegerConstraints
+    ) -> IntegerConstraints: ...
+
+    @overload
+    def _pooled_constraints(
+        self, choice_type: Literal["float"], constraints: FloatConstraints
+    ) -> FloatConstraints: ...
+
+    @overload
+    def _pooled_constraints(
+        self, choice_type: Literal["string"], constraints: StringConstraints
+    ) -> StringConstraints: ...
+
+    @overload
+    def _pooled_constraints(
+        self, choice_type: Literal["bytes"], constraints: BytesConstraints
+    ) -> BytesConstraints: ...
+
+    @overload
+    def _pooled_constraints(
+        self, choice_type: Literal["boolean"], constraints: BooleanConstraints
+    ) -> BooleanConstraints: ...
+
+    def _pooled_constraints(
+        self, choice_type: ChoiceTypeT, constraints: ChoiceConstraintsT
+    ) -> ChoiceConstraintsT:
         """Memoize common dictionary objects to reduce memory pressure."""
         # caching runs afoul of nondeterminism checks
         if self.provider.avoid_realization:
@@ -967,17 +1076,10 @@ class ConjectureData:
             if node.type == "simplest":
                 if forced is not None:
                     choice = forced
-                elif isinstance(self.provider, HypothesisProvider):
-                    try:
-                        choice = choice_from_index(0, choice_type, constraints)
-                    except ChoiceTooLarge:
-                        self.mark_overrun()
-                else:
-                    # give alternative backends control over ChoiceTemplate draws
-                    # as well
-                    choice = getattr(self.provider, f"draw_{choice_type}")(
-                        **constraints
-                    )
+                try:
+                    choice = choice_from_index(0, choice_type, constraints)
+                except ChoiceTooLarge:
+                    self.mark_overrun()
             else:
                 raise NotImplementedError
 
@@ -996,12 +1098,12 @@ class ConjectureData:
             bytes: "bytes",
         }[type(choice)]
         # If we're trying to:
-        # * draw a different ir type at the same location
-        # * draw the same ir type with a different constraints, which does not permit
+        # * draw a different choice type at the same location
+        # * draw the same choice type with a different constraints, which does not permit
         #   the current value
         #
         # then we call this a misalignment, because the choice sequence has
-        # slipped from what we expected at some point. An easy misalignment is
+        # changed from what we expected at some point. An easy misalignment is
         #
         #   one_of(integers(0, 100), integers(101, 200))
         #
@@ -1090,6 +1192,7 @@ class ConjectureData:
         observe_as: Optional[str] = None,
     ) -> "Ex":
         from hypothesis.internal.observability import TESTCASE_CALLBACKS
+        from hypothesis.strategies._internal.lazy import unwrap_strategies
         from hypothesis.strategies._internal.utils import to_jsonable
 
         if self.is_find and not strategy.supports_find:
@@ -1116,19 +1219,22 @@ class ConjectureData:
         if self.depth >= MAX_DEPTH:
             self.mark_invalid("max depth exceeded")
 
+        # Jump directly to the unwrapped strategy for the label and for do_draw.
+        # This avoids adding an extra span to all lazy strategies.
+        unwrapped = unwrap_strategies(strategy)
         if label is None:
-            assert isinstance(strategy.label, int)
-            label = strategy.label
+            label = unwrapped.label
+            assert isinstance(label, int)
+
         self.start_span(label=label)
         try:
             if not at_top_level:
-                return strategy.do_draw(self)
+                return unwrapped.do_draw(self)
             assert start_time is not None
             key = observe_as or f"generate:unlabeled_{len(self.draw_times)}"
             try:
-                strategy.validate()
                 try:
-                    v = strategy.do_draw(self)
+                    v = unwrapped.do_draw(self)
                 finally:
                     # Subtract the time spent in GC to avoid overcounting, as it is
                     # accounted for at the overall example level.
@@ -1256,9 +1362,7 @@ class ConjectureData:
         self.freeze()
         raise StopTest(self.testcounter)
 
-    def mark_interesting(
-        self, interesting_origin: Optional[InterestingOrigin] = None
-    ) -> NoReturn:
+    def mark_interesting(self, interesting_origin: InterestingOrigin) -> NoReturn:
         self.conclude_test(Status.INTERESTING, interesting_origin)
 
     def mark_invalid(self, why: Optional[str] = None) -> NoReturn:
@@ -1270,6 +1374,8 @@ class ConjectureData:
         self.conclude_test(Status.OVERRUN)
 
 
-def draw_choice(choice_type, constraints, *, random):
+def draw_choice(
+    choice_type: ChoiceTypeT, constraints: ChoiceConstraintsT, *, random: Random
+) -> ChoiceT:
     cd = ConjectureData(random=random)
-    return getattr(cd.provider, f"draw_{choice_type}")(**constraints)
+    return cast(ChoiceT, getattr(cd.provider, f"draw_{choice_type}")(**constraints))

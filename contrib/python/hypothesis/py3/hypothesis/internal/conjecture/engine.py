@@ -9,31 +9,30 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 import importlib
+import inspect
 import math
-import textwrap
 import time
 from collections import defaultdict
 from collections.abc import Generator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import AbstractContextManager, contextmanager, nullcontext, suppress
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
 from random import Random, getrandbits
 from typing import Callable, Final, List, Literal, NoReturn, Optional, Union, cast
 
-import attr
-
 from hypothesis import HealthCheck, Phase, Verbosity, settings as Settings
-from hypothesis._settings import local_settings
+from hypothesis._settings import local_settings, note_deprecation
 from hypothesis.database import ExampleDatabase, choices_from_bytes, choices_to_bytes
 from hypothesis.errors import (
     BackendCannotProceed,
-    FlakyReplay,
+    FlakyBackendFailure,
     HypothesisException,
     InvalidArgument,
     StopTest,
 )
 from hypothesis.internal.cache import LRUReusedCache
-from hypothesis.internal.compat import NotRequired, TypeAlias, TypedDict, ceil, override
+from hypothesis.internal.compat import NotRequired, TypedDict, ceil, override
 from hypothesis.internal.conjecture.choice import (
     ChoiceConstraintsT,
     ChoiceKeyT,
@@ -68,35 +67,49 @@ from hypothesis.internal.conjecture.providers import (
 from hypothesis.internal.conjecture.shrinker import Shrinker, ShrinkPredicateT, sort_key
 from hypothesis.internal.escalation import InterestingOrigin
 from hypothesis.internal.healthcheck import fail_health_check
+from hypothesis.internal.observability import Observation, with_observation_callback
 from hypothesis.reporting import base_report, report
 
+#: The maximum number of times the shrinker will reduce the complexity of a failing
+#: input before giving up. This avoids falling down a trap of exponential (or worse)
+#: complexity, where the shrinker appears to be making progress but will take a
+#: substantially long time to finish completely.
 MAX_SHRINKS: Final[int] = 500
-CACHE_SIZE: Final[int] = 10000
-MUTATION_POOL_SIZE: Final[int] = 100
-MIN_TEST_CALLS: Final[int] = 10
-BUFFER_SIZE: Final[int] = 8 * 1024
 
 # If the shrinking phase takes more than five minutes, abort it early and print
 # a warning.   Many CI systems will kill a build after around ten minutes with
 # no output, and appearing to hang isn't great for interactive use either -
 # showing partially-shrunk examples is better than quitting with no examples!
 # (but make it monkeypatchable, for the rare users who need to keep on shrinking)
+
+#: The maximum total time in seconds that the shrinker will try to shrink a failure
+#: for before giving up. This is across all shrinks for the same failure, so even
+#: if the shrinker successfully reduces the complexity of a single failure several
+#: times, it will stop when it hits |MAX_SHRINKING_SECONDS| of total time taken.
 MAX_SHRINKING_SECONDS: Final[int] = 300
 
-Ls: TypeAlias = list["Ls | int"]
+#: The maximum amount of entropy a single test case can use before giving up
+#: while making random choices during input generation.
+#:
+#: The "unit" of one |BUFFER_SIZE| does not have any defined semantics, and you
+#: should not rely on it, except that a linear increase |BUFFER_SIZE| will linearly
+#: increase the amount of entropy a test case can use during generation.
+BUFFER_SIZE: Final[int] = 8 * 1024
+CACHE_SIZE: Final[int] = 10000
+MIN_TEST_CALLS: Final[int] = 10
 
 
 def shortlex(s):
     return (len(s), s)
 
 
-@attr.s
+@dataclass
 class HealthCheckState:
-    valid_examples: int = attr.ib(default=0)
-    invalid_examples: int = attr.ib(default=0)
-    overrun_examples: int = attr.ib(default=0)
-    draw_times: "defaultdict[str, List[float]]" = attr.ib(
-        factory=lambda: defaultdict(list)
+    valid_examples: int = field(default=0)
+    invalid_examples: int = field(default=0)
+    overrun_examples: int = field(default=0)
+    draw_times: "defaultdict[str, List[float]]" = field(
+        default_factory=lambda: defaultdict(list)
     )
 
     @property
@@ -213,9 +226,25 @@ class DiscardObserver(DataObserver):
         raise ContainsDiscard
 
 
-def realize_choices(data: ConjectureData) -> None:
+def realize_choices(data: ConjectureData, *, for_failure: bool) -> None:
+    # backwards-compatibility with backends without for_failure, can remove
+    # in a few months
+    kwargs = {}
+    if for_failure:
+        if "for_failure" in inspect.signature(data.provider.realize).parameters:
+            kwargs["for_failure"] = True
+        else:
+            note_deprecation(
+                f"{type(data.provider).__qualname__}.realize does not have the "
+                "for_failure parameter. This will be an error in future versions "
+                "of Hypothesis. (If you installed this backend from a separate "
+                "package, upgrading that package may help).",
+                has_codemod=False,
+                since="2025-05-07",
+            )
+
     for node in data.nodes:
-        value = data.provider.realize(node.value)
+        value = data.provider.realize(node.value, **kwargs)
         expected_type = {
             "string": str,
             "float": float,
@@ -231,7 +260,10 @@ def realize_choices(data: ConjectureData) -> None:
 
         constraints = cast(
             ChoiceConstraintsT,
-            {k: data.provider.realize(v) for k, v in node.constraints.items()},
+            {
+                k: data.provider.realize(v, **kwargs)
+                for k, v in node.constraints.items()
+            },
         )
         node.value = value
         node.constraints = constraints
@@ -266,10 +298,7 @@ class ConjectureRunner:
         self.statistics: StatisticsDict = {}
         self.stats_per_test_case: list[CallStats] = []
 
-        # At runtime, the keys are only ever type `InterestingOrigin`, but can be `None` during tests.
-        self.interesting_examples: dict[
-            Optional[InterestingOrigin], ConjectureResult
-        ] = {}
+        self.interesting_examples: dict[InterestingOrigin, ConjectureResult] = {}
         # We use call_count because there may be few possible valid_examples.
         self.first_bug_found_at: Optional[int] = None
         self.last_bug_found_at: Optional[int] = None
@@ -310,11 +339,24 @@ class ConjectureRunner:
         self.reused_previously_shrunk_test_case: bool = False
 
         self.__pending_call_explanation: Optional[str] = None
+        self._backend_found_failure: bool = False
+        self._backend_exceeded_deadline: bool = False
         self._switch_to_hypothesis_provider: bool = False
 
         self.__failed_realize_count: int = 0
         # note unsound verification by alt backends
         self._verified_by: Optional[str] = None
+
+    @contextmanager
+    def _with_switch_to_hypothesis_provider(
+        self, value: bool
+    ) -> Generator[None, None, None]:
+        previous = self._switch_to_hypothesis_provider
+        try:
+            self._switch_to_hypothesis_provider = value
+            yield
+        finally:
+            self._switch_to_hypothesis_provider = previous
 
     @property
     def using_hypothesis_backend(self) -> bool:
@@ -469,8 +511,8 @@ class ConjectureRunner:
             self.__pending_call_explanation = None
 
         self.call_count += 1
-
         interrupted = False
+
         try:
             self.__stoppable_test_function(data)
         except KeyboardInterrupt:
@@ -488,6 +530,13 @@ class ConjectureRunner:
                     and (self.__failed_realize_count / self.call_count) > 0.2
                 ):
                     self._switch_to_hypothesis_provider = True
+
+            # treat all BackendCannotProceed exceptions as invalid. This isn't
+            # great; "verified" should really be counted as self.valid_examples += 1.
+            # But we check self.valid_examples == 0 to determine whether to raise
+            # Unsatisfiable, and that would throw this check off.
+            self.invalid_examples += 1
+
             # skip the post-test-case tracking; we're pretending this never happened
             interrupted = True
             data.cannot_proceed_scope = exc.scope
@@ -496,7 +545,7 @@ class ConjectureRunner:
         except BaseException:
             data.freeze()
             if self.settings.backend != "hypothesis":
-                realize_choices(data)
+                realize_choices(data, for_failure=True)
             self.save_choices(data.choices)
             raise
         finally:
@@ -516,7 +565,7 @@ class ConjectureRunner:
                 }
                 self.stats_per_test_case.append(call_stats)
                 if self.settings.backend != "hypothesis":
-                    realize_choices(data)
+                    realize_choices(data, for_failure=data.status is Status.INTERESTING)
 
                 self._cache(data)
                 if data.misaligned_at is not None:  # pragma: no branch # coverage bug?
@@ -565,33 +614,35 @@ class ConjectureRunner:
             if not self.using_hypothesis_backend:
                 # replay this failure on the hypothesis backend to ensure it still
                 # finds a failure. otherwise, it is flaky.
-                initial_origin = data.interesting_origin
-                initial_traceback = data.expected_traceback
+                initial_exception = data.expected_exception
                 data = ConjectureData.for_choices(data.choices)
-                self.__stoppable_test_function(data)
+                # we've already going to use the hypothesis provider for this
+                # data, so the verb "switch" is a bit misleading here. We're really
+                # setting this to inform our on_observation logic that the observation
+                # generated here was from a hypothesis backend, and shouldn't be
+                # sent to the on_observation of any alternative backend.
+                with self._with_switch_to_hypothesis_provider(True):
+                    self.__stoppable_test_function(data)
                 data.freeze()
-                # TODO: Convert to FlakyFailure on the way out. Should same-origin
-                #       also be checked?
+                # TODO: Should same-origin also be checked? (discussion in
+                # https://github.com/HypothesisWorks/hypothesis/pull/4470#discussion_r2217055487)
                 if data.status != Status.INTERESTING:
                     desc_new_status = {
                         data.status.VALID: "passed",
                         data.status.INVALID: "failed filters",
                         data.status.OVERRUN: "overran",
                     }[data.status]
-                    wrapped_tb = (
-                        ""
-                        if initial_traceback is None
-                        else textwrap.indent(initial_traceback, "  | ")
-                    )
-                    raise FlakyReplay(
-                        f"Inconsistent results from replaying a failing test case!\n"
-                        f"{wrapped_tb}on backend={self.settings.backend!r} but "
-                        f"{desc_new_status} under backend='hypothesis'",
-                        interesting_origins=[initial_origin],
+                    raise FlakyBackendFailure(
+                        f"Inconsistent results from replaying a failing test case! "
+                        f"Raised {type(initial_exception).__name__} on "
+                        f"backend={self.settings.backend!r}, but "
+                        f"{desc_new_status} under backend='hypothesis'.",
+                        [initial_exception],
                     )
 
                 self._cache(data)
 
+            assert data.interesting_origin is not None
             key = data.interesting_origin
             changed = False
             try:
@@ -611,6 +662,8 @@ class ConjectureRunner:
             if changed:
                 self.save_choices(data.choices)
                 self.interesting_examples[key] = data.as_result()  # type: ignore
+                if not self.using_hypothesis_backend:
+                    self._backend_found_failure = True
                 self.__data_cache.pin(self._cache_key(data.choices), data.as_result())
                 self.shrunk_examples.discard(key)
 
@@ -657,7 +710,7 @@ class ConjectureRunner:
         self.settings.database.delete(self.pareto_key, choices_to_bytes(data.choices))
 
     def generate_novel_prefix(self) -> tuple[ChoiceT, ...]:
-        """Uses the tree to proactively generate a starting sequence of bytes
+        """Uses the tree to proactively generate a starting choice sequence
         that we haven't explored yet for this test.
 
         When this method is called, we assume that there must be at
@@ -788,18 +841,42 @@ class ConjectureRunner:
             f"{', ' + data.output if data.output else ''}"
         )
 
+    def observe_for_provider(self) -> AbstractContextManager:
+        def on_observation(observation: Observation) -> None:
+            assert observation.type == "test_case"
+            # because lifetime == "test_function"
+            assert isinstance(self.provider, PrimitiveProvider)
+            # only fire if we actually used that provider to generate this observation
+            if not self._switch_to_hypothesis_provider:
+                self.provider.on_observation(observation)
+
+        if (
+            self.settings.backend != "hypothesis"
+            # only for lifetime = "test_function" providers (guaranteed
+            # by this isinstance check)
+            and isinstance(self.provider, PrimitiveProvider)
+            # and the provider opted-in to observations
+            and self.provider.add_observability_callback
+        ):
+            return with_observation_callback(on_observation)
+        return nullcontext()
+
     def run(self) -> None:
         with local_settings(self.settings):
-            try:
-                self._run()
-            except RunIsComplete:
-                pass
-            for v in self.interesting_examples.values():
-                self.debug_data(v)
-            self.debug(
-                "Run complete after %d examples (%d valid) and %d shrinks"
-                % (self.call_count, self.valid_examples, self.shrinks)
-            )
+            # NOTE: For compatibility with Python 3.9's LL(1)
+            # parser, this is written as a nested with-statement,
+            # instead of a compound one.
+            with self.observe_for_provider():
+                try:
+                    self._run()
+                except RunIsComplete:
+                    pass
+                for v in self.interesting_examples.values():
+                    self.debug_data(v)
+                self.debug(
+                    "Run complete after %d examples (%d valid) and %d shrinks"
+                    % (self.call_count, self.valid_examples, self.shrinks)
+                )
 
     @property
     def database(self) -> Optional[ExampleDatabase]:
@@ -964,6 +1041,7 @@ class ConjectureRunner:
         self.debug("Generating new examples")
 
         assert self.should_generate_more()
+        self._switch_to_hypothesis_provider = True
         zero_data = self.cached_test_function((ChoiceTemplate("simplest", count=None),))
         if zero_data.status > Status.OVERRUN:
             assert isinstance(zero_data, ConjectureResult)
@@ -1045,12 +1123,11 @@ class ConjectureRunner:
         small_example_cap = min(self.settings.max_examples // 10, 50)
         optimise_at = max(self.settings.max_examples // 2, small_example_cap + 1, 10)
         ran_optimisations = False
+        self._switch_to_hypothesis_provider = False
 
         while self.should_generate_more():
-            # Unfortunately generate_novel_prefix still operates in terms of
-            # a buffer and uses HypothesisProvider as its backing provider,
-            # not whatever is specified by the backend. We can improve this
-            # once more things are on the ir.
+            # we don't yet integrate DataTree with backends. Instead of generating
+            # a novel prefix, ask the backend for an input.
             if not self.using_hypothesis_backend:
                 data = self.new_conjecture_data([])
                 with suppress(BackendCannotProceed):
@@ -1462,16 +1539,14 @@ class ConjectureRunner:
                     choices_to_bytes(v.choices)
                     for v in self.interesting_examples.values()
                 }
-                cap = max(map(shortlex, primary))
-
-                if shortlex(c) > cap:
+                if shortlex(c) > max(map(shortlex, primary)):
                     break
-                else:
-                    self.cached_test_function(choices)
-                    # We unconditionally remove c from the secondary key as it
-                    # is either now primary or worse than our primary example
-                    # of this reason for interestingness.
-                    self.settings.database.delete(self.secondary_key, c)
+
+                self.cached_test_function(choices)
+                # We unconditionally remove c from the secondary key as it
+                # is either now primary or worse than our primary example
+                # of this reason for interestingness.
+                self.settings.database.delete(self.secondary_key, c)
 
     def shrink(
         self,

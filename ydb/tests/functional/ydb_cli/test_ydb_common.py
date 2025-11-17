@@ -2,7 +2,6 @@
 
 import os
 import logging
-import pytest
 import tempfile
 import uuid
 
@@ -62,4 +61,3 @@ class TestProfileWithInvalidCaFile:
         assert result['exit_code'] != 0, "Connection command should fail with invalid CA file"
         error_output = result['stderr'] + result['stdout']
         assert "ca" in error_output.lower() or "certificate" in error_output.lower()
-

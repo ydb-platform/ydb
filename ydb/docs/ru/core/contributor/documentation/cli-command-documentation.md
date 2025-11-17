@@ -63,7 +63,7 @@
 ```markdown
 Общий вид команды:
 
-    {{ ydb-cli }} [global options...] <command> [options...] [arguments...]
+{{ ydb-cli }} [global options...] <command> [options...] [arguments...]
 
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` — [параметры подкоманды](#options).
@@ -75,22 +75,22 @@
 Для команды без опций:
 
 ```markdown
-    {{ ydb-cli }} [global options...] topic drop <topic-path>
+{{ ydb-cli }} [global options...] topic drop <topic-path>
 ```
 
 Для команды с опциями:
 
 ```markdown
-    {{ ydb-cli }} [global options...] topic create [options...] <topic-path>
+{{ ydb-cli }} [global options...] topic create [options...] <topic-path>
 ```
 
 Для сложной команды:
 
 ```markdown
-    {{ ydb-cli }} [connection options] topic read <topic-path> [--consumer STR] \
-      [--format STR] [--wait] [--limit INT] \
-      [--transform STR] [--file STR] [--commit BOOL] \
-      [дополнительные параметры...]
+{{ ydb-cli }} [connection options] topic read <topic-path> [--consumer STR] \
+  [--format STR] [--wait] [--limit INT] \
+  [--transform STR] [--file STR] [--commit BOOL] \
+  [дополнительные параметры...]
 ```
 
 ### 5. Ссылка на справку
@@ -100,7 +100,7 @@
 ```markdown
 Посмотрите описание команды:
 
-    {{ ydb-cli }} <command> --help
+{{ ydb-cli }} <command> --help
 ```
 
 ### 6. Параметры подкоманды
@@ -192,9 +192,9 @@
 ```markdown
 Создайте читателя с именем `my-consumer` для [созданного ранее](topic-create.md) топика `my-topic`:
 
-    {{ ydb-cli }} -p quickstart topic consumer add \
-      --consumer my-consumer \
-      my-topic
+{{ ydb-cli }} -p quickstart topic consumer add \
+  --consumer my-consumer \
+  my-topic
 ```
 
 **Пример с результатом:**
@@ -202,7 +202,7 @@
 ```markdown
 Убедитесь, что читатель создан:
 
-    {{ ydb-cli }} -p quickstart scheme describe my-topic
+{{ ydb-cli }} -p quickstart scheme describe my-topic
 
 Результат:
 
@@ -223,11 +223,11 @@
 ```markdown
 * Чтение одного сообщения с выводом в терминал:
 
-      {{ ydb-cli }} -p quickstart topic read topic1 -c c1
+{{ ydb-cli }} -p quickstart topic read topic1 -c c1
 
 * Ожидание появления и чтение одного сообщения с записью его в файл:
 
-      {{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w -f message.bin
+{{ ydb-cli }} -p quickstart topic read topic1 -c c1 -w -f message.bin
 ```
 
 ## Полный шаблон статьи
@@ -249,14 +249,14 @@
 
 Общий вид команды:
 
-    {{ ydb-cli }} [global options...] topic drop <topic-path>
+{{ ydb-cli }} [global options...] topic drop <topic-path>
 
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `topic-path` — путь топика.
 
 Посмотрите описание команды удаления топика:
 
-    {{ ydb-cli }} topic drop --help
+{{ ydb-cli }} topic drop --help
 
 ## Примеры {#examples}
 ...

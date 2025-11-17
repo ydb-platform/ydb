@@ -99,43 +99,55 @@ By default (when `DbType` is not specified), the provider uses legacy YDB tempor
 
 ### Custom precision scale example
 
-```csharp
-[Table("amounts")]
-public sealed class AmountRow
-{
-    [PrimaryKey] public long Id { get; set; }
+{% list tabs group=lang %}
 
-    // Custom precision & scale: Decimal(25,10)
-    [Column("amount", DataType = DataType.Decimal, Precision = 25, Scale = 10), NotNull]
-    public decimal Amount { get; set; }
-}
-```
+- C#
+
+  ```csharp
+  [Table("amounts")]
+  public sealed class AmountRow
+  {
+      [PrimaryKey] public long Id { get; set; }
+
+      // Custom precision & scale: Decimal(25,10)
+      [Column("amount", DataType = DataType.Decimal, Precision = 25, Scale = 10), NotNull]
+      public decimal Amount { get; set; }
+  }
+  ```
+
+{% endlist %}
 
 ### DbType override example
 
-```csharp
-[Table("events")]
-public sealed class EventRow
-{
-[PrimaryKey] public long Id { get; set; }
+{% list tabs group=lang %}
 
-    // Extended-range timestamp
-    [Column("happened_at", DbType = "Timestamp64"), NotNull]
-    public DateTime HappenedAt { get; set; }
+- C#
 
-    // Extended-range date
-    [Column("due_on", DbType = "Date32"), NotNull]
-    public DateTime DueOn { get; set; }
+  ```csharp
+  [Table("events")]
+  public sealed class EventRow
+  {
+  [PrimaryKey] public long Id { get; set; }
 
-    // Second precision date
-    [Column("made_at", DbType = "Datetime64"), NotNull]
-    public DateTime MadeAt { get; set; }
+      // Extended-range timestamp
+      [Column("happened_at", DbType = "Timestamp64"), NotNull]
+      public DateTime HappenedAt { get; set; }
 
-    // Extended-range interval
-    [Column("duration", DbType = "Interval64"), NotNull]
-    public TimeSpan Duration { get; set; }
-}
-```
+      // Extended-range date
+      [Column("due_on", DbType = "Date32"), NotNull]
+      public DateTime DueOn { get; set; }
+
+      // Second precision date
+      [Column("made_at", DbType = "Datetime64"), NotNull]
+      public DateTime MadeAt { get; set; }
+
+      // Extended-range interval
+      [Column("duration", DbType = "Interval64"), NotNull]
+      public TimeSpan Duration { get; set; }
+  }
+  ```
+
+{% endlist %}
 
 ### Schema Generation from Attributes
 
@@ -203,13 +215,19 @@ Linq To DB doesn’t manage migrations. The DDL below is illustrative—apply it
 
 {% endnote %}
 
-```csharp
-using var db = new DataConnection("YDB", connectionString);
+{% list tabs group=lang %}
 
-// Apply the schema change (adds the column):
-db.Execute(@"ALTER TABLE Groups
-   ADD COLUMN Department Utf8;");
-```
+- C#
+
+  ```csharp
+  using var db = new DataConnection("YDB", connectionString);
+
+  // Apply the schema change (adds the column):
+  db.Execute(@"ALTER TABLE Groups
+     ADD COLUMN Department Utf8;");
+  ```
+
+{% endlist %}
 
 ### YDB Indexes how to set parameters
 
@@ -218,20 +236,26 @@ Parameters like ASYNC/SYNC and COVER(...) are not supported via the attribute; a
 
 #### Option A — attribute (name + Unique)
 
-```csharp
-[Table(Name = "Groups", IsColumnAttributeRequired = false)]
-[Index("GroupName", Name = "group_name_index", Unique = true)]
-public class Group
-{
-    [PrimaryKey, Column("GroupId")] public int Id { get; set; }
-    [Column("GroupName")] public string? Name { get; set; }
+{% list tabs group=lang %}
 
-    // A column you may include into COVER via separate DDL
-    [Column] public string? Department { get; set; }
-}
+- C#
 
-// When you call db.CreateTable<Group>(), a GLOBAL UNIQUE index on GroupName is created.
-```
+  ```csharp
+  [Table(Name = "Groups", IsColumnAttributeRequired = false)]
+  [Index("GroupName", Name = "group_name_index", Unique = true)]
+  public class Group
+  {
+      [PrimaryKey, Column("GroupId")] public int Id { get; set; }
+      [Column("GroupName")] public string? Name { get; set; }
+
+      // A column you may include into COVER via separate DDL
+      [Column] public string? Department { get; set; }
+  }
+
+  // When you call db.CreateTable<Group>(), a GLOBAL UNIQUE index on GroupName is created.
+  ```
+
+{% endlist %}
 
 The generated DDL is effectively
 
@@ -250,34 +274,40 @@ ALTER TABLE Groups
 
 #### Option B — extended parameters (ASYNC, COVER) via separate DDL
 
-```csharp
-[Table(Name = "Groups", IsColumnAttributeRequired = false)]
-public class Group
-{
-    [PrimaryKey, Column("GroupId")] public int Id { get; set; }
-    [Column("GroupName")] public string? Name { get; set; }
-    [Column] public string? Department { get; set; }
-}
+{% list tabs group=lang %}
 
-public static class Demo
-{
-    public static void Main()
-    {
-        using var db = new DataConnection("YDB", connectionString);
+- C#
 
-        // 1) Create table from attributes (avoid duplicate indexes if you plan to add them via DDL)
-        db.CreateTable<Group>();
+  ```csharp
+  [Table(Name = "Groups", IsColumnAttributeRequired = false)]
+  public class Group
+  {
+      [PrimaryKey, Column("GroupId")] public int Id { get; set; }
+      [Column("GroupName")] public string? Name { get; set; }
+      [Column] public string? Department { get; set; }
+  }
 
-        // 2) Add an index with ASYNC and COVER parameters
-        db.Execute(@"
-ALTER TABLE Groups
-  ADD INDEX group_name_index GLOBAL ASYNC
-       ON (GroupName)
-       COVER (Department);
-");
-    }
-}
-```
+  public static class Demo
+  {
+      public static void Main()
+      {
+          using var db = new DataConnection("YDB", connectionString);
+
+          // 1) Create table from attributes (avoid duplicate indexes if you plan to add them via DDL)
+          db.CreateTable<Group>();
+
+          // 2) Add an index with ASYNC and COVER parameters
+          db.Execute(@"
+  ALTER TABLE Groups
+    ADD INDEX group_name_index GLOBAL ASYNC
+         ON (GroupName)
+         COVER (Department);
+  ");
+      }
+  }
+  ```
+
+{% endlist %}
 
 ### Relationships between entities
 
@@ -343,7 +373,7 @@ CREATE TABLE Students (
 
 {% list tabs %}
 
-- “Lazy” loading (two queries)
+- C#: “Lazy” loading (two queries)
 
   ```csharp
     // 1) SELECT g.GroupId, g.GroupName FROM Groups AS g WHERE g.GroupName = 'M3439';
@@ -361,7 +391,7 @@ CREATE TABLE Students (
     .ToList();
   ```
 
-- “Eager” loading (JOIN)
+- C#: “Eager” loading (JOIN)
 
   ```csharp
     var joined =
@@ -376,7 +406,7 @@ CREATE TABLE Students (
 
 {% list tabs %}
 
-- “Lazy” loading (two queries)
+- YQL: “Lazy” loading (two queries)
 
   ```yql
   SELECT
@@ -397,7 +427,7 @@ CREATE TABLE Students (
       s.GroupId = ?;
   ```
 
-- “Eager” loading (JOIN)
+- YQL: “Eager” loading (JOIN)
 
   ```yql
   SELECT
@@ -484,45 +514,51 @@ ALTER TABLE employee
 
 Usage example
 
-```csharp
-using System;
-using System.Linq;
-using LinqToDB;
-using LinqToDB.Data;
+{% list tabs group=lang %}
 
-using var db = new DataConnection("YDB");
+- C#
 
-// INSERT
-var employee = new Employee
-{
-    Id         = 1L,
-    FullName   = "Example",
-    Email      = "example@example.com",
-    HireDate   = new DateTime(2023, 12, 20),
-    Salary     = 500000.000000000m,
-    IsActive   = true,
-    Department = "YDB AppTeam",
-    Age        = 23,
-};
-db.Insert(employee);
+  ```csharp
+  using System;
+  using System.Linq;
+  using LinqToDB;
+  using LinqToDB.Data;
 
-// SELECT by primary key
-var loaded = db.GetTable<Employee>()
-               .FirstOrDefault(e => e.Id == employee.Id);
+  using var db = new DataConnection("YDB");
 
-// UPDATE Email/Department/Salary by primary key
-db.GetTable<Employee>()
-  .Where(e => e.Id == employee.Id)
-  .Set(e => e.Email,      "example+updated@example.com")
-  .Set(e => e.Department, "Analytics")
-  .Set(e => e.Salary,     550000.000000000m)
-  .Update();
+  // INSERT
+  var employee = new Employee
+  {
+      Id         = 1L,
+      FullName   = "Example",
+      Email      = "example@example.com",
+      HireDate   = new DateTime(2023, 12, 20),
+      Salary     = 500000.000000000m,
+      IsActive   = true,
+      Department = "YDB AppTeam",
+      Age        = 23,
+  };
+  db.Insert(employee);
 
-// DELETE by primary key
-db.GetTable<Employee>()
-  .Where(e => e.Id == employee.Id)
-  .Delete();
-```
+  // SELECT by primary key
+  var loaded = db.GetTable<Employee>()
+                 .FirstOrDefault(e => e.Id == employee.Id);
+
+  // UPDATE Email/Department/Salary by primary key
+  db.GetTable<Employee>()
+    .Where(e => e.Id == employee.Id)
+    .Set(e => e.Email,      "example+updated@example.com")
+    .Set(e => e.Department, "Analytics")
+    .Set(e => e.Salary,     550000.000000000m)
+    .Update();
+
+  // DELETE by primary key
+  db.GetTable<Employee>()
+    .Where(e => e.Id == employee.Id)
+    .Delete();
+  ```
+
+{% endlist %}
 
 **YQL samples generated by the provider for simple operations:**
 
@@ -570,22 +606,28 @@ The provider emits parameters (?) because values and types are bound via the dri
 
 #### BulkCopy
 
-In the YDB provider, `BulkCopy` uses the native `BulkUpsert API` and does not generate textual YQL. Rows are sent to YDB as a stream of strongly-typed values over the SDK’s binary protocol, so there are no DECLARE statements or ? placeholders
+In the YDB provider, `BulkCopy` uses the native `BulkUpsert API` and does not generate textual YQL. Rows are sent to YDB as a stream of strongly-typed values over the SDK's binary protocol, so there are no DECLARE statements or ? placeholders
 
-```csharp
-var now  = DateTime.UtcNow;
-var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
-{
-    Id      = i,
-    IntVal  = i,
-    DecVal  = 0m,
-    StrVal  = $"Name {i}",
-    BoolVal = (i & 1) == 0,
-    DtVal   = now,
-}); 
-  
-  db.BulkCopy(data)
-  ```
+{% list tabs group=lang %}
+
+- C#
+
+  ```csharp
+  var now  = DateTime.UtcNow;
+  var data = Enumerable.Range(0, 15_000).Select(i => new SimpleEntity
+  {
+      Id      = i,
+      IntVal  = i,
+      DecVal  = 0m,
+      StrVal  = $"Name {i}",
+      BoolVal = (i & 1) == 0,
+      DtVal   = now,
+  }); 
+    
+    db.BulkCopy(data)
+    ```
+
+{% endlist %}
 
 Massive Update (WHERE IN)
 

@@ -629,7 +629,7 @@ TExprNode::TPtr BuildUpdateHandlerLambda(const TVector<TString>& keyFields, cons
                     .Seal()
                 .Seal().Build();
             // clang-format on
-        } else if (aggFunction == "distinct_all") {
+        } else if (aggFunction == "distinct") {
             // clang-format off
             aggFunc = ctx.Builder(pos)
                 .Callable("Member")
@@ -836,7 +836,7 @@ void GetAggregationFields(const TVector<TString>& inputColumns, const TVector<TO
             auto stateName = aggName + "_" + aggFunction;
 
             // No renames for distinct, we want to process only keys.
-            if (aggFunction == "distinct_all") {
+            if (aggFunction == "distinct") {
                 aggName = fullName;
                 stateName = fullName;
             }

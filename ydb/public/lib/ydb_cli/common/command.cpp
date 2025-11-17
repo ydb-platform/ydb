@@ -232,9 +232,6 @@ void TClientCommand::Config(TConfig& config) {
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
-    if (Local) {
-        config.LocalCommand = true;
-    }
 }
 
 void TClientCommand::Parse(TConfig& config) {
@@ -417,10 +414,6 @@ void TClientCommand::MarkDangerous() {
     Dangerous = true;
 }
 
-void TClientCommand::MarkLocal() {
-    Local = true;
-}
-
 void TClientCommand::UseOnlyExplicitProfile() {
     OnlyExplicitProfile = true;
 }
@@ -448,11 +441,6 @@ void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> comman
 void TClientCommandTree::AddDangerousCommand(std::unique_ptr<TClientCommand> command) {
     command->MarkDangerous();
     command->UseOnlyExplicitProfile();
-    AddCommand(std::move(command));
-}
-
-void TClientCommandTree::AddLocalCommand(std::unique_ptr<TClientCommand> command) {
-    command->MarkLocal();
     AddCommand(std::move(command));
 }
 

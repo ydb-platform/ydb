@@ -450,6 +450,12 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (TFsPath(config.ProfileFile).Exists() && !TFsPath(config.ProfileFile).IsFile()) {
         throw TMisuseException() << "\'" << config.ProfileFile << "\' is not a file";
     }
+
+    if (!config.NeedToConnect) {
+        // Do not parse any connection params if we don't need to connect to a database
+        return;
+    }
+
     ProfileManager = CreateProfileManager(config.ProfileFile);
     ParseProfile();
 
@@ -458,9 +464,6 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     }
     if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
-    }
-    if (config.LocalCommand) {
-        return;
     }
     if (IsVerbose()) {
         std::vector<TString> errors = ParseResult->LogConnectionParams([&](const TString& paramName, const TString& value, const TString& sourceText) {

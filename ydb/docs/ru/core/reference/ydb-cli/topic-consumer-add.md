@@ -77,7 +77,7 @@ Consumers:
 {{ ydb-cli }} -p quickstart topic consumer add \
   --consumer critical-consumer \
   --important \
-  --supported-codecs raw,zstd \
+  --supported-codecs raw,gzip,zstd \
   my-topic
 ```
 

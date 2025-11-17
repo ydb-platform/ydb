@@ -400,7 +400,11 @@ config:
     entry:
     - component: BS_CONTROLLER
       level: 7
+)";
 
+    Y_UNIT_TEST(CanSetHostnameAndDataCenterFromYdbNode) {
+        TString tmpConfig(config);
+        tmpConfig.append(R"(
   grpc_config:
     xds_bootstrap:
       xds_servers:
@@ -416,14 +420,8 @@ config:
         meta: {"service": "ydb"}
         #locality:
           #zone: Try set zone as data center of ydb node instance
-
-allowed_labels:
-  test:
-    type: string
-)";
-
-    Y_UNIT_TEST(CanSetHostnameAndDataCenterFromYdbNode) {
-        TTempFileHandle configFile = CreateConfigFile(config);
+)");
+        TTempFileHandle configFile = CreateConfigFile(tmpConfig);
         TVector<TString> args;
         PreFillArgs(args, configFile.Name());
         NKikimrConfig::TAppConfig appConfig = TransformConfig(args, GetEnvMock(/*hostname*/"vla-000-localhost", /*fqdnHostName*/"vla-000-localhost"));
@@ -436,7 +434,25 @@ allowed_labels:
     }
 
     Y_UNIT_TEST(CanSetDataCenterFromYbdNodeArgument) {
-        TTempFileHandle configFile = CreateConfigFile(config);
+      TString tmpConfig(config);
+      tmpConfig.append(R"(
+  grpc_config:
+    xds_bootstrap:
+      xds_servers:
+      - server_uri: "xds-provider.bootstrap.cloud-testing.yandex.net:18000"
+        server_features:
+        - "xds_v3"
+        channel_creds:
+        - type: "insecure"
+          config: {"k1": "v1", "k2": "v2"}
+      node:
+        # id: Do not set id. Try set id from ydb node instance
+        cluster: "testing"
+        meta: {"service": "ydb"}
+        #locality:
+          #zone: Try set zone as data center of ydb node instance
+)");
+        TTempFileHandle configFile = CreateConfigFile(tmpConfig);
         TVector<TString> args;
         PreFillArgs(args, configFile.Name());
         args.push_back("--data-center");
@@ -447,6 +463,56 @@ allowed_labels:
         UNIT_ASSERT(appConfig.GetGRpcConfig().HasXdsBootstrap());
         const auto& xdsBootstrap = appConfig.GetGRpcConfig().GetXdsBootstrap();
         UNIT_ASSERT_EQUAL(xdsBootstrap.GetNode().GetId(), "klg-000-localhost");
+        UNIT_ASSERT_EQUAL(xdsBootstrap.GetNode().GetLocality().GetZone(), "dc-klg");
+    }
+
+    Y_UNIT_TEST(CanCheckThatXdsBootstrapIsAbsent) {
+        TString tmpConfig(config);
+        tmpConfig.append(R"(
+  grpc_config:
+    port: 2135
+)");
+        TTempFileHandle configFile = CreateConfigFile(tmpConfig);
+        TVector<TString> args;
+        PreFillArgs(args, configFile.Name());
+        args.push_back("--data-center");
+        args.push_back("dc-klg");
+        NKikimrConfig::TAppConfig appConfig = TransformConfig(args, GetEnvMock(/*hostname*/"klg-000-localhost", /*fqdnHostName*/"klg-000-localhost"));
+
+        UNIT_ASSERT(appConfig.HasGRpcConfig());
+        UNIT_ASSERT(!appConfig.GetGRpcConfig().HasXdsBootstrap());
+    }
+
+    Y_UNIT_TEST(CanUseNodeIdFromYamlConfig) {
+      TString tmpConfig(config);
+      tmpConfig.append(R"(
+  grpc_config:
+    xds_bootstrap:
+      xds_servers:
+      - server_uri: "xds-provider.bootstrap.cloud-testing.yandex.net:18000"
+        server_features:
+        - "xds_v3"
+        channel_creds:
+        - type: "insecure"
+          config: {"k1": "v1", "k2": "v2"}
+      node:
+        id: "test-node-id"
+        cluster: "testing"
+        meta: {"service": "ydb"}
+        #locality:
+          #zone: Try set zone as data center of ydb node instance
+)");
+        TTempFileHandle configFile = CreateConfigFile(tmpConfig);
+        TVector<TString> args;
+        PreFillArgs(args, configFile.Name());
+        args.push_back("--data-center");
+        args.push_back("dc-klg");
+        NKikimrConfig::TAppConfig appConfig = TransformConfig(args, GetEnvMock(/*hostname*/"klg-000-localhost", /*fqdnHostName*/"klg-000-localhost"));
+
+        UNIT_ASSERT(appConfig.HasGRpcConfig());
+        UNIT_ASSERT(appConfig.GetGRpcConfig().HasXdsBootstrap());
+        const auto& xdsBootstrap = appConfig.GetGRpcConfig().GetXdsBootstrap();
+        UNIT_ASSERT_EQUAL(xdsBootstrap.GetNode().GetId(), "test-node-id");
         UNIT_ASSERT_EQUAL(xdsBootstrap.GetNode().GetLocality().GetZone(), "dc-klg");
     }
 }

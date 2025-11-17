@@ -22,11 +22,18 @@ public:
 const TString XDS_BOOTSTRAP_ENV = "GRPC_XDS_BOOTSTRAP";
 const TString XDS_BOOTSTRAP_CONFIG_ENV = "GRPC_XDS_BOOTSTRAP_CONFIG";
 
+Y_UNIT_TEST(CanNotSetEnvIfXdsBootstrapConfigIsAbsent) {
+    NKikimrConfig::TAppConfig appConfig;
+    TTestKikimrRunner::InitXdsBootstrapConfig(appConfig);
+    TString jsonXdsBootstrapConfig = GetEnv(XDS_BOOTSTRAP_CONFIG_ENV);
+    UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, "", "The checked value: " + jsonXdsBootstrapConfig);
+}
+
 Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnv) {
     NKikimrConfig::TAppConfig appConfig;
     auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
     auto* xdsServers = xdsBootstrapConfig->AddXdsServers();
-    xdsServers->SetServerUri("xds-provider.bootstrap.cloud-testing.yandex.net:18000");
+    xdsServers->SetServerUri("xds-provider.bootstrap.my-company.net:18000");
     *xdsServers->AddServerFeatures() = "xds_v3";
     auto* channelCreds = xdsServers->AddChannelCreds();
     channelCreds->SetType("insecure");
@@ -38,7 +45,38 @@ Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnv) {
     node->MutableLocality()->SetZone("test-zone");
 
     TTestKikimrRunner::InitXdsBootstrapConfig(appConfig);
-    const TString expectedJson = R"({"node":{"cluster":"testing","locality":{"zone":"test-zone"},"metadata":{"service":"ydb"},"id":"dc-000-host"},"xds_servers":[{"channel_creds":[{"config":{"k2":"v2","k1":"v1"},"type":"insecure"}],"server_uri":"xds-provider.bootstrap.cloud-testing.yandex.net:18000","server_features":["xds_v3"]}]})";
+    const TString expectedJson = R"({"node":{"cluster":"testing","locality":{"zone":"test-zone"},"metadata":{"service":"ydb"},"id":"dc-000-host"},"xds_servers":[{"channel_creds":[{"config":{"k2":"v2","k1":"v1"},"type":"insecure"}],"server_uri":"xds-provider.bootstrap.my-company.net:18000","server_features":["xds_v3"]}]})";
+    TString jsonXdsBootstrapConfig = GetEnv(XDS_BOOTSTRAP_CONFIG_ENV);
+    UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, expectedJson, "The checked value: " + jsonXdsBootstrapConfig);
+}
+
+Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnvWithSomeNumbersXdsServers) {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
+    {
+        auto* xdsServers = xdsBootstrapConfig->AddXdsServers();
+        xdsServers->SetServerUri("xds-provider-000.bootstrap.my-company.net:18000");
+        *xdsServers->AddServerFeatures() = "xds_v3";
+        auto* channelCreds = xdsServers->AddChannelCreds();
+        channelCreds->SetType("insecure");
+        channelCreds->SetConfig("{\"k1\": \"v1\", \"k2\": \"v2\"}");
+    }
+    {
+        auto* xdsServers = xdsBootstrapConfig->AddXdsServers();
+        xdsServers->SetServerUri("xds-provider-001.bootstrap.my-company.net:18000");
+        *xdsServers->AddServerFeatures() = "xds_v3";
+        auto* channelCreds = xdsServers->AddChannelCreds();
+        channelCreds->SetType("secure");
+        channelCreds->SetConfig("{\"k1\": \"v11\", \"k2\": \"v21\"}");
+    }
+    auto* node = xdsBootstrapConfig->MutableNode();
+    node->SetId("dc-000-host");
+    node->SetCluster("testing");
+    node->SetMeta("{\"service\": \"ydb\"}");
+    node->MutableLocality()->SetZone("test-zone");
+
+    TTestKikimrRunner::InitXdsBootstrapConfig(appConfig);
+    const TString expectedJson = R"({"node":{"cluster":"testing","locality":{"zone":"test-zone"},"metadata":{"service":"ydb"},"id":"dc-000-host"},"xds_servers":[{"channel_creds":[{"config":{"k2":"v2","k1":"v1"},"type":"insecure"}],"server_uri":"xds-provider-000.bootstrap.my-company.net:18000","server_features":["xds_v3"]},{"channel_creds":[{"config":{"k2":"v21","k1":"v11"},"type":"secure"}],"server_uri":"xds-provider-001.bootstrap.my-company.net:18000","server_features":["xds_v3"]}]})";
     TString jsonXdsBootstrapConfig = GetEnv(XDS_BOOTSTRAP_CONFIG_ENV);
     UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, expectedJson, "The checked value: " + jsonXdsBootstrapConfig);
 }

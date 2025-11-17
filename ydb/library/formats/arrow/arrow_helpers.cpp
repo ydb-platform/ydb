@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <util/datetime/base.h>
+#include <type_traits>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
@@ -613,15 +615,52 @@ TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
 
         auto& column = static_cast<const TArray&>(*array);
-        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+        if constexpr (std::is_same_v<typename TWrap::T, arrow::BooleanType>) {
+            result << (column.Value(position) ? "true" : "false");
+        } else if constexpr (std::is_same_v<typename TWrap::T, arrow::TimestampType>) {
+            const auto& tsArr = static_cast<const arrow::TimestampArray&>(column);
+            int64_t micros = tsArr.Value(position);
+            switch (std::static_pointer_cast<arrow::TimestampType>(array->type())->unit()) {
+                case arrow::TimeUnit::SECOND: {
+                    micros *= 1000000LL;
+                    break;
+                }
+                case arrow::TimeUnit::MILLI: {
+                    micros *= 1000LL;
+                    break;
+                }
+                case arrow::TimeUnit::MICRO: {
+                    break;
+                }
+                case arrow::TimeUnit::NANO: {
+                    micros /= 1000LL;
+                    break;
+                }
+            }
+
+            result << TInstant::MicroSeconds(micros).ToString();
+        } else if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             auto value = column.GetString(position);
             result << TString(value.data(), value.size());
+        } else if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+            auto v = column.Value(position);
+            using V = std::decay_t<decltype(v)>;
+            if constexpr (std::is_integral_v<V> && !std::is_same_v<V, bool>) {
+                if (array->type_id() == arrow::Type::UINT8 && (v == 0 || v == 1)) {
+                    result << (v == 1 ? "true" : "false");
+                } else {
+                    result << static_cast<i64>(v);
+                }
+            } else {
+                result << v;
+            }
+        } else {
+            result << array->ToString();
         }
-        if constexpr (arrow::has_c_type<typename TWrap::T>()) {
-            result << column.Value(position);
-        }
+
         return true;
     });
+
     return result;
 }
 

@@ -5639,7 +5639,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         UNIT_ASSERT(readResult1->Record.GetStatus().GetIssues(0).message().Contains("Target vector is not specified"));
 
         request1 = createRequest();
-        request1->Record.MutableVectorTopK()->SetTargetVector("\xE4\x16\x10");
+        request1->Record.MutableVectorTopK()->SetTargetVector("\xE4\x16\x20\x10"); // 25-3 only has length check
         readResult1 = helper.SendRead("table-vector", request1.release());
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
         UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.GetStatus().IssuesSize(), 1);

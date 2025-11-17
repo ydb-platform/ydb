@@ -367,7 +367,7 @@ public:
     }
 
     double CalcDistance(const TStringBuf a, const TStringBuf b) override {
-        return TMetric::Distance(a, b);
+        return TMetric::Distance(a.data(), b.data(), Dimensions);
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {

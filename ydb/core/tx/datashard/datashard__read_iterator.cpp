@@ -48,7 +48,7 @@ struct TReadIteratorVectorTop {
 
     void AddRow(TConstArrayRef<TCell> cells) {
         const auto embedding = cells.at(Column).AsBuf();
-        if (!KMeans->IsExpectedFormat(embedding)) {
+        if (!KMeans->IsExpectedSize(embedding)) {
             return;
         }
         TotalReadRows++;
@@ -2166,7 +2166,7 @@ public:
                 if (!topState->KMeans && error == "") {
                     error = "CreateClusters failed";
                 }
-                if (topState->KMeans && !topState->KMeans->IsExpectedFormat(topK.GetTargetVector())) {
+                if (topState->KMeans && !topState->KMeans->IsExpectedSize(topK.GetTargetVector())) {
                     error = "Target vector has invalid format";
                 }
             }

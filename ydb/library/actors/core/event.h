@@ -12,6 +12,10 @@
 #include <util/system/hp_timer.h>
 #include <util/generic/maybe.h>
 
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
+
 namespace NActors {
     class TChunkSerializer;
     class IActor;
@@ -39,7 +43,7 @@ namespace NActors {
         }
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-        virtual std::optional<TRope> SerializeToRope(std::function<TRcBuf(ui32 size)>) const {
+        virtual std::optional<TRope> SerializeToRope(NInterconnect::NRdma::IMemPool*) const {
             return std::nullopt;
         }
         virtual bool IsSerializable() const = 0;

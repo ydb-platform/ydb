@@ -333,30 +333,40 @@ namespace NActors {
         return true;
     }
 
-    std::optional<TRope> SerializeToRopeImpl(std::function<TRcBuf(ui32 size)> alloc, const TVector<TRope> &payload) {
+    std::optional<TRope> SerializeToRopeImpl(const google::protobuf::MessageLite& msg, const TVector<TRope>& payload, NInterconnect::NRdma::IMemPool* pool) {
         TRope result;
         auto sz = CalculateSerializedHeaderSizeImpl(payload);
-        if (!sz) {
-            return result;
-        }
-        TRcBuf headerBuf = alloc(sz);
-        if (!headerBuf) {
-            return {};
-        }
-        char* data = headerBuf.GetDataMut();
-        auto append = [&data](const char *p, size_t len) {
-            std::memcpy(data, p, len);
-            data += len;
-            return true;
-        };
-        SerializeHeaderCommon(payload, append);
-        result.Insert(result.End(), headerBuf);
+        if (sz) {
+            std::optional<TRcBuf> headerBuf = pool->AllocRcBuf(sz, NInterconnect::NRdma::IMemPool::EMPTY);
+            if (!headerBuf) {
+                return {};
+            }
+            char* data = headerBuf->GetDataMut();
+            auto append = [&data](const char *p, size_t len) {
+                std::memcpy(data, p, len);
+                data += len;
+                return true;
+            };
+            SerializeHeaderCommon(payload, append);
+            result.Insert(result.End(), std::move(headerBuf.value()));
 
-        auto appendRope = [&](TRope rope) {
-            result.Insert(result.End(), std::move(rope));
-            return true;
-        };
-        SerializePayloadCommon(payload, appendRope);
+            auto appendRope = [&](TRope rope) {
+                result.Insert(result.End(), std::move(rope));
+                return true;
+            };
+            SerializePayloadCommon(payload, appendRope);
+        }
+
+        {
+            ui32 size = msg.ByteSizeLong();
+            std::optional<TRcBuf> recordsSerializedBuf = pool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::EMPTY);
+            if (!recordsSerializedBuf) {
+                return {};
+            }
+            bool serializationDone = msg.SerializePartialToArray(recordsSerializedBuf->GetDataMut(), size);
+            Y_ABORT_UNLESS(serializationDone);
+            result.Insert(result.End(), std::move(recordsSerializedBuf.value()));
+        }
 
         return result;
     }

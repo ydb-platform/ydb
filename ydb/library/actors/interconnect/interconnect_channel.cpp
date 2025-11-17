@@ -328,9 +328,7 @@ namespace NActors {
         ui32* checksum, ssize_t rdmaDeviceIndex)
     {
         if (!event.Buffer && event.Event) {
-            std::optional<TRope> rope = event.Event->SerializeToRope(
-                [&](ui32 size) -> TRcBuf { return RdmaMemPool->AllocRcBuf(size, NInterconnect::NRdma::IMemPool::EMPTY).value(); }
-            );
+            std::optional<TRope> rope = event.Event->SerializeToRope(RdmaMemPool.get());
             if (!rope) {
                 return false; // serialization failed
             }

@@ -61,8 +61,7 @@ struct TARFile {
             memset(this, 0, sizeof(TARFileHeader));
             strcpy(filename, name.c_str());
             strcpy(fileSize, ToOct(size).c_str());
-            auto unixTime = time.MilliSeconds();
-            strcpy(lastModification, ToOct(unixTime).c_str());
+            strcpy(lastModification, ToOct(time.Seconds()).c_str());
             CalcChecksum();
         }
 

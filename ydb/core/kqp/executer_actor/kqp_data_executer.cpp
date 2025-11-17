@@ -307,7 +307,7 @@ public:
         MakeResponseAndPassAway();
     }
 
-    void HandleFinalize(TEvents::TEvUndelivered::TPtr&) {
+    void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
         AFL_ENSURE(ev->Sender == BufferActorId);
         LOG_W("Got Undelivered from BufferActor: " << ev->Sender);
     }

@@ -69,7 +69,7 @@ namespace NKikimr::NStorage {
 
         for (const auto& [item, location] : newNodeList) {
             const ui32 nodeId = item.NodeId();
-            AllNodeIds.insert(nodeId);
+            AllNodeIds.emplace(nodeId, item);
 
             // check if node is from the same pile (as this one)
             if (location.GetBridgePileName() == SelfNodeBridgePileName) {
@@ -401,7 +401,7 @@ namespace NKikimr::NStorage {
             ApplyConfigUpdateToDynamicNodes(true);
 
             if (sendUpdate) {
-                FanOutReversePush();
+                FanOutReversePush(nullptr); // config didn't change, but root node did
             }
 
             UnsubscribeQueue.insert(binding.NodeId);
@@ -434,7 +434,7 @@ namespace NKikimr::NStorage {
         // check if this binding was accepted and if it is acceptable from our point of view
         bool bindingUpdate = false;
         if (record.GetRejected()) {
-            AbortBinding("binding rejected by peer", false, false);
+            AbortBinding("binding rejected by peer", /*sendUnbindMessage=*/ false, /*sendUpdate=*/ false);
             if (const ui32 rootNodeId = record.GetRootNodeId()) {
                 StartBinding(rootNodeId);
             }
@@ -453,9 +453,10 @@ namespace NKikimr::NStorage {
 
         // update config if needed, or just fan-out binding changes
         if (record.HasCommittedStorageConfig()) {
-            ApplyStorageConfig(record.GetCommittedStorageConfig(), true);
+            ApplyStorageConfig(record.GetCommittedStorageConfig());
+            FanOutReversePush(&record.GetCommittedStorageConfig());
         } else if (bindingUpdate) {
-            FanOutReversePush();
+            FanOutReversePush(nullptr); // no configuration change, but root node has been updated
         }
 
         std::unique_ptr<TEvNodeConfigPush> pendingPush;
@@ -478,11 +479,6 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
-        }
-
-        if (StorageConfig && record.HasRequestStorageConfigGeneration() &&
-                record.GetRequestStorageConfigGeneration() <= StorageConfig->GetGeneration()) {
-            getPendingPushRecord()->MutableStorageConfig()->CopyFrom(*StorageConfig);
         }
 
         if (pendingPush) {
@@ -572,20 +568,21 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(senderNodeId != SelfId().NodeId());
         auto& record = ev->Get()->Record;
 
-        // check if we have to send our current config to the peer
-        const NKikimrBlobStorage::TStorageConfig *configToPeer = nullptr;
-        std::optional<ui64> requestStorageConfigGeneration;
-        const bool knownNode = AllNodeIds.contains(senderNodeId);
-        if (StorageConfig) {
-            for (const auto& item : record.GetBoundNodes()) {
-                if (item.GetNodeId().GetNodeId() == senderNodeId) {
-                    if (item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
-                        configToPeer = StorageConfig.get();
-                    } else if (StorageConfig->GetGeneration() < item.GetMeta().GetGeneration()) {
-                        requestStorageConfigGeneration.emplace(item.GetMeta().GetGeneration());
+        bool knownNode = false;
+        bool needToSendConfig = false;
+        if (const auto it = AllNodeIds.find(senderNodeId); it != AllNodeIds.end() && IsSelfStatic) {
+            Y_ABORT_UNLESS(StorageConfig); // we must have the storage configuration by the time we can process this message
+            if (record.GetInitial()) {
+                for (const auto& item : record.GetBoundNodes()) {
+                    if (item.GetNodeId().GetNodeId() == senderNodeId) {
+                        // ensure that whole node identifier tuple matches
+                        knownNode = it->second == TNodeIdentifier(item.GetNodeId());
+                        needToSendConfig = item.GetMeta().GetGeneration() < StorageConfig->GetGeneration();
+                        break;
                     }
-                    break;
                 }
+            } else {
+                knownNode = true;
             }
         }
 
@@ -601,7 +598,7 @@ namespace NKikimr::NStorage {
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
-            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected(nullptr));
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }
 
@@ -610,7 +607,7 @@ namespace NKikimr::NStorage {
             STLOG(PRI_DEBUG, BS_NODE, NWDC28, "TEvNodeConfigPush rejected", (NodeId, senderNodeId),
                 (Cookie, ev->Cookie), (SessionId, ev->InterconnectSession), (Binding, Binding),
                 (Record, record));
-            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected(nullptr));
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }
 
@@ -622,7 +619,7 @@ namespace NKikimr::NStorage {
                 // nodes AND this is the root one
             } else {
                 // this is either not the root node, or no quorum for connection
-                auto response = TEvNodeConfigReversePush::MakeRejected(nullptr);
+                auto response = TEvNodeConfigReversePush::MakeRejected();
                 if (Binding && Binding->RootNodeId) {
                     // command peer to join this specific node
                     response->Record.SetRootNodeId(Binding->RootNodeId);
@@ -657,8 +654,8 @@ namespace NKikimr::NStorage {
             GetRootNodeId());
         TBoundNode& info = it->second;
         if (inserted) {
-            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), configToPeer,
-                requestStorageConfigGeneration);
+            auto response = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(),
+                needToSendConfig ? StorageConfig.get() : nullptr);
             if (record.GetInitial()) {
                 auto *cache = record.MutableCacheUpdate();
 
@@ -725,10 +722,6 @@ namespace NKikimr::NStorage {
         // process cache items
         if (!record.GetInitial() && record.HasCacheUpdate()) {
             ApplyCacheUpdates(record.MutableCacheUpdate(), senderNodeId);
-        }
-
-        if (record.HasStorageConfig()) {
-            ApplyStorageConfig(record.GetStorageConfig(), /*fromBinding=*/ false);
         }
 
         if (pushEv && pushEv->IsUseful()) {
@@ -807,7 +800,10 @@ namespace NKikimr::NStorage {
         std::vector<ui32> goingToUnbind;
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             if (BridgeInfo->GetPileForNode(nodeId) != BridgeInfo->SelfNodePile) {
-                auto ev = TEvNodeConfigReversePush::MakeRejected(nodesToUpdate.contains(nodeId) ? StorageConfig.get() : nullptr);
+                auto ev = TEvNodeConfigReversePush::MakeRejected();
+                if (nodesToUpdate.contains(nodeId)) {
+                    ev->Record.MutableCommittedStorageConfig()->CopyFrom(*StorageConfig);
+                }
                 if (Binding && Binding->RootNodeId) { // inform about new root, if we have it
                     ev->Record.SetRootNodeId(Binding->RootNodeId);
                 }

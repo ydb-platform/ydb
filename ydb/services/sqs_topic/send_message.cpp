@@ -3,6 +3,7 @@
 #include "request.h"
 #include "events.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
@@ -123,17 +124,6 @@ namespace NKikimr::NSqsTopic::V1 {
                 // all messages fails validation
                 return HandleEmptyTask(ctx);
             }
-
-            NTabletPipe::TClientConfig clientConfig;
-            clientConfig.RetryPolicy = {
-                .RetryLimitCount = 6,
-                .MinRetryTime = TDuration::MilliSeconds(10),
-                .MaxRetryTime = TDuration::MilliSeconds(100),
-                .BackoffMultiplier = 2,
-                .DoFirstRetryInstantly = true};
-            PipeClient = ctx.RegisterWithSameMailbox(
-                NTabletPipe::CreateClient(ctx.SelfID, TabletId, clientConfig));
-
             SendWriteRequest(ctx);
             Become(&TSendMessagePartitionActor::PartitionWriteFunc);
         }
@@ -142,9 +132,19 @@ namespace NKikimr::NSqsTopic::V1 {
         STFUNC(PartitionWriteFunc) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvPersQueue::TEvResponse, HandlePartitionWriteResult);
-                HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-                HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+                HFunc(TEvPipeCache::TEvDeliveryProblem, HandleDeliveryProblem);
             };
+        }
+
+        void HandleDeliveryProblem(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Cookie != PipeCookie) {
+                return;
+            }
+            LOG_WARN_S(
+                    ctx,
+                    NKikimrServices::SQS,
+                    "Delivery problem. TabletId=" << TabletId);
+            ReplyWithError(ctx, NSQS::NErrors::SERVICE_UNAVAILABLE);
         }
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
@@ -168,12 +168,12 @@ namespace NKikimr::NSqsTopic::V1 {
             ReplyWithError(ctx, NSQS::NErrors::SERVICE_UNAVAILABLE);
         }
 
-        void SendWriteRequest(const TActorContext& ctx) {
+        void SendWriteRequest(const TActorContext&) {
             NKikimrClient::TPersQueueRequest request;
             request.MutablePartitionRequest()->SetTopic(Topic);
             request.MutablePartitionRequest()->SetPartition(Partition);
             request.MutablePartitionRequest()->SetIsDirectWrite(true);
-            ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
+
             ui64 totalSize = 0;
             for (const auto& item : DataToWrite) {
                 Y_ASSERT(item.ValidationError.Empty());
@@ -184,10 +184,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 request.MutablePartitionRequest()->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
             }
 
-            TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            std::unique_ptr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record.Swap(&request);
 
-            NTabletPipe::SendData(ctx, PipeClient, req.Release());
+            auto forward = std::make_unique<TEvPipeCache::TEvForward>(req.release(), TabletId, true, ++PipeCookie);
+            Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
         }
 
         void HandlePartitionWriteResult(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
@@ -258,9 +259,6 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void Die(const TActorContext& ctx) override {
-            if (PipeClient) {
-                NTabletPipe::CloseClient(ctx, PipeClient);
-            }
             TBase::Die(ctx);
         }
 
@@ -270,9 +268,9 @@ namespace NKikimr::NSqsTopic::V1 {
         ui32 Partition = 0;
         TString Topic;
         TVector<TSendMessageItem> DataToWrite;
-        NActors::TActorId PipeClient;
         bool ShouldBeCharged;
         ui32 Cookie = 0;
+        ui64 PipeCookie = 1;
     };
 
     template <class TProtoRequest>

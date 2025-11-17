@@ -71,7 +71,7 @@ Consumers:
   my-topic
 ```
 
-**Создайте важного читателя с именем `critical-consumer` для топика `my-topic` с поддержкой кодека `ZSTD`:**
+**Создайте важного читателя с именем `critical-consumer` для топика `my-topic` с дополнительной поддержкой кодека `ZSTD`:**
 
 ```bash
 {{ ydb-cli }} -p quickstart topic consumer add \

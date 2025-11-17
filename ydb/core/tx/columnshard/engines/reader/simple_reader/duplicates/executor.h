@@ -18,10 +18,6 @@ public:
     }
 
     bool ScheduleNext(TBuildFilterContext&& context);
-
-    ~TBuildFilterTaskExecutor() {
-        AFL_VERIFY(Portions.IsDone());
-    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

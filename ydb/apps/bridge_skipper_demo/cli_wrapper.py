@@ -15,7 +15,7 @@ def execute_cli_command(
         endpoints: List[str],
         strict_order: bool = False,
         ydb_auth_opts: Optional[List[str]] = None,
-        print_info: bool = None,
+        print_info: bool = False,
 ) -> Optional[subprocess.CompletedProcess]:
 
     if ydb_auth_opts and "--ca-file" in ydb_auth_opts:

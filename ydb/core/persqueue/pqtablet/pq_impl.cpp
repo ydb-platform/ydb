@@ -3122,7 +3122,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
     const NKikimrPQ::TEvProposeTransaction& event = ev->Get()->GetRecord();
     PQ_LOG_TX_D("Handle TEvPersQueue::TEvProposeTransaction " << event.ShortDebugString());
 
-    auto span = GenerateSpan("Topic.Transaction", *SamplingControl);
+    auto span = GenerateSpan("Topic.Transaction", *SamplingControl, std::move(ev->TraceId));
     span.Attribute("TxId", static_cast<i64>(event.GetTxId()));
     span.Attribute("TabletId", static_cast<i64>(TabletID()));
 

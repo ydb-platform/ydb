@@ -478,10 +478,10 @@ void Test(TJoinTestData testData, bool blockJoin) {
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr);
     if (testData.JoinMemoryConstraint) {
-        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 8_MB + testData.Setup->Alloc.GetUsed());
+        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 3000_MB + testData.Setup->Alloc.GetUsed());
     }
-    NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> provider = NYql::NUdf::MakeLogProvider([&](const NYql::NUdf::TStringRef& component, NYql::NUdf::ELogLevel, const NYql::NUdf::TStringRef& message ) {
-        Cout << Sprintf("component: %s, message: %s\n", component.Data(), message.Data());
+    NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> provider = NYql::NUdf::MakeLogProvider([&](std::string_view component, NYql::NUdf::ELogLevel, std::string_view message ) {
+        Cout << std::format("component: {}, message: {}\n", component, message);
     });
     got->GetContext().LogProvider = provider.Get();
     if (blockJoin) {

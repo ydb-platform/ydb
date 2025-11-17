@@ -4,7 +4,6 @@
 namespace NKikimr::NMiniKQL {
 
 NThreading::TFuture<ISpiller::TKey> SpillPage(ISpiller& spiller, TPackResult&& page){
-    // page.
     return spiller.Put(Serialize(std::move(page)));
 }
 
@@ -19,16 +18,12 @@ NYql::TChunkedBuffer Serialize(TPackResult&& result) {
     buff.Append(TString{reinterpret_cast<const char*>(result.PackedTuples.data()), result.PackedTuples.size()});
     buff.Append(TString{reinterpret_cast<const char*>(result.Overflow.data()), result.Overflow.size()});
 
-    // Cout << "spilling page, buff.size() == " << buff.Size() << Endl;
     MKQL_ENSURE(result.NTuples != 0,"spilling empty page?");
     return buff;
 }
 
 
 TPackResult Parse(NYql::TChunkedBuffer&& buff) {
-    // MKQL
-    // MKQL_ENSURE(buff.Size() == 3, Sprintf("pack result must have 3 pages, has%i", buff.Size()));
-    // buff.
     TPackResult res;
     auto size = buff.Front().Buf;
     auto code = std::from_chars( size.data(), size.data() + size.size(), res.NTuples);
@@ -41,7 +36,6 @@ TPackResult Parse(NYql::TChunkedBuffer&& buff) {
         res.Overflow.resize(buff.Front().Buf.size());
         std::ranges::copy(buff.Front().Buf, res.Overflow.data());
     }
-    // MKQL_ENSURE(tupleBatch.AllocatedBytes() < 2*Settings.BucketSizeBytes, "too big ")
 
     return res;
 }

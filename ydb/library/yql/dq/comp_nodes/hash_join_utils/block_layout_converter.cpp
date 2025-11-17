@@ -607,7 +607,6 @@ public:
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
-        Cout << TupleLayout_->TotalRowSize << "<- row size" << Endl;
     }
 
     void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) override {

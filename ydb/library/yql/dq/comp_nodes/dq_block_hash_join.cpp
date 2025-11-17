@@ -112,7 +112,6 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
                     tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
                     Output_.Data.SelectSide(side).PackedTuples, Output_.Data.SelectSide(side).Overflow);
             });
-            Cout << std::format("consumed thing: {}", Output_.NItems) << Endl;
             Output_.NItems++;
         };
     }
@@ -224,7 +223,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn());
                 switch (res) {
                 case EFetchResult::Finish: {
-                    Cout << "finished" << Endl;
                     if (Output_.SizeTuples() == 0) {
                         return NYql::NUdf::EFetchStatus::Finish;
                     }

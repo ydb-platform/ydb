@@ -144,7 +144,6 @@ public:
                 MKQL_ENSURE(totalSpillingPages == 0, "not enough pages for spilling?");
             }
         }
-        // Cout << 
         MKQL_ENSURE(!condition(), "sanitiy check");
         return ESpillResult::FinishedSpilling;
     }
@@ -172,7 +171,6 @@ public:
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {
         while(condition() || SpillingPages_.has_value()) {
             if (SpillingPages_.has_value()) {
-                // NThreading::WaitAll(*SpillingPages_);
                 for(auto& future: *SpillingPages_) {
 
                     if (!future.Val.IsReady()){
@@ -187,7 +185,6 @@ public:
                 SpillingPages_ = std::nullopt;
             } else {
 
-                // int spillingThisTime = /
                 if (State_.InMemoryPages_.size() < Settings.SpillingPagesAtTime) {
                     return ESpillResult::DontHavePages;
                 }
@@ -212,7 +209,6 @@ public:
                 State_.InMemoryPages_.push_back({.Val = std::move(page), .Side = tuple.Side, .BucketIndex = tuple.BucketIndex});
             }
         }
-        // InMemoryPages_.push_front(std::move(page));
     }
     bool IsBucketSpilled(int index) {
         TSides<bool> answers;
@@ -224,16 +220,10 @@ public:
     }
     State& GetState() {
         MKQL_ENSURE(!SpillingPages_.has_value(), "pages shoul've finished spilling earlier");
-        // for(auto& memPage: InMemoryPages_) {
-        //     SpilledBuckets_[memPage.BucketIndex].SelectSide(memPage.Side).InMemoryPages.push_back(std::move(memPage.Val));
-        // }
         return State_;
     }
 private:
     State State_;
-    // TPairOfBuckets SpilledBuckets_;
-    // // TMKQLVector<TPackResult> BucketBuffers_;
-    // TMKQLVector<TValueAndLocation<TPackResult>> InMemoryPages_;
     const NPackedTuple::TTupleLayout* Layout_;
 
     std::optional<TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>>> SpillingPages_;

@@ -129,7 +129,7 @@ public:
             return;
         }
 
-        Exporter = exporter.DetachResult();
+        Exporter = exporter.DetachResult().release();
 
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
         auto initialState = Exporter->Prepare(Driver.get(), MakeRowSchema());
@@ -145,7 +145,6 @@ public:
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("error", errorMessage);
         Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(errorMessage));
         Exporter->Finish(NTable::EStatus::Done);
-        Y_UNUSED(Exporter.release());
         PassAway();
     }
 
@@ -185,7 +184,6 @@ public:
             Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(isFinal));
             if (isFinal) {
                 Exporter->Finish(NTable::EStatus::Done);
-                Y_UNUSED(Exporter.release());
                 PassAway();
             }
             CurrentBatch.NeedResult = false;
@@ -296,7 +294,7 @@ private:
     NTable::EScan LastState = NTable::EScan::Sleep;
     std::queue<TBatchItem> DataQueue;
     std::unique_ptr<NColumnShard::NBackup::TExportDriver> Driver;
-    std::unique_ptr<NTable::IScan> Exporter;
+    NTable::IScan* Exporter = nullptr;
     NKikimrSchemeOp::TBackupTask BackupTask;
     const NDataShard::IExportFactory* ExportFactory;
     NDataShard::IExport::TTableColumns TableColumns;

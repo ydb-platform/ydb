@@ -14,27 +14,24 @@ to really unreasonable lengths to produce pretty output."""
 import ast
 import hashlib
 import inspect
-import linecache
-import os
 import re
-import sys
 import textwrap
 import types
 import warnings
-from collections.abc import MutableMapping, Sequence
+from collections.abc import Callable, Sequence
 from functools import partial, wraps
 from inspect import Parameter, Signature
 from io import StringIO
 from keyword import iskeyword
 from random import _inst as global_random_instance
-from tokenize import COMMENT, detect_encoding, generate_tokens, untokenize
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, Callable, Optional, TypeVar, Union
+from tokenize import COMMENT, generate_tokens, untokenize
+from types import EllipsisType, ModuleType
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 from unittest.mock import _patch as PatchType
-from weakref import WeakKeyDictionary
 
 from hypothesis.errors import HypothesisWarning
-from hypothesis.internal.compat import EllipsisType, is_typed_named_tuple
+from hypothesis.internal import lambda_sources
+from hypothesis.internal.compat import is_typed_named_tuple
 from hypothesis.utils.conventions import not_set
 from hypothesis.vendor.pretty import pretty
 
@@ -42,9 +39,6 @@ if TYPE_CHECKING:
     from hypothesis.strategies._internal.strategies import SearchStrategy
 
 T = TypeVar("T")
-
-READTHEDOCS = os.environ.get("READTHEDOCS", None) == "True"
-LAMBDA_SOURCE_CACHE: MutableMapping[Callable, str] = WeakKeyDictionary()
 
 
 def is_mock(obj: object) -> bool:
@@ -165,15 +159,7 @@ def get_signature(
                     parameters=[v for k, v in sig.parameters.items() if k != "self"]
                 )
         return sig
-    # eval_str is only supported by Python 3.10 and newer
-    if sys.version_info[:2] >= (3, 10):
-        sig = inspect.signature(
-            target, follow_wrapped=follow_wrapped, eval_str=eval_str
-        )
-    else:
-        sig = inspect.signature(
-            target, follow_wrapped=follow_wrapped
-        )  # pragma: no cover
+    sig = inspect.signature(target, follow_wrapped=follow_wrapped, eval_str=eval_str)
     check_signature(sig)
     return sig
 
@@ -188,7 +174,7 @@ def arg_is_required(param: Parameter) -> bool:
 def required_args(
     target: Callable[..., Any],
     args: tuple["SearchStrategy[Any]", ...] = (),
-    kwargs: Optional[dict[str, Union["SearchStrategy[Any]", EllipsisType]]] = None,
+    kwargs: dict[str, Union["SearchStrategy[Any]", EllipsisType]] | None = None,
 ) -> set[str]:
     """Return a set of names of required args to target that were not supplied
     in args or kwargs.
@@ -281,177 +267,6 @@ def is_first_param_referenced_in_function(f: Any) -> bool:
     )
 
 
-def extract_all_lambdas(tree, matching_signature):
-    lambdas = []
-
-    class Visitor(ast.NodeVisitor):
-        def visit_Lambda(self, node):
-            if ast_arguments_matches_signature(node.args, matching_signature):
-                lambdas.append(node)
-
-    Visitor().visit(tree)
-
-    return lambdas
-
-
-LINE_CONTINUATION = re.compile(r"\\\n")
-WHITESPACE = re.compile(r"\s+")
-PROBABLY_A_COMMENT = re.compile("""#[^'"]*$""")
-SPACE_FOLLOWS_OPEN_BRACKET = re.compile(r"\( ")
-SPACE_PRECEDES_CLOSE_BRACKET = re.compile(r" \)")
-
-
-def _extract_lambda_source(f):
-    """Extracts a single lambda expression from the string source. Returns a
-    string indicating an unknown body if it gets confused in any way.
-
-    This is not a good function and I am sorry for it. Forgive me my
-    sins, oh lord
-    """
-    # You might be wondering how a lambda can have a return-type annotation?
-    # The answer is that we add this at runtime, in new_given_signature(),
-    # and we do support strange choices as applying @given() to a lambda.
-    sig = inspect.signature(f)
-    assert sig.return_annotation in (Parameter.empty, None), sig
-
-    # Using pytest-xdist on Python 3.13, there's an entry in the linecache for
-    # file "<string>", which then returns nonsense to getsource.  Discard it.
-    linecache.cache.pop("<string>", None)
-
-    if sig.parameters:
-        if_confused = f"lambda {str(sig)[1:-1]}: <unknown>"
-    else:
-        if_confused = "lambda: <unknown>"
-    try:
-        source = inspect.getsource(f)
-    except OSError:
-        return if_confused
-
-    source = LINE_CONTINUATION.sub(" ", source)
-    source = WHITESPACE.sub(" ", source)
-    source = source.strip()
-    if "lambda" not in source:  # pragma: no cover
-        # If a user starts a hypothesis process, then edits their code, the lines
-        # in the parsed source code might not match the live __code__ objects.
-        #
-        # (and on sys.platform == "emscripten", this can happen regardless
-        # due to a pyodide bug in inspect.getsource()).
-        return if_confused
-
-    tree = None
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        for i in range(len(source) - 1, len("lambda"), -1):
-            prefix = source[:i]
-            if "lambda" not in prefix:
-                break
-            try:
-                tree = ast.parse(prefix)
-                source = prefix
-                break
-            except SyntaxError:
-                continue
-    if tree is None and source.startswith(("@", ".")):
-        # This will always eventually find a valid expression because the
-        # decorator or chained operator must be a valid Python function call,
-        # so will eventually be syntactically valid and break out of the loop.
-        # Thus, this loop can never terminate normally.
-        for i in range(len(source) + 1):
-            p = source[1:i]
-            if "lambda" in p:
-                try:
-                    tree = ast.parse(p)
-                    source = p
-                    break
-                except SyntaxError:
-                    pass
-        else:
-            raise NotImplementedError("expected to be unreachable")
-
-    if tree is None:
-        return if_confused
-
-    aligned_lambdas = extract_all_lambdas(tree, matching_signature=sig)
-    if len(aligned_lambdas) != 1:
-        return if_confused
-    lambda_ast = aligned_lambdas[0]
-    assert lambda_ast.lineno == 1
-
-    # If the source code contains Unicode characters, the bytes of the original
-    # file don't line up with the string indexes, and `col_offset` doesn't match
-    # the string we're using.  We need to convert the source code into bytes
-    # before slicing.
-    #
-    # Under the hood, the inspect module is using `tokenize.detect_encoding` to
-    # detect the encoding of the original source file.  We'll use the same
-    # approach to get the source code as bytes.
-    #
-    # See https://github.com/HypothesisWorks/hypothesis/issues/1700 for an
-    # example of what happens if you don't correct for this.
-    #
-    # Note: if the code doesn't come from a file (but, for example, a doctest),
-    # `getsourcefile` will return `None` and the `open()` call will fail with
-    # an OSError.  Or if `f` is a built-in function, in which case we get a
-    # TypeError.  In both cases, fall back to splitting the Unicode string.
-    # It's not perfect, but it's the best we can do.
-    try:
-        with open(inspect.getsourcefile(f), "rb") as src_f:
-            encoding, _ = detect_encoding(src_f.readline)
-
-        source_bytes = source.encode(encoding)
-        source_bytes = source_bytes[lambda_ast.col_offset :].strip()
-        source = source_bytes.decode(encoding)
-    except (OSError, TypeError):
-        source = source[lambda_ast.col_offset :].strip()
-
-    # This ValueError can be thrown in Python 3 if:
-    #
-    #  - There's a Unicode character in the line before the Lambda, and
-    #  - For some reason we can't detect the source encoding of the file
-    #
-    # because slicing on `lambda_ast.col_offset` will account for bytes, but
-    # the slice will be on Unicode characters.
-    #
-    # In practice this seems relatively rare, so we just give up rather than
-    # trying to recover.
-    try:
-        source = source[source.index("lambda") :]
-    except ValueError:
-        return if_confused
-
-    for i in range(len(source), len("lambda"), -1):  # pragma: no branch
-        try:
-            parsed = ast.parse(source[:i])
-            assert len(parsed.body) == 1
-            assert parsed.body
-            if isinstance(parsed.body[0].value, ast.Lambda):
-                source = source[:i]
-                break
-        except SyntaxError:
-            pass
-    lines = source.split("\n")
-    lines = [PROBABLY_A_COMMENT.sub("", l) for l in lines]
-    source = "\n".join(lines)
-
-    source = WHITESPACE.sub(" ", source)
-    source = SPACE_FOLLOWS_OPEN_BRACKET.sub("(", source)
-    source = SPACE_PRECEDES_CLOSE_BRACKET.sub(")", source)
-    return source.strip()
-
-
-def extract_lambda_source(f):
-    try:
-        return LAMBDA_SOURCE_CACHE[f]
-    except KeyError:
-        pass
-
-    source = _extract_lambda_source(f)
-    LAMBDA_SOURCE_CACHE[f] = source
-    return source
-
-
 def get_pretty_function_description(f: object) -> str:
     if isinstance(f, partial):
         return pretty(f)
@@ -459,7 +274,7 @@ def get_pretty_function_description(f: object) -> str:
         return repr(f)
     name = f.__name__  # type: ignore
     if name == "<lambda>":
-        return extract_lambda_source(f)
+        return lambda_sources.lambda_description(f)
     elif isinstance(f, (types.MethodType, types.BuiltinMethodType)):
         self = f.__self__
         # Some objects, like `builtins.abs` are of BuiltinMethodType but have
@@ -549,7 +364,7 @@ def accept({funcname}):
 
 def get_varargs(
     sig: Signature, kind: int = Parameter.VAR_POSITIONAL
-) -> Optional[Parameter]:
+) -> Parameter | None:
     for p in sig.parameters.values():
         if p.kind is kind:
             return p
@@ -663,6 +478,9 @@ def impersonate(target):
         f.__module__ = target.__module__
         f.__doc__ = target.__doc__
         f.__globals__["__hypothesistracebackhide__"] = True
+        # But leave an breadcrumb for _describe_lambda to follow, it's
+        # just confused by the lies above
+        f.__wrapped_target = target
         return f
 
     return accept
@@ -681,6 +499,31 @@ def proxies(target: T) -> Callable[[Callable], T]:
     return accept
 
 
-def is_identity_function(f: object) -> bool:
-    # TODO: pattern-match the AST to handle `def ...` identity functions too
-    return bool(re.fullmatch(r"lambda (\w+): \1", get_pretty_function_description(f)))
+def is_identity_function(f: Callable) -> bool:
+    try:
+        code = f.__code__
+    except AttributeError:
+        try:
+            f = f.__call__  # type: ignore
+            code = f.__code__
+        except AttributeError:
+            return False
+
+    # We only accept a single unbound argument. While it would be possible to
+    # accept extra defaulted arguments, it would be pointless as they couldn't
+    # be referenced at all in the code object (or the co_code check would fail).
+    bound_args = int(inspect.ismethod(f))
+    if code.co_argcount != bound_args + 1 or code.co_kwonlyargcount > 0:
+        return False
+
+    # We know that f accepts a single positional argument, now check that its
+    # code object is simply "return first unbound argument".
+    template = (lambda self, x: x) if bound_args else (lambda x: x)  # type: ignore
+    try:
+        return code.co_code == template.__code__.co_code
+    except AttributeError:  # pragma: no cover  # pypy only
+        # In PyPy, some builtin functions have a code object ('builtin-code')
+        # lacking co_code, perhaps because they are native-compiled and don't have
+        # a corresponding bytecode. Regardless, since Python doesn't have any
+        # builtin identity function it seems safe to say that this one isn't
+        return False

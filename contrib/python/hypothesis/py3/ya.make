@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.136.2)
+VERSION(6.143.0)
 
 LICENSE(MPL-2.0)
 
@@ -87,6 +87,7 @@ PY_SRCS(
     hypothesis/internal/floats.py
     hypothesis/internal/healthcheck.py
     hypothesis/internal/intervalsets.py
+    hypothesis/internal/lambda_sources.py
     hypothesis/internal/observability.py
     hypothesis/internal/reflection.py
     hypothesis/internal/scrutineer.py

@@ -946,7 +946,7 @@ TPrechargeResult TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef 
         const TCelled maxKey(maxKey_, *Scheme->Keys, false);
 
         for (const auto& run : GetLevels()) {
-            TChargeResult chargeResult;
+            TPrechargeResult chargeResult;
 
             switch (direction) {
                 case EDirection::Forward:

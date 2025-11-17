@@ -3,11 +3,11 @@
 
 namespace NKikimr::NTable {
 
-TChargeResult ChargeRange(IPages *env, const TCells key1, const TCells key2,
+TPrechargeResult ChargeRange(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
             ui64 items, ui64 bytes, bool includeHistory)
 {
-    TChargeResult result = {
+    TPrechargeResult result = {
         .Ready = true,
         .ItemsPrecharged = 0,
         .BytesPrecharged = 0
@@ -73,11 +73,11 @@ TChargeResult ChargeRange(IPages *env, const TCells key1, const TCells key2,
     return result;
 }
 
-TChargeResult ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
+TPrechargeResult ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
             ui64 items, ui64 bytes, bool includeHistory)
 {
-    TChargeResult result = {
+    TPrechargeResult result = {
         .Ready = true,
         .ItemsPrecharged = 0,
         .BytesPrecharged = 0

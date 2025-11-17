@@ -9,7 +9,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapLocks.DeleteAbsentMultipleShards+Reboot
-ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -33,7 +32,6 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/persqueue/ut TPQTest.TestComactificationWithRebootsMediumMsg
 ydb/core/persqueue/ut TPQTest.TestComactifiedWithRetention
 ydb/core/persqueue/ut [*/*] chunk chunk
-ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_AutosplitByLoad
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
@@ -41,6 +39,7 @@ ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTes
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
+ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
@@ -58,7 +57,6 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
-ydb/tests/fq/yds test_yq_streaming.py.TestYqStreaming.test_yq_streaming_read_from_binding_date_time[v1]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]

@@ -331,3 +331,25 @@ class TestInsertStatement(object):
             assert "Conflict with existing key" in ex.message
             assert primitive_type in ex.message, f"Error message should contain '{primitive_type}', but it does: {ex.message}"
 
+    def test_timestamp_pk_error_type(self):
+        table_path = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                ts Timestamp NOT NULL,
+                PRIMARY KEY(ts),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        ts_literal = 'Timestamp("2025-01-01T00:00:00Z")'
+        self.ydb_client.query(f"INSERT INTO `{table_path}` (ts) VALUES ({ts_literal});")
+        try:
+            self.ydb_client.query(f"INSERT INTO `{table_path}` (ts) VALUES ({ts_literal});")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in ex.message
+            assert "timestamp" in ex.message.lower(), f"Error message should contain 'timestamp', but it does: {ex.message}"

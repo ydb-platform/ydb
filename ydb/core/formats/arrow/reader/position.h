@@ -13,6 +13,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/system/types.h>
+#include <util/datetime/base.h>
 
 namespace NKikimr::NArrow::NMerger {
 
@@ -211,23 +212,7 @@ public:
         return true;
     }
 
-    NJson::TJsonValue DebugJson(const ui64 position) const {
-        NJson::TJsonValue result = NJson::JSON_MAP;
-        auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
-        for (auto&& i : Fields) {
-            jsonFields.AppendValue(i->ToString());
-        }
-
-        for (ui32 i = 0; i < Columns.size(); ++i) {
-            auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
-            jsonColumn["name"] = Fields[i]->name();
-            jsonColumn["value"] = PositionAddress[i].DebugString(position);
-        }
-
-        return result;
-    }
-
-    NJson::TJsonValue DebugJson(const ui64 position, const std::vector<NScheme::TTypeInfo>& pkTypes) const {
+    NJson::TJsonValue DebugJson(const ui64 position, const std::vector<NScheme::TTypeInfo>& pkTypes = {}) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
         for (ui32 i = 0; i < Fields.size(); ++i) {
@@ -245,9 +230,44 @@ public:
             jsonColumn["name"] = Fields[i]->name();
             auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
             if (i < pkTypes.size() && pkTypes[i].GetTypeId() == NScheme::NTypeIds::Bool) {
-                const auto s = scalar->ToString();
-                bool boolValue = (s == "1" || s == "true" || s == "True");
-                jsonColumn["value"] = boolValue ? "true" : "false";
+                if (!scalar || !scalar->is_valid) {
+                    jsonColumn["value"] = "NULL";
+                } else {
+                    const auto s = scalar->ToString();
+                    bool boolValue = (s == "1" || s == "true" || s == "True" || s == "\\u0001");
+                    jsonColumn["value"] = boolValue ? "true" : "false";
+                }
+            } else if (i < pkTypes.size() &&
+                       (pkTypes[i].GetTypeId() == NScheme::NTypeIds::Timestamp ||
+                        pkTypes[i].GetTypeId() == NScheme::NTypeIds::Timestamp64)) {
+                if (!scalar || !scalar->is_valid) {
+                    jsonColumn["value"] = "NULL";
+                } else {
+                    if (scalar->type->id() == arrow::Type::TIMESTAMP) {
+                        const auto& ts = static_cast<const arrow::TimestampScalar&>(*scalar);
+                        int64_t micros = ts.value;
+                        switch (std::static_pointer_cast<arrow::TimestampType>(scalar->type)->unit()) {
+                            case arrow::TimeUnit::SECOND: {
+                                micros *= 1000000LL;
+                                break;
+                            }
+                            case arrow::TimeUnit::MILLI: {
+                                micros *= 1000LL;
+                                break;
+                            }
+                            case arrow::TimeUnit::MICRO: {
+                                break;
+                            }
+                            case arrow::TimeUnit::NANO: {
+                                micros /= 1000LL;
+                                break;
+                            }
+                        }
+                        jsonColumn["value"] = TInstant::MicroSeconds(micros).ToString();
+                    } else {
+                        jsonColumn["value"] = scalar->ToString();
+                    }
+                }
             } else {
                 jsonColumn["value"] = (!scalar || !scalar->is_valid) ? "NULL" : scalar->ToString();
             }

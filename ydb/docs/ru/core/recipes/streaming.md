@@ -132,6 +132,7 @@ echo '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"
 echo '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
 echo '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
 echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
+echo '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}' | ./ydb --profile quickstart topic write 'streaming_recipe/input_topic'
 ```
 
 ## Шаг 6. Проверка содержимого выходного топика {#step6}

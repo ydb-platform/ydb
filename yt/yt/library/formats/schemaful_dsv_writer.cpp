@@ -247,7 +247,7 @@ public:
         return Result_;
     }
 
-    std::optional<NCrypto::TMD5Hash> GetDigest() const override
+    std::optional<TRowsDigest> GetDigest() const override
     {
         return std::nullopt;
     }

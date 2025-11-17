@@ -14,5 +14,5 @@ namespace NKikimr {
 
     TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type);
     TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(TTabletTypes::EType tabletType,
-        EBootType bootType, ui32 poolId, ui32 tabletPoolId);
+        ETabletBootType bootType, ui32 poolId, ui32 tabletPoolId);
 }

@@ -992,7 +992,7 @@ void TTablet::HandleBlockBlobStorageResult(TEvTabletBase::TEvBlockBlobStorageRes
     TEvTabletBase::TEvBlockBlobStorageResult *msg = ev->Get();
     switch (msg->Status) {
     case NKikimrProto::OK:
-        if (Info->BootType == EBootType::Recovery) {
+        if (Info->BootType == ETabletBootType::Recovery) {
             return StartRecovery();
         } else {
             return TabletRebuildGraph();
@@ -2176,27 +2176,35 @@ void TTablet::StartRecovery() {
     SendTabletStateUpdates(NKikimrTabletBase::TEvTabletStateUpdate::StateActive);
 }
 
-void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr&) {
+void TTablet::Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev) {
     BLOG_D("CompleteRecoveryBoot", "TSYS34");
 
-    // Write empty zero entry
-    THolder<NKikimrTabletBase::TTabletLogEntry> entry = MakeHolder<NKikimrTabletBase::TTabletLogEntry>();
-    entry->SetSnapshot(MakeGenStepPair(0, 0));
-    entry->SetZeroConfirmed(MakeGenStepPair(0, 0));
-    entry->SetZeroTailSz(0);
+    auto* msg = ev->Get();
+    using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
+    if (msg->Mode == EMode::WipeAllData) {
+        // Write empty zero entry
+        THolder<NKikimrTabletBase::TTabletLogEntry> entry = MakeHolder<NKikimrTabletBase::TTabletLogEntry>();
+        entry->SetSnapshot(MakeGenStepPair(0, 0));
+        entry->SetZeroConfirmed(MakeGenStepPair(0, 0));
+        entry->SetZeroTailSz(0);
 
-    const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
-    TVector<TEvTablet::TLogEntryReference> refs;
-    Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get()));
+        const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, 0, 0, 0, 0);
+        TVector<TEvTablet::TLogEntryReference> refs;
+        Register(CreateTabletReqWriteLog(SelfId(), logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticMinLatency, Info.Get()));
 
-    ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
+        ReportTabletStateChange(TTabletStateInfo::WriteZeroEntry);
 
-    // Boot tablet with empty graph
-    auto graph = MakeIntrusive<TEvTablet::TDependencyGraph>(std::pair<ui32, ui32>(0, 0));
-    Send(UserTablet,
-         new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
-                                graph.Get(), Launcher, Info, ResourceProfiles,
-                                TxCacheQuota));
+        // Boot tablet with empty graph
+        auto graph = MakeIntrusive<TEvTablet::TDependencyGraph>(std::pair<ui32, ui32>(0, 0));
+        Send(UserTablet,
+            new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
+                                    graph.Get(), Launcher, Info, ResourceProfiles,
+                                    TxCacheQuota));
+    } else {
+        TString error = TStringBuilder() << "CompleteRecoveryBoot, unsupported msg->Mode: " << static_cast<ui8>(msg->Mode);
+        BLOG_ERROR(error, "TSYS39");
+        return CancelTablet(TEvTablet::TEvTabletDead::ReasonError, error);
+    }
 }
 
 void TTablet::HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev) {

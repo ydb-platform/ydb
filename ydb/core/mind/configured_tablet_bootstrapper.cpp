@@ -173,7 +173,7 @@ TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type) {
 
 TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         TTabletTypes::EType tabletType,
-        EBootType bootType,
+        ETabletBootType bootType,
         ui32 poolId, ui32 tabletPoolId)
 {
     TTabletSetupInfo::TTabletCreationFunc createFunc;
@@ -243,7 +243,7 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         return nullptr;
     }
 
-    if (bootType == EBootType::Recovery) {
+    if (bootType == ETabletBootType::Recovery) {
         createFunc = &NTabletFlatExecutor::NRecovery::CreateRecoveryShard;
     }
 

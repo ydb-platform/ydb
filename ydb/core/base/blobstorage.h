@@ -335,13 +335,13 @@ public:
         : TabletID(Max<ui64>())
         , TabletType(TTabletTypes::TypeInvalid)
         , Version(0)
-        , BootType(EBootType::Normal)
+        , BootType(ETabletBootType::Normal)
     {}
     TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType)
         : TabletID(tabletId)
         , TabletType(tabletType)
         , Version(0)
-        , BootType(EBootType::Normal)
+        , BootType(ETabletBootType::Normal)
     {}
     virtual ~TTabletStorageInfo() {}
 
@@ -415,7 +415,7 @@ public:
     ui32 Version;
     TPathId TenantPathId;
     ui64 HiveId = 0;
-    EBootType BootType = EBootType::Normal;
+    ETabletBootType BootType = ETabletBootType::Normal;
 };
 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {

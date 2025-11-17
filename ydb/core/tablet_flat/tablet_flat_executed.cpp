@@ -267,7 +267,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 DIV_CLASS("col-md-12") {str << "Uptime: " << uptime.ToString(); }
             }
             TString bootType = "";
-            if (Info()->BootType == EBootType::Recovery) {
+            if (Info()->BootType == ETabletBootType::Recovery) {
                 bootType = TStringBuilder() << " (" << Info()->BootType << ")";
             }
             DIV_CLASS("row") {

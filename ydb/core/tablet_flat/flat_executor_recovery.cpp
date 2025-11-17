@@ -50,7 +50,8 @@ public:
         BackupPath = backupPath;
         RestoreSubscriber = subscriber;
 
-        Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot);
+        using EMode = TEvTablet::TEvCompleteRecoveryBoot::EMode;
+        Send(Tablet(), new TEvTablet::TEvCompleteRecoveryBoot(EMode::WipeAllData));
     }
 
     void CompleteRestore() {

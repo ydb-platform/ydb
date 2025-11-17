@@ -2,14 +2,14 @@
 
 namespace NKikimr {
 
-EBootType BootTypeFromProto(NKikimrConfig::TBootstrap::EBootType type) {
+ETabletBootType BootTypeFromProto(NKikimrConfig::TBootstrap::EBootType type) {
     switch (type) {
         case NKikimrConfig::TBootstrap_EBootType_NORMAL:
-            return EBootType::Normal;
+            return ETabletBootType::Normal;
         case NKikimrConfig::TBootstrap_EBootType_RECOVERY:
-            return EBootType::Recovery;
+            return ETabletBootType::Recovery;
         default:
-            return EBootType::Normal;
+            return ETabletBootType::Normal;
     }
 }
 

@@ -6,11 +6,11 @@
 
 namespace NKikimr {
 
-enum class EBootType : ui8 {
+enum class ETabletBootType : ui8 {
     Normal = 0,
     Recovery = 1,
 };
 
-EBootType BootTypeFromProto(NKikimrConfig::TBootstrap::EBootType type);
+ETabletBootType BootTypeFromProto(NKikimrConfig::TBootstrap::EBootType type);
 
 } // namespace NKikimr

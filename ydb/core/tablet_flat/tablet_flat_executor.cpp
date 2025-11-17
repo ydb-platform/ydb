@@ -88,7 +88,7 @@ namespace NFlatExecutorSetup {
     }
 
     bool ITablet::NeedBackup() const {
-        if (TabletInfo->BootType != EBootType::Normal) {
+        if (TabletInfo->BootType != ETabletBootType::Normal) {
             return false;
         }
 

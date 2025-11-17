@@ -383,7 +383,7 @@ struct TRecoveryStarter : public NFake::TStarter {
 
     NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
         auto* info = TBase::MakeTabletInfo(tablet, channelsCount);
-        info->BootType = EBootType::Recovery;
+        info->BootType = ETabletBootType::Recovery;
         return info;
     }
 }; // TRecoveryStarter

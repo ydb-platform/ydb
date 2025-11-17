@@ -955,7 +955,17 @@ struct TEvTablet {
         }
     };
 
-    struct TEvCompleteRecoveryBoot : public TEventLocal<TEvCompleteRecoveryBoot, EvCompleteRecoveryBoot> {};
+    struct TEvCompleteRecoveryBoot : public TEventLocal<TEvCompleteRecoveryBoot, EvCompleteRecoveryBoot> {
+        enum class EMode : ui8 {
+            WipeAllData,
+        };
+
+        TEvCompleteRecoveryBoot(EMode mode)
+            : Mode(mode)
+        {}
+
+        EMode Mode;
+    };
 };
 
 IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>());

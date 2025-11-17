@@ -764,9 +764,7 @@ TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
     return std::move(serializer).Serialize();
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
-    TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
-
+TString SerializeReadCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBinaryJson::TEntryCursor& value) {
     switch (value.GetType()) {
         case NBinaryJson::EEntryType::BoolFalse:
             callbacks.OnBoolean(false);
@@ -783,9 +781,52 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEnt
         case NBinaryJson::EEntryType::Number:
             callbacks.OnDouble(value.GetNumber());
             break;
-        case NBinaryJson::EEntryType::Container:
-            // TODO: Support recursive parsing and returning TBinaryJson
-            return TString("Container type is not a scalar value");
+        case NBinaryJson::EEntryType::Container: {
+            auto container = value.GetContainer();
+            if (container.GetType() == NBinaryJson::EContainerType::Array) {
+                callbacks.OnOpenArray();
+
+                auto it = container.GetArrayIterator();
+                while (it.HasNext()) {
+                    auto value = it.Next();
+                    if (auto error = SerializeReadCursorToBinaryJson(callbacks, value); !error.empty()) {
+                        return error;
+                    }
+                }
+
+                callbacks.OnCloseArray();
+
+            } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
+                callbacks.OnOpenMap();
+
+                auto it = container.GetObjectIterator();
+                while (it.HasNext()) {
+                    auto [key, value] = it.Next();
+                    if (key.GetType() != NBinaryJson::EEntryType::String) {
+                        return TString("Unexpected non-string key");
+                    }
+
+                    callbacks.OnMapKey(key.GetString());
+                    if (auto error = SerializeReadCursorToBinaryJson(callbacks, value); !error.empty()) {
+                        return error;
+                    }
+                }
+
+                callbacks.OnCloseMap();
+            } else {
+                return TString("Unexpected top value scalar in container iterator");
+            }
+        }
+    }
+
+    return {};
+}
+
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
+
+    if (auto error = SerializeReadCursorToBinaryJson(callbacks, value); !error.empty()) {
+        return error;
     }
 
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());

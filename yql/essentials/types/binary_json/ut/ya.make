@@ -6,6 +6,7 @@ SRCS(
     entry_ut.cpp
     test_base.cpp
     valid_ut.cpp
+    extract_ut.cpp
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

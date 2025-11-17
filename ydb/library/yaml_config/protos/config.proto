@@ -101,7 +101,6 @@ message THosts {
     optional string Address = 9;
     optional string Name = 10;
     repeated TExtendedHostConfigDrive Drive = 11;
-    optional string BridgePileName = 12;
 }
 
 message TTls {

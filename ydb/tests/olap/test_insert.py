@@ -284,7 +284,6 @@ class TestInsertStatement(object):
         except ydb.issues.GenericError as ex:
             assert "Failed to convert type" in ex.message
 
-
     def test_bool_pk_error_type(self):
         table_path = self.get_table_path()
         self.ydb_client.query(

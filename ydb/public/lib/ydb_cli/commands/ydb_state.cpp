@@ -57,12 +57,11 @@ struct TARFile {
         char checksum[8];
         char padding2[356];
 
-        TARFileHeader(const TString& name, ui32 size) {
+        TARFileHeader(const TString& name, ui32 size, TInstant time) {
             memset(this, 0, sizeof(TARFileHeader));
             strcpy(filename, name.c_str());
             strcpy(fileSize, ToOct(size).c_str());
-            auto unixTime = std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
+            auto unixTime = time.MilliSeconds();
             strcpy(lastModification, ToOct(unixTime).c_str());
             CalcChecksum();
         }
@@ -91,8 +90,8 @@ struct TARFile {
         }
     };
 
-    static void ToStream(IOutputStream& out, const TString& name, const TString& content) {
-        TARFileHeader h(name, content.size());
+    static void ToStream(IOutputStream& out, const TString& name, const TString& content, TInstant time) {
+        TARFileHeader h(name, content.size(), time);
         h.ToStream(out);
         out << content;
         size_t paddingBytes = (512 - (content.size() % 512)) % 512;
@@ -115,11 +114,11 @@ int TCommandClusterStateFetch::Run(TConfig& config) {
     TBZipCompress compress(&out);
     TString r = proto.Getresult();
     if (!r.empty()) {
-        TARFile::ToStream(compress, "result.json", r);
+        TARFile::ToStream(compress, "result.json", r, TInstant::Now());
     }
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
-        TARFile::ToStream(compress, block.Getname(), block.Getcontent());
+        TARFile::ToStream(compress, block.Getname(), block.Getcontent(), TInstant::Seconds(block.Gettimestamp().seconds()));
     }
     return EXIT_SUCCESS;
 }

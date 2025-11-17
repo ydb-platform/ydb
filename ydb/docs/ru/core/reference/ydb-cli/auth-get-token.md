@@ -67,17 +67,3 @@ TOKEN=$({{ ydb-cli }} -p quickstart auth get-token --force)
 echo "Token: $TOKEN"
 ```
 
-### Обработка ошибок {#error-handling}
-
-Если параметры аутентификации не указаны, команда завершится с ошибкой:
-
-```bash
-{{ ydb-cli }} auth get-token --force
-```
-
-Результат:
-
-```text
-No authentication provided
-```
-

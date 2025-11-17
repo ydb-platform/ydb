@@ -24,7 +24,7 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlob
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
-    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns, PortionInfo.GetPortionInfo().GetPortionId(), PortionInfo.GetPortionInfo().GetPathId());
+    return PortionInfo.PrepareForAssemble(data, resultSchema, blobs, {}, restoreAbsent).AssembleToGeneralContainer(seqColumns, PortionInfo.GetPortionInfo().GetPortionId(), PortionInfo.GetPortionInfo().GetPathId().DebugString());
 }
 
 TReadPortionInfoWithBlobs TReadPortionInfoWithBlobs::RestorePortion(

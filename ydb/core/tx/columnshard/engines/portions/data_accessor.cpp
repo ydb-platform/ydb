@@ -751,7 +751,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     return builder.Finish();
 }
 
-std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess(ui64 portionId, const TInternalPathId& internalPathId) const {
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess(ui64 portionId, const TString& internalPathId) const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
@@ -774,7 +774,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPrepare
 }
 
 std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
-    const std::shared_ptr<TColumnLoader>& loader, ui64 portionId, const TInternalPathId& internalPathId) const {
+    const std::shared_ptr<TColumnLoader>& loader, ui64 portionId, const TString& internalPathId) const {
     Y_UNUSED(portionId, internalPathId);
     if (DefaultRowsCount) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "build_trivial");
@@ -798,7 +798,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
 }
 
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TPortionDataAccessor::TPreparedBatchData::AssembleToGeneralContainer(
-    const std::set<ui32>& sequentialColumnIds, ui64 portionId, const TInternalPathId& internalPathId) const {
+    const std::set<ui32>& sequentialColumnIds, ui64 portionId, const TString& internalPathId) const {
     std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
     std::vector<std::shared_ptr<arrow::Field>> fields;
     for (auto&& i : Columns) {

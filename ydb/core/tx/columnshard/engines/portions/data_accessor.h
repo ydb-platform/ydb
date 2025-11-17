@@ -152,7 +152,7 @@ public:
         , RowsCount(rowsCount) {
     }
 
-    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds, ui64 portionId, const TInternalPathId& internalPathId) const;
+    TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds, ui64 portionId, const TString& internalPathId) const;
 };
 
 class TColumnAssemblingInfo {

@@ -18,12 +18,12 @@ IChunkedArray::TLocalChunkedArrayAddress TDeserializeChunkedArray::DoGetLocalChu
     }
     if (!!Data) {
         auto result = Loader->ApplyConclusion(Data, GetRecordsCount());
-        Y_ABORT_UNLESS(result, "Incorrect object for result request. internal path id: %s portion id: %ull error: %s ", InternalPathId.DebugString().data(), PortionId, result.GetErrorMessage().data());
+        Y_ABORT_UNLESS(result, "Incorrect object for result request. internal path id: %s portion id: %" PRIu64 " error: %s ", InternalPathId.data(), PortionId, result.GetErrorMessage().data());
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     } else {
         AFL_VERIFY(!!DataBuffer);
         auto result = Loader->ApplyConclusion(TString(DataBuffer.data(), DataBuffer.size()), GetRecordsCount());
-        Y_ABORT_UNLESS(result, "Incorrect object for result request. internal path id: %s portion id: %ull error: %s ", InternalPathId.DebugString().data(), PortionId, result.GetErrorMessage().data());
+        Y_ABORT_UNLESS(result, "Incorrect object for result request. internal path id: %s portion id: %" PRIu64 " error: %s ", InternalPathId.data(), PortionId, result.GetErrorMessage().data());
         return TLocalChunkedArrayAddress(result.DetachResult(), 0, 0);
     }
 }

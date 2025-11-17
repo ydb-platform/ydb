@@ -2185,7 +2185,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 - Go
 
-   The client code immediately receives all messages from the buffer (on the SDK side) even if they are not enough to form a batch during batch processing.
+   The client code immediately  takes and receives all messages from the buffer (on the SDK side) even if they are not enough to form a batch during batch processing.
 
    ```go
    r, _ := db.Topic().StartReader("my-consumer", nil,
@@ -2311,6 +2311,48 @@ In case of a _hard interruption_, the client receives a notification that it is 
 ### Topic autoscaling {#autoscaling}
 
 {% list tabs group=lang %}
+
+- C++
+  
+  The SDK supports two modes for reading topics with autoscaling enabled: full support mode and compatibility mode. The reading mode is set in the reading session creation parameters. The default is compatibility mode.
+
+    ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .SetAutoscalingSupport(true); // full support is enabled
+
+  // or
+
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .SetAutoscalingSupport(false); // compatibility mode is enabled
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  In full support mode, when all messages from the partition are read, the `TEndPartitionSessionEvent` event will arrive . After receiving this event, no more new messages will appear in the partition for reading. To continue reading from child partitions, you must call `Confirm()` , thereby confirming that the application is ready to accept messages from child partitions. If messages from all partitions are processed in one thread, then `Confirm()` can be called immediately after receiving `TEndPartitionSessionEvent` . If processing messages from different partitions is carried out in different threads, then you should complete the processing of messages, for example, execute the accumulated batch, confirm their processing (commit) or save the reading position in your database, and only after that call `Confirm()` . When processing a batch in different threads from several partitions, the batch may include messages from different partitions. When confirming a batch ( `Confirm()` ), there is no impact on other independent reading processes.
+
+  After receiving `TEndPartitionSessionEvent` and processing all messages, it is recommended to always immediately confirm their processing (commit). This will allow you to balance the reading of child partitions between different reading sessions, which will lead to an even distribution of the load across all readers.
+
+  An event loop fragment might look like this:
+
+ ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .SetAutoscalingSupport(true);
+
+  auto readSession = topicClient.CreateReadSession(settings);
+
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* endPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+      endPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
+  In compatibility mode, there is no explicit signal that a partition has finished reading, and the server will try to heuristically determine that the client has processed the partition to completion. This may result in a delay between finishing reading from a source partition and starting reading from its child partitions.
+
+  If the client confirms the processing of messages (commit), then the signal for completing the processing of messages from the partition will be confirmation of the processing of the last message of this partition. If the client does not confirm the processing of messages, the server will periodically interrupt reading from the partition and switch to reading in another session (if there are other sessions ready to process the partition). This will continue until reading [starts](#client-commit) from the end of the partition.
+
+  It is recommended to check the correctness of handling soft read interruption: the client must process received messages, confirm their processing (commit) or save the read position in its database, and only after that call `Confirm()` for the `TStopPartitionSessionEvent` event.
 
 - Go
 

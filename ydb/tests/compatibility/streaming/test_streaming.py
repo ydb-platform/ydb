@@ -1,72 +1,72 @@
 # -*- coding: utf-8 -*-
-import pytest
-import yatest
+import logging
 import os
+import pytest
+import time
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 # from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
-from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
+from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
+from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.test_meta import link_test_case
+
+logger = logging.getLogger(__name__)
 
 
-class StreamingTestBase(TestYdsBase):
+class StreamingTestBase:
     def setup_cluster(self):
-        
+        logger.debug(f"setup_cluster, versions {self.versions}")
+
         if min(self.versions) < (25, 4):
-            pytest.skip("Only available since 25-1")
+            pytest.skip("Only available since 25-4")
 
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
-        # self.s3_config = self.setup_s3()
-        # s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
-        # self.settings = (
-        #     ExportToS3Settings()
-        #     .with_endpoint(s3_endpoint)
-        #     .with_access_key(s3_access_key)
-        #     .with_secret_key(s3_secret_key)
-        #     .with_bucket(s3_bucket)
-        # )
-
+        # output_path = yatest.common.test_output_path()
+        # self.output_f = open(os.path.join(output_path, "out.log"), "w")
+        os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+        os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "15"
         yield from super().setup_cluster(
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True
-            }
+            },
+            additional_log_configs={
+                'KQP_COMPUTE': LogLevels.TRACE,
+                'STREAMS_CHECKPOINT_COORDINATOR': LogLevels.TRACE,
+                'STREAMS_STORAGE_SERVICE': LogLevels.TRACE,
+                'FQ_ROW_DISPATCHER': LogLevels.TRACE,
+                'KQP_PROXY': LogLevels.DEBUG,
+                'KQP_EXECUTOR': LogLevels.DEBUG},
         )
 
-    # @staticmethod
-    # def setup_s3():
-    #     s3_endpoint = os.getenv("S3_ENDPOINT")
-    #     s3_access_key = "minio"
-    #     s3_secret_key = "minio123"
-    #     s3_bucket = "test_bucket"
+    def create_topics(self):
 
-    #     resource = boto3.resource(
-    #         "s3", endpoint_url=s3_endpoint, aws_access_key_id=s3_access_key, aws_secret_access_key=s3_secret_key
-    #     )
-
-    #     bucket = resource.Bucket(s3_bucket)
-    #     bucket.create()
-    #     bucket.objects.all().delete()
-    #     bucket.put_object(Key="file.txt", Body="Hello S3!")
-
-    #     return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
-
-    def create_external_data_source(self):
-        self.input_topic = 'streaming_recipe/input_topic'
-        self.output_topic = 'streaming_recipe/output_topic'
+        # TODO: bug (Resource pool default not found or you don't have access permissions)
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            query = f"""
-                CREATE TOPIC `{self.input_topic}`;
-                CREATE TOPIC `{self.output_topic}`;
+            query = """
+                GRANT ALL ON `/Root` TO ``;
             """
             session_pool.execute_with_retries(query)
 
+        logger.debug("create_topics")
+        self.input_topic = 'streaming_recipe/input_topic'
+        self.output_topic = 'streaming_recipe/output_topic'
+        self.consumer_name = 'consumer_name'
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = f"""
+                CREATE TOPIC `{self.input_topic}`;
+                CREATE TOPIC `{self.output_topic}` (CONSUMER {self.consumer_name});
+            """
+            session_pool.execute_with_retries(query)
+
+    def create_external_data_source(self):
+        logger.debug("create_external_data_source")
+        endpoint = f"localhost:{self.cluster.nodes[1].port}"
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE EXTERNAL DATA SOURCE source_name WITH (
                     SOURCE_TYPE="Ydb",
-                    LOCATION="{self.endpoint}",
+                    LOCATION="{endpoint}",
                     DATABASE_NAME="{self.database_path}",
                     SHARED_READING="false",
                     AUTH_METHOD="NONE");
@@ -74,34 +74,99 @@ class StreamingTestBase(TestYdsBase):
             session_pool.execute_with_retries(query)
 
     def create_streaming_query(self):
+        logger.debug("create_streaming_query")
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
-                CREATE STREAMING QUERY query_name AS
-                DO BEGIN
-                    $in = SELECT time FROM source_name.`{self.input_topic}`
-                    WITH (
-                        FORMAT="json_each_row",
-                        SCHEMA=(time String NOT NULL))
-                    WHERE time like "%lunch%";
-                    INSERT INTO source_name.`{self.output_topic}` SELECT time FROM $in;
+                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+                $input = (
+                    SELECT
+                        *
+                    FROM
+                        source_name.`{self.input_topic}` WITH (
+                            FORMAT = 'json_each_row',
+                            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                        )
+                );
+
+                $filtered = (
+                    SELECT
+                        *
+                    FROM
+                        $input
+                    WHERE
+                        level == 'error'
+                );
+
+                $number_errors = (
+                    SELECT
+                        host,
+                        COUNT(*) AS error_count,
+                        CAST(HOP_START() AS String) AS ts
+                    FROM
+                        $filtered
+                    GROUP BY
+                        HoppingWindow(CAST(time AS Timestamp), 'PT600S', 'PT600S'),
+                        host
+                );
+
+                $json = (
+                    SELECT
+                        ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+                    FROM
+                        $number_errors
+                );
+
+                INSERT INTO source_name.`{self.output_topic}`
+                SELECT
+                    *
+                FROM
+                    $json
+                ;
                 END DO;
+
             """
             session_pool.execute_with_retries(query)
 
-    def do_test(self):
-        pass
-        # s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
+    def do_test_part1(self):
+        logger.debug("do_test_part1")
+        endpoint = f"localhost:{self.cluster.nodes[1].port}"
+        time.sleep(2)
+        data = [
+            '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}',
+            '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}',
+            '{"time": "2025-01-01T00:08:00.000000Z", "level": "error", "host": "host-1"}',
+            '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-2"}',
+            '{"time": "2025-01-01T00:12:00.000000Z", "level": "error", "host": "host-1"}']
 
-        # with ydb.QuerySessionPool(self.driver) as session_pool:
-        #     query = """
-        #         SELECT * FROM s3_source.`file.txt` WITH (
-        #             FORMAT = "raw",
-        #             SCHEMA = ( Data String )
-        #         );
-        #     """
-        #     result_sets = session_pool.execute_with_retries(query)
-        #     data = result_sets[0].rows[0]['Data']
-        #     assert isinstance(data, bytes) and data.decode() == 'Hello S3!'
+        logger.debug("write data to stream")
+        write_stream(path=self.input_topic, data=data, database=self.database_path, endpoint=endpoint)
+
+        expected_data = sorted([
+            '{"error_count":1,"host":"host-2","ts":"2025-01-01T00:00:00Z"}',
+            '{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}'])
+
+        logger.debug("read data from stream")
+        assert sorted(read_stream(path=self.output_topic, messages_count=len(expected_data), consumer_name=self.consumer_name, database=self.database_path, endpoint=endpoint)) == expected_data
+
+    def do_test_part2(self):
+
+        logger.debug("do_test_part2")
+        endpoint = f"localhost:{self.cluster.nodes[1].port}"
+        time.sleep(2)
+        data = [
+            '{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}',
+            '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-1"}',
+            '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-2"}']
+
+        logger.debug("write data to stream")
+        write_stream(path=self.input_topic, data=data, database=self.database_path, endpoint=endpoint)
+
+        expected_data = sorted([
+            '{"error_count":2,"host":"host-2","ts":"2025-01-01T00:10:00Z"}',
+            '{"error_count":1,"host":"host-1","ts":"2025-01-01T00:10:00Z"}'])
+
+        logger.debug("read data from stream")
+        assert sorted(read_stream(path=self.output_topic, messages_count=len(expected_data), consumer_name=self.consumer_name, database=self.database_path, endpoint=endpoint)) == expected_data
 
 
 # class TestExternalDataTableMixedCluster(StreamingTestBase, MixedClusterFixture):
@@ -119,11 +184,14 @@ class TestExternalDataTableRestartToAnotherVersion(StreamingTestBase, RestartToA
     def setup(self):
         yield from self.setup_cluster()
 
+    @link_test_case("#27924")
     def test_external_data_source(self):
+        self.create_topics()
         self.create_external_data_source()
         self.create_streaming_query()
+        self.do_test_part1()
         self.change_cluster_version()
-        self.do_test()
+        self.do_test_part2()
 
 
 # class TestExternalDataTableRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):

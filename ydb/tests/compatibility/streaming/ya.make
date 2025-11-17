@@ -1,7 +1,6 @@
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 FORK_TEST_FILES()
 FORK_TESTS()
@@ -19,12 +18,14 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries
+    ydb/tests/tools/pq_read
 )
 
 PEERDIR(
     contrib/python/boto3
     ydb/tests/library
     ydb/tests/library/compatibility
+    ydb/tests/library/test_meta
     ydb/tests/tools/datastreams_helpers
 )
 

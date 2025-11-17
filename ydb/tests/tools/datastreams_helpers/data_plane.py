@@ -17,9 +17,13 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 READ_TOOL_TIMEOUT = plain_or_under_sanitizer(30, 300)
 
 
-def write_stream(path, data, partition_key=None):
-    request_metadata = [("x-ydb-database", os.getenv("YDB_DATABASE"))]
-    channel = grpc.insecure_channel(os.getenv("YDB_ENDPOINT"))
+def write_stream(path, data, partition_key=None, database = None, endpoint = None):
+    if database is None:
+        database = os.getenv("YDB_DATABASE")
+    request_metadata = [("x-ydb-database", database)]
+    if endpoint is None:
+        endpoint = os.getenv("YDB_ENDPOINT")
+    channel = grpc.insecure_channel(endpoint)
     stub = ydb_datastreams_v1_pb2_grpc.DataStreamsServiceStub(channel)
 
     request = datastreams_pb2.PutRecordsRequest()
@@ -40,18 +44,23 @@ def write_stream(path, data, partition_key=None):
 
 
 #  Data plane grpc API is not implemented in datastreams.
-def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=READ_TOOL_TIMEOUT):
+def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=READ_TOOL_TIMEOUT, database = None, endpoint = None):
     result_file_name = "{}-{}-read-result-{}-{}-out".format(
         os.getenv("PYTEST_CURRENT_TEST").replace(":", "_").replace(" (call)", ""),
         path.replace("/", "_"),
         consumer_name,
         uuid.uuid4()
     )
+    if database is None:
+        database = os.getenv("YDB_DATABASE")
+    request_metadata = [("x-ydb-database", database)]
+    if endpoint is None:
+        endpoint = os.getenv("YDB_ENDPOINT")
     result_file = yatest.common.output_path(result_file_name)
     cmd = [
         yatest.common.binary_path("ydb/tests/tools/pq_read/pq_read"),
-        "--endpoint", os.getenv("YDB_ENDPOINT"),
-        "--database", os.getenv("YDB_DATABASE"),
+        "--endpoint", endpoint,
+        "--database", database,
         "--topic-path", path,
         "--consumer-name", consumer_name,
         "--disable-cluster-discovery",

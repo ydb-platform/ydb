@@ -12,6 +12,12 @@ The following {{ ydb-short-name }} distributed storage operating modes are avail
 
   ![mirror-3-dc topology](./_assets/mirror-3-dc.drawio.png)
 
+{% note info %}
+
+In the ` mirror-3-dc` operating mode, if two of the three data centers fail, the database becomes unavailable for both writing and reading data.
+
+{% endnote %}
+
 - `block-4-2`. [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) is applied with two blocks of redundancy added to the four blocks of source data. Storage nodes are placed in at least 8 failure domains (usually racks). {{ ydb-short-name }} cluster remains available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for clusters deployed within a single availability zone or data center.
 
   ![block-4-2 topology](./_assets/block-4-2.drawio.png)

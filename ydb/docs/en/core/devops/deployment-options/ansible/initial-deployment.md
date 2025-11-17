@@ -116,7 +116,6 @@ inventory = ./inventory
 pipelining = True
 private_role_vars = True
 timeout = 5
-vault_password_file = ./ansible_vault_password_file
 verbosity = 1
 log_path = ./ydb.log
 
@@ -420,7 +419,7 @@ all:
         ydb_password: <password>
 ```
 
-Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. This would require you to either manually enter the encryption password (which can be different) or have `vault_password_file` Ansible setting configured. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
+Encrypt this file using the command `ansible-vault encrypt inventory/99-inventory-vault.yaml`. It would require you to manually enter the encryption password, which is independent from the `ydb_password` setting value and better be different. Alternatively, you can save the encryption password to a separate file and configure the `vault_password_file` Ansible setting with the file path. See [Ansible Vault documentation](https://docs.ansible.com/ansible/latest/vault_guide/index.html) for more details on how this works.
 
 ### Prepare the {{ ydb-short-name }} Configuration File {#ydb-config-prepare}
 

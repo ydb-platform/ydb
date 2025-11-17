@@ -290,6 +290,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             SELECT a.join_info.Key as Key, b.Value as Value from AS_TABLE($a) as a
             LEFT JOIN `/Root/Join1_3` as b
             ON a.join_info.Key = b.Key
+            ORDER BY Key
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 

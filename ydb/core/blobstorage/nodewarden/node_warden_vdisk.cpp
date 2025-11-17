@@ -229,6 +229,7 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
+        vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

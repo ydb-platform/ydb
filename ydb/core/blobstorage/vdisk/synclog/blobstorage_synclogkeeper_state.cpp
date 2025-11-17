@@ -46,6 +46,7 @@ namespace NKikimr {
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
             , SelfId(selfId)
             , PhantomFlagStorageState(SlCtx->VCtx->Top->GType)
+            , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
         {
             SyncedLsns.resize(SlCtx->VCtx->Top->GetTotalVDisksNum());
             ui32 selfOrderNum = SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk);
@@ -404,9 +405,13 @@ namespace NKikimr {
             // trim SyncLog in case of disk overflow
             TVector<ui32> scheduledChunks = FixDiskOverflow(numChunksToAdd);
 
-            if (!scheduledChunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
-                PhantomFlagStorageState.Activate();
-                TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, Snapshot));
+            if (EnablePhantomFlagStorage) {
+                if (!scheduledChunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
+                    PhantomFlagStorageState.Activate();
+                    TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, Snapshot));
+                }
+            } else if (PhantomFlagStorageState.IsActive()) {
+                PhantomFlagStorageState.Deactivate();
             }
             
             // append scheduledChunks to ChunksToDeleteDelayed

@@ -107,7 +107,10 @@ namespace NKikimr {
             Type = EFullRecover;
             Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             Current.SyncState = syncState;
-            FullRecoverInfo = TFullRecoverInfo();
+            // we send initial request with unordered data protocol
+            // If peer doesn't support new protocol or new protocol is disabled on peer, we'll change
+            // the protocol after receiving response
+            FullRecoverInfo = TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
             ++RedirCounter;
         }
 
@@ -166,7 +169,7 @@ namespace NKikimr {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSyncFull>(Current.SyncState, Ctx->SelfVDiskId, VDiskId,
                     FullRecoverInfo->VSyncFullMsgsReceived, FullRecoverInfo->Stage,
                     FullRecoverInfo->LogoBlobFrom.LogoBlobID(), ReadUnaligned<ui64>(&FullRecoverInfo->BlockTabletFrom.TabletId),
-                    FullRecoverInfo->BarrierFrom);
+                    FullRecoverInfo->BarrierFrom, FullRecoverInfo->Protocol);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
                 return TSjOutcome::Event(ServiceId, std::move(msg));
@@ -325,6 +328,14 @@ namespace NKikimr {
             FullRecoverInfo->LogoBlobFrom = LogoBlobIDFromLogoBlobID(record.GetLogoBlobFrom());
             FullRecoverInfo->BlockTabletFrom = record.GetBlockTabletFrom();
             FullRecoverInfo->BarrierFrom = TKeyBarrier(record.GetBarrierFrom());
+            
+            if (record.HasProtocol()) {
+                FullRecoverInfo->Protocol = record.GetProtocol();
+            } else {
+                // Protocol may change after initial message when new protocol is either disabled
+                // on peer or not supported at all due to old version
+                FullRecoverInfo->Protocol = NKikimrBlobStorage::EFullSyncProtocol::Legacy;
+            }
 
             if (FullRecoverInfo->VSyncFullMsgsReceived == 1) {
                 SetSyncState(syncState); // from now keep this position in memory

@@ -205,7 +205,10 @@ namespace NKikimr {
 
             // synced lsns of neighbours
             std::vector<ui64> SyncedLsns;
+
+            // phantom flag storage
             TPhantomFlagStorageState PhantomFlagStorageState;
+            TMemorizableControlWrapper EnablePhantomFlagStorage;
 
         private:
             // Fix Disk overflow, i.e. remove some chunks from SyncLog

@@ -447,7 +447,7 @@ CREATE TABLE Students (
 
 {% endlist %}
 
-### “Business” entity example and generated DDL
+### A complete example using all the constructions above.
 
 This section shows a practical, production-style entity from a typical domain. It demonstrates:
 
@@ -604,7 +604,7 @@ The provider emits parameters (?) because values and types are bound via the dri
 
 ### Bulk operations: insert, update and delete
 
-#### BulkCopy
+**BulkCopy:**
 
 In the YDB provider, `BulkCopy` uses the native `BulkUpsert API` and does not generate textual YQL. Rows are sent to YDB as a stream of strongly-typed values over the SDK's binary protocol, so there are no DECLARE statements or ? placeholders
 
@@ -629,7 +629,7 @@ In the YDB provider, `BulkCopy` uses the native `BulkUpsert API` and does not ge
 
 {% endlist %}
 
-Massive Update (WHERE IN)
+**Massive Update (WHERE IN):**
 
 {% list tabs group=lang %}
 
@@ -661,7 +661,7 @@ Massive Update (WHERE IN)
 
 {% endlist %}
 
-Mass deletion (WHERE IN)
+**Mass deletion (WHERE IN):**
 
 {% list tabs group=lang %}
 
@@ -682,5 +682,4 @@ Mass deletion (WHERE IN)
   ```
 
 {% endlist %}
-
 ---

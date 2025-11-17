@@ -33,12 +33,16 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
+    ui64 DocCount = 0;
+    ui64 TotalDocLength = 0;
+
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
+    TBufferData* DocsBuf = nullptr;
 
     const NKikimrTxDataShard::TEvBuildFulltextIndexRequest Request;
     const TActorId ResponseActorId;
@@ -79,24 +83,24 @@ public:
             }
         }
 
+        auto addType = [&](auto& uploadTypes, const auto& column) {
+            auto it = types.find(column);
+            if (it != types.end()) {
+                Ydb::Type type;
+                NScheme::ProtoFromTypeInfo(it->second, type);
+                uploadTypes->emplace_back(it->first, type);
+            }
+        };
+
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            auto addType = [&](const auto& column) {
-                auto it = types.find(column);
-                if (it != types.end()) {
-                    Ydb::Type type;
-                    NScheme::ProtoFromTypeInfo(it->second, type);
-                    uploadTypes->emplace_back(it->first, type);
-                    types.erase(it);
-                }
-            };
             {
                 Ydb::Type type;
                 NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
             }
             for (const auto& column : table.KeyColumnIds) {
-                addType(table.Columns.at(column).Name);
+                addType(uploadTypes, table.Columns.at(column).Name);
             }
             if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
                 Ydb::Type type;
@@ -104,10 +108,26 @@ public:
                 uploadTypes->emplace_back(FreqColumn, type);
             } else {
                 for (auto dataColumn : Request.GetDataColumns()) {
-                    addType(dataColumn);
+                    addType(uploadTypes, dataColumn);
                 }
             }
             UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
+        }
+
+        if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+            for (const auto& column : table.KeyColumnIds) {
+                addType(uploadTypes, table.Columns.at(column).Name);
+            }
+            for (auto dataColumn : Request.GetDataColumns()) {
+                addType(uploadTypes, dataColumn);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::UINT32);
+                uploadTypes->emplace_back(DocLengthColumn, type);
+            }
+            DocsBuf = Uploader.AddDestination(Request.GetDocsTableName(), std::move(uploadTypes));
         }
     }
 
@@ -150,9 +170,11 @@ public:
         TString text((*row).at(0).AsBuf());
         auto tokens = Analyze(text, TextAnalyzers);
         if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            ui32 totalTokens = 0;
             THashMap<TString, ui32> tokenFreq;
             for (const auto& token : tokens) {
                 tokenFreq[token]++;
+                totalTokens++;
             }
             for (const auto& [token, freq] : tokenFreq) {
                 uploadKey.clear();
@@ -164,6 +186,23 @@ public:
 
                 UploadBuf->AddRow(uploadKey, uploadValue);
             }
+
+            uploadValue.clear();
+            // Include data columns in indexImplDocsTable
+            size_t index = 1; // skip text column
+            for (auto dataColumn : Request.GetDataColumns()) {
+                if (dataColumn != TextColumn) {
+                    uploadValue.push_back(row.Get(index++));
+                } else {
+                    uploadValue.push_back(TCell(text));
+                }
+            }
+            // Document length column
+            uploadValue.push_back(TCell::Make(totalTokens));
+            DocsBuf->AddRow(key, uploadValue);
+
+            DocCount++;
+            TotalDocLength += totalTokens;
         } else {
             for (const auto& token : tokens) {
                 uploadKey.clear();
@@ -171,6 +210,7 @@ public:
                 uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
                 uploadValue.clear();
+                // Include data columns in every posting row (poor, but anyway)
                 size_t index = 1; // skip text column
                 for (auto dataColumn : Request.GetDataColumns()) {
                     if (dataColumn != TextColumn) {
@@ -213,6 +253,8 @@ public:
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+        record.SetDocCount(DocCount);
+        record.SetTotalDocLength(TotalDocLength);
 
         Uploader.Finish(record, status);
 
@@ -416,6 +458,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             TString error;
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
+            }
+        }
+
+        if (request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            if (!request.GetDocsTableName()) {
+                badRequest(TStringBuilder() << "Empty index documents table name");
             }
         }
 

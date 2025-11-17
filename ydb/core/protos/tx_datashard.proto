@@ -1822,6 +1822,8 @@ message TEvBuildFulltextIndexRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
 
     optional string DatabaseName = 12;
+
+    optional string DocsTableName = 13;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -1837,6 +1839,9 @@ message TEvBuildFulltextIndexResponse {
     repeated Ydb.Issue.IssueMessage Issues = 7;
 
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 8;
+
+    optional uint64 DocCount = 9;
+    optional uint64 TotalDocLength = 10;
 }
 
 message TEvCdcStreamScanRequest {

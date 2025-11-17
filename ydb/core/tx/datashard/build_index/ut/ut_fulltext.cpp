@@ -21,6 +21,7 @@ static std::atomic<ui64> sId = 1;
 static const TString kDatabaseName = "/Root";
 static const TString kMainTable = "/Root/table-main";
 static const TString kIndexTable = "/Root/table-index";
+static const TString kDocsTable = "/Root/table-docs";
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
@@ -55,6 +56,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
         request.SetDatabaseName(kDatabaseName);
         request.SetIndexName(kIndexTable);
+        request.SetDocsTableName(kDocsTable);
 
         setupRequest(request);
 
@@ -72,7 +74,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvBuildFulltextIndexResponse>(server, sender, std::move(ev), tabletId, expectedError, expectedErrorSubstring, expectedStatus);
     }
 
-    TString DoBuild(Tests::TServer::TPtr server, TActorId sender, std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest) {
+    TAutoPtr<TEvDataShard::TEvBuildFulltextIndexResponse> DoBuildRaw(Tests::TServer::TPtr server, TActorId sender,
+        std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest) {
         auto ev1 = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
         auto tabletId = FillRequest(server, sender, ev1->Record, setupRequest);
 
@@ -88,6 +91,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
         UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE, reply->Record.ShortDebugString());
 
+        return reply;
+    }
+
+    TString DoBuild(Tests::TServer::TPtr server, TActorId sender, std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest) {
+        auto reply = DoBuildRaw(server, sender, setupRequest);
         auto index = ReadShardedTable(server, kIndexTable);
         Cerr << "Index:" << Endl;
         Cerr << index << Endl;
@@ -136,6 +144,19 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
             });
         }
         CreateShardedTable(server, sender, "/Root", "table-index", options);
+    }
+
+    void CreateDocsTable(Tests::TServer::TPtr server, TActorId sender) {
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+        options.AllowSystemColumnNames(true);
+        options.Columns({
+            {"key", "Uint32", true, true},
+            {"data", "String", false, false},
+            {DocLengthColumn, "Uint32", false, false},
+        });
+        CreateShardedTable(server, sender, "/Root", "table-docs", options);
     }
 
     void Setup(Tests::TServer::TPtr server, TActorId sender, bool withRelevance = false) {
@@ -192,6 +213,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.ClearIndexName();
         }, "{ <main>: Error: Empty index table name }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
+            request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
+            request.ClearDocsTableName();
+        }, "{ <main>: Error: Empty index documents table name }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request) {
             request.MutableSettings()->mutable_columns()->at(0).set_column("some");
@@ -378,12 +404,23 @@ __ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
         auto sender = server->GetRuntime()->AllocateEdgeActor();
 
         Setup(server, sender, true);
+        CreateDocsTable(server, sender);
 
-        auto result = DoBuild(server, sender, [](auto& request) {
+        auto reply = DoBuildRaw(server, sender, [](auto& request) {
             request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(result, R"(__ydb_token = and, key = 2, __ydb_freq = 1
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetDocCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetTotalDocLength(), 11);
+
+        auto index = ReadShardedTable(server, kIndexTable);
+        Cerr << "Index:" << Endl;
+        Cerr << index << Endl;
+        auto docs = ReadShardedTable(server, kDocsTable);
+        Cerr << "Docs:" << Endl;
+        Cerr << docs << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(index, R"(__ydb_token = and, key = 2, __ydb_freq = 1
 __ydb_token = apple, key = 1, __ydb_freq = 1
 __ydb_token = apple, key = 2, __ydb_freq = 2
 __ydb_token = apple, key = 3, __ydb_freq = 1
@@ -393,6 +430,11 @@ __ydb_token = green, key = 1, __ydb_freq = 1
 __ydb_token = red, key = 2, __ydb_freq = 1
 __ydb_token = red, key = 4, __ydb_freq = 1
 __ydb_token = yellow, key = 3, __ydb_freq = 1
+)");
+        UNIT_ASSERT_VALUES_EQUAL(docs, R"(key = 1, data = (empty maybe), __ydb_length = 2
+key = 2, data = (empty maybe), __ydb_length = 5
+key = 3, data = (empty maybe), __ydb_length = 2
+key = 4, data = (empty maybe), __ydb_length = 2
 )");
     }
 }

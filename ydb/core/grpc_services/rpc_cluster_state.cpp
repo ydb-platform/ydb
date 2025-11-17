@@ -129,7 +129,7 @@ public:
         {TopQueryColumns, ".sys/top_queries_by_request_units_one_minute" },
     };
     ui32 QueryIdx = 0;
-    TVector<TVector<TString>> Counters;
+    TVector<TVector<std::pair<TString, TInstant>>> Counters;
     TVector<TEvInterconnect::TNodeInfo> Nodes;
     NKikimrClusterStateInfoProto::TClusterStateInfo State;
     TInstant Started;
@@ -277,7 +277,7 @@ public:
 
     void Handle(NKikimr::NCountersInfo::TEvCountersInfoResponse::TPtr& ev) {
         ui32 idx = ev.Get()->Cookie;
-        Counters[idx].push_back(std::move(ev->Get()->Record.GetResponse()));
+        Counters[idx].push_back(std::make_pair(std::move(ev->Get()->Record.GetResponse()), TInstant::Now()));
         NodeStateInfoReceived(idx);
     }
 
@@ -385,6 +385,7 @@ public:
         auto* block = result.Addblocks();
         block->Setname("cluster_state.json");
         block->Setcontent(data);
+        block->Mutabletimestamp()->set_seconds(TInstant::Now().Seconds());
 
         for (ui32 node : xrange(Counters.size())) {
             for (ui32 i : xrange(Counters[node].size())) {
@@ -392,7 +393,8 @@ public:
                 TStringBuilder sb;
                 sb << "node_" << node << "_counters_" << i << ".json";
                 counterBlock->Setname(sb);
-                counterBlock->Setcontent(Counters[node][i]);
+                counterBlock->Setcontent(Counters[node][i].first);
+                counterBlock->Mutabletimestamp()->set_seconds(Counters[node][i].second.Seconds());
             }
         }
         operation.mutable_result()->PackFrom(result);

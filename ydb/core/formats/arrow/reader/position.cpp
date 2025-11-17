@@ -1,6 +1,7 @@
 #include "position.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <util/string/join.h>
 

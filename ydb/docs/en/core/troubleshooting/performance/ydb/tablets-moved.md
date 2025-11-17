@@ -74,4 +74,4 @@ Adjust Hive balancer settings:
     {% endnote %}
 
 
-[*counter]: Counter -- a fake resource representing a count of tablets of a certain type on a node, used to ensure such tablets are distributed evenly across nodes.
+[*counter]: Counter - a fake resource representing a count of tablets of a certain type on a node, used to ensure such tablets are distributed evenly across nodes.

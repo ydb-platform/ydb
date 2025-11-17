@@ -11,7 +11,7 @@
 
 Autobalancing occurs in the following cases:
 
-*   **Imbalanced Hardware Resource Usage**
+* **Imbalanced Hardware Resource Usage**
 
     {{ ydb-short-name }} uses the Scatter metric to evaluate the balance of hardware resource usage. For more details on the Scatter metric's calculation logic and balancing triggers, see the [{#T}](../../../contributor/hive.md#scatter) section.
 

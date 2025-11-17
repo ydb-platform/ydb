@@ -4,7 +4,13 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
-SIZE(medium)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h

@@ -7,7 +7,13 @@ TEST_SRCS(
     test_workload.py
 )
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
 REQUIREMENTS(ram:32 cpu:4)
 
 DEPENDS(

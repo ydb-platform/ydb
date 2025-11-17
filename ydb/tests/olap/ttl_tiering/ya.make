@@ -16,7 +16,12 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 PEERDIR(
     ydb/tests/library

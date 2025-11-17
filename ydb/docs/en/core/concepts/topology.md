@@ -14,7 +14,7 @@ The following {{ ydb-short-name }} distributed storage operating modes are avail
 
 {% note info %}
 
-In the ` mirror-3-dc` operating mode, if two of the three data centers fail, the database becomes unavailable for both writing and reading data.
+In the ` mirror-3-dc` operating mode, when leaving the fault model, the data becomes unavailable for both writing and reading.
 
 {% endnote %}
 

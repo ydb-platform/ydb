@@ -2,6 +2,7 @@ RECURSE(
     actor
     attributes
     base
+    error
     http
     queues
 )

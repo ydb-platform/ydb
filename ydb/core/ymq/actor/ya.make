@@ -13,7 +13,6 @@ SRCS(
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp
-    error.cpp
     executor.cpp
     fifo_cleanup.cpp
     garbage_collector.cpp
@@ -80,6 +79,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/ymq/attributes
     ydb/core/ymq/base
+    ydb/core/ymq/error
     ydb/core/ymq/proto
     ydb/core/ymq/queues/common
     ydb/core/ymq/queues/fifo

@@ -54,6 +54,10 @@ void CompareListAndBlockStreamIgnoringOrder(const TypeAndValue& expected, ICompu
 
 template <typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb, const TVector<Type>& vector) {
+    for(auto& val: vector | std::views::take(5)) {
+        Cout << val << ' '; 
+    }
+    Cout << Endl;
     TType* itemType;
     if constexpr (std::is_same_v<Type, std::optional<TString>>) {
         itemType = pb.NewOptionalType(pb.NewDataType(NUdf::EDataSlot::String));
@@ -103,6 +107,7 @@ const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb, const TVec
 }
 
 template <typename Setup, typename... TVectors> TypeAndValue ConvertVectorsToTuples(Setup& setup, TVectors... vectors) {
+    // for(auto& val: vec)
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto lists = BuildListNodes(pb, std::forward<TVectors>(vectors)...);
     const auto tuplesNode = pb.Zip(lists);

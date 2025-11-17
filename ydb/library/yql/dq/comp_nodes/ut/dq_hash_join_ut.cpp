@@ -17,12 +17,9 @@ struct TJoinTestData {
         Setup->Alloc.SetLimit(1);
         Setup->Alloc.Ref().SetIncreaseMemoryLimitCallback([&](ui64 limit, ui64 required) {
             auto newLimit = std::max(required, limit);
-            Cout << std::format("alloc limit {} -> {}, TotalAllocated_: {}", Setup->Alloc.GetLimit(), newLimit, Setup->Alloc.GetAllocated());
-            Cout << Endl;
             Setup->Alloc.SetLimit(newLimit);
         });
     }
-    // мщшв 
     auto MakeHardLimitIncreaseMemCallback(ui64 hardLimit) {
         return [hardLimit, this](ui64 limit, ui64 required) {
             auto newLimit = std::min(std::max(limit, required), hardLimit);
@@ -123,7 +120,6 @@ TJoinTestData MixedKeysInnerTestData() {
 
     TJoinTestData td;
     auto& setup = *td.Setup;
-    // setup.Alloc.SetLimit(size_t limit)
     TVector<ui64> leftKeys = {1, 1, 2, 3, 4};
     TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
 
@@ -438,7 +434,6 @@ TJoinTestData SpillingTestData() {
     TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
     TVector<ui64> leftValues = {13, 14, 15, 16, 17};
     constexpr int rightSize = 200000;
-    // rightKeys.resize(rightSize);
     TVector<ui64> rightKeys(rightSize);
     TVector<ui64> rightValues(rightSize);
     for(int index = 0; index < rightSize; ++index) {
@@ -482,12 +477,13 @@ void Test(TJoinTestData testData, bool blockJoin) {
 
     THolder<IComputationGraph> got = ConstructJoinGraphStream(
         testData.Kind, blockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash, descr);
-    // got->GetContext().
     if (testData.JoinMemoryConstraint) {
-        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 2_MB + testData.Setup->Alloc.GetLimit());
+        testData.SetHardLimitIncreaseMemCallback(*testData.JoinMemoryConstraint + 8_MB + testData.Setup->Alloc.GetUsed());
     }
-    // got->GetContext().SpillerFactory
-    // FromWideStream
+    NYql::NUdf::TUniquePtr<NYql::NUdf::ILogProvider> provider = NYql::NUdf::MakeLogProvider([&](const NYql::NUdf::TStringRef& component, NYql::NUdf::ELogLevel, const NYql::NUdf::TStringRef& message ) {
+        Cout << Sprintf("component: %s, message: %s\n", component.Data(), message.Data());
+    });
+    got->GetContext().LogProvider = provider.Get();
     if (blockJoin) {
         CompareListAndBlockStreamIgnoringOrder(testData.Result, *got);
     } else {
@@ -498,7 +494,6 @@ void Test(TJoinTestData testData, bool blockJoin) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
-    // Y_UNIT_TEST_Q
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {
         Test(BasicInnerJoinTestData(), BlockJoin);
     }

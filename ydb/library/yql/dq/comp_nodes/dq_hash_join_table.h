@@ -111,6 +111,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
     void Lookup(TSingleTuple row, std::invocable<TSingleTuple> auto consume) const {
         MKQL_ENSURE(Built_, "table must be built before lookup");
+        MKQL_ENSURE(!Table_.Empty(), "make sure to not lookup in empty table");
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
             consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
         });

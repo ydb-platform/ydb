@@ -81,7 +81,11 @@ struct TBucket {
         return SpilledPages.has_value();
     }
     bool Empty() const {
-        return InMemoryPages.empty() && (!SpilledPages.has_value() || SpilledPages->empty()) && BuildingPage.Empty();
+        bool inMemoryPagesEmpty = true;
+        for(auto& page: InMemoryPages) {
+            inMemoryPagesEmpty &= page.Empty();
+        }
+        return inMemoryPagesEmpty && (!SpilledPages.has_value() || SpilledPages->empty()) && BuildingPage.Empty();
     }
     TPackResult BuildingPage;
     std::optional<TMKQLVector<ISpiller::TKey>> SpilledPages;

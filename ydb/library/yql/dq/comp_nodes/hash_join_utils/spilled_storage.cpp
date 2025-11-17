@@ -19,7 +19,7 @@ NYql::TChunkedBuffer Serialize(TPackResult&& result) {
     buff.Append(TString{reinterpret_cast<const char*>(result.PackedTuples.data()), result.PackedTuples.size()});
     buff.Append(TString{reinterpret_cast<const char*>(result.Overflow.data()), result.Overflow.size()});
 
-    Cout << "spilling page, buff.size() == " << buff.Size() << Endl;
+    // Cout << "spilling page, buff.size() == " << buff.Size() << Endl;
     MKQL_ENSURE(result.NTuples != 0,"spilling empty page?");
     return buff;
 }

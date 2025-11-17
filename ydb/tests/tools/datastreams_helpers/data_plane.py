@@ -20,7 +20,6 @@ READ_TOOL_TIMEOUT = plain_or_under_sanitizer(30, 300)
 def write_stream(path, data, partition_key=None, database = None, endpoint = None):
     if database is None:
         database = os.getenv("YDB_DATABASE")
-    request_metadata = [("x-ydb-database", database)]
     if endpoint is None:
         endpoint = os.getenv("YDB_ENDPOINT")
     channel = grpc.insecure_channel(endpoint)
@@ -53,7 +52,6 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
     )
     if database is None:
         database = os.getenv("YDB_DATABASE")
-    request_metadata = [("x-ydb-database", database)]
     if endpoint is None:
         endpoint = os.getenv("YDB_ENDPOINT")
     result_file = yatest.common.output_path(result_file_name)

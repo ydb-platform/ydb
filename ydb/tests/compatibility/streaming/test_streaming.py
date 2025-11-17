@@ -4,7 +4,7 @@ import os
 import pytest
 import time
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture # , RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture  # RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.oss.ydb_sdk_import import ydb

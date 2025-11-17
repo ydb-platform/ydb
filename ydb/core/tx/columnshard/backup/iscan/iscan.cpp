@@ -129,9 +129,8 @@ public:
             return;
         }
 
-        Exporter = exporter.DetachResult().release();
-
         Driver = std::make_unique<NColumnShard::NBackup::TExportDriver>(TActorContext::ActorSystem(), SelfId());
+        Exporter = exporter.DetachResult().release();
         auto initialState = Exporter->Prepare(Driver.get(), MakeRowSchema());
         AFL_VERIFY(initialState.Scan == NTable::EScan::Feed);
 

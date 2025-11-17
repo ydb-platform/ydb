@@ -89,7 +89,7 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, bool forcedRes
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
         // TODO: check this code when the pool removal will be implemented, since the `parent` may be gone.
-        auto usage = Query->GetParent()->Usage.load();
+        auto usage = Query->GetParent()->Usage.load(std::memory_order_relaxed);
         auto fairShare = snapshot->GetParent()->FairShare;
         return fairShare >= usage ? (fairShare - usage) : 0;
     }

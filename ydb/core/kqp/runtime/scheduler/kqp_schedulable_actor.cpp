@@ -82,7 +82,9 @@ void TSchedulableActorBase::StopExecution(bool& forcedResume) {
         forcedResume = false;
         Executed = false;
 
-        SchedulableTask->Query->ResumeTasks(SchedulableTask->GetSpareUsage());
+        if (auto spareUsage = SchedulableTask->GetSpareUsage()) {
+            SchedulableTask->Query->ResumeTasks(spareUsage);
+        }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
         Resume();

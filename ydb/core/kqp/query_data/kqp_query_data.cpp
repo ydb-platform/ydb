@@ -193,6 +193,14 @@ NKikimr::NMiniKQL::TType* TQueryData::GetParameterType(const TString& name) {
 }
 
 std::pair<NKikimr::NMiniKQL::TType*, NUdf::TUnboxedValue> TQueryData::GetTxResult(ui32 txIndex, ui32 resultIndex) {
+    // Log indices for debugging
+    Cerr << "[DISCARD_INDEX] GetTxResult: txIndex=" << txIndex 
+        << ", resultIndex=" << resultIndex
+        << ", TxResults[" << txIndex << "].size()=" << TxResults[txIndex].size()
+        << ", QueryResultIndex=" << (TxResults[txIndex][resultIndex].QueryResultIndex.Defined() 
+            ? std::to_string(*TxResults[txIndex][resultIndex].QueryResultIndex) : "NONE")
+        << ", Rows.RowCount()=" << TxResults[txIndex][resultIndex].Rows.RowCount() << Endl;
+    
     return TxResults[txIndex][resultIndex].GetUV(
         TypeEnv(), AllocState->HolderFactory);
 }
@@ -216,6 +224,10 @@ Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding
 {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();
+
+    Cerr << "[DISCARD_INDEX] GetYdbTxResult: txIndex=" << txIndex 
+        << ", resultIndex=" << resultIndex
+        << ", HasResult=" << HasResult(txIndex, resultIndex) << Endl;
 
     YQL_ENSURE(HasResult(txIndex, resultIndex));
 

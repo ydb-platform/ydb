@@ -1087,14 +1087,20 @@ namespace {
 
 void DoPipeInputToOutput(
     const auto& input,
-    const auto& output)
+    const auto& output,
+    bool copyBlocks)
 {
     while (true) {
         auto asyncBlock = input->Read();
         auto block = WaitFor(asyncBlock)
             .ValueOrThrow();
-        if (!block || block.Empty()) {
+        if (block.Empty()) {
             break;
+        }
+        if (copyBlocks) {
+            struct TPipeInputToOutputTag
+            { };
+            block = TSharedRef::MakeCopy<TPipeInputToOutputTag>(block);
         }
         WaitFor(output->Write(block))
             .ThrowOnError();
@@ -1107,14 +1113,26 @@ void PipeInputToOutput(
     const IAsyncZeroCopyInputStreamPtr& input,
     const IAsyncOutputStreamPtr& output)
 {
-    DoPipeInputToOutput(input, output);
+    DoPipeInputToOutput(
+        input,
+        output,
+        /*copyBlocks*/ false);
 }
 
 void PipeInputToOutput(
     const IAsyncZeroCopyInputStreamPtr& input,
     const IAsyncZeroCopyOutputStreamPtr& output)
 {
-    DoPipeInputToOutput(input, output);
+    // NB: When both input and output strams are zero-copy
+    // blocks need to be copied:
+    // 1) input stream only guarantees their content remains intact
+    //    until the next Read() call is made;
+    // 2) output stream relies on the passed content to be immutable
+    //    the whole time.
+    DoPipeInputToOutput(
+        input,
+        output,
+        /*copyBlocks*/ true);
 }
 
 void DrainInput(const IAsyncZeroCopyInputStreamPtr& input)

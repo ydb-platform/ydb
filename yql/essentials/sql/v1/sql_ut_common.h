@@ -5466,7 +5466,13 @@ Y_UNIT_TEST(ReplaceIntoMapReduce) {
 Y_UNIT_TEST(UpsertIntoMapReduce) {
     NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output SELECT key FROM plato.Input");
     UNIT_ASSERT(!res.Root);
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT INTO is not supported for yt tables\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT is not available before language version 2025.04\n");
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    res = SqlToYqlWithSettings("UPSERT INTO plato.Output SELECT key FROM plato.Input", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 
 Y_UNIT_TEST(UpdateMapReduce) {

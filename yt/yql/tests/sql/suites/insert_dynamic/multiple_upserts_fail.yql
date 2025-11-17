@@ -1,0 +1,16 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+/* ytfile can not - result error is yt specific */
+/* custom error:Duplicate lockable dynamic table*/
+use plato;
+pragma yt.UseNativeDynamicTableRead;
+
+upsert into Output
+select "x" as key;
+
+commit; 
+
+upsert into Output
+select "y" as key;

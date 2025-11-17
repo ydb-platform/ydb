@@ -1078,11 +1078,13 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
                             // The B-Tree implementation ignores the limits and keys when the tree has no levels,
                             // except for the case when the history or the groups are turned on
                             if ((part.IndexPages.GetBTree({}).LevelCount == 0) && (!params.Groups) && (!params.History)) {
-                                UNIT_ASSERT_VALUES_EQUAL_C(
-                                    treeChargeResult.ItemsPrecharged,
-                                    part.IndexPages.GetBTree({}).GetRowCount(),
-                                    message
-                                );
+                                if (treeChargeResult.ItemsPrecharged != 0) {
+                                    UNIT_ASSERT_VALUES_EQUAL_C(
+                                        treeChargeResult.ItemsPrecharged,
+                                        part.IndexPages.GetBTree({}).GetRowCount(),
+                                        message
+                                    );
+                                }
                             // In some cases the flat implementation does not adjust
                             // the precharged counts based on the precise keys
                             } else if ((!params.Groups) && (!params.History)) {

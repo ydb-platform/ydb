@@ -127,6 +127,7 @@ public:
         , DisableDefaultTimeout(settings.DisableDefaultTimeout)
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
+        , StreamingQueryPath(settings.StreamingQueryPath)
         , Counters(settings.Counters)
     {}
 
@@ -144,6 +145,7 @@ public:
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
+        UserRequestContext->StreamingQueryPath = StreamingQueryPath;
 
         LOG_I("Bootstrap");
 
@@ -969,6 +971,7 @@ private:
     const bool DisableDefaultTimeout = false;
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    const TString StreamingQueryPath;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

@@ -37,7 +37,6 @@ ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/kqp/ut/federated_query/large_results KqpScriptExecResults.ExecuteScriptWithLargeFile
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingSyncIndex
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestOrderByDecimal+UseScanQuery
 ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationAfterDeletion
 ydb/core/kqp/ut/olap KqpOlapWrite.SimplificationWithWrite[]
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads

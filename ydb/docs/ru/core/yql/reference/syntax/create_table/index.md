@@ -37,7 +37,7 @@
     [AS SELECT ...]
 ```
 
-### Примечание про `column_option_list`
+{% note info %}
 
 `column_option_list` - список опций для колонки. Для указания этих опций существует два синтаксиса:
 
@@ -52,23 +52,9 @@
 
 Важно: конструкция `DEFAULT false NOT NULL` недопустима. Если Вам требуется указать несколько опций, включая `DEFAULT`, то следует использовать либо синтаксис со скобками, либо указывать опцию `DEFAULT` последней.
 
-### Примеры
+Для лучшего понимания обратитесь к [примерам](#создание-таблицы-с-разными-опциями-колонки).
 
-```yql
-CREATE TABLE tbl (
-    k Uint64,
-    v Bool (DEFAULT false, NOT NULL),
-    PRIMARY KEY (k)
-);
-```
-
-```yql
-CREATE TABLE tbl (
-    k Uint64,
-    v Bool NOT NULL DEFAULT false,
-    PRIMARY KEY (k)
-);
-```
+{% endnote %}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -281,6 +267,25 @@ CREATE TABLE <table_name> (
 ```
 
 {% endif %}
+
+### Создание таблицы с разными опциями колонки
+
+```yql
+CREATE TABLE tbl (
+    k Uint64,
+    v Bool (DEFAULT false, NOT NULL),
+    PRIMARY KEY (k)
+);
+```
+
+```yql
+CREATE TABLE tbl (
+    k Uint64,
+    v Bool NOT NULL DEFAULT false,
+    PRIMARY KEY (k)
+);
+```
+
 
 {% if backend_name == "YDB" and oss == true %}
 

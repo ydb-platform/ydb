@@ -1,6 +1,5 @@
 #include "chunked_buffer.h"
 
-#include <format>
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
@@ -59,7 +58,6 @@ TChunkedBuffer& TChunkedBuffer::Append(TString&& str) {
         Items_.emplace_back(TChunk{*owner, owner});
         Size_ += owner->size();
     }
-    // Cout << std::format("chunks: {}", Items_.size()) << Endl;
     return *this;
 }
 
@@ -80,7 +78,6 @@ TChunkedBuffer& TChunkedBuffer::Clear() {
 }
 
 TChunkedBuffer& TChunkedBuffer::Erase(size_t size) {
-    // Cout << std::format("{}", Items_.size()) << Endl;
     while (size && !Items_.empty()) {
         TStringBuf& buf = Items_.front().Buf;
         size_t toErase = std::min(buf.size(), size);

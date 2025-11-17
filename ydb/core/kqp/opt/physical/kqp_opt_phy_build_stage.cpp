@@ -811,9 +811,9 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
     TExprNodeList args;
     args.push_back(arg.Ptr());
 
-    auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
+    auto leftStruct = tupleType.Arg(0).Cast<TCoStructType>();
 
-    for (auto structContent : rightStruct ) {
+    for (auto structContent : leftStruct ) {
         auto attrName = structContent.Ptr()->Child(0);
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name(attrName)

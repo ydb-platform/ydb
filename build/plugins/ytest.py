@@ -859,6 +859,7 @@ def onadd_check_py_imports(fields, unit, *args):
         df.BinaryPath.stripped,
         df.TestRunnerBin.value,
         df.DockerImage.value,
+        df.ParallelTestsInSingleNode.value,
     )
 )
 def onadd_pytest_bin(fields, unit, *args):

@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 
@@ -254,10 +255,10 @@ TEST_F(XdcRdmaTest, SerializeToRope) {
         totalXdcSize += len;
     }
 
-    auto allocRcBuf = [](ui32 size) {
-        return TRcBuf::Uninitialized(size);
-    };
-    auto serializedRope = ev->SerializeToRope(allocRcBuf);
+    auto mempool = NInterconnect::NRdma::CreateSlotMemPool(nullptr);
+
+    auto serializedRope = ev->SerializeToRope(mempool.get());
+
     ASSERT_TRUE(serializedRope.has_value());
     auto rope = serializedRope->ConvertToString();
     // 6 1 -120 39 88x5000 8 123 18 11 104 101 108 108 111 32 119 111 114 108 100

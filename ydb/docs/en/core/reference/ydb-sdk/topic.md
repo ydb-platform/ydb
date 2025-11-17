@@ -2185,7 +2185,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 - Go
 
-   The client code immediately  takes and receives all messages from the buffer (on the SDK side) even if they are not enough to form a batch during batch processing.
+   The client code immediately receives all messages from the buffer (on the SDK side) even if they are not enough to form a batch during batch processing.
 
    ```go
    r, _ := db.Topic().StartReader("my-consumer", nil,

@@ -150,6 +150,7 @@ public:
     }
 
     std::string_view GetRawValue() const {
+        AFL_VERIFY(IsValidFlag);
         return RawValue;
     }
 

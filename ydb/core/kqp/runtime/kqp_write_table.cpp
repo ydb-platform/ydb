@@ -1000,37 +1000,23 @@ public:
             , RowBatcher(ColumnsMapping.size(), std::nullopt, Alloc) {
     }
 
-    void Fill(const IDataBatchPtr& data) override {
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        auto* batch = dynamic_cast<TRowBatch*>(data.Get());
-        AFL_ENSURE(batch);
-        const auto& rows = batch->GetRows();
-        AddDataShard(rows.begin(), rows.end());
-    }
-
-    void Fill(const TRowsRef& data) override {
-        YQL_ENSURE(RowBatcher.IsEmpty());
-        AddDataShard(data.begin(), data.end());
-    }
-
-    void AddDataShard(
-            TVector<TConstArrayRef<TCell>>::const_iterator begin,
-            TVector<TConstArrayRef<TCell>>::const_iterator end) {
+    void AddRow(TConstArrayRef<TCell> row) override {
         const size_t columnsCount = ColumnsMapping.size();
         std::vector<TCell> cells(columnsCount);
-        for (auto it = begin; it != end; ++it) {
-            const auto& row = *it;
-            for (size_t index = 0; index < columnsCount; ++index) {
-                cells[index] = row[ColumnsMapping[index]];
-            }
-            RowBatcher.AddRow(cells);
+        for (size_t index = 0; index < columnsCount; ++index) {
+            cells[index] = row[ColumnsMapping[index]];
         }
+        RowBatcher.AddRow(std::move(cells));
     }
 
     IDataBatchPtr Flush() override {
         auto result = RowBatcher.Flush(true);
         YQL_ENSURE(RowBatcher.IsEmpty());
         return result;
+    }
+
+    bool IsEmpty() const override {
+        return RowBatcher.IsEmpty();
     }
 
 private:

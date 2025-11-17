@@ -396,7 +396,7 @@ message TTableServiceConfig {
     optional bool EnableOlapScalarApply = 86 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableOlapSubstringPushdown = 87 [default = true, (InvalidateCompileCache) = true];
 
-    optional bool EnableIndexStreamWrite = 88 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableIndexStreamWrite = 88 [default = true, (InvalidateCompileCache) = true];
 
     reserved 89;
 

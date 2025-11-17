@@ -68,9 +68,9 @@ IDataBatcherPtr CreateColumnDataBatcher(
 
 class IDataBatchProjection : public TThrRefBase {
 public:
-    virtual void Fill(const IDataBatchPtr& data) = 0;
-    virtual void Fill(const TRowsRef& data) = 0;
+    virtual void AddRow(TConstArrayRef<TCell> row) = 0;
     virtual IDataBatchPtr Flush() = 0;
+    virtual bool IsEmpty() const = 0;
 };
 
 using IDataBatchProjectionPtr = TIntrusivePtr<IDataBatchProjection>;

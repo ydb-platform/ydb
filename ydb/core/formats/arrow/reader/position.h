@@ -243,17 +243,13 @@ public:
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
+            auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
             if (i < pkTypes.size() && pkTypes[i].GetTypeId() == NScheme::NTypeIds::Bool) {
-                auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
-                if (!scalar || !scalar->is_valid) {
-                    jsonColumn["value"] = "NULL";
-                } else {
-                    const auto s = scalar->ToString();
-                    bool boolValue = (s == "1" || s == "true" || s == "True");
-                    jsonColumn["value"] = boolValue ? "true" : "false";
-                }
+                const auto s = scalar->ToString();
+                bool boolValue = (s == "1" || s == "true" || s == "True");
+                jsonColumn["value"] = boolValue ? "true" : "false";
             } else {
-                jsonColumn["value"] = PositionAddress[i].DebugString(position);
+                jsonColumn["value"] = (!scalar || !scalar->is_valid) ? "NULL" : scalar->ToString();
             }
         }
 

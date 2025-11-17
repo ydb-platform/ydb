@@ -329,5 +329,5 @@ class TestInsertStatement(object):
             assert False, 'Should Fail'
         except ydb.issues.PreconditionFailed as ex:
             assert "Conflict with existing key" in ex.message
-            assert primitive_type.lower() in ex.message, f"Error message should contain '{primitive_type.lower()}', but it does: {ex.message}"
+            assert primitive_type in ex.message, f"Error message should contain '{primitive_type}', but it does: {ex.message}"
 

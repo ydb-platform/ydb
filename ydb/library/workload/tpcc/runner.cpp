@@ -345,7 +345,7 @@ void TPCCRunner::RunSync() {
     bool forcedWarmup = false;
     uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminalMs.count() / 1000 + 1;
 
-    uint32_t warmupSeconds;
+    uint32_t warmupSeconds = minWarmupSeconds;
     if (Config.WarmupDuration == TDuration()) {
         // adaptive, a very simple heuristic
         if (Config.WarehouseCount <= 10) {

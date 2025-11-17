@@ -85,7 +85,7 @@ Y_UNIT_TEST(CanNotSetGrpcXdsBootstrapConfigEnvIfVariableAlreadySet) {
     NKikimrConfig::TAppConfig appConfig;
     auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
     auto* xdsServers = xdsBootstrapConfig->AddXdsServers();
-    xdsServers->SetServerUri("xds-provider.bootstrap.cloud-testing.yandex.net:18000");
+    xdsServers->SetServerUri("xds-provider.bootstrap.my-company.net:18000");
     *xdsServers->AddServerFeatures() = "xds_v3";
     auto* channelCreds = xdsServers->AddChannelCreds();
     channelCreds->SetType("insecure");

@@ -128,7 +128,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                 // TotalSpilledPages(), TotalInMemoryPages() ) << Endl;
 
                 while (std::accumulate(Buckets_.begin(), Buckets_.end(), 0, [&](int pages, const TBucket& bucket) {
-                           return pages + bucket.IsSpilled() ? std::ssize(bucket.InMemoryPages) : 0;
+                           return pages + (bucket.IsSpilled() ? std::ssize(bucket.InMemoryPages) : 0);
                        }) < Settings.SpillingPagesAtTime) {
                     std::optional<int> bucketIndex = FindInMemoryBucketWithMostPages();
                     if (!bucketIndex) {

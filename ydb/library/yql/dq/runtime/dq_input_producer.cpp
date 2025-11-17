@@ -76,7 +76,8 @@ private:
                 }();
 
                 if (watermarkChanged) {
-                    WatermarkStorage->WatermarkIn = Watermark;
+                    Y_DEBUG_ABORT_UNLESS(WatermarksTracker->HasPendingWatermark());
+                    WatermarkStorage->WatermarkIn = WatermarksTracker->GetPendingWatermark();
                     return NUdf::EFetchStatus::Yield;
                 }
             }

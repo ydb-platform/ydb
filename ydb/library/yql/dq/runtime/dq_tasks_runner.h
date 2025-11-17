@@ -214,7 +214,7 @@ struct TDqTaskRunnerSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
     bool UseCacheForLLVM = true;
-    bool EnableWatermarks = false;
+    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;

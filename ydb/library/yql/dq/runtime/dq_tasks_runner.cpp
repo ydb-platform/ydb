@@ -256,7 +256,7 @@ public:
         , Settings(settings)
         , LogFunc(logFunc)
         , AllocatedHolder(std::make_optional<TAllocatedHolder>())
-        , WatermarksTracker("TDqTaskRunner")
+        , WatermarksTracker(Settings.WatermarksTracker)
     {
         Stats = std::make_unique<TDqTaskRunnerStats>();
         Stats->CreateTs = TInstant::Now();
@@ -649,7 +649,7 @@ public:
                         InputConsumed,
                         PgBuilder_.get(),
                         &Watermark,
-                        GetWatermarksTracker()
+                        WatermarksTracker
                     );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
@@ -663,7 +663,7 @@ public:
                             Stats->StartTs,
                             InputConsumed,
                             &Watermark,
-                            GetWatermarksTracker()
+                            WatermarksTracker
                         )
                     );
                 } else {
@@ -679,7 +679,7 @@ public:
                             InputConsumed,
                             PgBuilder_.get(),
                             &Watermark,
-                            GetWatermarksTracker()
+                            WatermarksTracker
                         )
                     );
                 }
@@ -1044,8 +1044,13 @@ private:
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {
-                    if (WatermarksTracker.HasPendingWatermark()) {
-                        WatermarksTracker.PopPendingWatermark();
+                    // only for sync ca
+                    if (WatermarksTracker && WatermarksTracker->HasPendingWatermark()) {
+                        const auto watermark = WatermarksTracker->GetPendingWatermark();
+                        NDqProto::TWatermark watermarkRequest;
+                        watermarkRequest.SetTimestampUs(watermark->MicroSeconds());
+                        AllocatedHolder->Output->Consume(std::move(watermarkRequest));
+                        WatermarksTracker->PopPendingWatermark();
                     }
                     return ERunStatus::PendingInput;
                 }
@@ -1053,11 +1058,6 @@ private:
         }
 
         return ERunStatus::PendingOutput;
-    }
-
-    [[nodiscard]] TDqComputeActorWatermarks* GetWatermarksTracker() {
-        // inject watermark in InputProducer using WatermarksTracker only for Sync CA
-        return Settings.EnableWatermarks ? &WatermarksTracker : nullptr;
     }
 
 private:
@@ -1116,7 +1116,7 @@ private:
 
     std::optional<TAllocatedHolder> AllocatedHolder;
     NKikimr::NMiniKQL::TWatermark Watermark;
-    TDqComputeActorWatermarks WatermarksTracker;
+    TDqComputeActorWatermarks* WatermarksTracker;
 
     bool TaskHasEffects = false;
 

@@ -635,12 +635,13 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 }
 
 void TKqpPlanner::PrepareCheckpoints() {
-    if (!CheckpointCoordinatorId) {
+    const auto enableCheckpoints = static_cast<bool>(CheckpointCoordinatorId);
+    const auto enableWatermarks = AppData()->FeatureFlags.GetEnableWatermarks();
+    TasksGraph.BuildCheckpointingAndWatermarksMode(enableCheckpoints, enableWatermarks);
+
+    if (!enableCheckpoints) {
         return;
     }
-
-    const auto enableWatermarks = AppData()->FeatureFlags.GetEnableWatermarks();
-    TasksGraph.BuildCheckpointingAndWatermarksMode(true, enableWatermarks);
 
     bool hasStreamingIngress = false;
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();

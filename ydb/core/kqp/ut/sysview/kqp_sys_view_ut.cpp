@@ -546,6 +546,222 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         CompareYson(expected, StreamResultToYson(it));
     }
 
+    Y_UNIT_TEST(NodesOrderByDesc) {
+        // Test to reproduce issue #12585: ORDER BY DESC doesn't work for sys views
+        // The sys view actors ignore the direction flag and don't guarantee order
+        TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 5);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        ui32 offset = kikimr.GetTestServer().GetRuntime()->GetNodeId(0);
+
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT NodeId, Host
+            FROM `/Root/.sys/nodes`
+            ORDER BY NodeId DESC
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Collect all results
+        TVector<ui32> nodeIds;
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto nodeId = parser.ColumnParser("NodeId").GetOptionalUint32().value();
+            nodeIds.push_back(nodeId);
+        }
+
+        // Verify we got all 5 nodes
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds.size(), 5);
+
+        // Verify results are in descending order (this should fail if the bug exists)
+        // According to issue #12585, sys view actors ignore the direction flag
+        // and don't guarantee order, so this assertion should fail
+        for (size_t i = 1; i < nodeIds.size(); ++i) {
+            UNIT_ASSERT_C(nodeIds[i - 1] >= nodeIds[i],
+                TStringBuilder() << "Results not in descending order: "
+                << "nodeIds[" << (i - 1) << "] = " << nodeIds[i - 1]
+                << " < nodeIds[" << i << "] = " << nodeIds[i]
+                << ". ORDER BY DESC is being ignored by sys view actors.");
+        }
+
+        // Verify exact expected order: offset+4, offset+3, offset+2, offset+1, offset
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[0], offset + 4);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[1], offset + 3);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[2], offset + 2);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[3], offset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(nodeIds[4], offset);
+    }
+
+    Y_UNIT_TEST(PartitionStatsOrderByDesc) {
+        // Test ORDER BY DESC for partition_stats sys view
+        // Primary key: OwnerId, PathId, PartIdx, FollowerId
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT OwnerId, PathId, PartIdx, FollowerId, Path
+            FROM `/Root/.sys/partition_stats`
+            ORDER BY OwnerId DESC, PathId DESC, PartIdx DESC, FollowerId DESC
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Collect all results
+        struct TPartitionKey {
+            ui64 OwnerId;
+            ui64 PathId;
+            ui64 PartIdx;
+            ui32 FollowerId;
+        };
+        TVector<TPartitionKey> partitionKeys;
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto ownerId = parser.ColumnParser("OwnerId").GetOptionalUint64().value();
+            auto pathId = parser.ColumnParser("PathId").GetOptionalUint64().value();
+            auto partIdx = parser.ColumnParser("PartIdx").GetOptionalUint64().value();
+            auto followerId = parser.ColumnParser("FollowerId").GetOptionalUint32().value();
+            partitionKeys.push_back({ownerId, pathId, partIdx, followerId});
+        }
+
+        // Verify we got some results
+        UNIT_ASSERT_C(partitionKeys.size() > 0, "Expected at least one partition");
+
+        // Verify results are in descending order by OwnerId, PathId, PartIdx, FollowerId
+        for (size_t i = 1; i < partitionKeys.size(); ++i) {
+            const auto& prev = partitionKeys[i - 1];
+            const auto& curr = partitionKeys[i];
+
+            auto prevKey = std::tie(prev.OwnerId, prev.PathId, prev.PartIdx, prev.FollowerId);
+            auto currKey = std::tie(curr.OwnerId, curr.PathId, curr.PartIdx, curr.FollowerId);
+
+            UNIT_ASSERT_C(prevKey >= currKey,
+                TStringBuilder() << "Results not in descending order: "
+                << "partitionKeys[" << (i - 1) << "] = (" << prev.OwnerId << ", " << prev.PathId << ", " << prev.PartIdx << ", " << prev.FollowerId << ")"
+                << " < partitionKeys[" << i << "] = (" << curr.OwnerId << ", " << curr.PathId << ", " << curr.PartIdx << ", " << curr.FollowerId << ")"
+                << ". ORDER BY DESC is being ignored by sys view actors.");
+        }
+    }
+
+    Y_UNIT_TEST(QuerySessionsOrderByDesc) {
+        // Test ORDER BY DESC for query_sessions sys view
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableRealSystemViewPaths(true);
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetFeatureFlags(featureFlags);
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        // Create some sessions to have data
+        const size_t sessionsCount = 5;
+        std::vector<NYdb::NQuery::TSession> sessionsSet;
+        for(ui32 i = 0; i < sessionsCount; i++) {
+            sessionsSet.emplace_back(std::move(client.GetSession().GetValueSync().GetSession()));
+        }
+
+        // Wait a bit for sessions to be registered
+        ::Sleep(TDuration::MilliSeconds(100));
+
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT SessionId, State, NodeId
+            FROM `/Root/.sys/query_sessions`
+            ORDER BY SessionId DESC
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Collect all results
+        TVector<std::string> sessionIds;
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto sessionId = parser.ColumnParser("SessionId").GetOptionalUtf8().value();
+            sessionIds.push_back(sessionId);
+        }
+
+        // Verify we got some results
+        UNIT_ASSERT_C(sessionIds.size() > 0, "Expected at least one session");
+
+        // Verify results are in descending order (lexicographically)
+        for (size_t i = 1; i < sessionIds.size(); ++i) {
+            UNIT_ASSERT_C(sessionIds[i - 1] >= sessionIds[i],
+                TStringBuilder() << "Results not in descending order: "
+                << "sessionIds[" << (i - 1) << "] = \"" << sessionIds[i - 1] << "\""
+                << " < sessionIds[" << i << "] = \"" << sessionIds[i] << "\""
+                << ". ORDER BY DESC is being ignored by sys view actors.");
+        }
+    }
+
+    Y_UNIT_TEST(TopQueriesOrderByDesc) {
+        // Test ORDER BY DESC for top_queries sys views
+        TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        // Execute some queries to populate stats
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+        {
+            auto result = tableSession.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/TwoShard`
+            )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            auto result = tableSession.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/EightShard`
+            )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        // Wait a bit for stats to be collected
+        ::Sleep(TDuration::MilliSeconds(500));
+
+        // Test top_queries_by_read_bytes_one_minute
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT IntervalEnd, Rank, ReadBytes
+            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`
+            ORDER BY IntervalEnd DESC, Rank DESC
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Collect all results
+        TVector<std::pair<TInstant, ui32>> intervalEndRank;
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto intervalEnd = parser.ColumnParser("IntervalEnd").GetOptionalTimestamp().value();
+            auto rank = parser.ColumnParser("Rank").GetOptionalUint32().value();
+            intervalEndRank.push_back({intervalEnd, rank});
+        }
+
+        // Verify we got some results (may be empty if no stats collected yet)
+        if (intervalEndRank.size() > 0) {
+            // Verify results are in descending order by IntervalEnd, then Rank
+            for (size_t i = 1; i < intervalEndRank.size(); ++i) {
+                const auto& prev = intervalEndRank[i - 1];
+                const auto& curr = intervalEndRank[i];
+
+                auto prevKey = std::tie(prev.first, prev.second);
+                auto currKey = std::tie(curr.first, curr.second);
+
+                UNIT_ASSERT_C(prevKey >= currKey,
+                    TStringBuilder() << "Results not in descending order: "
+                    << "intervalEndRank[" << (i - 1) << "] = (" << prev.first.ToString() << ", " << prev.second << ")"
+                    << " < intervalEndRank[" << i << "] = (" << curr.first.ToString() << ", " << curr.second << ")"
+                    << ". ORDER BY DESC is being ignored by sys view actors.");
+            }
+        }
+    }
+
     Y_UNIT_TEST(QueryStatsSimple) {
         auto checkTable = [&] (const TStringBuf tableName) {
             TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);

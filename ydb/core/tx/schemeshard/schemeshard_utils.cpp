@@ -421,8 +421,8 @@ auto CalcFulltextDictImplTableDescImpl(
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::FreqColumn);
-        col->SetType("Uint32");
-        col->SetTypeId(Ydb::Type::UINT32);
+        col->SetType("Uint64");
+        col->SetTypeId(Ydb::Type::UINT64);
         col->SetNotNull(true);
     }
 

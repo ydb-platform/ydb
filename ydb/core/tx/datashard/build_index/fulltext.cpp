@@ -24,6 +24,29 @@ namespace NKikimr::NDataShard {
 using namespace NTableIndex::NFulltext;
 using namespace NKikimr::NFulltext;
 
+/*
+ * TBuildFulltextIndexScan scans the source document table and calculates the token posting table.
+ *
+ * This scan takes the main table and writes output to indexImplTable.
+ *
+ * Source columns: <PK columns>, <text column>, <data columns>
+ * Destination columns with FLAT index layout: __ydb_token, <PK columns>, __ydb_freq
+ * Destination columns with FLAT_RELEVANCE index layout: __ydb_token, <PK columns>, <data columns>
+ *
+ * Request:
+ * - The client sends TEvBuildFulltextIndexRequest with:
+ *   - Name of the target table
+ *   - Fulltext index settings
+ *   - Data columns
+ *
+ * Execution Flow:
+ * - TBuildFulltextIndexScan scans the whole input shard
+ * - Extracts tokens from the text column using tokenizers set in the index settings
+ * - When the index layout is FLAT_RELEVANCE it also calculates __ydb_freq for each token
+ *   as the number of its occurrences in the document
+ * - Tokens are inserted into the index table with their __ydb_freqs if required
+ */
+
 class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IActorExceptionHandler, public NTable::IScan {
     IDriver* Driver = nullptr;
 

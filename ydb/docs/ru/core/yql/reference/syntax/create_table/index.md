@@ -294,6 +294,25 @@ CREATE TABLE <table_name> (
 
 {% endif %}
 
+### Создание таблицы с разными опциями колонки
+
+```yql
+CREATE TABLE tbl (
+    k Uint64,
+    v Bool (DEFAULT false, NOT NULL),
+    PRIMARY KEY (k)
+);
+```
+
+```yql
+CREATE TABLE tbl (
+    k Uint64,
+    v Bool NOT NULL DEFAULT false,
+    PRIMARY KEY (k)
+);
+```
+
+
 {% if backend_name == "YDB" and oss == true %}
 
 При создании строковых таблиц возможно задать:

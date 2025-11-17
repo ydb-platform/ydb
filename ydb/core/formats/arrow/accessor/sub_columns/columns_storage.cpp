@@ -71,6 +71,10 @@ void TColumnsData::TIterator::InitArrays() {
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
+            AFL_VERIFY(localIndex < CurrentArrayData->length())
+                ("localIndex", localIndex)
+                ("CurrentArrayData->length()", CurrentArrayData->length())
+                ("CurrentArrayData", CurrentArrayData->ToString());
             if (CurrentArrayData->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();

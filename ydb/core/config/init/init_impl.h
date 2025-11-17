@@ -478,6 +478,7 @@ struct TCommonAppOptions {
                 auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
                 if (xdsBootstrapConfig->GetNode().GetId().empty()) {
                     xdsBootstrapConfig->MutableNode()->SetId(env.FQDNHostName());
+                    ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
                 }
                 if (xdsBootstrapConfig->GetNode().GetLocality().GetZone().empty()) {
                     TString dataCenter;
@@ -496,6 +497,7 @@ struct TCommonAppOptions {
                         }
                     }
                     xdsBootstrapConfig->MutableNode()->MutableLocality()->SetZone(dataCenter);
+                    ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
                 }
             }
         }

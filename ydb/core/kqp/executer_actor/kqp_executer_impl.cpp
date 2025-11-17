@@ -14,6 +14,11 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
     YQL_ENSURE(TxResults.empty());
     TxResults.reserve(TxResults.size() + tx->ResultsSize());
 
+    // Create TxResults for ALL results (including DISCARD) using physical index
+    // DISCARD results will have empty data (no channels created for them)
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
+        "[DISCARD_INDEX] InitTxResult: total results count = " << tx->ResultsSize());
+    
     for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
         const auto& result = tx->GetResults(i);
         const auto& resultMeta = tx->GetTxResultsMeta()[i];
@@ -23,9 +28,17 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
             queryResultIndex = result.GetQueryResultIndex();
         }
 
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
+            "[DISCARD_INDEX] InitTxResult[" << i << "]: "
+            << "QueryResultIndex=" << (queryResultIndex.Defined() ? std::to_string(*queryResultIndex) : "NONE/DISCARD")
+            << ", IsStream=" << result.GetIsStream());
+
         TxResults.emplace_back(result.GetIsStream(), resultMeta.MkqlItemType, &resultMeta.ColumnOrder, &resultMeta.ColumnHints,
             queryResultIndex);
     }
+    
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
+        "[DISCARD_INDEX] InitTxResult: TxResults.size() = " << TxResults.size());
 }
 
 void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch&& rows) {

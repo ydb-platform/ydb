@@ -2480,7 +2480,17 @@ public:
         if (QueryState->PreparedQuery) {
             auto& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
             size_t trailingResultsCount = 0;
+            
+            Cerr << "[DISCARD_INDEX] FormResponse: ResultBindingsSize=" << phyQuery.ResultBindingsSize() << Endl;
+            
+            // ResultBindings now contains only non-DISCARD results
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
+                auto& resultBinding = phyQuery.GetResultBindings(i);
+                auto txIdx = resultBinding.GetTxResultBinding().GetTxIndex();
+                auto resIdx = resultBinding.GetTxResultBinding().GetResultIndex();
+                
+                Cerr << "[DISCARD_INDEX] FormResponse[" << i << "]: "
+                    << "txIndex=" << txIdx << ", resultIndex=" << resIdx << Endl;
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(

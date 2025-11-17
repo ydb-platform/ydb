@@ -304,19 +304,27 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
     }
 }
 
-void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx) {
+void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx, ui64 totalTxCount) {
+    // Determine if transaction has any results returned to user (with QueryResultIndex)
+    bool hasAnyQueryResultIndex = false;
     for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
+        if (tx->GetResults(i).HasQueryResultIndex()) {
+            hasAnyQueryResultIndex = true;
+            break;
+        }
+    }
+    
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
+        "[DISCARD_INDEX] BuildKqpTaskGraphResultChannels: txIdx=" << txIdx << "/" << totalTxCount 
+        << ", hasAnyQueryResultIndex=" << (hasAnyQueryResultIndex ? "YES" : "NO")
+        << ", tx->ResultsSize()=" << tx->ResultsSize());
+    
+    for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "tx->ResultsSize() = " << tx->ResultsSize());
         const auto& result = tx->GetResults(i);
         const auto& connection = result.GetConnection();
         const auto& inputStageInfo = GetStageInfo(TStageId(txIdx, connection.GetStageIndex()));
         const auto& outputIdx = connection.GetOutputIndex();
-
-        // Mark DISCARD results (those without QueryResultIndex)
-        if (!result.HasQueryResultIndex()) {
-            GetMeta().DiscardResultIndices.insert(i);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
-                "Mark result " << i << " as DISCARD (no QueryResultIndex)");
-        }
 
         if (inputStageInfo.Tasks.size() < 1) {
             // it's empty result from a single partition stage
@@ -325,17 +333,40 @@ void TKqpTasksGraph::BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TCon
 
         YQL_ENSURE(inputStageInfo.Tasks.size() == 1, "actual count: " << inputStageInfo.Tasks.size());
         auto originTaskId = inputStageInfo.Tasks[0];
+        auto& originTask = GetTask(originTaskId);
+        auto& taskOutput = originTask.Outputs[outputIdx];
+
+        // Skip creating channel for DISCARD results:
+        // - Result has no QueryResultIndex (it's DISCARD or intermediate), AND
+        // - Either: some other result in this tx has QueryResultIndex (final tx with mixed results)
+        //   OR: this is single-result transaction (final tx with single DISCARD)
+        //
+        // Create channel for:
+        // - Results with QueryResultIndex (returned to user)
+        // - Intermediate transaction results (all results have no QueryResultIndex, multi-result tx)
+        //   These are passed to next transactions via TxResultBinding
+        bool shouldSkipChannel = !result.HasQueryResultIndex() && 
+                                 (hasAnyQueryResultIndex || tx->ResultsSize() == 1);
+        
+        if (shouldSkipChannel) {
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER,
+                "[DISCARD_INDEX] BuildResultChannels: SKIP physical_index=" << i
+                << " (DISCARD result), setting output type to Effects");
+            taskOutput.Type = TTaskOutputType::Effects;
+            continue;
+        }
 
         auto& channel = AddChannel();
         channel.SrcTask = originTaskId;
         channel.SrcOutputIndex = outputIdx;
         channel.DstTask = 0;
         channel.DstInputIndex = i;
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, 
+            "[DISCARD_INDEX] BuildResultChannels: CREATE channel for physical_index=" << i 
+            << ", DstInputIndex=" << i 
+            << ", QueryResultIndex=" << result.GetQueryResultIndex());
         channel.InMemory = true;
 
-        auto& originTask = GetTask(originTaskId);
-
-        auto& taskOutput = originTask.Outputs[outputIdx];
         taskOutput.Type = TTaskOutputType::Map;
         taskOutput.Channels.push_back(channel.Id);
 
@@ -1126,14 +1157,7 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
         YQL_ENSURE(it != resultChannelProxies.end());
         ActorIdToProto(it->second, channelDesc.MutableDstEndpoint()->MutableActorId());
     } else {
-        // Check if this is a DISCARD result channel
-        const bool isDiscardResult = GetMeta().DiscardResultIndices.contains(channel.DstInputIndex);
-        
-        if (!isDiscardResult) {
-            // For non-stream execution, collect results in executer and forward with response.
-            ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
-        }
-        // For DISCARD results, don't set DstEndpoint - this prevents ChannelData from being sent
+        ActorIdToProto(srcTask.Meta.ExecuterId, channelDesc.MutableDstEndpoint()->MutableActorId());
     }
 
     channelDesc.SetIsPersistent(false);
@@ -3133,7 +3157,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         GetMeta().UseFastChannels = tx.Body->EnableFastChannels();
 
         // Not task-related
-        BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
+        BuildKqpTaskGraphResultChannels(tx.Body, txIdx, transactions.size());
     }
 
     return sourceScanPartitionsCount;

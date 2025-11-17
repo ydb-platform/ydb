@@ -753,6 +753,8 @@ public:
                     auto result = kiResult.Cast<TKiResult>();
                     bool discard = result.Discard().Value() == "true";
                     resultDiscardFlags.push_back(discard);
+                    Cerr << "[DISCARD_COMPILER] resultDiscardFlags[" << (resultDiscardFlags.size()-1) 
+                        << "] = " << (discard ? "DISCARD" : "NORMAL") << Endl;
                 }
             }
 
@@ -768,28 +770,42 @@ public:
             }
         }
 
+        Cerr << "[DISCARD_COMPILER] === After collecting resultDiscardFlags ===" << Endl;
+        Cerr << "[DISCARD_COMPILER] Total resultDiscardFlags: " << resultDiscardFlags.size() << Endl;
+        Cerr << "[DISCARD_COMPILER] query.Transactions().Size(): " << query.Transactions().Size() << Endl;
+
         for (const auto& tx : query.Transactions()) {
             CompileTransaction(tx, *queryProto.AddTransactions(), ctx);
         }
 
-        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
-            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
-                NYql::TIssue rootIssue("Invalid override planner settings");
-                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-                for (auto issue : issues) {
-                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
+        Cerr << "[DISCARD_COMPILER] === After CompileTransaction ===" << Endl;
+        Cerr << "[DISCARD_COMPILER] queryProto.TransactionsSize(): " << queryProto.TransactionsSize() << Endl;
+        for (ui32 txIdx = 0; txIdx < queryProto.TransactionsSize(); ++txIdx) {
+            auto& tx = queryProto.GetTransactions(txIdx);
+            Cerr << "[DISCARD_COMPILER] tx[" << txIdx << "].ResultsSize() = " << tx.ResultsSize() << Endl;
+            for (ui32 resIdx = 0; resIdx < tx.ResultsSize(); ++resIdx) {
+                auto& res = tx.GetResults(resIdx);
+                Cerr << "[DISCARD_COMPILER]   tx[" << txIdx << "].result[" << resIdx 
+                    << "].HasQueryResultIndex() = " << (res.HasQueryResultIndex() ? "YES" : "NO");
+                if (res.HasQueryResultIndex()) {
+                    Cerr << ", QueryResultIndex = " << res.GetQueryResultIndex();
                 }
-                ctx.AddError(rootIssue);
-                return false;
+                Cerr << Endl;
             }
         }
 
+        // Set QueryResultIndex for non-DISCARD results BEFORE validating ParamBindings
         ui32 resultIdx = 0; // to skip discard results
 
         // For backward compatibility: ignore discard flag for Data and Scan queries
         bool ignoreDiscard = (querySettings.Type == EPhysicalQueryType::Data ||
                               querySettings.Type == EPhysicalQueryType::Scan);
 
+        Cerr << "[DISCARD_COMPILER] === Processing query.Results() ===" << Endl;
+        Cerr << "[DISCARD_COMPILER] query.Results().Size() = " << query.Results().Size() 
+            << ", resultDiscardFlags.size() = " << resultDiscardFlags.size() 
+            << ", ignoreDiscard=" << (ignoreDiscard ? "YES" : "NO") << Endl;
+        
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -798,22 +814,42 @@ public:
             auto txIndex = FromString<ui32>(binding.TxIndex().Value());
             auto txResultIndex = FromString<ui32>(binding.ResultIndex());
 
+            Cerr << "[DISCARD_COMPILER] --- query.Results()[" << i << "] ---" << Endl;
+            Cerr << "[DISCARD_COMPILER]   Binding: txIndex=" << txIndex 
+                << ", txResultIndex=" << txResultIndex << Endl;
+
             YQL_ENSURE(txIndex < queryProto.TransactionsSize());
             YQL_ENSURE(txResultIndex < queryProto.GetTransactions(txIndex).ResultsSize());
             auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
             YQL_ENSURE(txResult.GetIsStream());
 
+            bool isDiscard = !ignoreDiscard && (i < resultDiscardFlags.size() && resultDiscardFlags[i]);
+            
+            Cerr << "[DISCARD_COMPILER]   resultDiscardFlags[" << i << "] = " 
+                << (i < resultDiscardFlags.size() ? (resultDiscardFlags[i] ? "DISCARD" : "NORMAL") : "OUT_OF_BOUNDS") << Endl;
+            Cerr << "[DISCARD_COMPILER]   Calculated isDiscard = " << (isDiscard ? "YES" : "NO") << Endl;
+            Cerr << "[DISCARD_COMPILER]   tx[" << txIndex << "].result[" << txResultIndex 
+                << "] BEFORE: HasQueryResultIndex=" << (txResult.HasQueryResultIndex() ? "YES" : "NO") << Endl;
+            
+            // Only create ResultBinding for non-DISCARD results
+            if (isDiscard) {
+                Cerr << "[DISCARD_COMPILER]   SKIP: This is a DISCARD result, not setting QueryResultIndex" << Endl;
+                continue;
+            }
+            
+            Cerr << "[DISCARD_COMPILER]   Setting QueryResultIndex=" << resultIdx << " on tx[" 
+                << txIndex << "].result[" << txResultIndex << "]" << Endl;
+            txResult.SetQueryResultIndex(resultIdx);
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
-            txBindingProto.SetResultIndex(txResultIndex);
-
-            bool isDiscard = !ignoreDiscard && (i < resultDiscardFlags.size() && resultDiscardFlags[i]); // is it not always true?: i < resultDiscardFlags.size()
-            if (!isDiscard) {
-                txResult.SetQueryResultIndex(resultIdx);
-                resultIdx++;
-            }
+            txBindingProto.SetResultIndex(resultIdx);  // Use QueryResultIndex, not txResultIndex!
+            
+            Cerr << "[DISCARD_COMPILER]   Created ResultBinding: TxIndex=" << txIndex 
+                << ", ResultIndex=" << resultIdx << Endl;
+            
+            resultIdx++;
 
             auto type = binding.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             YQL_ENSURE(type);
@@ -848,6 +884,23 @@ public:
                 auto& columnMeta = resultMetaColumns->at(bindingColumnId);
                 columnMeta.Setname(it != columnOrder.end() ? order.at(it->second).LogicalName : column.GetName());
                 ConvertMiniKQLTypeToYdbType(column.GetType(), *columnMeta.mutable_type());
+            }
+        }
+
+        // Note: We don't validate ParamBindings here because they can reference intermediate
+        // results from other transactions that are not in query.Results() and don't have
+        // QueryResultIndex. The DISCARD concept only applies to results returned to the user
+        // (i.e., those in query.Results()), not to intermediate results used between transactions.
+
+        if (const auto overridePlanner = Config->OverridePlanner.Get()) {
+            if (const auto& issues = ApplyOverridePlannerSettings(*overridePlanner, queryProto)) {
+                NYql::TIssue rootIssue("Invalid override planner settings");
+                rootIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+                for (auto issue : issues) {
+                    rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)));
+                }
+                ctx.AddError(rootIssue);
+                return false;
             }
         }
 
@@ -1132,6 +1185,7 @@ private:
                 auto txIndex = FromString<ui32>(resultBinding.TxIndex());
                 auto resultIndex = FromString<ui32>(resultBinding.ResultIndex());
 
+                // ResultIndex is physical index, TxResults array is also indexed by physical index
                 auto& txResultProto = *bindingProto.MutableTxResultBinding();
                 txResultProto.SetTxIndex(txIndex);
                 txResultProto.SetResultIndex(resultIndex);

@@ -19,8 +19,10 @@ namespace NKikimr::NKqp {
 // The request from TEvStartKqpTasksRequest
 struct TNodeRequest : TMoveOnly {
     using TPtr = std::shared_ptr<TNodeRequest>;
-    using TExpirationInfo = std::pair<TInstant, ui64 /* txId */>;
-    using TTaskInfo = std::pair<ui64 /* taskId */, TActorId>;
+    using TTaskInfo = std::pair<ui64 /* taskId */, TActorId /* computeActorId */>;
+    using TExpirationInfo = std::tuple<TInstant, ui64 /* txId */, TActorId /* executerId */>;
+    // NOTE: in case there are multiple executers for a single txId - separate them by executerId.
+    // TODO: is it even possible to have multiple executers to send the same TxId?
 
     explicit TNodeRequest(ui64 txId, NScheduler::NHdrf::NDynamic::TQueryPtr query, TActorId executerId, TInstant startTime)
         : TxId(txId)
@@ -31,7 +33,7 @@ struct TNodeRequest : TMoveOnly {
     }
 
     TExpirationInfo GetExpirationInfo() const {
-        return std::make_tuple(Deadline, TxId);
+        return std::make_tuple(Deadline, TxId, ExecuterId);
     }
 
     const ui64 TxId = 0;
@@ -52,7 +54,7 @@ public:
     bool HasRequest(ui64 txId) const;
     std::vector<ui64 /* txId */> ClearExpiredRequests();
 
-    bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId);
+    bool OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId);
     void OnTaskFinished(ui64 txId, ui64 taskId, bool success);
 
     // Returns only started tasks
@@ -73,9 +75,9 @@ private:
     // Split all requests into buckets - for better concurrent access.
     struct TBucket {
         TRWMutex Mutex;
-        THashMap<ui64 /* txId */, TNodeRequest> Requests;         // protected by Mutex
         std::set<TNodeRequest::TExpirationInfo> ExpiringRequests; // protected by Mutex
-        // TODO: is it even possible to have multiple executers send the same TxId?
+        THashMultiMap<ui64 /* txId */, TNodeRequest> Requests;    // protected by Mutex
+        // TODO: is it even possible to have multiple executers to send the same TxId?
     };
     std::array<TBucket, BucketsCount> Buckets;
 };

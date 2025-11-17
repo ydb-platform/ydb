@@ -7,11 +7,10 @@ void TNodeState::AddRequest(TNodeRequest&& request) {
 
     TWriteGuard guard(bucket.Mutex);
     auto txId = request.TxId;
-    auto [it, requestInserted] = bucket.Requests.emplace(txId, std::move(request));
+    auto it = bucket.Requests.emplace(txId, std::move(request));
 
-    YQL_ENSURE(requestInserted);
     if (it->second.Deadline) {
-        bucket.ExpiringRequests.emplace(std::make_pair(it->second.Deadline, txId));
+        bucket.ExpiringRequests.emplace(std::make_tuple(it->second.Deadline, txId, it->second.ExecuterId));
     }
 }
 
@@ -40,52 +39,57 @@ std::vector<ui64> TNodeState::ClearExpiredRequests() {
     return requests;
 }
 
-bool TNodeState::OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId) {
+bool TNodeState::OnTaskStarted(ui64 txId, ui64 taskId, TActorId computeActorId, TActorId executerId) {
     auto& bucket = GetBucketByTxId(txId);
 
     TWriteGuard guard(bucket.Mutex);
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
 
-    if (auto requestIt = bucket.Requests.find(txId); requestIt != bucket.Requests.end()) {
-        auto& request = requestIt->second;
-        if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
-            taskIt->second = computeActorId;
-        } else {
-            // If request has more tasks, then this one may already be finished and not exist.
-            return false;
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        if (auto& request = requestIt->second; request.ExecuterId == executerId) {
+            if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
+                taskIt->second = computeActorId;
+                return true;
+            } else {
+                // If request has more tasks, then this one may already be finished and not exist.
+                return false;
+            }
         }
-    } else {
-        // If request has a single task, then it may already be finished - and request may not exist.
-        return false;
     }
 
-    return true;
+    // If request(s) had a single task, then the task may already be finished - and request(s) may not exist.
+    return false;
 }
 
 void TNodeState::OnTaskFinished(ui64 txId, ui64 taskId, bool success) {
     auto& bucket = GetBucketByTxId(txId);
 
     TWriteGuard guard(bucket.Mutex);
-    auto requestIt = bucket.Requests.find(txId);
-    YQL_ENSURE(requestIt != bucket.Requests.end());
-    auto& request = requestIt->second;
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    YQL_ENSURE(requestsBegin != requestsEnd);
 
-    auto taskIt = request.Tasks.find(taskId);
-    if (taskIt != request.Tasks.end()) {
-        request.Tasks.erase(taskIt);
-        request.ExecutionCancelled |= !success;
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
+        auto& request = requestIt->second;
 
-        if (request.Tasks.empty()) {
-            bucket.ExpiringRequests.erase(request.GetExpirationInfo());
+        if (auto taskIt = request.Tasks.find(taskId); taskIt != request.Tasks.end()) {
+            request.Tasks.erase(taskIt);
+            request.ExecutionCancelled |= !success;
 
-            if (requestIt->second.Query) {
-                auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-                removeQueryEvent->QueryId = txId;
-                Y_ENSURE(TlsActivationContext);
-                auto* actorSystem = TlsActivationContext->ActorSystem();
-                actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
+            if (request.Tasks.empty()) {
+                bucket.ExpiringRequests.erase(request.GetExpirationInfo());
+
+                if (requestIt->second.Query) {
+                    auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+                    removeQueryEvent->QueryId = txId;
+                    Y_ENSURE(TlsActivationContext);
+                    auto* actorSystem = TlsActivationContext->ActorSystem();
+                    actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
+                }
+
+                bucket.Requests.erase(requestIt);
             }
 
-            bucket.Requests.erase(requestIt);
+            break;
         }
     }
 }
@@ -96,7 +100,8 @@ std::vector<TNodeRequest::TTaskInfo> TNodeState::GetTasksByTxId(ui64 txId) const
     const auto& bucket = GetBucketByTxId(txId);
     TReadGuard guard(bucket.Mutex);
 
-    if (auto requestIt = bucket.Requests.find(txId); requestIt != bucket.Requests.end()) {
+    const auto [requestsBegin, requestsEnd] = bucket.Requests.equal_range(txId);
+    for (auto requestIt = requestsBegin; requestIt != requestsEnd; ++requestIt) {
         for(const auto& [taskId, actorId] : requestIt->second.Tasks) {
             if (actorId) {
                 tasks.push_back({taskId, *actorId});

@@ -36,11 +36,11 @@ bool TSchedulableTask::TryIncreaseUsage() {
     ui64 fairShare = 0;
     NHdrf::NDynamic::TTreeElement* poolOrQuery = nullptr;
 
-    if (const auto snapshot = Query->GetSnapshot()) { // TODO: got segfault here on ~shared_ptr - need to investigate.
+    if (const auto snapshot = Query->GetSnapshot()) {
         fairShare = snapshot->GetParent()->FairShare;
         poolOrQuery = Query->GetParent();
     } else {
-        // TODO: check directly for pool snapshot - even if there is no query snapshot yet.
+        // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
         // TODO: check if each query is allowed minimum fair-share?
         fairShare = 1;
         poolOrQuery = Query.get();

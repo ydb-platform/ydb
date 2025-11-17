@@ -296,7 +296,7 @@ private:
 
             startedTask->SetTaskId(taskId);
             ActorIdToProto(*actorId, startedTask->MutableActorId());
-            if (State_->OnTaskStarted(txId, taskId, *actorId)) {
+            if (State_->OnTaskStarted(txId, taskId, *actorId, executerId)) {
                 LOG_D("TxId: " << txId << ", executing task: " << taskId << " on compute actor: " << *actorId);
             } else {
                 LOG_D("TxId: " << txId << ", task finished in an instant: " << taskId << " on compute actor: " << *actorId);
@@ -367,12 +367,6 @@ private:
                 Send(computeActorId, abortEv.release());
             }
         }
-
-        // {
-        //     auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-        //     removeQueryEvent->QueryId = txId;
-        //     Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
-        // }
     }
 
     void HandleWork(TEvents::TEvWakeup::TPtr& ev) {

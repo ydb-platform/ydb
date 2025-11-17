@@ -214,8 +214,6 @@ public:
             tableKind = tableKindExtract(meta);
         }
 
-        // TODO: pass args.State to compute actor
-
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);

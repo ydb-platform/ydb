@@ -294,7 +294,7 @@ CREATE TABLE <table_name> (
 
 {% endif %}
 
-### Создание таблицы с разными опциями колонки
+### Создание таблицы с разными опциями колонки {#table-options-examples}
 
 ```yql
 CREATE TABLE tbl (

@@ -4,33 +4,24 @@
 
 {{ ydb-short-name }} considers usage of the following hardware resources for balancing nodes:
 
-- CPU
-- Memory
-- Network
-- [Count](*count)
+* CPU
+* Memory
+* Network
+* [Counter](*count)
 
 Autobalancing occurs in the following cases:
 
-- **Disbalance in hardware resource usage**
+*   **Imbalanced Hardware Resource Usage**
 
-    {{ ydb-short-name }} uses the **scatter** metric to evaluate the balance in hardware resource usage. This metric is calculated for each resource using the following formula:
+    {{ ydb-short-name }} uses the Scatter metric to evaluate the balance of hardware resource usage. For more details on the Scatter metric's calculation logic and balancing triggers, see the [{#T}](../../../contributor/hive.md#scatter) section.
 
-    $Scatter = \frac {MaxUsage - MinUsage} {MaxUsage},$
+* **Overloaded nodes (CPU and memory usage)**
 
-    where:
+    Hive initiates balancing in case of a significant load asymmetry (for example, > 90% on one node and < 70% on another). Learn more here: [{#T}](../../../contributor/hive.md#emergency).
 
-    - $MaxUsage$ is the maximum hardware resource usage among all of the nodes.
-    - $MinUsage$ is the minimum hardware resource usage among all of the nodes.
+* **Uneven distribution of database objects**
 
-    To distribute the load, {{ ydb-short-name }} considers the hardware resources available to each node. Under low loads, the scatter value may vary significantly across nodes; however, the minimum value for this formula is set to never fall below 30%.
-
-- **Overloaded nodes (CPU and memory usage)**
-
-    Hive starts the autobalancing procesure when the highest load on a node exceeds 90%, while the lowest load on a node is below 70%.
-
-- **Uneven distribution of database objects**
-
-    {{ ydb-short-name }} uses the **ObjectImbalance** metric to monitor the distribution of tablets utilizing the **[count](*count)** resource across {{ ydb-short-name }} nodes. When {{ ydb-short-name }} nodes restart, these tablets may not distribute evenly, prompting Hive to initiate the autobalancing procedure.
+    For tablets with no explicit resource consumption, Hive uses a fake **Counter** resource to ensure their even distribution. Balancing is triggered if this distribution becomes skewed. Learn more: [{#T}](../../../contributor/hive.md#imbalance).
 
 
 ## Diagnostics
@@ -83,4 +74,4 @@ Adjust Hive balancer settings:
     {% endnote %}
 
 
-[*count]: Count is a virtual resource for distributing tablets of the same type evenly between nodes.
+[*counter]: Counter -- a fake resource representing a count of tablets of a certain type on a node, used to ensure such tablets are distributed evenly across nodes.

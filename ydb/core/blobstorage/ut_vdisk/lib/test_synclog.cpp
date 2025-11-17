@@ -227,7 +227,8 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                 VDiskConfig->SyncLogMaxMemAmount,
                 VDiskConfig->MaxResponseSize,
                 Db->SyncLogFirstLsnToKeep,
-                false);
+                false,
+                TControlWrapper(0, 0, 1));
         TestCtx->SyncLogId = ctx.Register(CreateSyncLogActor(slCtx, Conf->GroupInfo, TestCtx->SelfVDiskId, std::move(repaired)));
         // Send Db birth lsn
         ui64 dbBirthLsn = 0;

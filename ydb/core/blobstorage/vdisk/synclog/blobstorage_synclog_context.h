@@ -53,6 +53,8 @@ public:
 
     const bool IsReadOnlyVDisk;
 
+    TControlWrapper EnablePhantomFlagStorage;
+
     TSyncLogCtx(TIntrusivePtr<TVDiskContext> vctx,
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
@@ -63,7 +65,8 @@ public:
             ui64 syncLogMaxMemAmount,
             ui32 maxResponseSize,
             std::shared_ptr<TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep,
-            bool isReadOnlyVDisk)
+            bool isReadOnlyVDisk,
+            const TControlWrapper& enablePhantomFlagStorage)
         : VCtx(std::move(vctx))
         , LsnMngr(std::move(lsnMngr))
         , PDiskCtx(std::move(pdiskCtx))
@@ -78,6 +81,7 @@ public:
         , CountersMonGroup(VCtx->VDiskCounters, "subsystem", "synclogcounters")
         , PhantomFlagStorageGroup(VCtx->VDiskCounters, "subsystem", "phantomflagstorage")
         , IsReadOnlyVDisk(isReadOnlyVDisk)
+        , EnablePhantomFlagStorage(enablePhantomFlagStorage)
     {}
 };
 

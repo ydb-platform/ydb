@@ -7,7 +7,7 @@
 * CPU
 * Memory
 * Network
-* [Counter](*count)
+* [Counter](*counter)
 
 Autobalancing occurs in the following cases:
 

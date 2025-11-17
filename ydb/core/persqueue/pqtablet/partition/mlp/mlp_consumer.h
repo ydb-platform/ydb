@@ -23,7 +23,7 @@ class TConsumerActor : public TBaseTabletActor<TConsumerActor>
 public:
     TConsumerActor(const TString& database, ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId,
         const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig::TConsumer& config,
-        std::optional<TDuration> retentionPeriod);
+        std::optional<TDuration> retentionPeriod, ui64 partitionEndOffset);
 
     void Bootstrap();
     void PassAway() override;
@@ -43,6 +43,8 @@ private:
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPConsumerUpdateConfig::TPtr&);
+    void HandleInit(TEvPQ::TEvEndOffsetChanged::TPtr&);
+    void Handle(TEvPQ::TEvEndOffsetChanged::TPtr&);
     void Handle(TEvPQ::TEvGetMLPConsumerStateRequest::TPtr&);
 
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
@@ -50,7 +52,6 @@ private:
 
     void HandleOnInit(TEvPQ::TEvProxyResponse::TPtr&);
     void Handle(TEvPQ::TEvProxyResponse::TPtr&);
-    void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
@@ -84,8 +85,8 @@ private:
     const TActorId PartitionActorId;
     NKikimrPQ::TPQTabletConfig::TConsumer Config;
     std::optional<TDuration> RetentionPeriod;
+    ui64 PartitionEndOffset;
 
-    bool HasDataInProgress = false;
     bool FetchInProgress = false;
     ui64 FetchCookie = 0;
     ui64 LastCommittedOffset = 0;

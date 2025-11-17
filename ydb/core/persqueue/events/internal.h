@@ -214,6 +214,7 @@ struct TEvPQ {
         EvGetMLPConsumerStateResponse,
         EvMLPConsumerUpdateConfig,
         EvMLPDLQMoverResponse,
+        EvEndOffsetChanged,
         EvEnd
     };
 
@@ -1609,6 +1610,15 @@ struct TEvPQ {
         // offset->seqNo
         std::vector<std::pair<ui64, ui64>> MovedMessages;
         TString ErrorDescription;
+    };
+
+    struct TEvEndOffsetChanged : TEventLocal<TEvEndOffsetChanged, EvEndOffsetChanged> {
+        TEvEndOffsetChanged(ui64 offset)
+            : Offset(offset)
+        {
+        }
+
+        ui64 Offset;
     };
 };
 

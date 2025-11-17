@@ -503,6 +503,9 @@ message TInterconnectConfig {
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
     optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
+    optional bool UseRdma = 52;
+    optional uint32 RdmaMaxWr = 53 [default = 4096];
+    optional bool RdmaChecksum = 54 [default = true];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1747,6 +1750,13 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 EnablePhantomFlagStorage = 38 [(ControlOptions) = {
+            Description: "Enable new FullSync protocol which allows to send PhantomFlags",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -2071,6 +2081,7 @@ message TAuditConfig {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
         optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
+        optional TUAClientConfig UAClientConfig = 4; // If not specified, the configuration is taken from common TLogConfig section
     }
 
     message TLogClassConfig {

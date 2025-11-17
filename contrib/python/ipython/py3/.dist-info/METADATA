@@ -1,6 +1,6 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: ipython
-Version: 8.32.0
+Version: 8.37.0
 Summary: IPython: Productive Interactive Computing
 Author: The IPython Development Team
 Author-email: ipython-dev@python.org
@@ -75,6 +75,7 @@ Requires-Dist: packaging; extra == "test"
 Provides-Extra: test-extra
 Requires-Dist: ipython[test]; extra == "test-extra"
 Requires-Dist: curio; extra == "test-extra"
+Requires-Dist: jupyter_ai; extra == "test-extra"
 Requires-Dist: matplotlib!=3.2.0; extra == "test-extra"
 Requires-Dist: nbformat; extra == "test-extra"
 Requires-Dist: numpy>=1.23; extra == "test-extra"
@@ -88,6 +89,7 @@ Requires-Dist: ipython[test,test_extra]; extra == "all"
 Dynamic: author
 Dynamic: author-email
 Dynamic: license
+Dynamic: license-file
 
 IPython provides a rich toolkit to help you make the most out of using Python
 interactively.  Its main components are:

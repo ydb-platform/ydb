@@ -4,6 +4,8 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 
+#include <optional>
+
 struct ibv_qp;
 struct ibv_cq;
 struct ibv_wc;
@@ -34,7 +36,7 @@ class IIbVerbsBuilder;
 
 // Wrapper for ibv Completion Queue
 // Hides logic to controll work request count
-// https://www.rdmamojo.com/2012/11/03/ibv_create_cq/ 
+// https://www.rdmamojo.com/2012/11/03/ibv_create_cq/
 class ICq {
     ICq() {};
     friend class TCqCommon;

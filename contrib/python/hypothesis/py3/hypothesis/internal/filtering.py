@@ -26,18 +26,16 @@ import ast
 import inspect
 import math
 import operator
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from decimal import Decimal
 from fractions import Fraction
 from functools import partial
-from typing import Any, Callable, NamedTuple, Optional, TypeVar
+from typing import Any, NamedTuple, TypeVar
 
 from hypothesis.internal.compat import ceil, floor
 from hypothesis.internal.floats import next_down, next_up
-from hypothesis.internal.reflection import (
-    extract_lambda_source,
-    get_pretty_function_description,
-)
+from hypothesis.internal.lambda_sources import lambda_description
+from hypothesis.internal.reflection import get_pretty_function_description
 
 Ex = TypeVar("Ex")
 Predicate = Callable[[Ex], bool]
@@ -62,7 +60,7 @@ class ConstructivePredicate(NamedTuple):
     """
 
     constraints: dict[str, Any]
-    predicate: Optional[Predicate]
+    predicate: Predicate | None
 
     @classmethod
     def unchanged(cls, predicate: Predicate) -> "ConstructivePredicate":
@@ -191,7 +189,7 @@ def numeric_bounds_from_ast(
         ops = tree.ops
         vals = tree.comparators
         comparisons = [(tree.left, ops[0], vals[0])]
-        for i, (op, val) in enumerate(zip(ops[1:], vals[1:]), start=1):
+        for i, (op, val) in enumerate(zip(ops[1:], vals[1:], strict=True), start=1):
             comparisons.append((vals[i - 1], op, val))
         bounds = []
         for comp in comparisons:
@@ -253,7 +251,7 @@ def get_numeric_predicate_bounds(predicate: Predicate) -> ConstructivePredicate:
     # and fall back to standard rejection sampling (a running theme).
     try:
         if predicate.__name__ == "<lambda>":
-            source = extract_lambda_source(predicate)
+            source = lambda_description(predicate)
         else:
             source = inspect.getsource(predicate)
         tree: ast.AST = ast.parse(source)

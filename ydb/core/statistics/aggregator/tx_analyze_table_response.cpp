@@ -40,7 +40,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
 
         analyzedShard->Status = TAnalyzedShard::EStatus::AnalyzeFinished;
 
-        bool completeResponse = std::any_of(operationTable->AnalyzedShards.begin(), operationTable->AnalyzedShards.end(), 
+        bool completeResponse = std::all_of(operationTable->AnalyzedShards.begin(), operationTable->AnalyzedShards.end(),
             [] (const TAnalyzedShard& analyzedShard) { return analyzedShard.Status == TAnalyzedShard::EStatus::AnalyzeFinished;});
 
         if (!completeResponse) {

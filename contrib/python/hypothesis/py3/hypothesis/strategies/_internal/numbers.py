@@ -11,7 +11,7 @@
 import math
 from decimal import Decimal
 from fractions import Fraction
-from typing import Literal, Optional, Union
+from typing import Literal, cast
 
 from hypothesis.control import reject
 from hypothesis.errors import InvalidArgument
@@ -45,11 +45,12 @@ from hypothesis.strategies._internal.strategies import (
 from hypothesis.strategies._internal.utils import cacheable, defines_strategy
 
 # See https://github.com/python/mypy/issues/3186 - numbers.Real is wrong!
-Real = Union[int, float, Fraction, Decimal]
+Real = int | float | Fraction | Decimal
 
 
 class IntegersStrategy(SearchStrategy[int]):
-    def __init__(self, start: Optional[int], end: Optional[int]) -> None:
+    def __init__(self, start: int | None, end: int | None) -> None:
+        super().__init__()
         assert isinstance(start, int) or start is None
         assert isinstance(end, int) or end is None
         assert start is None or end is None or start <= end
@@ -109,8 +110,8 @@ class IntegersStrategy(SearchStrategy[int]):
 @cacheable
 @defines_strategy(force_reusable_values=True)
 def integers(
-    min_value: Optional[int] = None,
-    max_value: Optional[int] = None,
+    min_value: int | None = None,
+    max_value: int | None = None,
 ) -> SearchStrategy[int]:
     """Returns a strategy which generates integers.
 
@@ -127,15 +128,15 @@ def integers(
     if min_value is not None:
         if min_value != int(min_value):
             raise InvalidArgument(
-                "min_value=%r of type %r cannot be exactly represented as an integer."
-                % (min_value, type(min_value))
+                f"min_value={min_value!r} of type {type(min_value)!r} "
+                "cannot be exactly represented as an integer."
             )
         min_value = int(min_value)
     if max_value is not None:
         if max_value != int(max_value):
             raise InvalidArgument(
-                "max_value=%r of type %r cannot be exactly represented as an integer."
-                % (max_value, type(max_value))
+                f"max_value={max_value!r} of type {type(max_value)!r} "
+                "cannot be exactly represented as an integer."
             )
         max_value = int(max_value)
 
@@ -247,12 +248,12 @@ class FloatStrategy(SearchStrategy[float]):
 @cacheable
 @defines_strategy(force_reusable_values=True)
 def floats(
-    min_value: Optional[Real] = None,
-    max_value: Optional[Real] = None,
+    min_value: Real | None = None,
+    max_value: Real | None = None,
     *,
-    allow_nan: Optional[bool] = None,
-    allow_infinity: Optional[bool] = None,
-    allow_subnormal: Optional[bool] = None,
+    allow_nan: bool | None = None,
+    allow_infinity: bool | None = None,
+    allow_subnormal: bool | None = None,
     width: Literal[16, 32, 64] = 64,
     exclude_min: bool = False,
     exclude_max: bool = False,
@@ -305,6 +306,10 @@ def floats(
             f"Got {width=}, but the only valid values "
             "are the integers 16, 32, and 64."
         )
+    # Literal[16] accepts both 16 and 16.0. Normalize to the int 16 here, mainly
+    # for mypyc. We want to support width=16.0 to make e.g. width=mywidth / 2 for
+    # mywidth=32 easy.
+    width = cast(Literal[16, 32, 64], int(width))
 
     check_valid_bound(min_value, "min_value")
     check_valid_bound(max_value, "max_value")
@@ -422,8 +427,8 @@ def floats(
         # This is a custom alternative to check_valid_interval, because we want
         # to include the bit-width and exclusion information in the message.
         msg = (
-            "There are no %s-bit floating-point values between min_value=%r "
-            "and max_value=%r" % (width, min_arg, max_arg)
+            f"There are no {width}-bit floating-point values between "
+            f"min_value={min_arg!r} and max_value={max_arg!r}"
         )
         if exclude_min or exclude_max:
             msg += f", {exclude_min=} and {exclude_max=}"

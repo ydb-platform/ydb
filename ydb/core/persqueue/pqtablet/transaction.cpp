@@ -413,6 +413,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     auto command = request.AddCmdWrite();
     command->SetKey(GetKey());
     command->SetValue(value);
+    command->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
 NKikimrPQ::TTransaction TDistributedTransaction::Serialize() {

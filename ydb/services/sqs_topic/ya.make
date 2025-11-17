@@ -1,11 +1,12 @@
 LIBRARY()
 
 SRCS(
-    sqs_topic_proxy.cpp
-    utils.cpp
-    send_message.cpp
-    statuses.cpp
+    actor.cpp
     error.cpp
+    send_message.cpp
+    sqs_topic_proxy.cpp
+    statuses.cpp
+    utils.cpp
 )
 
 PEERDIR(

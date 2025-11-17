@@ -1,4 +1,5 @@
 #include "send_message.h"
+#include "actor.h"
 #include "utils.h"
 #include "request.h"
 #include "events.h"
@@ -18,7 +19,6 @@
 #include <ydb/core/protos/sqs.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <ydb/library/http_proxy/error/error.h>
 
@@ -307,27 +307,10 @@ namespace NKikimr::NSqsTopic::V1 {
     };
 
     template <class TDerived, class TServiceRequest>
-    class TSendMessageActorBase: public TQueueUrlHolder, public TPQGrpcSchemaBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
+    class TSendMessageActorBase: public TQueueUrlHolder, public TGrpcActorBase<TSendMessageActorBase<TDerived, TServiceRequest>, TServiceRequest> {
     protected:
-        using TBase = TPQGrpcSchemaBase<TSendMessageActorBase, TServiceRequest>;
+        using TBase = TGrpcActorBase<TSendMessageActorBase, TServiceRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
-
-        void ReplyWithError(Ydb::StatusIds::StatusCode status, size_t additionalStatus, const TString& messageText) = delete;
-
-        void ReplyWithError(const NSQS::TError& error) {
-            if (TBase::IsDead) {
-                return;
-            }
-
-            NYql::TIssue issue(error.GetMessage());
-            issue.SetCode(
-                NSQS::TErrorClass::GetId(error.GetErrorCode()),
-                NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-            this->Request_->RaiseIssue(issue);
-            this->Request_->ReplyWithYdbStatus(Ydb::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED);
-            this->Die(this->ActorContext());
-            TBase::IsDead = true;
-        }
 
     public:
         TSendMessageActorBase(NKikimr::NGRpcService::IRequestOpCtx* request)

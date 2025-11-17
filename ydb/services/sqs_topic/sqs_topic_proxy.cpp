@@ -1,7 +1,9 @@
 #include "sqs_topic_proxy.h"
+#include "actor.h"
+#include "error.h"
+#include "request.h"
 #include "send_message.h"
 #include "utils.h"
-#include "request.h"
 
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
@@ -13,7 +15,6 @@
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -30,8 +31,8 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 
-    class TGetQueueUrlActor: public TPQGrpcSchemaBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest> {
-        using TBase = TPQGrpcSchemaBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>;
+    class TGetQueueUrlActor: public TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest> {
+        using TBase = TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
 
     public:
@@ -57,12 +58,10 @@ namespace NKikimr::NSqsTopic::V1 {
     void TGetQueueUrlActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
         if (GetRequest<TProtoRequest>(Request_.get()).queue_name().empty()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::MISSING_PARAMETER),
-                                  "No QueueName parameter.");
+            return ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueName parameter."));
         }
         if (!Request_->GetDatabaseName()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
-                                  "Request without dabase is forbiden");
+            return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbiden"));
         }
 
         SendDescribeProposeRequest(ctx);

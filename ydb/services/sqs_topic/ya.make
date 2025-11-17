@@ -25,6 +25,7 @@ PEERDIR(
     ydb/services/sqs_topic/queue_url
     ydb/services/ydb
     ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/mlp
     ydb/core/ymq/attributes
     ydb/core/ymq/base
     ydb/core/ymq/error

@@ -1,5 +1,4 @@
 #include "send_message.h"
-#include "attributes.h"
 #include "utils.h"
 #include "request.h"
 #include "events.h"
@@ -33,6 +32,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
@@ -70,22 +70,22 @@ namespace NKikimr::NSqsTopic::V1 {
         {
             Y_ASSERT(!item.MessageId.empty());
             auto* m = proto.AddMessageMeta();
-            m->set_key(NMessageConsts::MessageId);
+            m->set_key(NPQ::NMLP::NMessageConsts::MessageId);
             m->set_value(item.MessageId);
         }
         if (!item.MessageDeduplicationId.Empty()) {
             auto* m = proto.AddMessageMeta();
-            m->set_key(NMessageConsts::MessageDeduplicationId);
+            m->set_key(NPQ::NMLP::NMessageConsts::MessageDeduplicationId);
             m->set_value(*item.MessageDeduplicationId);
         }
         if (!item.SerializedMessageAttributes.Empty()) {
             auto* m = proto.AddMessageMeta();
-            m->set_key(NMessageConsts::MessageAttributes);
+            m->set_key(NPQ::NMLP::NMessageConsts::MessageAttributes);
             m->set_value(*item.SerializedMessageAttributes);
         }
         if (item.DelaySeconds > 0) {
             auto* m = proto.AddMessageMeta();
-            m->set_key(NMessageConsts::DelaySeconds);
+            m->set_key(NPQ::NMLP::NMessageConsts::DelaySeconds);
             m->set_value(ToString(item.DelaySeconds));
         }
 

@@ -2556,14 +2556,6 @@ public:
         TVector<ui64> finishedCookies;
         for (auto& [cookie, writeTask] : WriteTasks) {
             writeTask.Process();
-            if (writeTask.IsError()) {
-                ReplyError(
-                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << writeTask.GetError(),
-                    {});
-                return false;
-            }
             if (writeTask.IsFinished()) {
                 finishedCookies.push_back(cookie);
             }

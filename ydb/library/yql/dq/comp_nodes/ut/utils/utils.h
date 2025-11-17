@@ -41,7 +41,6 @@ TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list
 
 TVector<NUdf::TUnboxedValue> ConvertWideStreamToTupleVector(IComputationGraph& wideStream, size_t tupleSize);
 
-
 struct TypeAndValue {
     TType* Type;
     NUdf::TUnboxedValue Value;

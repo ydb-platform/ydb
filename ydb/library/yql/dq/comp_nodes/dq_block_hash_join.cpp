@@ -177,7 +177,6 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_, std::move(layouts), Meta_.get());
     }
 
-
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;

@@ -4,10 +4,9 @@
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-namespace NKikimr::NMiniKQL{
+namespace NKikimr::NMiniKQL {
 
-template<typename T>
-using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
+template <typename T> using TMKQLDeque = std::deque<T, TMKQLAllocator<T>>;
 
 using TFuturePage = NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>;
 
@@ -26,7 +25,7 @@ template <typename T> struct TSides {
     }
 };
 
-template<typename Container> std::optional<typename Container::value_type> GetFrontOrNull(Container& cont) {
+template <typename Container> std::optional<typename Container::value_type> GetFrontOrNull(Container& cont) {
     if (cont.empty()) {
         return std::nullopt;
     } else {
@@ -36,7 +35,7 @@ template<typename Container> std::optional<typename Container::value_type> GetFr
     }
 }
 
-template<typename Container> std::optional<typename Container::value_type> GetBackOrNull(Container& cont) {
+template <typename Container> std::optional<typename Container::value_type> GetBackOrNull(Container& cont) {
     if (cont.empty()) {
         return std::nullopt;
     } else {
@@ -47,9 +46,6 @@ template<typename Container> std::optional<typename Container::value_type> GetBa
         return ret;
     }
 }
-
-
-
 
 /*
   usage:
@@ -68,33 +64,35 @@ void f(TSides<int> sizes, TSides<bool> required) {
         use(sizes.SelectSide(side) + (required.SelectSide(side) ? 0 : transform(sizes.SelectSide(side))));
     });
 }
-  
+
 */
 void ForEachSide(std::invocable<ESide> auto fn) {
     fn(ESide::Build);
     fn(ESide::Probe);
 }
 
-
 struct TBucket {
     bool IsSpilled() const {
         return SpilledPages.has_value();
     }
+
     bool Empty() const {
         bool inMemoryPagesEmpty = true;
-        for(auto& page: InMemoryPages) {
+        for (auto& page : InMemoryPages) {
             inMemoryPagesEmpty &= page.Empty();
         }
         return inMemoryPagesEmpty && (!SpilledPages.has_value() || SpilledPages->empty()) && BuildingPage.Empty();
     }
+
     TPackResult BuildingPage;
     std::optional<TMKQLVector<ISpiller::TKey>> SpilledPages;
     TMKQLVector<TPackResult> InMemoryPages;
+
     bool DetatchBuildingPage() {
         return DetatchBuildingPageIfLimitReached<0>();
     }
-    template<int SizeLimit>
-    bool DetatchBuildingPageIfLimitReached() {
+
+    template <int SizeLimit> bool DetatchBuildingPageIfLimitReached() {
         if (BuildingPage.AllocatedBytes() > SizeLimit) {
             InMemoryPages.push_back(std::move(BuildingPage));
             InMemoryPages.back().PackedTuples.shrink_to_fit();
@@ -105,23 +103,23 @@ struct TBucket {
         return false;
     }
 };
-using TBuckets = TMKQLVector<TBucket>;   
+
+using TBuckets = TMKQLVector<TBucket>;
 using TPairOfBuckets = TMKQLVector<TSides<TBucket>>;
 bool IsBucketSpilled(const TSides<TBucket>& bucket);
 
-enum class PageSpillingAlready{
+enum class PageSpillingAlready {
     InMemoryYet,
     SpillingInProcess,
 
 };
 
-template<typename Value>
-struct TValueAndLocation{
+template <typename Value> struct TValueAndLocation {
     Value Val;
     ESide Side;
     int BucketIndex;
 };
 
-// struct 
+// struct
 
-}
+} // namespace NKikimr::NMiniKQL

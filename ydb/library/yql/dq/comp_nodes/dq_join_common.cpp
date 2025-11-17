@@ -14,7 +14,7 @@ TKeyTypes KeyTypesFromColumns(const TMKQLVector<TType*>& types, const TMKQLVecto
 }
 
 bool AllInMemory(const TBuckets& buckets) {
-    return !std::ranges::find(buckets, true, [](const TBucket& bucket){return bucket.IsSpilled();});
+    return !std::ranges::find(buckets, true, [](const TBucket& bucket) { return bucket.IsSpilled(); });
 }
 
 TPackResult GetPage(TFuturePage&& future) {
@@ -23,6 +23,5 @@ TPackResult GetPage(TFuturePage&& future) {
     // MKQL_ENSURE(buff->Size() == 3, Sprintf("pack result must have 3 pages, has%i", buff->Size()));
     return Parse(std::move(*buff));
 }
-
 
 } // namespace NKikimr::NMiniKQL

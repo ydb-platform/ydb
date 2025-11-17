@@ -198,8 +198,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         leftKeyColumns.emplace_back(item->AsValue().Get<ui32>());
     }
 
-    
-
     const auto rightKeyColumnsLiteral = callable.GetInput(4);
     const auto rightKeyColumnsTuple = AS_VALUE(TTupleLiteral, rightKeyColumnsLiteral);
     TMKQLVector<ui32> rightKeyColumns;

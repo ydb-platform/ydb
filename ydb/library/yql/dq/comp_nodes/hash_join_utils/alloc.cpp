@@ -1,16 +1,17 @@
 #include "alloc.h"
-#include <yql/essentials/minikql/defs.h>
 #include <util/string/printf.h>
-namespace NKikimr::NMiniKQL{
+#include <yql/essentials/minikql/defs.h>
 
+namespace NKikimr::NMiniKQL {
 
 int MemoryUsagePercent(int totalBytes) {
-    return 100*totalBytes / TlsAllocState->GetLimit();
+    return 100 * totalBytes / TlsAllocState->GetLimit();
 }
 
 int FreeMemory() {
-    MKQL_ENSURE(TlsAllocState->GetLimit() >= TlsAllocState->GetUsed(), Sprintf("sanity check, limit: %i, alloc: %i", TlsAllocState->GetLimit(), TlsAllocState->GetUsed()));
-    return TlsAllocState->GetLimit() - TlsAllocState->GetUsed(); 
+    MKQL_ENSURE(TlsAllocState->GetLimit() >= TlsAllocState->GetUsed(),
+                Sprintf("sanity check, limit: %i, alloc: %i", TlsAllocState->GetLimit(), TlsAllocState->GetUsed()));
+    return TlsAllocState->GetLimit() - TlsAllocState->GetUsed();
 }
 
 bool AllocateWithSizeMayThrow(i64 size) {
@@ -29,4 +30,4 @@ bool MemoryPercentIsFree(int freePercent) {
     std::optional<int> usedPercent = GetMemoryUsageIfReachedLimit();
     return !usedPercent.has_value() || (freePercent + *usedPercent < 100);
 }
-}
+} // namespace NKikimr::NMiniKQL

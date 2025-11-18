@@ -212,7 +212,6 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
     NJoinTable::TStdJoinTable Table_;
 };
 
-bool AllInMemory(const TBuckets& buckets);
 
 enum class EIsInMemory : bool {
     Spilled,
@@ -460,11 +459,12 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         return EFetchResult::Yield;
     }
 
-    TPackResult GetPage(TFuturePage&& future) {
+    TPackResult GetPage(TFuturePage&& future, ESide side) {
         std::optional<NYql::TChunkedBuffer> buff = ExtractReadyFuture(std::move(future));
         MKQL_ENSURE(buff.has_value(), "corrupted extract key?");
-        return Parse(std::move(*buff));
+        return Parse(std::move(*buff), Layouts_.SelectSide(side));
     }
+
 
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
                            std::invocable<TSides<TSingleTuple>> auto consumePairOfTuples) {
@@ -703,7 +703,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     if (tdata->All.IsReady()) {
                         TMKQLVector<TPackResult> vec;
                         for (auto& future : tdata->Futures) {
-                            vec.push_back(GetPage(std::move(future)));
+                            vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build};
                         table.BuildWith(Flatten(std::move(vec)));
@@ -723,7 +723,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                         state.SelectedPair = std::nullopt;
                     } else {
                         if (table->Futures.front().IsReady()) {
-                            TPackResult pack = GetPage(*GetFrontOrNull(table->Futures));
+                            TPackResult pack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
                             pack.ForEachTuple([&](TSingleTuple probeTuple) {
                                 table->Table.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                                     consumePairOfTuples({.Build = buildTuple, .Probe = probeTuple});

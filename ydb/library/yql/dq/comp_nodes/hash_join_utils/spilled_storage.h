@@ -12,7 +12,7 @@ void PopFront(NYql::TChunkedBuffer& buff);
 
 NYql::TChunkedBuffer Serialize(TPackResult&& result);
 
-TPackResult Parse(NYql::TChunkedBuffer&& buff);
+TPackResult Parse(NYql::TChunkedBuffer&& buff, const NPackedTuple::TTupleLayout* layout);
 
 struct BlobIdAndBucketIndex {
     bool IsReady() const {

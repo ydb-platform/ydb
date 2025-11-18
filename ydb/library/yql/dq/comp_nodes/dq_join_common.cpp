@@ -13,15 +13,5 @@ TKeyTypes KeyTypesFromColumns(const TMKQLVector<TType*>& types, const TMKQLVecto
     return kt;
 }
 
-bool AllInMemory(const TBuckets& buckets) {
-    return !std::ranges::find(buckets, true, [](const TBucket& bucket) { return bucket.IsSpilled(); });
-}
-
-TPackResult GetPage(TFuturePage&& future) {
-    std::optional<NYql::TChunkedBuffer> buff = ExtractReadyFuture(std::move(future));
-    MKQL_ENSURE(buff.has_value(), "corrupted extract key?");
-    // MKQL_ENSURE(buff->Size() == 3, Sprintf("pack result must have 3 pages, has%i", buff->Size()));
-    return Parse(std::move(*buff));
-}
 
 } // namespace NKikimr::NMiniKQL

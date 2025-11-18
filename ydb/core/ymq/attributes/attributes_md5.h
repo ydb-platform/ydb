@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/core/protos/sqs.pb.h>
 
 namespace NKikimr::NSQS {

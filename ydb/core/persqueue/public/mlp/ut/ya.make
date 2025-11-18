@@ -13,7 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/persqueue/public/mlp/ut/common
 )
-
+ENV(INSIDE_YDB="1")
 END()
 
 RECURSE(

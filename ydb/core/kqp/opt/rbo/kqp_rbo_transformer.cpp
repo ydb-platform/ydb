@@ -321,8 +321,7 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
                 .Seal()
             .Build();
             // clnag-format on
-        }
-        else if (input->IsCallable()){
+    } else if (input->IsCallable()){
             TVector<TExprNode::TPtr> newChildren;
             for (auto c : input->Children()) {
                 newChildren.push_back(ReplacePgOps(c, ctx));
@@ -635,15 +634,18 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
             auto pgAgg = GetPgCallable(lambda.Body().Ptr(), "PgAgg");
             if (pgAgg) {
                 // Collect original column names processing `PgAgg` callable.
-                TVector<TInfoUnit> originalColNames;
-                GetAllMembers(pgAgg, originalColNames);
+                TInfoUnit originalColName;
+                TInfoUnit renamedColName;
+
+                auto lambdaBody = lambda.Body().Ptr();
                 auto pgResolvedOp = GetPgCallable(lambda.Body().Ptr(), "PgResolvedOp");
-
-                auto originalColName = originalColNames.front();
-                auto renamedColName = originalColName;
-
-                if (pgResolvedOp) {
+                if (pgResolvedOp && !lambdaBody->IsCallable("PgResolvedOp")) {
+                    // Aggregation on expression f(a x b).
+                    // We pull expression outside a given aggregation and rename result of a given expression with unique name
+                    // to later process result with aggregate function.
+                    // For example: (a x b) as uqique_result_name -> f(unique_result_name)
                     auto fromPg = ctx.NewCallable(node->Pos(), "FromPg", {pgResolvedOp});
+
                     // clang-format off
                     auto exprLambda = Build<TCoLambda>(ctx, node->Pos())
                         .Args(lambda.Args())
@@ -651,12 +653,22 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     .Done().Ptr();
                     // clang-format on
 
-                    // Just any unique name for expression result, physical plan should be AsSturct(`unique_name (expression))
+                    // Just any unique name for expression result, physical plan should be AsSturct(`unique_name (expression)).
                     originalColName = TInfoUnit(GenerateUniqueColumnName("_expr_"));
                     renamedColName = originalColName;
                     aggFieldsExpressionsMap.push_back({originalColName, exprLambda});
                 } else {
-                    // Rename agg column we will add a map to map same column to different renames.
+                    // Either an aggregation f(a) or expression on aggregation f(a) x b.
+                    // Here we want to get just a column name for aggregation.
+                    Y_ENSURE(pgAgg->ChildrenSize() == 3, "Invalid children size for `PgAgg`");
+                    auto toPg = pgAgg->ChildPtr(2);
+                    Y_ENSURE(toPg->IsCallable("ToPg") && toPg->ChildPtr(0)->IsCallable("Member"), "PgAgg not a member");
+                    auto member = TCoMember(toPg->ChildPtr(0));
+                    originalColName = TInfoUnit(member.Name().StringValue());
+                    renamedColName = originalColName;
+
+                    // Aggregation columns should be unique, so we have to add rename map.
+                    // For example f(a), g(a) => map((a -> a), (a -> a_0)) -> f(a), g(a_0).
                     if (uniqueColumnNames.count(originalColName.GetFullName())) {
                         renamedColName = TInfoUnit(originalColName.Alias, GenerateUniqueColumnName(originalColName.ColumnName));
                         needRenameMap = true;
@@ -664,9 +676,8 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     aggFieldsRenamesMap.push_back({originalColName, renamedColName});
                 }
                 uniqueColumnNames.insert(renamedColName.GetFullName());
-                //Y_ENSURE(!GetAtom(pgAgg->ChildPtr(1), "distinct"));
 
-                // Distinct for column or expression.
+                // Distinct for column or expression f(distinct a) => distinct a as result -> f(result).
                 if (!!GetAtom(pgAgg->ChildPtr(1), "distinct")) {
                     const auto colName = renamedColName.GetFullName();
                     auto distinctAggTraits =
@@ -676,12 +687,15 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     distinctPreAggregate = true;
                 }
 
+                // Aggregation on pg columns requires type cast from yql type to pg type.
                 aggregationColumnsRequireCastToPgType.insert(resultColName);
                 const TString aggFuncName = TString(pgAgg->ChildPtr(0)->Content());
+                // Build an aggregation traits.
                 auto aggregationTraits = BuildAggregationTraits(renamedColName.GetFullName(), resultColName, aggFuncName,
                                                                 aggFuncResultType, ctx, node->Pos());
                 aggTraits.AggTraitsList.push_back(aggregationTraits);
 
+                // Case for distinct after aggregation.
                 if (distinctAll) {
                     auto distinctAggTraits =
                         BuildAggregationTraits(resultColName, resultColName, "distinct", aggFuncResultType, ctx, node->Pos());
@@ -793,16 +807,33 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 Y_ENSURE(SupportedAggregationFunctions.count(pgAgg->ChildPtr(0)->Content()),
                          "Aggregation function " + TString(pgAgg->ChildPtr(0)->Content()) + " is not supported ");
 
+                // clang-format off
+                auto newBody = Build<TCoMember>(ctx, node->Pos())
+                    .Struct(lambda.Args().Arg(0))
+                    .Name<TCoAtom>()
+                        .Value(columnName)
+                    .Build()
+                .Done().Ptr();
+                // clang-format on
+
+                auto lambdaBody = lambda.Body().Ptr();
                 // Build a projection lambda, we do not need `PgAgg` inside.
+                if (lambdaBody->IsCallable("PgResolvedOp")) {
+                    // Replace PgResolvedOp(PgAgg(arg)) -> PgResolvedOp(PgCast(ToPg(Member(arg, columnName))))
+                    auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {newBody});
+                    auto pgType =
+                        ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
+                    auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {toPg, pgType});
+
+                    TNodeOnNodeOwnedMap replaces;
+                    replaces[pgAgg.Get()] = pgCast;
+                    newBody = ctx.ReplaceNodes(lambda.Body().Ptr(), replaces);
+                }
+
                 // clang-format off
                 lambda = Build<TCoLambda>(ctx, node->Pos())
                     .Args(lambda.Args())
-                    .Body<TCoMember>()
-                        .Struct(lambda.Args().Arg(0))
-                        .Name<TCoAtom>()
-                            .Value(columnName)
-                        .Build()
-                    .Build()
+                    .Body(newBody)
                 .Done();
                 // clang-format on
             }
@@ -853,7 +884,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     .Body(toPg)
                 .Done();
                 // clang-format on
-            } else if (needPgCast || needPgCastForAgg) {
+            } else if ((needPgCast || needPgCastForAgg)) {
 
                 auto pgType =
                     ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
@@ -961,6 +992,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         .ColumnOrder(columnOrder)
     .Done().Ptr();
     // clang-format on
+
 }
 
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
@@ -1081,7 +1113,8 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 
     Y_UNUSED(ctx);
 
-    //YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << output->Dump();
+    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << KqpExprToPrettyString(TExprBase(output), ctx) << Endl;
+
 
     if (output->IsList() && output->ChildrenSize() >= 1) {
         auto child_level_1 = output->Child(0);

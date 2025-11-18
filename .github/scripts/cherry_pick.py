@@ -442,45 +442,68 @@ class CherryPickCreator:
         
         return entry
 
-    def _extract_description_for_reviewers(self, pr_body: str) -> Optional[str]:
-        """Extract Description for reviewers section from PR body"""
+    def _extract_changelog_entry_content(self, pr_body: str) -> Optional[str]:
+        """Extract only the content inside Changelog entry section (without header and content before it)
+        
+        Returns only the text content inside "### Changelog entry" section (up to "### Changelog category").
+        """
         if not pr_body:
             return None
         
-        desc_match = re.search(r"### Description for reviewers.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
-        if not desc_match:
+        # Find Changelog entry section
+        entry_match = re.search(r"### Changelog entry.*?\n(.*?)(\n### Changelog category|$)", pr_body, re.DOTALL)
+        if not entry_match:
             return None
         
-        desc = desc_match.group(1).strip()
-        # Skip if it's just "..." or empty
-        if desc in ['...', '']:
+        # Get only content of Changelog entry section (without header)
+        entry_content = entry_match.group(1).strip()
+        
+        # Skip if entry is just "..." or empty
+        if entry_content in ['...', '']:
             return None
         
-        return desc
+        return entry_content
 
     def _get_changelog_info(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-        """Get Changelog category, entry, and description from original PRs"""
+        """Get Changelog category, entry, and merged entry content from original PRs
+        
+        For multiple PRs: merges Changelog entry contents with '---' separator.
+        Returns: (category, entry_text, merged_entry_content)
+        """
         category = None
         entry = None
-        description = None
+        entry_contents = []  # Collect all Changelog entry contents to merge
         
-        # Try to get from first PR (usually there's one main PR)
+        # Collect info from all PRs
         for pull in self.pull_requests:
             if pull.body:
-                cat = self._extract_changelog_category(pull.body)
-                if cat:
-                    category = cat
-                ent = self._extract_changelog_entry(pull.body)
-                if ent:
-                    entry = ent
-                desc = self._extract_description_for_reviewers(pull.body)
-                if desc:
-                    description = desc
-                # If we found all, we're done
-                if category and entry and description:
-                    break
+                # Extract category (take first non-empty)
+                if not category:
+                    cat = self._extract_changelog_category(pull.body)
+                    if cat:
+                        category = cat
+                
+                # Extract entry text (take first non-empty) - used for building new entry if merged content not available
+                if not entry:
+                    ent = self._extract_changelog_entry(pull.body)
+                    if ent:
+                        entry = ent
+                
+                # Extract only Changelog entry content (without header)
+                entry_content = self._extract_changelog_entry_content(pull.body)
+                if entry_content:
+                    entry_contents.append(entry_content)
         
-        return category, entry, description
+        # Merge entry contents if multiple PRs have content
+        if len(entry_contents) > 1:
+            # For multiple PRs, combine with separator
+            merged_entry_content = "\n\n---\n\n".join(entry_contents)
+        elif len(entry_contents) == 1:
+            merged_entry_content = entry_contents[0]
+        else:
+            merged_entry_content = None
+        
+        return category, entry, merged_entry_content
 
     def pr_title(self, target_branch) -> str:
         """Generate PR title"""
@@ -508,17 +531,24 @@ class CherryPickCreator:
         # Determine target branch for description
         branch_desc = target_branch if target_branch else ', '.join(self.target_branches)
         
-        # Get Changelog category, entry, and description from original PR
-        changelog_category, changelog_entry, original_description = self._get_changelog_info()
+        # Get Changelog category, entry, and merged entry content from original PRs
+        changelog_category, changelog_entry_text, merged_entry_content = self._get_changelog_info()
         
-        # Build changelog entry if not found
-        if not changelog_entry:
+        # Use merged entry content if available, otherwise build entry
+        if merged_entry_content:
+            # Use merged content from original PRs directly in Changelog entry
+            changelog_entry = merged_entry_content
+        elif not changelog_entry_text:
+            # Build changelog entry if not found
             if len(self.pull_requests) == 1:
                 pr_num = self.pull_requests[0].number
                 changelog_entry = f"Backport of PR #{pr_num} to `{branch_desc}`"
             else:
                 pr_nums = ', '.join([f"#{p.number}" for p in self.pull_requests])
                 changelog_entry = f"Backport of PRs {pr_nums} to `{branch_desc}`"
+        else:
+            # Use extracted entry text as fallback
+            changelog_entry = changelog_entry_text
         
         # Ensure entry is at least 20 characters (validation requirement)
         if len(changelog_entry) < 20:
@@ -545,10 +575,6 @@ class CherryPickCreator:
         description_section += f"- **Original PR author(s):** {authors}\n"
         description_section += f"- **Cherry-picked by:** @{self.workflow_triggerer}\n"
         description_section += f"- **Related issues:** {issue_refs}"
-        
-        # If original PR had description, append it
-        if original_description:
-            description_section += f"\n\n#### Original Description\n{original_description}"
         
         # Add conflicts section if needed
         if has_conflicts:

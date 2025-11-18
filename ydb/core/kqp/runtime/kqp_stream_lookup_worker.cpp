@@ -16,6 +16,8 @@ namespace NKikimr {
 namespace NKqp {
 
 constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
+constexpr ui64 SEQNO_SPACE = 40;
+constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
 
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
@@ -303,6 +305,10 @@ public:
         return readRequests;
     }
 
+    bool HasPendingResults() final {
+        return !ReadResults.empty();
+    }
+
     void AddResult(TShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
@@ -317,8 +323,8 @@ public:
         ReadResults.emplace_back(std::move(result));
     }
 
-    bool IsOverloaded() final {
-        return false;
+    std::optional<TString> IsOverloaded() final {
+        return std::nullopt;
     }
 
     TReadResultStats ReplyResult(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, i64 freeSpace) final {
@@ -494,11 +500,15 @@ private:
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
 public:
-    TKqpJoinRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TKqpJoinRows(TLookupSettings&& settings, ui64 taskId,
+        const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
         : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
-        , InputDesc(inputDesc) {
-
+        , InputDesc(inputDesc)
+        , InputRowSeqNo(taskId << SEQNO_SPACE)
+        , InputRowSeqNoLast((taskId + 1) << SEQNO_SPACE)
+    {
+        YQL_ENSURE(taskId < MaxTaskId);
         // read columns should contain join key and result columns
         for (auto joinKey : Settings.LookupKeyColumns) {
             ReadColumns.emplace(joinKey->Name, *joinKey);
@@ -518,7 +528,7 @@ public:
     };
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
-        auto joinKey = inputRow.GetElement(0);
+        auto joinKey = inputRow.GetElement(1);
         std::vector<TCell> joinKeyCells(Settings.LookupKeyColumns.size());
         NMiniKQL::TStringProviderBackend backend;
 
@@ -533,6 +543,7 @@ public:
             lastRow = cookie.LastRow;
         } else {
             rowSeqNo = InputRowSeqNo++;
+            YQL_ENSURE(InputRowSeqNo < InputRowSeqNoLast);
         }
 
         if (joinKey.HasValue()) {
@@ -546,7 +557,7 @@ public:
             }
         }
 
-        TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(1))), .StorageBytes=0};
+        TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(0))), .StorageBytes=0};
         row.ComputeSize = NYql::NDq::TDqDataSerializer::EstimateSize(row.Data, GetLeftRowType());
         ui64 joinKeyId = JoinKeySeqNo++;
         TOwnedCellVec cellVec(std::move(joinKeyCells));
@@ -585,8 +596,20 @@ public:
         YQL_ENSURE(false);
     }
 
-    bool IsOverloaded() final {
-        return UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT || PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT || ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT;
+    std::optional<TString> IsOverloaded() final {
+        if (UnprocessedRows.size() >= MAX_IN_FLIGHT_LIMIT ||
+            PendingLeftRowsByKey.size() >= MAX_IN_FLIGHT_LIMIT ||
+            ResultRowsBySeqNo.size() >= MAX_IN_FLIGHT_LIMIT)
+        {
+            TStringBuilder overloadDescriptor;
+            overloadDescriptor << "unprocessed rows: " << UnprocessedRows.size()
+                << "pending left: " << PendingLeftRowsByKey.size()
+                << "result rows: " << ResultRowsBySeqNo.size();
+
+            return TString(overloadDescriptor);
+        }
+
+        return std::nullopt;
     }
 
     std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui64& newReadId) final {
@@ -778,6 +801,16 @@ public:
         return requests;
     }
 
+    bool HasPendingResults() final {
+        auto nextSeqNo = KeepRowsOrder() ? ResultRowsBySeqNo.find(CurrentResultSeqNo) : ResultRowsBySeqNo.begin();
+
+        if (nextSeqNo != ResultRowsBySeqNo.end() && !nextSeqNo->second.Rows.empty()) {
+            return true;
+        }
+
+        return false;
+    }
+
     void AddResult(TShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
@@ -880,7 +913,7 @@ public:
         batch.clear();
 
         auto getNextResult = [&]() {
-            if (!ShoulKeepRowsOrder()) {
+            if (!KeepRowsOrder()) {
                 return ResultRowsBySeqNo.begin();
             }
 
@@ -1063,12 +1096,12 @@ private:
         }
     };
 
-    bool ShoulKeepRowsOrder() const {
+    bool KeepRowsOrder() const {
         return Settings.KeepRowsOrder;
     }
 
     bool IsRowSeqNoValid(const ui64& seqNo) const {
-        if (!ShoulKeepRowsOrder()) {
+        if (!KeepRowsOrder()) {
             return true;
         }
 
@@ -1167,6 +1200,7 @@ private:
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
+    ui64 InputRowSeqNoLast = 0;
     ui64 JoinKeySeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
     NMiniKQL::TStructType* LeftRowType = nullptr;
@@ -1174,6 +1208,7 @@ private:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc) {
 
@@ -1224,7 +1259,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
-            return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
+            return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), taskId, typeEnv, holderFactory, inputDesc);
         default:
             return {};
     }

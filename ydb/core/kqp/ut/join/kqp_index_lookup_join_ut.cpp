@@ -70,6 +70,21 @@ void PrepareTables(TSession session) {
             PRIMARY KEY(idx_processId, idx_launchNumber)
         );
 
+        CREATE TABLE UserItemRelation (
+            item_id	String,
+            user_id	String,
+            PRIMARY KEY(item_id, user_id),
+            INDEX relation_by_user_id GLOBAL  ON (user_id)
+        );
+
+        CREATE TABLE Items (
+            id	String,
+            idx_a	String,
+            idx_b	Int64,
+            PRIMARY KEY(id),
+            INDEX idx GLOBAL ON (idx_a, idx_b)
+        );
+
         CREATE TABLE X (x_id Int32, a Int32, b Int32, PRIMARY KEY(x_id));
         CREATE TABLE Y (y_id Int32, a Int32, b Int32, c Int32, PRIMARY KEY(y_id), INDEX ix_a GLOBAL ON (a));
 
@@ -156,6 +171,11 @@ void PrepareTables(TSession session) {
             (221, 2, 1, 3), (222, 2, 2, 4),  (223, 2, 3, 5),
             (231, 3, 1, 4), (232, 3, 2, 5),  (233, 3, 3, 6);
 
+        UPSERT INTO Items(id, idx_a, idx_b)
+				VALUES
+		("item_1", "root_1", 0),
+		("item_2", "root_1", 0);
+
     )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
 }
 
@@ -198,6 +218,8 @@ public:
     bool DqReplicate = false;
     bool DoValidateStats = true;
     bool OnlineReadOnly = false;
+    NYdb::TParamsBuilder ParamsBuilder;
+    bool NeedParams = false;
 
     TTester& Run() {
         auto settings = TKikimrSettings();
@@ -211,6 +233,8 @@ public:
 
         TString ysonResult;
 
+        auto params = ParamsBuilder.Build();
+
         {
             auto dbQuery = kikimr.GetQueryClient();
             auto sessionQuery = dbQuery.GetSession().GetValueSync().GetSession();
@@ -221,7 +245,7 @@ public:
                 txSettings.OnlineRO().OnlineSettings(NYdb::NQuery::TTxOnlineSettings().AllowInconsistentReads(true));
             }
 
-            auto result = sessionQuery.ExecuteQuery(Q_(Query), NYdb::NQuery::TTxControl::BeginTx(txSettings).CommitTx(), execSettings).ExtractValueSync();
+            auto result = sessionQuery.ExecuteQuery(Q_(Query), NYdb::NQuery::TTxControl::BeginTx(txSettings).CommitTx(), params, execSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
             Cerr << result.GetStats()->GetAst() << Endl;
@@ -236,7 +260,7 @@ public:
         {
             TExecDataQuerySettings execSettings;
             execSettings.CollectQueryStats(ECollectQueryStatsMode::Full);
-            auto result = session.ExecuteDataQuery(Q_(Query), TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+            auto result = session.ExecuteDataQuery(Q_(Query), TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             ysonResult = FormatResultSetYson(result.GetResultSet(0));
             Cerr << result.GetStats()->GetAst() << Endl;
@@ -1148,6 +1172,49 @@ Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditions, StreamLookupJoin) {
     };
     tester.Run();
 }
+
+Y_UNIT_TEST_TWIN(LeftJoinPointPredicateAndJoinAfterThat, StreamLookupJoin) {
+    auto tester = TTester{
+        .Query=R"(
+           	DECLARE $idx_a AS List<String>;
+			DECLARE $user_id AS String?;
+			DECLARE $idx_b AS List<Int64>;
+			$items = (SELECT
+				Items.idx_a AS idx_a,
+				Items.id AS item_id
+			FROM Items
+			VIEW idx AS Items
+			WHERE
+				idx_a IN $idx_a
+				AND Coalesce(idx_b, 0) NOT IN $idx_b);
+
+			$user_hidden = (
+				SELECT item_id, user_id
+				FROM UserItemRelation VIEW relation_by_user_id
+				WHERE user_id = $user_id
+			);
+			SELECT
+				c.idx_a AS id,
+				CAST(COUNT(*) AS Int64) AS count
+			FROM $items AS c
+			LEFT JOIN $user_hidden AS uh ON c.item_id = uh.item_id
+			WHERE uh.user_id IS NULL
+			GROUP BY c.idx_a;
+        )",
+        .Answer=R"([
+            [[root_1];[2]]
+        ])",
+        .StreamLookup=StreamLookupJoin,
+        .DoValidateStats=false,
+    };
+
+    tester.ParamsBuilder
+        .AddParam("$idx_a").BeginList().AddListItem().String("root_1").EndList().Build()
+        .AddParam("$user_id").OptionalString(std::nullopt).Build()
+        .AddParam("$idx_b").BeginList().AddListItem().Int64(3).AddListItem().Int64(2).EndList().Build();
+    tester.Run();
+}
+
 
 Y_UNIT_TEST_TWIN(LeftJoinNonPkJoinConditionsWithCast, StreamLookupJoin) {
     auto tester = TTester{

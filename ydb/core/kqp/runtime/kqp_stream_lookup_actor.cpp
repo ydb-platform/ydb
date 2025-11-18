@@ -42,7 +42,7 @@ public:
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -155,6 +155,7 @@ private:
     struct TShardState {
         ui64 RetryAttempts = 0;
         std::unordered_set<ui64> Reads;
+        bool HasPipe = false;
     };
 
     struct TReads {
@@ -218,6 +219,18 @@ private:
             }
 
             return result;
+        }
+
+        bool NeedToCreatePipe(ui64 shardId) {
+            return !ReadsPerShard[shardId].HasPipe;
+        }
+
+        void SetPipeCreated(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = true;
+        }
+
+        void SetPipeDestroyed(ui64 shardId) {
+            ReadsPerShard[shardId].HasPipe = false;
         }
     };
 
@@ -288,8 +301,12 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        if (!StreamLookupWorker->IsOverloaded()) {
+        auto overloaded = StreamLookupWorker->IsOverloaded();
+        if (!overloaded.has_value()) {
             FetchInputRows();
+        } else {
+            CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
+                << overloaded.value_or("empty"));
         }
 
         if (Partitioning) {
@@ -299,9 +316,10 @@ private:
         const bool inputRowsFinished = LastFetchStatus == NUdf::EFetchStatus::Finish;
         const bool allReadsFinished = AllReadsFinished();
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
+        const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (inputRowsFinished && allReadsFinished && !allRowsProcessed) {
-            // all reads are completed, but we have unprocessed rows
+        if (hasPendingResults) {
+            // has more results
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
 
@@ -487,8 +505,17 @@ private:
             request->Record.SetMaxRows(defaultSettings.GetMaxRows());
             request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
 
-            Send(MainPipeCacheId, new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
+            const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+            Send(MainPipeCacheId,
+                new TEvPipeCache::TEvForward(
+                    request.Release(), read.ShardId, TEvPipeCache::TEvForwardOptions{
+                        .AutoConnect = needToCreatePipe,
+                        .Subscribe = needToCreatePipe,
+                    }),
                 IEventHandle::FlagTrackDelivery);
+
+            Reads.SetPipeCreated(read.ShardId);
 
             CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
 
@@ -510,6 +537,8 @@ private:
         CA_LOG_D("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
 
         const auto& tabletId = ev->Get()->TabletId;
+
+        Reads.SetPipeDestroyed(tabletId);
 
         TVector<TReadState*> toRetry;
         for (auto* read : Reads.GetShardReads(tabletId)) {
@@ -620,8 +649,21 @@ private:
             << ", lockTxId=" << record.GetLockTxId()
             << ", lockNodeId=" << record.GetLockNodeId());
 
-        Send(MainPipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
-            IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
+        const bool needToCreatePipe = Reads.NeedToCreatePipe(read.ShardId);
+
+        Send(MainPipeCacheId,
+            new TEvPipeCache::TEvForward(
+                request.Release(),
+                shardId,
+                TEvPipeCache::TEvForwardOptions{
+                    .AutoConnect = needToCreatePipe,
+                    .Subscribe = needToCreatePipe,
+                }),
+            IEventHandle::FlagTrackDelivery,
+            0,
+            LookupActorSpan.GetTraceId());
+
+        Reads.SetPipeCreated(read.ShardId);
 
         read.State = EReadState::Running;
 

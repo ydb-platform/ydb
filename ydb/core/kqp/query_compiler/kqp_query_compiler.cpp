@@ -1529,8 +1529,8 @@ private:
                     const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
                     YQL_ENSURE(inputTupleType->GetSize() == 2 || inputTupleType->GetSize() == 3);
 
-                    YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
-                    const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+                    YQL_ENSURE(inputTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
+                    const auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
                     YQL_ENSURE(joinKeyType->GetKind() == ETypeAnnotationKind::Struct);
                     const auto& joinKeyColumns = joinKeyType->Cast<TStructExprType>()->GetItems();
                     for (const auto keyColumn : joinKeyColumns) {

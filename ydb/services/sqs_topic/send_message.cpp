@@ -238,6 +238,7 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void Die(const TActorContext& ctx) override {
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
             TBase::Die(ctx);
         }
 

@@ -26,7 +26,6 @@ ydb/core/erasure/ut unittest.[*/*] chunk
 ydb/core/fq/libs/checkpoint_storage/ut NFq.(anonymous namespace).TStorageServiceTest<false>.ShouldNotCreateCheckpointTwice
 ydb/core/fq/libs/checkpoint_storage/ut NFq.(anonymous namespace).TStorageServiceTest<true>.ShouldNotCreateCheckpointAfterGenerationChanged
 ydb/core/fq/libs/checkpoint_storage/ut unittest.[*/*] chunk
-ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.TwoSessionsWithDifferentSchemes
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/close_with_load KqpQueryService.CloseSessionsWithLoad

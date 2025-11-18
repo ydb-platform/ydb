@@ -37,7 +37,7 @@ class CherryPickCreator:
         self.has_errors = False
         self.merge_commits_mode = getattr(args, 'merge_commits', 'skip')  # fail or skip
         self.allow_unmerged = getattr(args, 'allow_unmerged', False)  # Allow backporting unmerged PRs
-        self.created_backport_prs = []  # Store created backport PRs: [(target_branch, pr, has_conflicts), ...]
+        self.created_backport_prs = []  # Store created backport PRs: [(target_branch, pr, has_conflicts, conflict_files), ...]
         self.skipped_branches = []  # Store branches where PR was not created: [(target_branch, reason), ...]
         self.backport_comments = []  # Store comment objects for editing: [(pull, comment), ...]
         
@@ -431,7 +431,7 @@ class CherryPickCreator:
         
         return title
 
-    def pr_body(self, with_wf: bool, has_conflicts: bool = False, target_branch: Optional[str] = None) -> str:
+    def pr_body(self, with_wf: bool, has_conflicts: bool = False, target_branch: Optional[str] = None, dev_branch_name: Optional[str] = None, conflict_files: Optional[List[str]] = None) -> str:
         """Generate PR body with improved format that passes validation"""
         commits = '\n'.join(self.pr_body_list)
         
@@ -490,8 +490,7 @@ class CherryPickCreator:
 * Not for changelog (changelog entry is not required)"""
         
         # Build description for reviewers section
-        description_section = f"Backport to `{branch_desc}`.\n\n"
-        description_section += f"#### Original PR(s)\n{commits}\n\n"
+        description_section = f"#### Original PR(s)\n{commits}\n\n"
         description_section += f"#### Metadata\n"
         description_section += f"- **Original PR author(s):** {authors}\n"
         description_section += f"- **Cherry-picked by:** @{self.workflow_triggerer}\n"
@@ -503,19 +502,32 @@ class CherryPickCreator:
         
         # Add conflicts section if needed
         if has_conflicts:
-            description_section += """
+            # Use dev_branch_name if provided, otherwise use target_branch as fallback
+            branch_for_instructions = dev_branch_name if dev_branch_name else (target_branch if target_branch else "<branch_name>")
+            
+            # Build conflicted files list with links
+            conflicted_files_section = ""
+            if conflict_files:
+                conflicted_files_section = "\n\n**Files with conflicts:**\n"
+                for file_path in conflict_files:
+                    # Create link to file in GitHub branch (will show conflict markers)
+                    # Format: https://github.com/{repo}/blob/{branch}/{file_path}
+                    file_link = f"https://github.com/{self.repo_name}/blob/{branch_for_instructions}/{file_path}"
+                    conflicted_files_section += f"- [{file_path}]({file_link})\n"
+            
+            description_section += f"""
 #### Conflicts Require Manual Resolution
 
-This PR contains merge conflicts that require manual resolution.
+This PR contains merge conflicts that require manual resolution.{conflicted_files_section}
 
 **How to resolve conflicts:**
 
 ```bash
-git fetch origin <branch_name>
-git checkout <branch_name>
+git fetch origin
+git checkout --track origin/{branch_for_instructions}
 # Resolve conflicts in files
 git add .
-git commit --amend  # or create new commit
+git commit -m "Resolved merge conflicts"
 git push
 ```
 
@@ -573,7 +585,8 @@ After resolving conflicts, mark this PR as ready for review.
         return output
 
     def _handle_cherry_pick_conflict(self, commit_sha: str):
-        """Handle cherry-pick conflict: commit the conflict"""
+        """Handle cherry-pick conflict: commit the conflict and return list of conflicted files"""
+        conflict_files = []
         try:
             # Check if there are conflicts (files with conflicts or unmerged paths)
             result = subprocess.run(
@@ -592,18 +605,42 @@ After resolving conflicts, mark this PR as ready for review.
                     if line.startswith('UU') or line.startswith('AA') or line.startswith('DD'):
                         # Unmerged paths - definitely a conflict
                         has_conflict_markers = True
-                        break
+                        # Extract filename (after status code)
+                        # Format: "XY filename" where XY is 2-char status, then space, then filename
+                        # More robust: split by whitespace and take everything after status code
+                        parts = line.split(None, 1)  # Split on whitespace, max 1 split
+                        if len(parts) > 1:
+                            file_path = parts[1].strip()
+                            if file_path:
+                                conflict_files.append(file_path)
                 
                 if has_conflict_markers or result.stdout.strip():
+                    # If we didn't find unmerged paths, try to find files with conflict markers
+                    if not conflict_files:
+                        # Use git diff to find files with conflict markers
+                        try:
+                            diff_result = subprocess.run(
+                                ['git', 'diff', '--name-only', '--diff-filter=U'],
+                                capture_output=True,
+                                text=True,
+                                check=True
+                            )
+                            if diff_result.stdout.strip():
+                                conflict_files = [f.strip() for f in diff_result.stdout.strip().split('\n') if f.strip()]
+                        except subprocess.CalledProcessError:
+                            pass
+                    
                     # There are changes (conflicts)
                     self.git_run("add", "-A")
                     self.git_run("commit", "-m", f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
                     self.logger.info(f"Conflict committed for commit {commit_sha[:7]}")
-                    return True
+                    if conflict_files:
+                        self.logger.info(f"Conflicted files: {', '.join(conflict_files)}")
+                    return True, conflict_files
         except Exception as e:
             self.logger.error(f"Error handling conflict for commit {commit_sha[:7]}: {e}")
         
-        return False
+        return False, []
 
     def _find_existing_backport_comment(self, pull):
         """Find existing backport comment in PR (created by previous workflow run)"""
@@ -662,7 +699,7 @@ After resolving conflicts, mark this PR as ready for review.
                         updated_comment += f" - [workflow run]({self.workflow_url})"
                 elif total_branches == 1 and len(self.created_backport_prs) == 1:
                     # Single branch with PR - simple comment
-                    target_branch, pr, has_conflicts = self.created_backport_prs[0]
+                    target_branch, pr, has_conflicts, conflict_files = self.created_backport_prs[0]
                     status = "draft PR" if has_conflicts else "PR"
                     updated_comment = f"Backported to `{target_branch}`: {status} {pr.html_url}"
                     if has_conflicts:
@@ -674,7 +711,7 @@ After resolving conflicts, mark this PR as ready for review.
                     updated_comment = "Backport results:\n"
                     
                     # List created PRs
-                    for target_branch, pr, has_conflicts in self.created_backport_prs:
+                    for target_branch, pr, has_conflicts, conflict_files in self.created_backport_prs:
                         status = "draft PR" if has_conflicts else "PR"
                         conflict_note = " (contains conflicts requiring manual resolution)" if has_conflicts else ""
                         updated_comment += f"- `{target_branch}`: {status} {pr.html_url}{conflict_note}\n"
@@ -695,6 +732,7 @@ After resolving conflicts, mark this PR as ready for review.
         """Create PR for target branch with conflict handling"""
         dev_branch_name = f"cherry-pick-{target_branch}-{self.dtm}"
         has_conflicts = False
+        all_conflict_files = []  # Collect all conflicted files across all commits
         
         # First fetch for up-to-date branch information
         self.git_run("fetch", "origin", target_branch)
@@ -729,8 +767,13 @@ After resolving conflicts, mark this PR as ready for review.
                 # Check if this is a conflict or another error
                 if "CONFLICT" in error_output or "conflict" in error_output.lower():
                     self.logger.warning(f"Conflict during cherry-pick of commit {commit_sha[:7]}")
-                    if self._handle_cherry_pick_conflict(commit_sha):
+                    conflict_handled, conflict_files = self._handle_cherry_pick_conflict(commit_sha)
+                    if conflict_handled:
                         has_conflicts = True
+                        # Add conflicted files to the list (avoid duplicates)
+                        for file_path in conflict_files:
+                            if file_path not in all_conflict_files:
+                                all_conflict_files.append(file_path)
                     else:
                         # Failed to handle conflict, abort cherry-pick
                         self.git_run("cherry-pick", "--abort")
@@ -756,7 +799,7 @@ After resolving conflicts, mark this PR as ready for review.
                 base=target_branch,
                 head=dev_branch_name,
                 title=self.pr_title(target_branch),
-                body=self.pr_body(True, has_conflicts, target_branch),
+                body=self.pr_body(True, has_conflicts, target_branch, dev_branch_name, all_conflict_files if all_conflict_files else None),
                 maintainer_can_modify=True,
                 draft=has_conflicts
             )
@@ -792,7 +835,7 @@ After resolving conflicts, mark this PR as ready for review.
                     self.logger.warning(f"AUTOMERGE_WARNING: Failed to enable automerge with method SQUASH for PR {pr.html_url}: {f}")
         
         # Store created PR for later comment
-        self.created_backport_prs.append((target_branch, pr, has_conflicts))
+        self.created_backport_prs.append((target_branch, pr, has_conflicts, all_conflict_files))
 
     def process(self):
         """Main processing method"""

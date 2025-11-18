@@ -23,8 +23,7 @@ message CreateTestShardRequest {
     // Number of tablets to create
     uint32 count = 5;
 
-    // TestShard initialization config in YAML format (optional)
-    // If not provided, tablets are created but not initialized
+    // TestShard initialization config in YAML format
     //
     // Structure:
     //   workload - Load generation patterns (sizes, write rate, restarts, request types)

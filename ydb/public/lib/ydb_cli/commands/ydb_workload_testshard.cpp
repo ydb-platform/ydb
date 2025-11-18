@@ -29,8 +29,6 @@ void TCommandTestShardCreate::Config(TConfig& config) {
         });
     config.Opts->AddLongOption("count", "Number of tablets to create (default: 1)")
         .DefaultValue(1).RequiredArgument("NUM").StoreResult(&Count);
-    config.Opts->AddLongOption('c', "config", "YAML configuration string for TestShard load generation")
-        .RequiredArgument("YAML").StoreResult(&ConfigYaml);
     config.Opts->AddLongOption('f', "config-file", "Path to YAML configuration file")
         .RequiredArgument("PATH").StoreResult(&ConfigFile);
     config.Opts->MutuallyExclusive("config", "config-file");
@@ -44,12 +42,8 @@ void TCommandTestShardCreate::Parse(TConfig& config) {
         ythrow yexception() << "owner-idx must be non-zero";
     }
 
-    if (Channels.empty()) {
-        Cerr << "No channels specified. Using database default storage pools." << Endl;
-    }
-
-    if (ConfigYaml.empty() && ConfigFile.empty()) {
-        Cerr << "No configuration provided. TestShard tablets will be created but not initialized." << Endl;
+    if (ConfigFile.empty()) {
+        ythrow yexception() << "config-file must be specified";
     }
 
     if (!ConfigFile.empty()) {

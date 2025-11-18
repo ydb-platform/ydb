@@ -37,6 +37,8 @@ public:
     {}
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
+        static constexpr ui32 MAX_TABLETS_PER_REQUEST = 1000;
+
         const auto* req = GetProtoRequest();
         if (!req) {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -62,26 +64,36 @@ public:
             return false;
         }
 
+        if (req->count() > MAX_TABLETS_PER_REQUEST) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue(TStringBuilder() << "count must be less than or equal to " << MAX_TABLETS_PER_REQUEST);
+            return false;
+        }
+
         if (TBase::IsRootDomain(req->database()) && req->channels_size() == 0) {
             status = Ydb::StatusIds::BAD_REQUEST;
             issues.AddIssue("channels must be explicitly specified for root domain (/Root)");
             return false;
         }
 
-        if (!req->config().empty()) {
-            TString errorMsg;
-            try {
-                auto doc = NFyaml::TDocument::Parse(req->config());
-                if (!ParseYamlConfig(doc.Root(), errorMsg)) {
-                    status = Ydb::StatusIds::BAD_REQUEST;
-                    issues.AddIssue(errorMsg);
-                    return false;
-                }
-            } catch (const std::exception& e) {
+        if (req->config().empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue("config must be specified");
+            return false;
+        }
+
+        TString errorMsg;
+        try {
+            auto doc = NFyaml::TDocument::Parse(req->config());
+            if (!ParseYamlConfig(doc.Root(), errorMsg)) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                issues.AddIssue(TStringBuilder() << "Failed to parse YAML config: " << e.what());
+                issues.AddIssue(errorMsg);
                 return false;
             }
+        } catch (const std::exception& e) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            issues.AddIssue(TStringBuilder() << "Failed to parse YAML config: " << e.what());
+            return false;
         }
 
         return true;
@@ -190,6 +202,12 @@ private:
         }
 
         CreatedTabletIds.push_back(record.GetTabletID());
+
+        if (record.GetStatus() == NKikimrProto::ALREADY) {
+            if (--PendingCreationResults == 0) {
+                return InitializeTablets();
+            }
+        }
     }
 
     void Handle(TEvHive::TEvTabletCreationResult::TPtr& ev) {
@@ -202,24 +220,33 @@ private:
         }
 
         if (--PendingCreationResults == 0) {
-            const auto* req = GetProtoRequest();
-            if (!req->config().empty()) {
-                return InitializeTablets();
-            }
-            return ReplySuccess();
+            return InitializeTablets();
         }
+    }
+
+    bool ValidateYamlKeys(const auto& mapping, const TString& sectionName,
+                         const THashSet<TString>& validKeys, TString& errorMsg) {
+        for (const auto& pair : mapping) {
+            TString keyStr{pair.Key().Scalar()};
+            if (!validKeys.contains(keyStr)) {
+                TVector<TString> keysList;
+                for (const auto& key : validKeys) {
+                    keysList.push_back(key);
+                }
+                Sort(keysList);
+                errorMsg = TStringBuilder() << "Unknown key in '" << sectionName << "': '" << keyStr
+                    << "'. Valid keys: " << JoinSeq(", ", keysList);
+                return false;
+            }
+        }
+        return true;
     }
 
     bool ParseWorkloadSection(const NFyaml::TNodeRef& workloadNode, TString& errorMsg) {
         auto workload = workloadNode.Map();
         const THashSet<TString> validWorkloadKeys = {"sizes", "write", "restart", "patch_fraction_ppm"};
-        for (const auto& pair : workload) {
-            TString keyStr{pair.Key().Scalar()};
-            if (!validWorkloadKeys.contains(keyStr)) {
-                errorMsg = TStringBuilder() << "Unknown key in 'workload': '" << keyStr
-                    << "'. Valid keys: sizes, write, restart, patch_fraction_ppm";
-                return false;
-            }
+        if (!ValidateYamlKeys(workload, "workload", validWorkloadKeys, errorMsg)) {
+            return false;
         }
 
         if (workload.Has("sizes")) {
@@ -278,13 +305,8 @@ private:
     bool ParseLimitsSection(const NFyaml::TNodeRef& limitsNode, TString& errorMsg) {
         auto limits = limitsNode.Map();
         const THashSet<TString> validLimitsKeys = {"data", "concurrency"};
-        for (const auto& pair : limits) {
-            TString keyStr{pair.Key().Scalar()};
-            if (!validLimitsKeys.contains(keyStr)) {
-                errorMsg = TStringBuilder() << "Unknown key in 'limits': '" << keyStr
-                    << "'. Valid keys: data, concurrency";
-                return false;
-            }
+        if (!ValidateYamlKeys(limits, "limits", validLimitsKeys, errorMsg)) {
+            return false;
         }
 
         if (limits.Has("data")) {
@@ -315,13 +337,8 @@ private:
     bool ParseTimingSection(const NFyaml::TNodeRef& timingNode, TString& errorMsg) {
         auto timing = timingNode.Map();
         const THashSet<TString> validTimingKeys = {"delay_start", "reset_on_full", "stall_counter"};
-        for (const auto& pair : timing) {
-            TString keyStr{pair.Key().Scalar()};
-            if (!validTimingKeys.contains(keyStr)) {
-                errorMsg = TStringBuilder() << "Unknown key in 'timing': '" << keyStr
-                    << "'. Valid keys: delay_start, reset_on_full, stall_counter";
-                return false;
-            }
+        if (!ValidateYamlKeys(timing, "timing", validTimingKeys, errorMsg)) {
+            return false;
         }
 
         if (timing.Has("delay_start")) ParsedInitCmd.SetSecondsBeforeLoadStart(FromString<ui32>(timing.at("delay_start").Scalar()));
@@ -334,13 +351,8 @@ private:
     bool ParseValidationSection(const NFyaml::TNodeRef& validationNode, TString& errorMsg) {
         auto validation = validationNode.Map();
         const THashSet<TString> validValidationKeys = {"server", "after_bytes"};
-        for (const auto& pair : validation) {
-            TString keyStr{pair.Key().Scalar()};
-            if (!validValidationKeys.contains(keyStr)) {
-                errorMsg = TStringBuilder() << "Unknown key in 'validation': '" << keyStr
-                    << "'. Valid keys: server, after_bytes";
-                return false;
-            }
+        if (!ValidateYamlKeys(validation, "validation", validValidationKeys, errorMsg)) {
+            return false;
         }
 
         if (validation.Has("server")) {
@@ -366,13 +378,8 @@ private:
     bool ParseTracingSection(const NFyaml::TNodeRef& tracingNode, TString& errorMsg) {
         auto tracing = tracingNode.Map();
         const THashSet<TString> validTracingKeys = {"put_fraction_ppm", "verbosity"};
-        for (const auto& pair : tracing) {
-            TString keyStr{pair.Key().Scalar()};
-            if (!validTracingKeys.contains(keyStr)) {
-                errorMsg = TStringBuilder() << "Unknown key in 'tracing': '" << keyStr
-                    << "'. Valid keys: put_fraction_ppm, verbosity";
-                return false;
-            }
+        if (!ValidateYamlKeys(tracing, "tracing", validTracingKeys, errorMsg)) {
+            return false;
         }
 
         if (tracing.Has("put_fraction_ppm")) {
@@ -395,13 +402,8 @@ private:
             auto rootMap = root.Map();
 
             const THashSet<TString> validTopLevelKeys = {"workload", "limits", "timing", "validation", "tracing"};
-            for (const auto& pair : rootMap) {
-                TString keyStr{pair.Key().Scalar()};
-                if (!validTopLevelKeys.contains(keyStr)) {
-                    errorMsg = TStringBuilder() << "Unknown top-level key: '" << keyStr
-                        << "'. Valid keys: workload, limits, timing, validation, tracing";
-                    return false;
-                }
+            if (!ValidateYamlKeys(rootMap, "config root", validTopLevelKeys, errorMsg)) {
+                return false;
             }
 
             #define PARSE_YAML_SECTION(sectionName, parserMethod) \

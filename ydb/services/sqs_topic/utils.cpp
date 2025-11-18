@@ -6,6 +6,8 @@
 
 #include <util/system/hostname.h>
 
+#include <format>
+
 namespace NKikimr::NSqsTopic {
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt) {
@@ -28,4 +30,4 @@ namespace NKikimr::NSqsTopic {
     const NKikimrConfig::TSqsConfig& Cfg() {
         return AppData()->SqsConfig;
     }
-}
+} // namespace NKikimr::NSqsTopic

@@ -5,7 +5,11 @@
 
 namespace NKikimrConfig {
     class TSqsConfig;
-}
+} // namespace NKikimrConfig
+
+namespace NKikimr::NGrpcService {
+    class IRequestOpCtx;
+} // namespace NKikimr::NGrpcService
 
 namespace NKikimr::NSqsTopic {
 
@@ -16,8 +20,7 @@ namespace NKikimr::NSqsTopic {
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt Y_LIFETIME_BOUND);
 
-
     const NKikimrConfig::TSqsConfig& Cfg();
 
     TString GetEndpoint(const NKikimrConfig::TSqsConfig& config);
-}
+} // namespace NKikimr::NSqsTopic

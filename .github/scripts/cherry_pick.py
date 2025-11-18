@@ -10,6 +10,15 @@ from typing import List, Optional, Tuple
 from github import Github, GithubException, GithubObject, Commit
 import requests
 
+# Import PR template and categories from validate_pr_description action
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'actions', 'validate_pr_description'))
+from pr_template import (
+    ISSUE_PATTERNS,
+    FOR_CHANGELOG_CATEGORIES,
+    NOT_FOR_CHANGELOG_CATEGORIES,
+    get_category_section_template
+)
+
 
 class CherryPickCreator:
     def __init__(self, args):
@@ -463,13 +472,7 @@ class CherryPickCreator:
         # For Bugfix category, ensure there's an issue reference in changelog entry (validation requirement)
         if changelog_category and changelog_category.startswith("Bugfix") and issue_refs and issue_refs != "None":
             # Check if issue reference is already in entry
-            issue_patterns = [
-                r"https://github.com/ydb-platform/[a-z\-]+/issues/\d+",
-                r"https://st.yandex-team.ru/[a-zA-Z]+-\d+",
-                r"#\d+",
-                r"[a-zA-Z]+-\d+"
-            ]
-            has_issue = any(re.search(pattern, changelog_entry) for pattern in issue_patterns)
+            has_issue = any(re.search(pattern, changelog_entry) for pattern in ISSUE_PATTERNS)
             if not has_issue:
                 # Add issue reference to entry
                 changelog_entry = f"{changelog_entry} ({issue_refs})"
@@ -479,15 +482,7 @@ class CherryPickCreator:
             category_section = f"* {changelog_category}"
         else:
             # Use full template if category not found - let user choose
-            category_section = """* New feature
-* Experimental feature
-* Improvement
-* Performance improvement
-* User Interface
-* Bugfix
-* Backward incompatible change
-* Documentation (changelog entry is not required)
-* Not for changelog (changelog entry is not required)"""
+            category_section = get_category_section_template()
         
         # Build description for reviewers section
         description_section = f"#### Original PR(s)\n{commits}\n\n"

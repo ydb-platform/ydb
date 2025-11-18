@@ -60,6 +60,13 @@ Perform the following steps to establish a connection:
 
 1. In the **User** and **Password** fields, enter the login and password for connecting to the database. A complete list of authentication methods and connection strings for {{ ydb-name }} is provided in the [JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) description.
 
+{% note info %}
+
+In Managed installations of {{ ydb-name }} (both internal and cloud), login and password authentication is not available.
+
+{% endnote %}
+
+
 1. Click **Test Connection...** to verify the settings.
 
     If all settings are correct, a message indicating successful connection testing will appear:

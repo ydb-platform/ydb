@@ -66,28 +66,19 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
-
-        std::unordered_set<ui64> saveStatisticsQueryResponse;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev) {
-            saveStatisticsQueryResponse.emplace(ev->Get()->PathId.OwnerId);
-        });
-
         PrepareColumnTable(env, "Database", "Table1", 1);
+        ui64 saTabletId = 0;
+        auto pathId = ResolvePathId(runtime, "/Root/Database/Table1", nullptr, &saTabletId);
 
-        runtime.DispatchEvents(TDispatchOptions{
-            .CustomFinalCondition = [&]() {
-                return saveStatisticsQueryResponse.size() >= 1;
-            }
-        });
+        Analyze(runtime, saTabletId, {pathId});
 
-        auto sender = runtime.AllocateEdgeActor();
-        auto pathId = ResolvePathId(runtime, "/Root/Database/Table1");
         std::vector<TColumnStatisticsProbes> expected = {
             {
                 .Tag = 1,
                 .Probes{ {1, 4}, {2, 4} }
             }
         };
+        auto sender = runtime.AllocateEdgeActor();
         CheckColumnStatistics(runtime, pathId, sender, expected);
     }
 
@@ -99,19 +90,16 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         CreateServerlessDatabase(env, "Serverless1", "/Root/Shared", 1);
         CreateServerlessDatabase(env, "Serverless2", "/Root/Shared", 1);
 
-        std::unordered_set<ui64> saveStatisticsQueryResponse;
-        auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev) {
-            saveStatisticsQueryResponse.emplace(ev->Get()->PathId.OwnerId);
-        });
-
         PrepareColumnTable(env, "Serverless1", "Table1", 1);
         PrepareColumnTable(env, "Serverless2", "Table2", 1);
 
-        runtime.DispatchEvents(TDispatchOptions{
-            .CustomFinalCondition = [&]() {
-                return saveStatisticsQueryResponse.size() >= 2;
-            }
-        });
+        // Same SA tablet for both serverless databases
+        ui64 saTabletId = 0;
+        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
+        auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
+
+        Analyze(runtime, saTabletId, {pathId1});
+        Analyze(runtime, saTabletId, {pathId2});
 
         auto sender = runtime.AllocateEdgeActor();
         std::vector<TColumnStatisticsProbes> expected = {
@@ -121,10 +109,7 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
             }
         };
 
-        auto pathId1 = ResolvePathId(runtime, "/Root/Serverless1/Table1");
         CheckColumnStatistics(runtime, pathId1, sender, expected);
-
-        auto pathId2 = ResolvePathId(runtime, "/Root/Serverless2/Table2");
         CheckColumnStatistics(runtime, pathId2, sender, expected);
     }
 }

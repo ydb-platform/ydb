@@ -39,17 +39,13 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
 
         NIceDb::TNiceDb db(txc.DB);
 
-        switch (Self->NavigateType) {
-        case ENavigateType::Analyze:
-            Self->NavigateType = ENavigateType::Traversal;
-            Self->ScheduleNextTraversal(db);
-            break;
-        case ENavigateType::Traversal:
-            Self->NavigateType = ENavigateType::Analyze;
-            Self->ScheduleNextAnalyze(db);
-            break;
-        }
+        // First try to dispatch a table analyze operation.
+        Self->ScheduleNextAnalyze(db, ctx);
 
+        // Next, if there is no analyze operation, try to schedule background traversal.
+        if (!Self->TraversalPathId && Self->EnableBackgroundColumnStatsCollection) {
+            Self->ScheduleNextBackgroundTraversal(db);
+        }
         return true;
     }
 

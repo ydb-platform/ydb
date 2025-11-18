@@ -166,8 +166,8 @@ private:
     void PersistGlobalTraversalRound(NIceDb::TNiceDb& db);
 
     void ResetTraversalState(NIceDb::TNiceDb& db);
-    void ScheduleNextAnalyze(NIceDb::TNiceDb& db);
-    void ScheduleNextTraversal(NIceDb::TNiceDb& db);
+    void ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx);
+    void ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db);
     void StartTraversal(NIceDb::TNiceDb& db);
     void FinishTraversal(NIceDb::TNiceDb& db);
 
@@ -344,14 +344,6 @@ private:
     static constexpr TDuration AnalyzeDeadline = TDuration::Days(1);
     static constexpr TDuration AnalyzeDeadlinePeriod = TDuration::Seconds(1);
 
-    enum ENavigateType {
-        Analyze,
-        Traversal
-    };
-    ENavigateType NavigateType = Analyze;
-    TString GetNavigateTypeString() const;
-
-    TString NavigateAnalyzeOperationId;
     TString NavigateDatabase;
     TPathId NavigatePathId;
 

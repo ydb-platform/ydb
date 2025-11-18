@@ -11,6 +11,8 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
 // TODO: check for arbitrary set of values of type T (including frequent duplicates)
 // numbers (1..N) were count as a sketch. Check sketch properties
 bool CheckCountMinSketch(const std::shared_ptr<TCountMinSketch>& sketch, const ui32 N) {
@@ -29,11 +31,20 @@ bool CheckCountMinSketch(const std::shared_ptr<TCountMinSketch>& sketch, const u
     return failedEstimatesCount < delta * N;
 }
 
+TTestEnv CreateTestEnv() {
+    return TTestEnv(1, 1, false, [](Tests::TServerSettings& settings) {
+        settings.AppConfig->MutableStatisticsConfig()
+            ->SetEnableBackgroundColumnStatsCollection(true);
+    });
+}
+
+}
+
 Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     const ui8 ShardCount = 4;
 
     Y_UNIT_TEST(TraverseColumnTable) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -46,7 +57,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseServerlessColumnTable) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         auto databaseInfo = PrepareServerlessDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -59,7 +70,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootColumnshard) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -75,7 +86,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }    
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -101,7 +112,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeReqDistribution) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -122,7 +133,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeAggregate) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -143,7 +154,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeSave) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -164,7 +175,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletInAggregate) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -186,7 +197,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionZeroNodes) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -232,7 +243,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionAbsentNodes) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -270,7 +281,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableAggrStatUnavailableNode) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];
@@ -308,7 +319,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     }
 
     Y_UNIT_TEST(TraverseColumnTableAggrStatNonLocalTablet) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = PrepareDatabaseColumnTables(env, 1, ShardCount);
         const auto& tableInfo = databaseInfo.Tables[0];

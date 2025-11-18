@@ -10,10 +10,21 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
+TTestEnv CreateTestEnv() {
+    return TTestEnv(1, 1, false, [](Tests::TServerSettings& settings) {
+        settings.AppConfig->MutableStatisticsConfig()
+            ->SetEnableBackgroundColumnStatsCollection(true);
+    });
+}
+
+}
+
 Y_UNIT_TEST_SUITE(TraverseDatashard) {
 
     Y_UNIT_TEST(TraverseOneTable) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
@@ -24,7 +35,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
     }
 
     Y_UNIT_TEST(TraverseTwoTables) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database");
@@ -38,7 +49,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
     }    
 
     Y_UNIT_TEST(TraverseOneTableServerless) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Shared", 1, true);
@@ -50,7 +61,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
     }
 
     Y_UNIT_TEST(TraverseTwoTablesServerless) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Shared", 1, true);
@@ -65,7 +76,7 @@ Y_UNIT_TEST_SUITE(TraverseDatashard) {
     }
 
     Y_UNIT_TEST(TraverseTwoTablesTwoServerlessDbs) {
-        TTestEnv env(1, 1);
+        TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Shared", 1, true);

@@ -4,6 +4,7 @@
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
 
 #include <util/stream/file.h>
+#include <util/system/fs.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -45,9 +46,11 @@ void TCommandTestShardCreate::Parse(TConfig& config) {
         ythrow yexception() << "config-file must be specified";
     }
 
-    if (!ConfigFile.empty()) {
-        ConfigYaml = TFileInput(ConfigFile).ReadAll();
+    if (!NFs::Exists(ConfigFile)) {
+        ythrow yexception() << "Config file not found: " << ConfigFile;
     }
+
+    ConfigYaml = TFileInput(ConfigFile).ReadAll();
 }
 
 int TCommandTestShardCreate::Run(TConfig& config) {
@@ -106,3 +109,4 @@ int TCommandTestShardDelete::Run(TConfig& config) {
 }
 
 } // namespace NYdb::NConsoleClient
+

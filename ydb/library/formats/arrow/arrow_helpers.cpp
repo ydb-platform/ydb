@@ -604,6 +604,30 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui3
     return result;
 }
 
+TInstant ArrowTimestampToInstant(const arrow::TimestampArray& timestamp, const ui32 position) {
+    int64_t micros = timestamp.Value(position);
+    const auto unit = std::static_pointer_cast<arrow::TimestampType>(timestamp.type())->unit();
+    switch (unit) {
+        case arrow::TimeUnit::SECOND: {
+            micros *= 1000000LL;
+            break;
+        }
+        case arrow::TimeUnit::MILLI: {
+            micros *= 1000LL;
+            break;
+        }
+        case arrow::TimeUnit::MICRO: {
+            break;
+        }
+        case arrow::TimeUnit::NANO: {
+            micros /= 1000LL;
+            break;
+        }
+    }
+
+    return TInstant::MicroSeconds(micros);
+}
+
 TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
     if (!array) {
         return "_NO_DATA";
@@ -619,26 +643,7 @@ TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
             result << (column.Value(position) ? "true" : "false");
         } else if constexpr (std::is_same_v<typename TWrap::T, arrow::TimestampType>) {
             const auto& tsArr = static_cast<const arrow::TimestampArray&>(column);
-            int64_t micros = tsArr.Value(position);
-            switch (std::static_pointer_cast<arrow::TimestampType>(array->type())->unit()) {
-                case arrow::TimeUnit::SECOND: {
-                    micros *= 1000000LL;
-                    break;
-                }
-                case arrow::TimeUnit::MILLI: {
-                    micros *= 1000LL;
-                    break;
-                }
-                case arrow::TimeUnit::MICRO: {
-                    break;
-                }
-                case arrow::TimeUnit::NANO: {
-                    micros /= 1000LL;
-                    break;
-                }
-            }
-
-            result << TInstant::MicroSeconds(micros).ToString();
+            result << ArrowTimestampToInstant(tsArr, position).ToString();
         } else if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             auto value = column.GetString(position);
             result << TString(value.data(), value.size());

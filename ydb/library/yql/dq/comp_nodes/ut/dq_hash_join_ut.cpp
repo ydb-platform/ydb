@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(InnerJoinRenamesTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestBlockSpilling) {
+    Y_UNIT_TEST(TestBlockSpilling) { 
         try {
             Test(SpillingTestData(), true);
         } catch (...) {

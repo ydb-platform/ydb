@@ -101,14 +101,11 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
-        // return bucketIndex;
     }
 
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {
         while (condition() || SpillingPages_.has_value()) {
-            // Cout << std::format("free mem:{}\n", FreeMemory());
             if (SpillingPages_.has_value()) {
-                // Cout << "Have spilling pages " << Endl;
                 for (auto& future : *SpillingPages_) {
                     if (!future.IsReady()) {
                         return Wait();
@@ -121,15 +118,12 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                 }
                 SpillingPages_ = std::nullopt;
             } else {
-                // Cout << std::format("Dont have spilling pages, total pages spilled: {}, in memory: {} ",
-                // TotalSpilledPages(), TotalInMemoryPages() ) << Endl;
 
                 while (std::accumulate(Buckets_.begin(), Buckets_.end(), 0, [&](int pages, const TBucket& bucket) {
                            return pages + (bucket.IsSpilled() ? std::ssize(bucket.InMemoryPages) : 0);
                        }) < Settings.SpillingPagesAtTime) {
                     std::optional<int> bucketIndex = FindInMemoryBucketWithMostPages();
                     if (!bucketIndex) {
-                        // Cout << "Dont have pages" << Endl;
                         return ESpillResult::DontHavePages;
                     }
                     Buckets_[*bucketIndex].SpilledPages.emplace();

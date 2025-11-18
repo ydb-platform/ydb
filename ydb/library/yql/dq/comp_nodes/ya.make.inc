@@ -32,7 +32,6 @@ YQL_LAST_ABI_VERSION()
 ADDINCL(
     ${ORIG_SRC_DIR}
 )
-CFLAGS(-Wmissing-field-initializers)
 COPY(
     WITH_CONTEXT
     AUTO

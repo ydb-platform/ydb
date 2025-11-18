@@ -25,27 +25,6 @@ template <typename T> struct TSides {
     }
 };
 
-template <typename Container> std::optional<typename Container::value_type> GetFrontOrNull(Container& cont) {
-    if (cont.empty()) {
-        return std::nullopt;
-    } else {
-        std::optional<typename Container::value_type> ret = std::move(*cont.begin());
-        cont.erase(cont.begin());
-        return ret;
-    }
-}
-
-template <typename Container> std::optional<typename Container::value_type> GetBackOrNull(Container& cont) {
-    if (cont.empty()) {
-        return std::nullopt;
-    } else {
-        auto it = cont.end();
-        --it;
-        std::optional<typename Container::value_type> ret = std::move(*it);
-        cont.erase(it);
-        return ret;
-    }
-}
 
 /*
   usage:
@@ -69,6 +48,28 @@ void f(TSides<int> sizes, TSides<bool> required) {
 void ForEachSide(std::invocable<ESide> auto fn) {
     fn(ESide::Build);
     fn(ESide::Probe);
+}
+
+template <typename Container> std::optional<typename Container::value_type> GetFrontOrNull(Container& cont) {
+    if (cont.empty()) {
+        return std::nullopt;
+    } else {
+        std::optional<typename Container::value_type> ret = std::move(*cont.begin());
+        cont.erase(cont.begin());
+        return ret;
+    }
+}
+
+template <typename Container> std::optional<typename Container::value_type> GetBackOrNull(Container& cont) {
+    if (cont.empty()) {
+        return std::nullopt;
+    } else {
+        auto it = cont.end();
+        --it;
+        std::optional<typename Container::value_type> ret = std::move(*it);
+        cont.erase(it);
+        return ret;
+    }
 }
 
 struct TBucket {

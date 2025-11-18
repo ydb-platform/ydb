@@ -27,7 +27,6 @@ IF (ARCH_X86_64 AND OS_LINUX)
 CFLAGS(
     -mprfchw
     -mavx2
-    -Wmissing-field-initializers
 )
 
 ENDIF()

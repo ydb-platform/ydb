@@ -85,7 +85,6 @@ template <EJoinKind Kind> struct TRenamedOutput {
 template <typename Fun, typename Tuple>
 concept JoinMatchFun = std::invocable<Fun, NJoinTable::TTuple> || std::invocable<Fun, TSides<Tuple>>;
 
-// IBlockLayoutConverter::TPackResult Flatten(TMKQLVector<TPackResult> tuples);
 
 template <typename Source, EJoinKind Kind> class TJoin : public TComputationValue<TJoin<Source, Kind>> {
     using TBase = TComputationValue<TJoin>;
@@ -501,9 +500,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     break;
                 case DontHavePages:
                     MKQL_ENSURE(false,
-                                "spilling in smaller pages is not implemented"); // we can not spill much and do not
-                                                                                 // have memory. spilling smaller chunks
-                                                                                 // is not implemented currently.
+                                "spilling in smaller pages is not implemented");
                     break;
                 }
                 state.Pack->ForEachTuple([&](TSingleTuple tuple) { state.Spiller.AddRow(tuple); });
@@ -551,9 +548,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                 break;
             case DontHavePages:
                 MKQL_ENSURE(false,
-                            "spilling in smaller pages is not implemented"); // we can not spill much and do not have
-                                                                             // memory. spilling smaller chunks is not
-                                                                             // implemented currently.
+                            "spilling in smaller pages is not implemented");
                 break;
             }
             MKQL_ENSURE(peakMemoryDuringBuild() < TlsAllocState->GetLimit(), "sanity check");
@@ -570,7 +565,6 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     for (auto& page : bucket.InMemoryPages) {
                         inMemoryPages.push_back(std::move(page));
                     }
-                    // bucket.InMemoryPages.clear();
                 } else {
                     bucket.DetatchBuildingPage();
                     probeSpiller.GetState().SpilledBuckets_[index].Build = std::move(bucket);
@@ -584,7 +578,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
             State_ = Probing{*this, std::move(state.EmptyTable), std::move(probeSpiller)};
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
-            if (!state.FetchedPack.has_value()) { // same as build side
+            if (!state.FetchedPack.has_value()) { 
                 FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
@@ -639,15 +633,8 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                 case DontHavePages: {
                     MKQL_ENSURE(
                         false,
-                        "dont have any pages to spill, spilling in smaller pages is not implemented"); // we can not
-                                                                                                       // spill much and
-                                                                                                       // do not have
-                                                                                                       // memory.
-                                                                                                       // spilling
-                                                                                                       // smaller chunks
-                                                                                                       // is not
-                                                                                                       // implemented
-                                                                                                       // currently.
+                        "dont have any pages to spill, "
+                        "spilling in smaller pages is not implemented");
                 }
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");

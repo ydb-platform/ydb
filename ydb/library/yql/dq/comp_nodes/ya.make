@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS()
-CFLAGS(-Wmissing-field-initializers)
 
 # TODO: Migrate all dependents to explicit llvm16/no_llvm and remove this peerdir
 PEERDIR(

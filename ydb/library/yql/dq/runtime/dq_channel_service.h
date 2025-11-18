@@ -73,7 +73,9 @@ public:
         Timestamp = TInstant::Now();
     }
 
-    TDataChunk(bool leading, bool finished) : Bytes(1), Leading(leading), Finished(finished) {}
+    TDataChunk(bool leading, bool finished) : Bytes(1), Leading(leading), Finished(finished) {
+        Timestamp = TInstant::Now();
+    }
 
     TChunkedBuffer Buffer;
     ui64 Rows = 0;

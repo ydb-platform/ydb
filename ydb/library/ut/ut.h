@@ -35,7 +35,7 @@ struct TTestContext : public TTestContextBase {
 
 // Context-aware fail implementation
 // TODO: After library/cpp/testing/unittest extension we won't need any custom
-// CTX_UNIT redefenition (we just use customization point and replace original
+// CTX_UNIT redefinition (we just use customization point and replace original
 // UNIT_FAIL_IMPL with context aware version)
 #define CTX_UNIT_FAIL_IMPL(R, M)                                               \
   do {                                                                         \

@@ -24,7 +24,7 @@ When using helper functions in unit tests that contain assertions, if an asserti
 
 ## Future Improvements
 
-After `library/cpp/testing/unittest` extension we won't need any custom `CTX_UNIT` redefenition (we just use customization point and replace original `UNIT_FAIL_IMPL` with context aware version).
+After `library/cpp/testing/unittest` extension we won't need any custom `CTX_UNIT` redefinition (we just use customization point and replace original `UNIT_FAIL_IMPL` with context aware version).
 
 3. Call the helper as usual:
    ```cpp

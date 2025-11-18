@@ -297,7 +297,7 @@ public:
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
         ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
-        ProcessResponseBlob(orderNumber, msg.Record);
+        ProcessResponseBlob(msg.Record.GetStatus(), orderNumber, msg.Record);
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
 
@@ -306,7 +306,7 @@ public:
         ProcessResponseCommonPart(msg.Record);
         ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
         for (const auto& item : msg.Record.GetItems()) {
-            ProcessResponseBlob(orderNumber, item);
+            ProcessResponseBlob(item.GetStatus(), orderNumber, item);
         }
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
@@ -328,11 +328,11 @@ protected:
         const TBlobStorageGroupInfo::TGroupVDisks& expired);
 
     template<typename TProtobuf>
-    void ProcessResponseBlob(ui32 orderNumber, TProtobuf& record) {
+    void ProcessResponseBlob(NKikimrProto::EReplyStatus status, ui32 orderNumber, TProtobuf& record) {
         Y_ABORT_UNLESS(record.HasStatus());
         Y_ABORT_UNLESS(record.HasBlobID());
 
-        const NKikimrProto::EReplyStatus status = record.GetStatus();
+        const NKikimrProto::EReplyStatus replyStatus = record.GetStatus();
         const TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(record.GetBlobID());
 
         const size_t blobIdx = GetBlobIdx(blobId);
@@ -341,12 +341,12 @@ protected:
             return;
         }
 
-        switch (status) {
+        switch (replyStatus) {
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
             case NKikimrProto::OUT_OF_SPACE:
                 Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
-                AtLeastOneResponseWasNotOk = true;
+                AtLeastOneResponseWasNotOk = status != NKikimrProto::NOTREADY;
                 break;
             case NKikimrProto::OK:
             case NKikimrProto::ALREADY:
@@ -354,7 +354,7 @@ protected:
                 WrittenBeyondBarrier[blobIdx] = record.GetWrittenBeyondBarrier();
                 break;
             default:
-                Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                Y_ABORT("unexpected status# %s", NKikimrProto::EReplyStatus_Name(replyStatus).data());
         }
     }
 

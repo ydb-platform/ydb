@@ -10,6 +10,8 @@
 #include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/library/formats/arrow/switch/compare.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -204,8 +206,8 @@ std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const 
     return NArrow::CopyRecords(Array, { Address.GetLocalIndex(recordIndex) });
 }
 
-TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position) const {
-    return NArrow::DebugString(Array, Address.GetLocalIndex(position));
+TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position, const NKikimr::NScheme::TTypeInfo* logicalType) const {
+    return NArrow::DebugString(Array, Address.GetLocalIndex(position), logicalType);
 }
 
 void IChunkedArray::TLocalDataAddress::Reallocate() {

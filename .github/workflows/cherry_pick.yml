@@ -19,6 +19,10 @@ on:
         default: ""
         description: Comma or space separated branches to cherry-pick
         required: true
+      allow_unmerged:
+        type: boolean
+        default: true
+        description: Allow backporting unmerged PRs (uses commits from PR directly)
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
@@ -56,4 +60,5 @@ jobs:
         run: |
           ./.github/scripts/cherry_pick.py \
             --commits="${{ inputs.commits }}" \
-            --target-branches="${{ inputs.target_branches }}"
+            --target-branches="${{ inputs.target_branches }}" \
+            ${{ inputs.allow_unmerged && '--allow-unmerged' || '' }}

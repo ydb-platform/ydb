@@ -22,7 +22,7 @@
 
 Команда / подкоманда | Краткое описание
 --- | ---
-admin cluster bootstrap | Инициализация автоматически подготовленного [кластера](../../../concepts/glossary.md#cluster)
+admin cluster bootstrap | Инициализация подготовленного [кластера](../../../concepts/glossary.md#cluster)
 [admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
 [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Возвращение [pile](../../../concepts/glossary.md#pile) в [кластер](../../../concepts/glossary.md#cluster) после обслуживания или восстановления

@@ -999,9 +999,10 @@ After resolving conflicts, mark this PR as ready for review.
             return
         
         # Cherry-pick commits
+        # Note: git cherry-pick by default skips empty commits, so we don't need --empty=drop (which doesn't exist)
         for commit_sha in commits_to_pick:
             try:
-                self.git_run("cherry-pick", "--empty=drop", commit_sha)
+                self.git_run("cherry-pick", commit_sha)
             except subprocess.CalledProcessError as e:
                 error_output = e.output.decode() if e.output else ""
                 # Check if this is a conflict or another error

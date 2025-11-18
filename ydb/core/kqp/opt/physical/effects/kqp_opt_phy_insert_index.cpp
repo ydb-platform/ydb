@@ -104,13 +104,14 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
-    const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
-        && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSync
-                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
-        });
+    const bool useStreamIndex = isSink && kqpCtx.Config->EnableIndexStreamWrite;
 
-    const bool needPrecompute = !(isSink && abortOnError && canUseStreamIndex);
+    const bool needPrecompute = !abortOnError
+        || !useStreamIndex
+        || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
+            return index.second->Type != TIndexDescription::EType::GlobalSync
+                && index.second->Type != TIndexDescription::EType::GlobalSyncUnique;
+        });;
 
     if (!needPrecompute) {
         TVector<TStringBuf> insertColumns;
@@ -129,27 +130,19 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
         }
 
-        if (insertColumns.size() == insert.Columns().Size()) {
-            return Build<TKqlUpsertRows>(ctx, insert.Pos())
-                .Table(insert.Table())
-                .Input(insert.Input())
-                .Columns(insert.Columns())
-                .ReturningColumns(insert.ReturningColumns())
-                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-                .Settings(insert.Settings())
-                .Done();
-        } else {
-            auto insertRows = MakeInsertIndexRows(
+        auto insertRows = (insertColumns.size() == insert.Columns().Size())
+            ? insert.Input()
+            : MakeInsertIndexRows(
                 insert.Input(), table, inputColumnsSet, insertColumns, insert.Pos(), ctx, false);
-            return Build<TKqlUpsertRows>(ctx, insert.Pos())
-                .Table(insert.Table())
-                .Input(insertRows)
-                .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
-                .ReturningColumns(insert.ReturningColumns())
-                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-                .Settings(insert.Settings())
-                .Done();
-        }
+
+        return Build<TKqlUpsertRows>(ctx, insert.Pos())
+            .Table(insert.Table())
+            .Input(insertRows)
+            .Columns(BuildColumnsList(insertColumns, insert.Pos(), ctx))
+            .ReturningColumns(insert.ReturningColumns())
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .Settings(insert.Settings())
+            .Done();
     } else {
         THashSet<TStringBuf> inputColumnsSet;
         for (const auto& column : insert.Columns()) {
@@ -161,22 +154,39 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             return node;
         }
 
+        // TODO: don't use precompute here!
         auto insertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos())
             .Connection(insertRows.Cast())
             .Done();
 
-        auto upsertTable = Build<TKqlUpsertRows>(ctx, insert.Pos())
-            .Table(insert.Table())
-            .Input(insertRowsPrecompute)
-            .Columns(insert.Columns())
-            .ReturningColumns(insert.ReturningColumns())
-            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-            .Done();
-
         TVector<TExprBase> effects;
-        effects.emplace_back(upsertTable);
+
+        if (useStreamIndex) {
+            effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
+                .Table(insert.Table())
+                .Input(insertRowsPrecompute)
+                .Columns(insert.Columns())
+                .ReturningColumns(insert.ReturningColumns())
+                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                .Settings(insert.Settings())
+                .Done());
+        } else {
+            effects.emplace_back(Build<TKqlUpsertRows>(ctx, insert.Pos())
+                .Table(insert.Table())
+                .Input(insertRowsPrecompute)
+                .Columns(insert.Columns())
+                .ReturningColumns(insert.ReturningColumns())
+                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                .Done());
+        }
 
         for (const auto& [tableNode, indexDesc] : indexes) {
+            if (useStreamIndex
+                    && (indexDesc->Type == TIndexDescription::EType::GlobalSync
+                        || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+                continue;
+            }
+
             THashSet<TStringBuf> indexTableColumnsSet;
             TVector<TStringBuf> indexTableColumns;
 
@@ -199,8 +209,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
             std::optional<TExprBase> upsertIndexRows;
             switch (indexDesc->Type) {
-                case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
+                    AFL_ENSURE(false);
+                case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalSyncUnique: {
                     upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
                         insert.Pos(), ctx, true);

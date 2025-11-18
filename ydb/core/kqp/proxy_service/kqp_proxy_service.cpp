@@ -1295,6 +1295,8 @@ private:
             return true;
         }
 
+        KQP_PROXY_LOG_W("Reply process error for request " << static_cast<ui64>(request->EventType) << ", status: " << ydbStatus << ", issues: " << issues.ToOneLineString());
+
         if (request->EventType == TKqpEvents::EvPingSessionRequest) {
             auto response = std::make_unique<TEvKqp::TEvPingSessionResponse>();
             response->Record.SetStatus(ydbStatus);

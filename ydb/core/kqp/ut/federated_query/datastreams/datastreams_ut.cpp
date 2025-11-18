@@ -153,7 +153,7 @@ public:
     std::shared_ptr<TQueryClient> GetQueryClient() {
         if (!QueryClient) {
             QueryClient = std::make_shared<TQueryClient>(
-                GetKikimrRunner()->GetQueryClient(TClientSettings().AuthToken(BUILTIN_ACL_ROOT))
+                GetKikimrRunner()->GetQueryClient(QueryClientSettings)
             );
         }
 
@@ -728,6 +728,7 @@ private:
 protected:
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
+    TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 
 private:
     std::optional<NKikimrConfig::TAppConfig> AppConfig;
@@ -2664,6 +2665,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnInternalRetry, TStreamingTestFixture) {
+        QueryClientSettings = TClientSettings();
+
         // Join with S3 used for introducing temporary failure and force retry on specific key
 
         constexpr char sourceBucket[] = "test_streaming_query_recovery_on_internal_retry";

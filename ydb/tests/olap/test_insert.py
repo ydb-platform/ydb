@@ -3,6 +3,7 @@ import os
 import random
 import yatest.common
 import ydb
+import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -24,6 +25,9 @@ class TestInsertStatement(object):
                 "compaction_enabled": True,
                 "deduplication_enabled": True,
                 "reader_class_name": "SIMPLE",
+            },
+            extra_feature_flags={
+                "enable_columnshard_bool": True,
             }
         )
         cls.cluster = KiKiMR(config)
@@ -279,3 +283,72 @@ class TestInsertStatement(object):
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
             assert "Failed to convert type" in ex.message
+
+    def test_bool_pk_error_type(self):
+        table_path = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                b Bool NOT NULL,
+                PRIMARY KEY(b),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        self.ydb_client.query(f"INSERT INTO `{table_path}` (b) VALUES (false);")
+        try:
+            self.ydb_client.query(f"INSERT INTO `{table_path}` (b) VALUES (false);")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in ex.message
+            # Check that error message doesn't contain "uint8" (bool stored as uint8 internally)
+            assert "uint8" not in ex.message, f"Error message should not contain 'uint8', but it does: {ex.message}"
+
+    @pytest.mark.parametrize("primitive_type", ["Uint64", "Int32", "Int16", "Uint8"])
+    def test_primitive_pk_error_type(self, primitive_type):
+        table_path = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                type {primitive_type} NOT NULL,
+                PRIMARY KEY(type),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        self.ydb_client.query(f"INSERT INTO `{table_path}` (type) VALUES (239);")
+        try:
+            self.ydb_client.query(f"INSERT INTO `{table_path}` (type) VALUES (239);")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in ex.message
+            assert primitive_type in ex.message, f"Error message should contain '{primitive_type}', but it does: {ex.message}"
+
+    def test_timestamp_pk_error_type(self):
+        table_path = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                ts Timestamp NOT NULL,
+                PRIMARY KEY(ts),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        ts_literal = 'Timestamp("2025-01-01T00:00:00Z")'
+        self.ydb_client.query(f"INSERT INTO `{table_path}` (ts) VALUES ({ts_literal});")
+        try:
+            self.ydb_client.query(f"INSERT INTO `{table_path}` (ts) VALUES ({ts_literal});")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in ex.message
+            assert "timestamp" in ex.message.lower(), f"Error message should contain 'timestamp', but it does: {ex.message}"

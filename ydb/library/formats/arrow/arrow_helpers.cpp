@@ -5,10 +5,13 @@
 
 #include "switch/switch_type.h"
 #include "validation/validation.h"
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <util/datetime/base.h>
+#include <type_traits>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
@@ -602,10 +605,27 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui3
     return result;
 }
 
-TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
+TInstant ArrowTimestampToInstant(const arrow::TimestampArray& timestamp, const ui32 position) {
+    int64_t micros = timestamp.Value(position);
+    const auto unit = std::static_pointer_cast<arrow::TimestampType>(timestamp.type())->unit();
+    if (unit == arrow::TimeUnit::SECOND) {
+        return TInstant::MicroSeconds(micros * 1000000LL);
+    } else if (unit == arrow::TimeUnit::MILLI) {
+        return TInstant::MicroSeconds(micros * 1000LL);
+    } else if (unit == arrow::TimeUnit::MICRO) {
+        return TInstant::MicroSeconds(micros);
+    } else if (unit == arrow::TimeUnit::NANO) {
+        return TInstant::MicroSeconds(micros * 1000LL);
+    }
+
+    return TInstant::MicroSeconds(micros);
+}
+
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position, const NKikimr::NScheme::TTypeInfo* logicalType) {
     if (!array) {
         return "_NO_DATA";
     }
+
     Y_ABORT_UNLESS(position < array->length());
     TStringBuilder result;
     SwitchType(array->type_id(), [&](const auto& type) {
@@ -613,15 +633,45 @@ TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
 
         auto& column = static_cast<const TArray&>(*array);
-        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+        if (!logicalType) {
+            auto& column = static_cast<const TArray&>(*array);
+            if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+                auto value = column.GetString(position);
+                result << TString(value.data(), value.size());
+            }
+            if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                result << column.Value(position);
+            }
+            return true;
+        }
+
+        if constexpr (std::is_same_v<typename TWrap::T, arrow::BooleanType>) {
+            result << (column.Value(position) ? "true" : "false");
+        } else if constexpr (std::is_same_v<typename TWrap::T, arrow::TimestampType>) {
+            const auto& tsArr = static_cast<const arrow::TimestampArray&>(column);
+            result << ArrowTimestampToInstant(tsArr, position).ToString();
+        } else if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             auto value = column.GetString(position);
             result << TString(value.data(), value.size());
+        } else if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+            auto v = column.Value(position);
+            using V = std::decay_t<decltype(v)>;
+            if constexpr (std::is_integral_v<V> && !std::is_same_v<V, bool>) {
+                if (logicalType && logicalType->GetTypeId() == NKikimr::NScheme::NTypeIds::Bool) {
+                    result << (v != 0 ? "true" : "false");
+                } else {
+                    result << static_cast<i64>(v);
+                }
+            } else {
+                result << v;
+            }
+        } else {
+            result << array->ToString();
         }
-        if constexpr (arrow::has_c_type<typename TWrap::T>()) {
-            result << column.Value(position);
-        }
+
         return true;
     });
+
     return result;
 }
 

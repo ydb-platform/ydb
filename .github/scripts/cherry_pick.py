@@ -523,17 +523,20 @@ class CherryPickCreator:
             # Use dev_branch_name if provided, otherwise use target_branch as fallback
             branch_for_instructions = dev_branch_name if dev_branch_name else (target_branch if target_branch else "<branch_name>")
             
-            # Build conflicted files list with links
+            # Build conflicted files list with links and conflict messages
             conflicted_files_section = ""
             if conflict_files:
                 conflicted_files_section = "\n\n**Files with conflicts:**\n"
                 for conflict_item in conflict_files:
-                    # Handle both tuple (file_path, line) and string (file_path) for backward compatibility
+                    # Handle both tuple (file_path, line, message) and string (file_path) for backward compatibility
                     if isinstance(conflict_item, tuple):
-                        file_path, conflict_line = conflict_item
+                        file_path = conflict_item[0]
+                        conflict_line = conflict_item[1] if len(conflict_item) > 1 else None
+                        conflict_message = conflict_item[2] if len(conflict_item) > 2 else None
                     else:
                         file_path = conflict_item
                         conflict_line = None
+                        conflict_message = None
                     
                     # Create link to file in PR diff (if PR is created) or branch (as fallback)
                     if pr_number:
@@ -561,6 +564,10 @@ class CherryPickCreator:
                     # If conflict_line is None, it means the whole file is in conflict, so don't add line number
                     display_text = f"{file_path} (line {conflict_line})" if conflict_line else file_path
                     conflicted_files_section += f"- [{display_text}]({file_link})\n"
+                    
+                    # Add conflict message if available
+                    if conflict_message:
+                        conflicted_files_section += f"  - `{conflict_message}`\n"
             
             description_section += f"""
 #### Conflicts Require Manual Resolution
@@ -656,9 +663,50 @@ After resolving conflicts, mark this PR as ready for review.
             self.logger.debug("Command output:\n%s", output)
         return output
 
-    def _handle_cherry_pick_conflict(self, commit_sha: str):
-        """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with line numbers"""
-        conflict_files = []  # List of (file_path, first_conflict_line) tuples
+    def _extract_conflict_messages(self, git_output: str) -> List[str]:
+        """Extract CONFLICT messages from git cherry-pick output
+        
+        Git supports the following conflict types:
+        - CONFLICT (content): Both branches modified the same part of a file (status: UU)
+        - CONFLICT (modify/delete): File modified in one branch, deleted in another (status: DU or UD)
+        - CONFLICT (add/add): File added in both branches with different content (status: AA)
+        - CONFLICT (rename/delete): File renamed in one branch, deleted in another
+        - CONFLICT (rename/rename): File renamed differently in both branches
+        - CONFLICT (delete/modify): File deleted in one branch, modified in another (status: DU or UD)
+        
+        This function extracts all CONFLICT messages from git output, which includes the full description
+        of what happened (e.g., "CONFLICT (modify/delete): file.py deleted in HEAD and modified in...").
+        
+        Returns:
+            List of conflict messages (e.g., "CONFLICT (modify/delete): file.py deleted in HEAD and modified in...")
+        """
+        conflict_messages = []
+        lines = git_output.split('\n')
+        
+        for i, line in enumerate(lines):
+            if 'CONFLICT' in line and '(' in line and ')' in line:
+                # Found a CONFLICT line, collect it and any continuation lines
+                conflict_msg = line.strip()
+                # Check if next line is a continuation (starts with "Version" or is part of the message)
+                j = i + 1
+                while j < len(lines) and (lines[j].strip().startswith('Version') or 
+                                         (lines[j].strip() and not lines[j].strip().startswith('hint:') and 
+                                          not lines[j].strip().startswith('error:'))):
+                    conflict_msg += ' ' + lines[j].strip()
+                    j += 1
+                conflict_messages.append(conflict_msg)
+        
+        return conflict_messages
+
+    def _handle_cherry_pick_conflict(self, commit_sha: str, git_output: str = ""):
+        """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with conflict messages
+        
+        Returns:
+            (success, conflict_files) where conflict_files is list of (file_path, conflict_line, conflict_message) tuples
+        """
+        conflict_files = []  # List of (file_path, conflict_line, conflict_message) tuples
+        conflict_messages = self._extract_conflict_messages(git_output)
+        
         try:
             # Check if there are conflicts (files with conflicts or unmerged paths)
             result = subprocess.run(
@@ -668,25 +716,37 @@ After resolving conflicts, mark this PR as ready for review.
                 check=True
             )
             
-            # Also check for conflict markers
-            has_conflict_markers = False
             if result.stdout.strip():
                 # Check for conflict markers in files
                 status_lines = result.stdout.strip().split('\n')
                 for line in status_lines:
-                    if line.startswith('UU') or line.startswith('AA') or line.startswith('DD'):
+                    # Git status codes for conflicts:
+                    # UU: both modified (content conflict)
+                    # AA: both added (add/add conflict)
+                    # DD: both deleted (delete/delete - usually not a conflict, but git marks it)
+                    # DU: deleted by us, updated by them (modify/delete or delete/modify)
+                    # UD: updated by us, deleted by them (modify/delete or delete/modify)
+                    # AU: added by us, updated by them (add/modify conflict)
+                    # UA: updated by us, added by them (modify/add conflict)
+                    if line.startswith('UU') or line.startswith('AA') or line.startswith('DD') or \
+                       line.startswith('DU') or line.startswith('UD') or line.startswith('AU') or line.startswith('UA'):
                         # Unmerged paths - definitely a conflict
-                        has_conflict_markers = True
                         # Extract filename (after status code)
-                        # Format: "XY filename" where XY is 2-char status, then space, then filename
-                        # More robust: split by whitespace and take everything after status code
                         parts = line.split(None, 1)  # Split on whitespace, max 1 split
                         if len(parts) > 1:
                             file_path = parts[1].strip()
                             if file_path:
                                 # Find first conflict line in file
                                 conflict_line = self._find_first_conflict_line(file_path)
-                                conflict_files.append((file_path, conflict_line))
+                                
+                                # Find matching conflict message from git output
+                                conflict_message = None
+                                for msg in conflict_messages:
+                                    if file_path in msg:
+                                        conflict_message = msg
+                                        break
+                                
+                                conflict_files.append((file_path, conflict_line, conflict_message))
                 
                 # If we didn't find unmerged paths, try to find files with conflict markers
                 if not conflict_files:
@@ -704,17 +764,31 @@ After resolving conflicts, mark this PR as ready for review.
                                 if file_path:
                                     # Find first conflict line in file
                                     conflict_line = self._find_first_conflict_line(file_path)
-                                    conflict_files.append((file_path, conflict_line))
+                                    
+                                    # Find matching conflict message
+                                    conflict_message = None
+                                    for msg in conflict_messages:
+                                        if file_path in msg:
+                                            conflict_message = msg
+                                            break
+                                    
+                                    conflict_files.append((file_path, conflict_line, conflict_message))
                     except subprocess.CalledProcessError:
                         pass
+                
+                # Log detailed conflict information
+                if conflict_files:
+                    self.logger.info(f"Detected {len(conflict_files)} conflict(s) for commit {commit_sha[:7]}:")
+                    for file_path, conflict_line, conflict_message in conflict_files:
+                        if conflict_message:
+                            self.logger.info(f"  {conflict_message}")
+                        else:
+                            self.logger.info(f"  - {file_path}" + (f" (line {conflict_line})" if conflict_line else ""))
                 
                 # There are changes (conflicts or other modifications)
                 self.git_run("add", "-A")
                 self.git_run("commit", "-m", f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
                 self.logger.info(f"Conflict committed for commit {commit_sha[:7]}")
-                if conflict_files:
-                    file_list = [f"{path} (line {line})" if line else path for path, line in conflict_files]
-                    self.logger.info(f"Conflicted files: {', '.join(file_list)}")
                 return True, conflict_files
         except Exception as e:
             self.logger.error(f"Error handling conflict for commit {commit_sha[:7]}: {e}")
@@ -933,21 +1007,22 @@ After resolving conflicts, mark this PR as ready for review.
                 # Check if this is a conflict or another error
                 if "conflict" in full_output.lower():
                     self.logger.warning(f"Conflict during cherry-pick of commit {commit_sha[:7]}")
-                    conflict_handled, conflict_files = self._handle_cherry_pick_conflict(commit_sha)
+                    conflict_handled, conflict_files = self._handle_cherry_pick_conflict(commit_sha, full_output)
                     if conflict_handled:
                         has_conflicts = True
                         # Add conflicted files to the list (avoid duplicates by file path)
+                        # conflict_item is now (file_path, conflict_line, conflict_message) tuple
                         for conflict_item in conflict_files:
-                            # conflict_item is (file_path, conflict_line) tuple
-                            file_path, conflict_line = conflict_item
-                            # Check if file_path already exists
-                            existing = next((f for f in all_conflict_files if isinstance(f, tuple) and f[0] == file_path), None)
-                            if not existing:
-                                all_conflict_files.append((file_path, conflict_line))
-                            elif conflict_line and existing[1] is None:
-                                # Update with line number if we found one and didn't have it before
-                                idx = all_conflict_files.index(existing)
-                                all_conflict_files[idx] = (file_path, conflict_line)
+                            if len(conflict_item) >= 2:
+                                file_path = conflict_item[0]
+                                # Check if file_path already exists
+                                existing = next((f for f in all_conflict_files if isinstance(f, tuple) and len(f) > 0 and f[0] == file_path), None)
+                                if not existing:
+                                    all_conflict_files.append(conflict_item)
+                                elif len(conflict_item) >= 3 and conflict_item[2] and (len(existing) < 3 or not existing[2]):
+                                    # Update with conflict message if we found one and didn't have it before
+                                    idx = all_conflict_files.index(existing)
+                                    all_conflict_files[idx] = conflict_item
                     else:
                         # Failed to handle conflict, abort cherry-pick
                         self.git_run("cherry-pick", "--abort")

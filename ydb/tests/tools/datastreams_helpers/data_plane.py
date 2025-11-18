@@ -18,6 +18,7 @@ READ_TOOL_TIMEOUT = plain_or_under_sanitizer(30, 300)
 
 
 def write_stream(path, data, partition_key=None, database = None, endpoint = None):
+    request_metadata = [("x-ydb-database", os.getenv("YDB_DATABASE"))]
     if database is None:
         database = os.getenv("YDB_DATABASE")
     if endpoint is None:

@@ -17,7 +17,7 @@ From the *Scan Queries* interface, you can query [system tables](../../dev/syste
 
 Scan queries cannot currently be considered an effective solution for running OLAP queries due to their technical limitations (which will be removed in time):
 
-* The query duration is limited to 5 minutes.
+* The query duration is limited to 10 minutes.
 * Many operations (including sorting) are performed entirely in memory, which may lead to resource shortage errors when running complex queries.
 * A single strategy is currently in use for joins: *MapJoin* (a.k.a. *Broadcast Join*) where the "right" table is converted to a map; and therefore, must be no more than single gigabytes in size.
 * Prepared form isn't supported, so for each call, a query is compiled.

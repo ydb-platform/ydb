@@ -104,6 +104,7 @@ private:
                 c = '_';
             }
         }
+
         return out;
     }
 
@@ -133,8 +134,8 @@ private:
             }
         } else {
             if (/* verbose */ false) {
-                // placeholder to keep patch minimal; we'll wire actual flag below
             }
+
             ++Errors;
         }
 

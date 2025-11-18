@@ -14,13 +14,18 @@ from github import Github, GithubException, GithubObject, Commit
 import requests
 
 # Import PR template and categories from validate_pr_description action
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'actions', 'validate_pr_description'))
-from pr_template import (
-    ISSUE_PATTERNS,
-    FOR_CHANGELOG_CATEGORIES,
-    NOT_FOR_CHANGELOG_CATEGORIES,
-    get_category_section_template
-)
+try:
+    pr_template_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'actions', 'validate_pr_description'))
+    sys.path.insert(0, pr_template_path)
+    from pr_template import (
+        ISSUE_PATTERNS,
+        FOR_CHANGELOG_CATEGORIES,
+        NOT_FOR_CHANGELOG_CATEGORIES,
+        get_category_section_template
+    )
+except ImportError as e:
+    logging.error(f"Failed to import pr_template: {e}")
+    raise
 
 
 class CherryPickCreator:
@@ -223,12 +228,14 @@ class CherryPickCreator:
 
     def _validate_prs(self):
         """Validate PR numbers"""
-        # Validate PRs from self.pull_requests (already loaded)
+        # Validate PRs from self.pull_requests (already loaded, no need to re-fetch)
         for pull in self.pull_requests:
             try:
-                fetched_pull = self.repo.get_pull(pull.number)
-                if not fetched_pull.merged and not self.allow_unmerged:
-                    raise ValueError(f"PR #{fetched_pull.number} is not merged. Use --allow-unmerged to allow backporting unmerged PRs")
+                # Use already loaded PR object instead of re-fetching
+                if not hasattr(pull, "merged"):
+                    raise ValueError(f"PR #{pull.number} object is missing 'merged' attribute, cannot validate")
+                if not pull.merged and not self.allow_unmerged:
+                    raise ValueError(f"PR #{pull.number} is not merged. Use --allow-unmerged to allow backporting unmerged PRs")
             except GithubException as e:
                 raise ValueError(f"PR #{pull.number} does not exist or is not accessible: {e}")
 
@@ -429,12 +436,26 @@ class CherryPickCreator:
         
         return None
 
-    def _extract_changelog_entry(self, pr_body: str) -> Optional[str]:
-        """Extract Changelog entry from PR body"""
+    def _extract_changelog_entry(self, pr_body: str, stop_at_category: bool = False) -> Optional[str]:
+        """Extract Changelog entry from PR body
+        
+        Args:
+            pr_body: PR body text
+            stop_at_category: If True, stop at "### Changelog category", otherwise stop at any "###"
+        
+        Returns:
+            Content of Changelog entry section, or None if not found
+        """
         if not pr_body:
             return None
         
-        entry_match = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
+        # Choose regex pattern based on stop_at_category
+        if stop_at_category:
+            pattern = r"### Changelog entry.*?\n(.*?)(\n### Changelog category|$)"
+        else:
+            pattern = r"### Changelog entry.*?\n(.*?)(\n###|$)"
+        
+        entry_match = re.search(pattern, pr_body, re.DOTALL)
         if not entry_match:
             return None
         
@@ -450,22 +471,7 @@ class CherryPickCreator:
         
         Returns only the text content inside "### Changelog entry" section (up to "### Changelog category").
         """
-        if not pr_body:
-            return None
-        
-        # Find Changelog entry section
-        entry_match = re.search(r"### Changelog entry.*?\n(.*?)(\n### Changelog category|$)", pr_body, re.DOTALL)
-        if not entry_match:
-            return None
-        
-        # Get only content of Changelog entry section (without header)
-        entry_content = entry_match.group(1).strip()
-        
-        # Skip if entry is just "..." or empty
-        if entry_content in ['...', '']:
-            return None
-        
-        return entry_content
+        return self._extract_changelog_entry(pr_body, stop_at_category=True)
 
     def _get_changelog_info(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """Get Changelog category, entry, and merged entry content from original PRs
@@ -608,19 +614,18 @@ class CherryPickCreator:
                             if conflict_line:
                                 file_link += f"R{conflict_line}"
                         else:
-                            # Fallback: use simple link to PR files page (GitHub will find the file)
-                            # GitHub can resolve files by name in PR view
-                            encoded_path = quote(file_path, safe='')
-                            file_link = f"https://github.com/{self.repo_name}/pull/{pr_number}/files#diff-{encoded_path}"
-                            if conflict_line:
-                                file_link += f"R{conflict_line}"
+                            # Fallback: use simple link to PR files page (no anchor, since we can't get the hash)
+                            # GitHub doesn't support encoded path in diff anchor, so we link to files tab without anchor
+                            file_link = f"https://github.com/{self.repo_name}/pull/{pr_number}/files"
+                            # Line number is shown in link text, not in URL
                     else:
                         # Fallback: link to file in branch (will be updated after PR creation)
                         file_link = f"https://github.com/{self.repo_name}/blob/{branch_for_instructions}/{file_path}"
                         if conflict_line:
                             file_link += f"#L{conflict_line}"
                     
-                    # Add line number to display text if available
+                    # Add line number to display text if available (always try to show it if we have it)
+                    # If conflict_line is None, it means the whole file is in conflict, so don't add line number
                     display_text = f"{file_path} (line {conflict_line})" if conflict_line else file_path
                     conflicted_files_section += f"- [{display_text}]({file_link})\n"
             
@@ -667,9 +672,12 @@ After resolving conflicts, mark this PR as ready for review.
         return pr_body
     
     def _compute_file_hash(self, base64_content: str) -> str:
-        """Compute SHA256 hash from base64-encoded file content"""
-        decoded_content = base64.b64decode(base64_content).decode('utf-8', errors='ignore')
-        return hashlib.sha256(decoded_content.encode('utf-8')).hexdigest()
+        """Compute SHA256 hash from base64-encoded file content
+        
+        Hashes bytes directly to support both text and binary files correctly.
+        """
+        decoded_bytes = base64.b64decode(base64_content)
+        return hashlib.sha256(decoded_bytes).hexdigest()
     
     def _get_file_diff_hash(self, file_path: str, pr_number: int) -> Optional[str]:
         """Get diff hash for GitHub PR file link using GitHub API
@@ -781,7 +789,12 @@ After resolving conflicts, mark this PR as ready for review.
         return False, []
     
     def _find_first_conflict_line(self, file_path: str) -> Optional[int]:
-        """Find the first line number with conflict markers in a file"""
+        """Find the first line number with conflict markers in a file
+        
+        Returns:
+            Line number of first conflict marker (<<<<<<<) if found, None otherwise.
+            None means either the whole file is in conflict or we couldn't determine the line.
+        """
         try:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 for line_num, line in enumerate(f, start=1):
@@ -800,7 +813,7 @@ After resolving conflicts, mark this PR as ready for review.
                 # Check if comment is from YDBot and contains "Backport" keyword
                 if comment.user.login == "YDBot" and "Backport" in comment.body:
                     # Check if it's an initial comment (contains "in progress") or a result comment
-                    if "in progress" in comment.body or "Backport" in comment.body:
+                    if "in progress" in comment.body:
                         return comment
         except Exception as e:
             self.logger.debug(f"Failed to find existing comment in PR #{pull.number}: {e}")
@@ -1050,7 +1063,9 @@ After resolving conflicts, mark this PR as ready for review.
                     pr.edit(body=updated_body)
                     self.logger.info(f"Updated PR body with diff links for conflicts")
                 except GithubException as e:
-                    self.logger.warning(f"Failed to update PR body with diff links: {e}")
+                    self.has_errors = True
+                    self.logger.error(f"PR_BODY_UPDATE_ERROR: Failed to update PR body with diff links for branch {target_branch}: {e}")
+                    raise
         except GithubException as e:
             self.has_errors = True
             self.logger.error(f"PR_CREATION_ERROR: Failed to create PR for branch {target_branch}: {e}")
@@ -1154,7 +1169,7 @@ After resolving conflicts, mark this PR as ready for review.
                 else:
                     reason = f"git command failed (exit code {e.returncode})"
                 self.skipped_branches.append((target, reason))
-            except BaseException as e:
+            except Exception as e:
                 self.has_errors = True
                 error_msg = f"UNEXPECTED_ERROR: Branch {target} - {type(e).__name__}: {e}"
                 self.logger.error(error_msg)

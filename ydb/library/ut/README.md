@@ -22,10 +22,6 @@ When using helper functions in unit tests that contain assertions, if an asserti
    void MyHelper(int expected, int actual, NYdb::NUnitTest::TTestContext testCtx = NYdb::NUnitTest::TTestContext()) {
    ```
 
-## Future Improvements
-
-After `library/cpp/testing/unittest` extension we won't need any custom `CTX_UNIT` redefinition (we just use customization point and replace original `UNIT_FAIL_IMPL` with context aware version).
-
 3. Call the helper as usual:
    ```cpp
    Y_UNIT_TEST(MyTest) {
@@ -33,6 +29,10 @@ After `library/cpp/testing/unittest` extension we won't need any custom `CTX_UNI
        MyHelper(1, 2); // Failure reported at this line
    }
    ```
+
+## Future Improvements
+
+After `library/cpp/testing/unittest` extension we won't need any custom `CTX_UNIT` redefinition (we just use customization point and replace original `UNIT_FAIL_IMPL` with context aware version).
 
 ## Macros
 

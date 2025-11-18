@@ -4,7 +4,7 @@
 
 Это руководство по использованию [LinqToDB](https://linq2db.github.io/) с {{ ydb-short-name }}.
 
-LinqToDB — лёгкий и быстрый ORM/µ-ORM для .NET, предоставляющий типобезопасные [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) запросы и точный контроль над SQL. Провайдер {{ ydb-short-name }} формирует корректный YQL, поддерживает типы YDB, генерацию схемы и массовые операции (Bulk Copy).
+linq2db — лёгкий и быстрый ORM/µ-ORM для .NET, предоставляющий типобезопасные [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) запросы и точный контроль над SQL. Провайдер {{ ydb-short-name }} формирует корректный YQL, поддерживает типы YDB, генерацию схемы и массовые операции (Bulk Copy).
 
 ## Установка провайдера {{ ydb-short-name }} {#install-provider}
 
@@ -577,8 +577,6 @@ DELETE FROM employee WHERE Id = ?;
 ### Массовые операции: вставка, обновление и удаление
 
 #### Массовая вставка (BulkCopy)
-
-`BulkCopy` в провайдере YDB выполняется через нативный `API BulkUpsert` и не генерирует текстовый YQL. Данные отправляются в YDB как поток типизированных строк по двоичному протоколу SDK, поэтому не используются DECLARE и параметрические плейсхолдеры (?)
 
 ```csharp
 var now  = DateTime.UtcNow;

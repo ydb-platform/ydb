@@ -4,7 +4,7 @@
 
 This guide explains how to use [LinqToDB](https://linq2db.github.io/) with {{ ydb-short-name }}.
 
-LinqToDB is a lightweight and fast ORM/µ-ORM for .NET that provides type-safe [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) queries and precise SQL control. The {{ ydb-short-name }} provider generates correct YQL, supports {{ ydb-short-name }} types, schema generation, and bulk operations (Bulk Copy).
+linq2db is a lightweight and fast ORM/µ-ORM for .NET that provides type-safe [LINQ](https://learn.microsoft.com/en-us/dotnet/csharp/linq/) queries and precise SQL control. The {{ ydb-short-name }} provider generates correct YQL, supports {{ ydb-short-name }} types, schema generation, and bulk operations (Bulk Copy).
 
 ## Installing the {{ ydb-short-name }} provider {#install-provider}
 
@@ -605,8 +605,6 @@ The provider emits parameters (?) because values and types are bound via the dri
 ### Bulk operations: insert, update and delete
 
 **BulkCopy:**
-
-In the YDB provider, `BulkCopy` uses the native `BulkUpsert API` and does not generate textual YQL. Rows are sent to YDB as a stream of strongly-typed values over the SDK's binary protocol, so there are no DECLARE statements or ? placeholders
 
 {% list tabs group=lang %}
 

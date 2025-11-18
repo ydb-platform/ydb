@@ -147,27 +147,6 @@ namespace NKikimr::NSqsTopic::V1 {
             ReplyWithError(ctx, NSQS::NErrors::SERVICE_UNAVAILABLE);
         }
 
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
-            if (ev->Get()->Status != NKikimrProto::EReplyStatus::OK) {
-                LOG_WARN_S(
-                    ctx,
-                    NKikimrServices::SQS,
-                    "Cannot connect to tablet " << TabletId);
-
-                ReplyWithError(ctx, NSQS::NErrors::SERVICE_UNAVAILABLE);
-            }
-        }
-
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
-            Y_UNUSED(ev);
-            LOG_WARN_S(
-                ctx,
-                NKikimrServices::SQS,
-                "Connection to tablet " << TabletId << " is dead");
-            ReplyWithError(ctx, NSQS::NErrors::SERVICE_UNAVAILABLE);
-        }
-
         void SendWriteRequest(const TActorContext&) {
             NKikimrClient::TPersQueueRequest request;
             request.MutablePartitionRequest()->SetTopic(Topic);

@@ -52,8 +52,10 @@ template <typename TProviderContext = TTestContext>
 std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
     auto ctx = TProviderContext();
     TExprContext dummyCtx;
+
+    TCBOSettings settings{};
     auto optimizer =
-        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), dummyCtx, false));
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
 
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
     auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);

@@ -483,6 +483,8 @@ struct TServiceMethod
     std::string Service;
     std::string Method;
 
+    int MaxWindow;
+
     REGISTER_YSON_STRUCT_LITE(TServiceMethod);
 
     static void Register(TRegistrar registrar);

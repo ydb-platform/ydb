@@ -8,9 +8,11 @@
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
+// NB: Please refer to YT-18899 before trying to pass future to
+// these functions by const-ref.
 
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitFor(TFuture<T> future, IInvokerPtr invoker)
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invoker)
 {
     YT_ASSERT(future);
     YT_ASSERT(invoker);
@@ -20,8 +22,8 @@ template <class T>
     return future.Get();
 }
 
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForFast(TFuture<T> future)
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
 {
     YT_ASSERT(future);
     YT_ASSERT(!IsContextSwitchForbidden());
@@ -34,7 +36,7 @@ template <class T>
 }
 
 template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUnique(const TFuture<T>& future, IInvokerPtr invoker)
+[[nodiscard]] TErrorOr<T> WaitForUnique(TFuture<T> future, IInvokerPtr invoker)
 {
     YT_ASSERT(future);
     YT_ASSERT(invoker);
@@ -45,7 +47,7 @@ template <class T>
 }
 
 template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUniqueFast(const TFuture<T>& future)
+[[nodiscard]] TErrorOr<T> WaitForUniqueFast(TFuture<T> future)
 {
     YT_ASSERT(future);
 
@@ -56,14 +58,12 @@ template <class T>
     return future.GetUnique();
 }
 
-template <class T>
-TErrorOr<T> WaitForWithStrategy(
-    TFuture<T> future,
-    EWaitForStrategy strategy)
+template <CFuture TFuture>
+TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWaitForStrategy strategy)
 {
     switch (strategy) {
         case EWaitForStrategy::WaitFor:
-            return WaitFor(std::move(future));
+            return WaitFor(future);
         case EWaitForStrategy::Get:
             return future.Get();
         default:

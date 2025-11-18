@@ -61,6 +61,18 @@ NThreading::TFuture<TOperationsList<NImport::TImportFromS3Response>> TOperationC
     return List<NImport::TImportFromS3Response>("import/s3", pageSize, pageToken);
 }
 
+template NThreading::TFuture<NExport::TExportToFsResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NExport::TExportToFsResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NExport::TExportToFsResponse>("export/fs", pageSize, pageToken);
+}
+
+template NThreading::TFuture<NImport::TImportFromFsResponse> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NImport::TImportFromFsResponse>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NImport::TImportFromFsResponse>("import/fs", pageSize, pageToken);
+}
+
 template NThreading::TFuture<NTable::TBuildIndexOperation> TOperationClient::Get(const TOperation::TOperationId& id);
 template <>
 NThreading::TFuture<TOperationsList<NTable::TBuildIndexOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {

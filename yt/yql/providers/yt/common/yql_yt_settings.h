@@ -116,6 +116,7 @@ public:
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -158,6 +159,7 @@ public:
     NCommon::TConfSetting<bool, Static> ValidateClusters;
     NCommon::TConfSetting<NSize::TSize, Static> _QueryDumpTableSizeLimit;
     NCommon::TConfSetting<ui32, Static> _QueryDumpTableCountPerClusterLimit;
+    NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

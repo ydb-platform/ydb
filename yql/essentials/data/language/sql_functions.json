@@ -420,11 +420,19 @@
     "kind": "Normal"
   },
   {
+    "name": "EmptyDictType",
+    "kind": "Normal"
+  },
+  {
     "name": "EmptyDictTypeHandle",
     "kind": "Normal"
   },
   {
     "name": "EmptyList",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyListType",
     "kind": "Normal"
   },
   {
@@ -1036,6 +1044,10 @@
     "kind": "Normal"
   },
   {
+    "name": "NullType",
+    "kind": "Normal"
+  },
+  {
     "name": "NullTypeHandle",
     "kind": "Normal"
   },
@@ -1156,8 +1168,16 @@
     "kind": "Normal"
   },
   {
+    "name": "RandomSample",
+    "kind": "Agg"
+  },
+  {
     "name": "RandomUuid",
     "kind": "Normal"
+  },
+  {
+    "name": "RandomValue",
+    "kind": "Agg"
   },
   {
     "name": "Rank",

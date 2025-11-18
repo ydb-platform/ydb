@@ -6,7 +6,6 @@
 {%-     set all_targets = all_targets + extra_targets -%}
 {%- endif -%}
 
-{%- set publish = all_targets|selectattr('publish', 'eq', true)|length -%}
 {%- if not output_root -%}
 {%-     set output_root = arcadia_root -%}
 {%- endif -%}
@@ -28,7 +27,7 @@
 
 {#- ErrorProne -#}
 {%- set with_errorprone = not(disable_errorprone) and (target.use_errorprone) and (target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
-{%- set with_test_errorprone = not(disable_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
+{%- set with_test_errorprone = not(disable_errorprone) and not(disable_test_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
 {%- if with_errorprone or with_test_errorprone -%}
 {%-     set errorprones = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|unique -%}
 {%- endif -%}
@@ -37,7 +36,7 @@
 {%- set with_lombok_plugin = not(disable_lombok_plugin) and (all_targets|selectattr('use_annotation_processor')|map(attribute='use_annotation_processor')|sum|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) -%}
 
 {#- JNI -#}
-{%- set jnis = all_targets|selectattr(consumer)|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}
+{%- set jnis = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('type', 'eq', 'dll')|selectattr('jar')|map(attribute='jar')|unique -%}
 
 {#- Flags -#}
 {%- set hasResources = all_targets|selectattr('resource_sets')|map(attribute='resource_sets')|sum|length -%}
@@ -57,5 +56,8 @@
 {%-     set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
 {%-     set extractLibrariesProtosTask = libraries|length -%}
 {%- endif -%}
+
+{%- set MAIN_VARPREFIX = "codegen" -%}
+{%- set CODEGENS_DIRNAME = "gradle.codegens" -%}
 
 {%- include "[generator]/jdk.jinja" -%}

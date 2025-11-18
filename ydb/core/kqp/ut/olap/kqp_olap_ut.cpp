@@ -1101,7 +1101,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2001);
 
         auto tableClient = kikimr.GetTableClient();
         auto selectQuery = TString(R"(
@@ -1771,6 +1771,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 b Int32,
                 timestamp Timestamp,
                 jsonDoc JsonDocument,
+                jsonDoc1 JsonDocument,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1780,12 +1781,12 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
 
         auto insertRes = session2.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc)
-            VALUES (1, 1, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"a.b.c" : "a1", "b.c.d" : "b1", "c.d.e" : "c1"}'));
-            INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc)
-            VALUES (2, 11, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"a.b.c" : "a2", "b.c.d" : "b2", "c.d.e" : "c2"}'));
-            INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc)
-            VALUES (3, 11, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"b.c.a" : "a3", "b.c.d" : "b3", "c.d.e" : "c3"}'));
+            INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc, jsonDoc1)
+            VALUES (1, 1, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"a.b.c" : "a1", "b.c.d" : "b1", "c.d.e" : "c1"}'), JsonDocument('{"a" : "1.1", "b" : "1.2", "c" : "1.3"}'));
+            INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc, jsonDoc1)
+            VALUES (2, 11, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"a.b.c" : "a2", "b.c.d" : "b2", "c.d.e" : "c2"}'), JsonDocument('{"a" : "2.1", "b" : "2.2", "c" : "2.3"}'));
+            INSERT INTO `/Root/foo` (a, b, timestamp, jsonDoc, jsonDoc1)
+            VALUES (3, 11, Timestamp("1970-01-01T00:00:03.000001Z"), JsonDocument('{"b.c.a" : "a3", "b.c.d" : "b3", "c.d.e" : "c3"}'), JsonDocument('{"x" : "3.1", "y" : "1.2", "z" : "1.3"}'));
         )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT(insertRes.IsSuccess());
 
@@ -1830,6 +1831,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\""), JSON_VALUE(jsonDoc, "$.\"b.c.d\""), JSON_VALUE(jsonDoc, "$.\"c.d.e\"")
                 FROM `/Root/foo`
                 ORDER BY a;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as result
+                FROM `/Root/foo`
+                ORDER BY result;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2
+                FROM `/Root/foo`
+                ORDER BY col2;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1,
+                       CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2,
+                       CAST(JSON_VALUE(jsonDoc1, "$.\"b\"") as Double) as col3
+                FROM `/Root/foo`
+                ORDER BY col2;
             )"
         };
 
@@ -1838,7 +1862,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"([[[3000001u];["a1"];1u];[[3000001u];["a2"];1u]])",
             R"([[[3000001u];#;1u];[[3000001u];["a1"];1u];[[3000001u];["a2"];1u]])",
             R"([[[3000001u];["a1"];1u];[[3000001u];["a2"];1u]])",
-            R"([[1;["a1"];["b1"];["c1"]];[2;["a2"];["b2"];["c2"]];[3;#;["b3"];["c3"]]])"
+            R"([[1;["a1"];["b1"];["c1"]];[2;["a2"];["b2"];["c2"]];[3;#;["b3"];["c3"]]])",
+            R"([[#];[[1.1]];[[2.1]]])",
+            R"([[#;#];[[%true];[1.1]];[[%false];[2.1]]])",
+            R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -4520,6 +4547,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
 
         TTestHelper testHelper(runnerSettings);
+        testHelper.GetKikimr().GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_TRACE);
         auto client = testHelper.GetKikimr().GetQueryClient();
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -4810,64 +4838,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::BeginTx().CommitTx(), params).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_C(result.GetResultSet(0).RowsCount() == 1, result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST(RandomJsonCharacters) {
-        auto settings = TKikimrSettings();
-        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
-        TKikimrRunner kikimr(settings);
-        auto client = kikimr.GetTableClient();
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
-
-        {
-            auto result = kikimr.GetQueryClient()
-                              .ExecuteQuery(R"(
-                CREATE TABLE `/Root/olapTable` (
-                    id Uint32 NOT NULL,
-                    json_payload JsonDocument,
-                    PRIMARY KEY (id)
-                )
-                WITH (
-                    STORE = COLUMN,
-                    PARTITION_COUNT = 1
-                );
-
-                ALTER OBJECT `/Root/olapTable`
-                (TYPE TABLE)
-                SET (ACTION=ALTER_COLUMN, NAME=json_payload,
-                `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
-                `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`false`, `COLUMNS_LIMIT`=`1024`,
-                `SPARSED_DETECTOR_KFF`=`20`, `MEM_LIMIT_CHUNK`=`52428800`, `OTHERS_ALLOWED_FRACTION`=`0`,
-                `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
-                )", NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
-        }
-
-        // TODO: fix other symbols
-        {
-            auto result = kikimr.GetQueryClient()
-                              .ExecuteQuery(R"(
-                UPSERT INTO `/Root/olapTable` (id, json_payload)
-                VALUES (1, JsonDocument(@@{"":   null}@@));
-                       -- (2, JsonDocument(@@{"'":  null}@@)),
-                       -- (3, JsonDocument(@@{"\"": null}@@)),
-                       -- (4, JsonDocument(@@{".":  null}@@));
-                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
-        }
-
-        {
-            auto status = kikimr.GetQueryClient()
-                              .ExecuteQuery(R"(
-                SELECT id, json_payload FROM  `/Root/olapTable`;
-                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
-
-            TString result = FormatResultSetYson(status.GetResultSet(0));
-
-            CompareYson(result, R"([[1u;["{\"\":\"NULL\"}"]]])");
-
         }
     }
 }

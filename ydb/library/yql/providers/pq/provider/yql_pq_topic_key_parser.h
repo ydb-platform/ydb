@@ -54,6 +54,10 @@ public:
         return Watermark;
     }
 
+    TExprNode::TPtr GetSkipJsonErrors() const {
+        return SkipJsonErrors;
+    }
+
     bool Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx);
 
 private:
@@ -72,6 +76,7 @@ private:
     TExprNode::TPtr UserSchema;
     TExprNode::TPtr ColumnOrder;
     TExprNode::TPtr Watermark;
+    TExprNode::TPtr SkipJsonErrors;
 };
 
 } // namespace NYql

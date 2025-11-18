@@ -13,11 +13,12 @@ import os
 import sys
 import textwrap
 import traceback
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import partial
 from inspect import getframeinfo
 from pathlib import Path
 from types import ModuleType, TracebackType
-from typing import Callable, NamedTuple, Optional
 
 import hypothesis
 from hypothesis.errors import _Trimmable
@@ -42,10 +43,7 @@ def belongs_to(package: ModuleType) -> Callable[[str], bool]:
         except KeyError:
             pass
         try:
-            if not filepath.startswith("<frozen "):
-                Path(filepath).resolve().relative_to(root)
-            else:
-                raise ValueError
+            Path(filepath).resolve().relative_to(root)
             result = True
         except Exception:
             result = False
@@ -60,8 +58,8 @@ is_hypothesis_file = belongs_to(hypothesis)
 
 
 def get_trimmed_traceback(
-    exception: Optional[BaseException] = None,
-) -> Optional[TracebackType]:
+    exception: BaseException | None = None,
+) -> TracebackType | None:
     """Return the current traceback, minus any frames added by Hypothesis."""
     if exception is None:
         _, exception, tb = sys.exc_info()
@@ -93,7 +91,8 @@ def get_trimmed_traceback(
     return tb
 
 
-class InterestingOrigin(NamedTuple):
+@dataclass(frozen=True)
+class InterestingOrigin:
     # The `interesting_origin` is how Hypothesis distinguishes between multiple
     # failures, for reporting and also to replay from the example database (even
     # if report_multiple_bugs=False).  We traditionally use the exception type and
@@ -101,8 +100,8 @@ class InterestingOrigin(NamedTuple):
     # blocks and understand the __cause__ (`raise x from y`) or __context__ that
     # first raised an exception as well as PEP-654 exception groups.
     exc_type: type[BaseException]
-    filename: Optional[str]
-    lineno: Optional[int]
+    filename: str | None
+    lineno: int | None
     context: "InterestingOrigin | tuple[()]"
     group_elems: "tuple[InterestingOrigin, ...]"
 
@@ -125,7 +124,7 @@ class InterestingOrigin(NamedTuple):
             filename, lineno, *_ = traceback.extract_tb(tb)[-1]
         seen = (*seen, exception)
         make = partial(cls.from_exception, seen=seen)
-        context: "InterestingOrigin | tuple[()]" = ()
+        context: InterestingOrigin | tuple[()] = ()
         if exception.__context__ is not None and exception.__context__ not in seen:
             context = make(exception.__context__)
         return cls(

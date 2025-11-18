@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1163,6 +1164,114 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
 
             auto result = kikimr.RunCall([&] {
                 return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
+        }
+    }
+
+    TVector<std::pair<TActorId, TActorId>> ResolveFollowers(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
+        auto sender = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.Send(new IEventHandle(MakeStateStorageProxyID(), sender,
+            new TEvStateStorage::TEvLookup(tabletId, 0)),
+            nodeIndex, true);
+        auto ev = runtime.GrabEdgeEventRethrow<TEvStateStorage::TEvInfo>(sender);
+        Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK, "Failed to resolve tablet %" PRIu64, tabletId);
+        return std::move(ev->Get()->Followers);
+    }
+
+    Y_UNIT_TEST_QUAD(VectorSearchPushdown, Covered, Followers) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetEnableForceFollowers(Followers)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, true, Covered); });
+
+        if (Followers) {
+            std::vector<TString> tableNames = {
+                "/Root/TestTable",
+                "/Root/TestTable/index1/indexImplLevelTable",
+                "/Root/TestTable/index1/indexImplPostingTable"
+            };
+            for (const TString& tableName: tableNames) {
+                const TString alterTable(Q_(Sprintf(R"(
+                    ALTER TABLE `%s` SET (READ_REPLICAS_SETTINGS = "PER_AZ:3");
+                )", tableName.c_str())));
+                auto result = kikimr.RunCall([&] { return session.ExecuteSchemeQuery(alterTable).ExtractValueSync(); });
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+
+        constexpr static ui32 levelType = 1, postingType = 2, mainType = 3;
+        constexpr static ui32 followerTypeFlag = 8;
+        THashMap<TActorId, ui32> actorTypes;
+        auto resolveActors = [&](const char* tableName, ui32 type) {
+            auto shards = GetTableShards(&kikimr.GetTestServer(), runtime->AllocateEdgeActor(), tableName);
+            for (auto shardId: shards) {
+                auto actorId = ResolveTablet(*runtime, shardId);
+                actorTypes[actorId] = type;
+                if (Followers) {
+                    auto followers = ResolveFollowers(*runtime, shardId, 0);
+                    for (auto& [_, followerId]: followers) {
+                        actorTypes[followerId] = type | followerTypeFlag;
+                    }
+                }
+            }
+        };
+        resolveActors("/Root/TestTable/index1/indexImplLevelTable", levelType);
+        resolveActors("/Root/TestTable/index1/indexImplPostingTable", postingType);
+        resolveActors("/Root/TestTable", mainType);
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                ui32 shardType = actorTypes[ev->GetRecipientRewrite()];
+                bool isFollower = (shardType & followerTypeFlag);
+                shardType = shardType & ~followerTypeFlag;
+                // Check that level & posting are read from followers
+                UNIT_ASSERT(isFollower == (Followers && (shardType == levelType || shardType == postingType)));
+                auto & read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                if (shardType == (Covered ? mainType : postingType)) {
+                    // Non-covering index does topK on main table, covering does it on posting
+                    UNIT_ASSERT(!read.HasVectorTopK());
+                } else {
+                    UNIT_ASSERT(shardType != 0);
+                    UNIT_ASSERT(read.HasVectorTopK());
+                    auto & topK = read.GetVectorTopK();
+                    // Check that target and limit are pushed down
+                    UNIT_ASSERT(topK.GetTargetVector() == "\x67\x71\x02");
+                    if (shardType == levelType) {
+                        // Equal to pragma
+                        UNIT_ASSERT(topK.GetLimit() == 2);
+                    } else if (shardType == (Covered ? postingType : mainType)) {
+                        // Equal to LIMIT
+                        UNIT_ASSERT(topK.GetLimit() == 3);
+                    }
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        {
+            TString query1(Q_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "2";
+                $TargetEmbedding = String::HexDecode("677102");
+                SELECT * FROM `/Root/TestTable`
+                VIEW index1 ORDER BY Knn::CosineDistance(emb, $TargetEmbedding)
+                LIMIT 3
+            )"));
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(
+                    Followers ? TTxSettings::StaleRO() : TTxSettings::SerializableRW()).CommitTx())
                     .ExtractValueSync();
             });
             UNIT_ASSERT(result.IsSuccess());

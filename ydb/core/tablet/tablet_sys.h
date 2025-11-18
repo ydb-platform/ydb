@@ -423,6 +423,11 @@ class TTablet : public TActor<TTablet> {
     void TabletStateUndelivered(const TActorId& actorId, ui64 cookie);
     void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags = 0, ui64 cookie = 0);
 
+    void StartRecovery();
+    void Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev);
+    void HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev);
+    void Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev);
+
     STATEFN(StateResolveStateStorage) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvInfo, HandleStateStorageInfoResolve);
@@ -622,6 +627,35 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvBlobStorage::TEvGetBlockResult, Handle);
             hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
             sFunc(TEvTabletBase::TEvLogGcRetry, RetryGcRequests);
+        }
+    }
+
+    STATEFN(StateRecovery) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTablet::TEvCompleteRecoveryBoot, Handle);
+            hFunc(TEvTabletBase::TEvWriteLogResult, HandleEmptyZeroEntry);
+            hFunc(TEvTabletBase::TEvDeleteTabletResult, Handle);
+
+            hFunc(TEvTabletPipe::TEvConnect, Handle);
+            hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
+
+            hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
+            hFunc(TEvTablet::TEvPing, HandlePingBoot);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
+            hFunc(TEvTablet::TEvTabletStop, HandleStop);
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
+            cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
+            hFunc(TEvTablet::TEvFollowerAttach, HandleByLeader);
+            hFunc(TEvTablet::TEvFollowerDetach, HandleByLeader);
+            hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
+            hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
+            hFunc(TEvents::TEvUndelivered, HandleByLeader);
         }
     }
 

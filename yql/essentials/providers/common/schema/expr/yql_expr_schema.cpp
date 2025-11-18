@@ -229,6 +229,12 @@ public:
             case ETypeAnnotationKind::DynamicLinear:
                 TBase::SaveDynamicLinearType(*type->Cast<TDynamicLinearExprType>());
                 break;
+            case ETypeAnnotationKind::Block:
+                TBase::SaveBlockType(*type->Cast<TBlockExprType>());
+                break;
+            case ETypeAnnotationKind::Scalar:
+                TBase::SaveScalarType(*type->Cast<TScalarExprType>());
+                break;
             default:
                 YQL_ENSURE(false, "Unsupported type annotation kind: " << type->GetKind());
         }
@@ -376,6 +382,12 @@ struct TExprTypeLoader {
         auto ret = Ctx.MakeType<TVariantExprType>(underlyingType);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
+    }
+    TMaybe<TType> LoadBlockType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TBlockExprType>(itemType);
+    }
+    TMaybe<TType> LoadScalarType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TScalarExprType>(itemType);
     }
     void Error(const TString& info) {
         Ctx.AddError(TIssue(Pos, info));

@@ -106,7 +106,6 @@ BELONGS ya.make
 FILE_INCLUDE LICENSE found in files: LICENSE at line 600
 FILE_INCLUDE third_party/address_sorting/LICENSE found in files: LICENSE at line 600
 FILE_INCLUDE third_party/upb/LICENSE found in files: LICENSE at line 600
-FILE_INCLUDE third_party/upb/third_party/utf8_range/LICENSE found in files: LICENSE at line 600
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MPL-2.0
@@ -126,18 +125,6 @@ BELONGS ya.make
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
         LICENSE [2:202]
-
-KEEP     MIT                  399584035c417b91040964779555dfac
-BELONGS third_party/upb/ya.make
-    License text:
-        MIT License
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        third_party/upb/third_party/utf8_range/LICENSE [1:1]
 
 KEEP     Apache-2.0           3b0ea1fb66390711cb1f160e05b0e2a4
 BELONGS ya.make
@@ -1584,18 +1571,6 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
     Files with this license:
         src/core/lib/load_balancing/lb_policy.h [277:278]
-
-KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
-BELONGS third_party/upb/ya.make
-FILE_INCLUDE AUTHORS found in files: third_party/upb/third_party/utf8_range/LICENSE at line 18
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        third_party/upb/third_party/utf8_range/LICENSE [5:21]
 
 SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
 BELONGS third_party/upb/ya.make

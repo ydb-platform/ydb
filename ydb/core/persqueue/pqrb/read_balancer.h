@@ -5,13 +5,11 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -216,6 +214,7 @@ private:
     std::unordered_set<ui64> PipesRequested;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedExtendedCounters;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
 
     NMonitoring::TDynamicCounterPtr DynamicCounters;

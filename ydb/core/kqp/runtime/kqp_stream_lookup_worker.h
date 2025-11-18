@@ -18,6 +18,7 @@ struct TLookupSettings {
     ui32 AllowNullKeysPrefixSize;
     bool KeepRowsOrder;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
+    std::unique_ptr<NKikimrKqp::TReadVectorTopK> VectorTopK;
 
     std::unordered_map<TString, TSysTables::TTableColumnInfo> KeyColumns;
     std::vector<TSysTables::TTableColumnInfo*> LookupKeyColumns;
@@ -91,6 +92,7 @@ protected:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc);
 

@@ -91,24 +91,24 @@ void TEngineLogsCounters::OnActualizationTask(const ui32 evictCount, const ui32 
     }
 }
 
-void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
+void TEngineLogsCounters::TPortionsInfoGuard::OnNewPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
     const ui32 producedId = (ui32)portion->GetProduced();
     PortionRecordCountGuards[producedId]->Add(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Add(portion->GetTotalBlobBytes(), 1);
 
     if (portion->GetTotalBlobBytes() <= GetBadPortionSizeLimit()) {
-        BadPortionsCount->Add(1);
+        BadPortionsCount.Add(1);
     }
 }
 
-void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
+void TEngineLogsCounters::TPortionsInfoGuard::OnDropPortion(const std::shared_ptr<NOlap::TPortionInfo>& portion) {
     const ui32 producedId = (ui32)portion->GetProduced();
     THashSet<NOlap::TUnifiedBlobId> blobIds;
     PortionRecordCountGuards[producedId]->Sub(portion->GetRecordsCount(), 1);
     PortionSizeGuards[producedId]->Sub(portion->GetTotalBlobBytes(), 1);
 
     if (portion->GetTotalBlobBytes() <= GetBadPortionSizeLimit()) {
-        BadPortionsCount->Sub(1);
+        BadPortionsCount.Sub(1);
     }
 }
 

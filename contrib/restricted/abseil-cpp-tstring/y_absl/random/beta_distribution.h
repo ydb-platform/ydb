@@ -17,14 +17,16 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <istream>
 #include <limits>
 #include <ostream>
 #include <type_traits>
 
+#include "y_absl/base/attributes.h"
+#include "y_absl/base/config.h"
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/random/internal/fast_uniform_bits.h"
-#include "y_absl/random/internal/fastmath.h"
 #include "y_absl/random/internal/generate_real.h"
 #include "y_absl/random/internal/iostream_state_saver.h"
 

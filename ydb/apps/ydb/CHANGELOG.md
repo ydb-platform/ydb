@@ -1,3 +1,9 @@
+* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output .tar.bz2 file.
+* Added a simple progress bar for non-interactive stderr.
+
+## 2.27.0 ##
+
+* Added a new `--exclude` option to the `ydb import s3` command, allowing objects to be excluded from the operation if their names match a pattern.
 * Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
 * Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
 * Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.

@@ -2827,7 +2827,9 @@ enum EAggrFuncTypeCallback {
     LIST,
     UDAF,
     PG,
-    NTH_VALUE
+    NTH_VALUE,
+    RANDOM_SAMPLE,
+    RANDOM_VALUE
 };
 
 struct TCoreFuncInfo {
@@ -2871,7 +2873,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     const TString& factoryName,
     EAggrFuncTypeCallback type = NORMAL,
     const TString& functionNameOverride = TString(),
-    const TVector<EAggregateMode>& validModes = {}) {
+    const TVector<EAggregateMode>& validModes = {})
+{
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
     return [functionName, realFunctionName, factoryName, type, validModes](TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
         if (!validModes.empty()) {
@@ -2936,6 +2939,12 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                 break;
             case NTH_VALUE:
                 factory = BuildNthFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+                break;
+            case RANDOM_SAMPLE:
+                factory = BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, false);
+                break;
+            case RANDOM_VALUE:
+                factory = BuildReservoirSamplingFactoryAggregation(pos, realFunctionName, factoryName, aggMode, true);
                 break;
         }
         if (isFactory) {
@@ -3222,6 +3231,9 @@ struct TBuiltinFuncData {
             {"generictype", {"GenericType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("GenericType", 0, 0)}},
             {"unittype", {"UnitType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("UnitType", 0, 0)}},
             {"voidtype", {"VoidType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidType", 0, 0)}},
+            {"nulltype", {"NullType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullType", 0, 0)}},
+            {"emptylisttype", {"EmptyListType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyListType", 0, 0)}},
+            {"emptydicttype", {"EmptyDictType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictType", 0, 0)}},
             {"resourcetype", {"ResourceType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlResourceType>()}},
             {"taggedtype", {"TaggedType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlTaggedType>()}},
             {"varianttype", {"VariantType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantType", 1, 1)}},
@@ -3499,7 +3511,10 @@ struct TBuiltinFuncData {
 
             // MatchRecognize navigation functions
             {"first", {"First", "MatchRec", BuildAggrFuncFactoryCallback("First", "first_traits_factory")}},
-            {"last", {"Last", "MatchRec", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")}}};
+            {"last", {"Last", "MatchRec", BuildAggrFuncFactoryCallback("Last", "last_traits_factory")}},
+
+            {"randomsample", {"RandomSample", "Agg", BuildAggrFuncFactoryCallback("RandomSample", "random_sample_factory", RANDOM_SAMPLE)}},
+            {"randomvalue", {"RandomValue", "Agg", BuildAggrFuncFactoryCallback("RandomValue", "random_value_factory", RANDOM_VALUE)}}};
         return aggrFuncs;
     }
 
@@ -3562,15 +3577,20 @@ struct TBuiltinFuncData {
             {"todate", {"CAST(_ as Date)"}},
             {"todatetime", {"CAST(_ as DateTime)"}},
             {"today", {"CurrentUtcDate()"}},
+            {"curdate", {"CurrentUtcDate()"}},
             {"tolist", {"AsList or DictKeys/DictItems/DictPayloads"}},
             {"tostring", {"CAST(_ as String)"}},
             {"listdistinct", {"ListUniq or ListUniqStable"}},
             {"ypathstring", {"Yson::YPathString"}},
+            {"ypathint64", {"Yson::YPathInt64"}},
+            {"ypathuint64", {"Yson::YPathUint64"}},
             {"substr", {"Substring or Unicode::Substring"}},
             {"type", {"FormatType(TypeOf(_))"}},
             {"splittolist", {"String::SplitToList or Unicode::SplitToList"}},
             {"listlenght", {"ListLength"}},
+            {"listsize", {"ListLength"}},
             {"converttostring", {"Yson::ConvertToString"}},
+            {"lookupstring", {"Yson::LookupString"}},
             {"uniq", {"HLL"}},
             {"cnt", {"Count"}},
             {"as_table", {"FROM AS_TABLE(_)"}},
@@ -3582,6 +3602,7 @@ struct TBuiltinFuncData {
             {"str", {"CAST(_ as String)"}},
             {"values", {"FROM (VALUES _)"}},
             {"has", {"ListHas/DictContains"}},
+            {"hasitems", {"ListHasItems/DictHasItems or ListHas/DictContains"}},
             {"mean", {"Avg"}},
             {"average", {"Avg"}},
             {"currentdate", {"CurrentUtcDate"}},
@@ -3595,6 +3616,7 @@ struct TBuiltinFuncData {
             {"listcontains", {"ListHas"}},
             {"ifnull", {"operator '\?\?' or Coalesce/NVL"}},
             {"date_format", {"DateTime::Format"}},
+            {"str_to_date", {"DateTime::Format"}},
             {"asstring", {"CAST(_ as String)"}},
             {"flatten", {"FROM FLATTEN LIST BY or ListFlatten"}},
             {"jsonextractstring", {"Yson::ParseJson + Yson::LookupString"}},
@@ -3606,6 +3628,7 @@ struct TBuiltinFuncData {
             {"is_null", {"_ IS NULL"}},
             {"from_unixtime", {"DateTime::FromSeconds"}},
             {"position", {"Find or Unicode::Find"}},
+            {"strpos", {"Find or Unicode::Find"}},
             {"regexp_replace", {"Re2::Replace"}},
             {"toint64", {"CAST(_ as Int64)"}},
             {"touint64", {"CAST(_ as Uint64)"}},
@@ -3614,24 +3637,36 @@ struct TBuiltinFuncData {
             {"tofloat32", {"CAST(_ as Float)"}},
             {"tofloat64", {"CAST(_ as Double)"}},
             {"datediff", {"operator '-' + DateTime::To*"}},
+            {"date_diff", {"operator '-' + DateTime::To*"}},
+            {"timestampdiff", {"operator '-' + DateTime::To*"}},
             {"todate", {"CAST(_ as Date)"}},
             {"todate32", {"CAST(_ as Date32)"}},
             {"trim", {"String::Strip or Unicode::Strip"}},
             {"converttolist", {"Yson::ConvertToList"}},
+            {"converttodict", {"Yson::ConvertToDict"}},
             {"multiif", {"CASE WHEN"}},
+            {"decode", {"CASE WHEN"}},
+            {"hash", {"Digest::*"}},
+            {"getlength", {"Length"}},
             {"group_concat", {"AGG_LIST + String::JoinFromList or Unicode::JoinFromList"}},
             {"intervalfromdays", {"DateTime::IntervalFromDays"}},
             {"argmax", {"MaxBy"}},
             {"argmin", {"MinBy"}},
             {"tostartofmonth", {"DateTime::StartOfMonth"}},
             {"startofmonth", {"DateTime::StartOfMonth"}},
+            {"tostartofhour", {"DateTime::StartOf"}},
             {"tounixtimestamp", {"DateTime::ToSeconds"}},
             {"unixtimestamp", {"DateTime::ToSeconds"}},
+            {"toseconds", {"DateTime::ToSeconds"}},
             {"split", {"String::SplitToList or Unicode::SplitToList"}},
             {"match", {"Re2::Match"}},
+            {"regexp_like", {"Re2::Match"}},
             {"contains", {"Find(_) IS NOT NULL or ListHas/DictContains"}},
             {"quantile", {"PERCENTILE"}},
             {"grouparray", {"AGG_LIST"}},
+            {"groupuniqarray", {"AGG_LIST_DISTINCT"}},
+            {"listagg", {"AGG_LIST"}},
+            {"list_agg", {"AGG_LIST"}},
             {"folder", {"FROM FOLDER(_)"}},
             {"tablerecord", {"TableRecordIndex"}},
             {"substring_index", {"Find"}},
@@ -3656,6 +3691,7 @@ struct TBuiltinFuncData {
             {"trunc", {"DateTime::StartOf"}},
             {"farm_hash", {"Digest::FarmHash"}},
             {"makedate", {"DateTime::MakeDate"}},
+            {"makedatetime", {"DateTime::MakeDatetime"}},
             {"any_value", {"Some"}},
             {"substing", {"Substring"}},
             {"listfirst", {"ListHead"}},
@@ -3670,6 +3706,7 @@ struct TBuiltinFuncData {
             {"currentdatetime", {"CurrentUtcDatetime"}},
             {"parsejson", {"Yson::ParseJson"}},
             {"splitbychar", {"String::SplitToList or Unicode::SplitToList"}},
+            {"splitbystring", {"String::SplitToList or Unicode::SplitToList"}},
             {"converttostringlist", {"Yson::ConvertToStringList"}},
             {"converttoint64", {"Yson::ConvertToInt64"}},
             {"asoptional", {"Just"}},
@@ -3688,12 +3725,26 @@ struct TBuiltinFuncData {
             {"date_format", {"DateTime::Format"}},
             {"string_split", {"String::SplitToList or Unicode::SplitToList"}},
             {"joinfromlist", {"String::JoinFromList or Unicode::JoinFromList"}},
+            {"listjoin", {"String::JoinFromList or Unicode::JoinFromList"}},
             {"array_length", {"ListLength"}},
-            {"split_part", {"String::SplitToList or Unicode::SplitToList + operator []"}},
+            {"split_part", {"String::SplitToList or Unicode::SplitToList + operator '[]'"}},
             {"createlist", {"ListCreate"}},
             {"setlength", {"DictLength"}},
             {"lookup", {"DictLookup"}},
+            {"arrayelement", {"operator '[]'"}},
+            {"hist", {"HISTOGRAM"}},
+            {"min_if", {"MIN(IF(_))"}},
+            {"minif", {"MIN(IF(_))"}},
+            {"max_if", {"MAX(IF(_))"}},
+            {"maxif", {"MAX(IF(_))"}},
+            {"totuple", {"ListToTuple(_,N)"}},
+            {"map", {"ListMap"}},
+            {"startofweek", {"DateTime::StartOfWeek"}},
+            {"dayofweek", {"DateTime::GetDayOfWeek"}},
+            {"nth", {"operator '.'"}},
+            {"member", {"operator '.'"}},
         };
+
         return missingFuncs;
     }
 };

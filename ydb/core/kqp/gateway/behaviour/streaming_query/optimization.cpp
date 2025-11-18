@@ -19,7 +19,7 @@ struct TStreamingExploreCtx {
     TExprContext& Ctx;
     std::unordered_set<const TExprNode*> Visited;
     ui64 StreamingReads = 0;
-    ui64 StreamingWrites = 0;
+    ui64 Writes = 0;
 };
 
 bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) {
@@ -58,24 +58,31 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
     }
 
     if (const auto maybeDataSink = TMaybeNode<TCoDataSink>(providerArg)) {
+        ++res.Writes;
+
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
-        if (dataSinkCategory == NYql::PqProviderName) {
-            ++res.StreamingWrites;
+        if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName}, dataSinkCategory)) {
             return true;
         }
 
-        if (dataSinkCategory == NYql::SolomonProviderName) {
+        if (dataSinkCategory == NYql::KikimrProviderName) {
+            const auto maybeYdbWrite = TMaybeNode<TKiWriteTable>(node);
+            if (!maybeYdbWrite) {
+                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Operations with YDB objects is not allowed inside streaming queries"));
+                return false;
+            }
+
+            const auto ydbWrite = maybeYdbWrite.Cast();
+            if (const TString mode(ydbWrite.Mode()); mode != "upsert") {
+                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Only UPSERT writing mode is supported for YDB writes inside streaming queries, got mode: " << to_upper(mode)));
+                return false;
+            }
+
             return true;
         }
 
         if (dataSinkCategory == NYql::ResultProviderName) {
             res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Results is not allowed for streaming queries, please use INSERT to record the query result"));
-        } else if (dataSinkCategory == NYql::KikimrProviderName) {
-            if (TMaybeNode<TKiWriteTable>(node)) {
-                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Writing into YDB tables is not supported now for streaming queries"));
-            } else {
-                res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Operations with YDB objects is not allowed inside streaming queries"));
-            }
         } else {
             res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Writing into data sink " << dataSinkCategory << " is not supported now for streaming queries"));
         }
@@ -111,8 +118,8 @@ bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
         return false;
     }
 
-    if (res.StreamingWrites > 1) {
-        ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query with more than one streaming write to topic is not supported now"));
+    if (res.Writes > 1) {
+        ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query with more than one write is not supported now"));
         return false;
     }
 

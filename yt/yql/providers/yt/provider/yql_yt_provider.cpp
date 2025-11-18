@@ -360,14 +360,16 @@ std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;
+        bool isRobot = false;
         if (ytState->Types->Credentials != nullptr) {
             groups.insert(ytState->Types->Credentials->GetGroups().begin(), ytState->Types->Credentials->GetGroups().end());
+            isRobot = ytState->Types->Credentials->IsRobot();
         }
-        auto filter = [userName, ytState, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
+        auto filter = [userName, ytState, groups = std::move(groups), isRobot](const NYql::TAttr& attr) -> bool {
             if (!attr.HasActivation()) {
                 return true;
             }
-            if (NConfig::Allow(attr.GetActivation(), userName, groups)) {
+            if (NConfig::Allow(attr.GetActivation(), userName, isRobot, groups)) {
                 with_lock(ytState->StatisticsMutex) {
                     ytState->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                 }
@@ -544,6 +546,7 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtWriteTable::CallableName());
         Names.insert(TYtFill::CallableName());
         Names.insert(TYtTouch::CallableName());
+        Names.insert(TYtCreateTable::CallableName());
         Names.insert(TYtDropTable::CallableName());
         Names.insert(TCoCommit::CallableName());
         Names.insert(TYtPublish::CallableName());

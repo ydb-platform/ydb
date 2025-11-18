@@ -102,11 +102,12 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     const bool isSink = NeedSinks(table, kqpCtx);
 
-    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx, nullptr);
+    auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
         && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
-            return index.second->Type == TIndexDescription::EType::GlobalSync;
+            return index.second->Type == TIndexDescription::EType::GlobalSync
+                || index.second->Type == TIndexDescription::EType::GlobalSyncUnique;
         });
 
     const bool needPrecompute = !(isSink && abortOnError && canUseStreamIndex);
@@ -227,7 +228,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
-                    // For fulltext indexes, we need to tokenize the text and create index rows and refill index columns
+                    // For fulltext indexes, we need to tokenize the text and create inserted rows
                     upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertRowsPrecompute, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
                         insert.Pos(), ctx);
                     break;

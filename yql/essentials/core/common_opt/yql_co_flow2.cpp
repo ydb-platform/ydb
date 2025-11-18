@@ -24,19 +24,16 @@ bool AllowSubsetFieldsForNode(const TExprNode& node, const TOptimizeContext& opt
 
 bool AllowComplexFiltersOverAggregatePushdown(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString pushdown = to_lower(TString("PushdownComplexFiltersOverAggregate"));
-    static const TString noPushdown = to_lower(TString("DisablePushdownComplexFiltersOverAggregate"));
-    return optCtx.Types->OptimizerFlags.contains(pushdown) &&
-           !optCtx.Types->OptimizerFlags.contains(noPushdown) &&
+    static const char optName[] = "PushdownComplexFiltersOverAggregate";
+    return IsOptimizerEnabled<optName>(*optCtx.Types) &&
+           !IsOptimizerDisabled<optName>(*optCtx.Types) &&
            optCtx.Types->MaxAggPushdownPredicates > 0;
 }
 
 bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     YQL_ENSURE(optCtx.Types);
-    static const TString pull = to_lower(TString("PullUpExtendOverEquiJoin"));
-    static const TString noPull = to_lower(TString("DisablePullUpExtendOverEquiJoin"));
-    return optCtx.Types->OptimizerFlags.contains(pull) &&
-           !optCtx.Types->OptimizerFlags.contains(noPull);
+    static const char optName[] = "PullUpExtendOverEquiJoin";
+    return IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
 }
 
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {

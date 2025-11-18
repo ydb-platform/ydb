@@ -65,6 +65,7 @@ struct TEnvironmentSetup {
         const ui32 NumPiles = 0;
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
+        const bool EnablePhantomFlagStorage = false;
     };
 
     const TSettings Settings;
@@ -243,7 +244,7 @@ struct TEnvironmentSetup {
         char *end = p + len;
         TReallyFastRng32 rng(RandomNumber<ui64>());
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
-            *reinterpret_cast<ui32*>(p) = rng();
+            WriteUnaligned<ui32>(p, rng());
         }
         for (; p < end; ++p) {
             *p = rng();
@@ -551,6 +552,7 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, false, false, true, Settings.EnablePhantomFlagStorage);
                 
 #undef ADD_ICB_CONTROL
 

@@ -354,6 +354,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
     REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
     REGISTER_SETTING(*this, ConvertDynamicTablesToStatic).Parser([](const TString& v) { return FromString<EConvertDynamicTablesToStatic>(v); });
+    REGISTER_SETTING(*this, _EnableDynamicTablesWrite);
     REGISTER_SETTING(*this, KeepMergeWithDynamicInput);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
@@ -614,6 +615,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFolder);
     REGISTER_SETTING(*this, _QueryDumpTableSizeLimit);
     REGISTER_SETTING(*this, _QueryDumpTableCountPerClusterLimit);
+    REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

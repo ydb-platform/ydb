@@ -21,7 +21,13 @@ import string
 import threading
 from collections import defaultdict
 
-from botocore.exceptions import IncompleteReadError, ReadTimeoutError
+from botocore.exceptions import (
+    IncompleteReadError,
+    ReadTimeoutError,
+    ResponseStreamingError,
+)
+from botocore.httpchecksum import AwsChunkedWrapper
+from botocore.utils import is_s3express_bucket
 
 from s3transfer.compat import SOCKET_ERROR, fallocate, rename_file
 
@@ -39,6 +45,7 @@ S3_RETRYABLE_DOWNLOAD_ERRORS = (
     SOCKET_ERROR,
     ReadTimeoutError,
     IncompleteReadError,
+    ResponseStreamingError,
 )
 
 
@@ -54,10 +61,12 @@ def signal_not_transferring(request, operation_name, **kwargs):
 
 
 def signal_transferring(request, operation_name, **kwargs):
-    if operation_name in ['PutObject', 'UploadPart'] and hasattr(
-        request.body, 'signal_transferring'
-    ):
-        request.body.signal_transferring()
+    if operation_name in ['PutObject', 'UploadPart']:
+        body = request.body
+        if isinstance(body, AwsChunkedWrapper):
+            body = getattr(body, '_raw', None)
+        if hasattr(body, 'signal_transferring'):
+            body.signal_transferring()
 
 
 def calculate_num_parts(size, part_size):
@@ -182,9 +191,7 @@ class FunctionContainer:
         self._kwargs = kwargs
 
     def __repr__(self):
-        return 'Function: {} with args {} and kwargs {}'.format(
-            self._func, self._args, self._kwargs
-        )
+        return f'Function: {self._func} with args {self._args} and kwargs {self._kwargs}'
 
     def __call__(self):
         return self._func(*self._args, **self._kwargs)
@@ -627,7 +634,7 @@ class TaskSemaphore:
         """
         logger.debug("Acquiring %s", tag)
         if not self._semaphore.acquire(blocking):
-            raise NoResourcesAvailable("Cannot acquire tag '%s'" % tag)
+            raise NoResourcesAvailable(f"Cannot acquire tag '{tag}'")
 
     def release(self, tag, acquire_token):
         """Release the semaphore
@@ -685,7 +692,7 @@ class SlidingWindowSemaphore(TaskSemaphore):
         try:
             if self._count == 0:
                 if not blocking:
-                    raise NoResourcesAvailable("Cannot acquire tag '%s'" % tag)
+                    raise NoResourcesAvailable(f"Cannot acquire tag '{tag}'")
                 else:
                     while self._count == 0:
                         self._condition.wait()
@@ -707,7 +714,7 @@ class SlidingWindowSemaphore(TaskSemaphore):
         self._condition.acquire()
         try:
             if tag not in self._tag_sequences:
-                raise ValueError("Attempted to release unknown tag: %s" % tag)
+                raise ValueError(f"Attempted to release unknown tag: {tag}")
             max_sequence = self._tag_sequences[tag]
             if self._lowest_sequence[tag] == sequence_number:
                 # We can immediately process this request and free up
@@ -734,7 +741,7 @@ class SlidingWindowSemaphore(TaskSemaphore):
             else:
                 raise ValueError(
                     "Attempted to release unknown sequence number "
-                    "%s for tag: %s" % (sequence_number, tag)
+                    f"{sequence_number} for tag: {tag}"
                 )
         finally:
             self._condition.release()
@@ -772,13 +779,13 @@ class ChunksizeAdjuster:
         if current_chunksize > self.max_size:
             logger.debug(
                 "Chunksize greater than maximum chunksize. "
-                "Setting to %s from %s." % (self.max_size, current_chunksize)
+                f"Setting to {self.max_size} from {current_chunksize}."
             )
             return self.max_size
         elif current_chunksize < self.min_size:
             logger.debug(
                 "Chunksize less than minimum chunksize. "
-                "Setting to %s from %s." % (self.min_size, current_chunksize)
+                f"Setting to {self.min_size} from {current_chunksize}."
             )
             return self.min_size
         else:
@@ -795,8 +802,13 @@ class ChunksizeAdjuster:
         if chunksize != current_chunksize:
             logger.debug(
                 "Chunksize would result in the number of parts exceeding the "
-                "maximum. Setting to %s from %s."
-                % (chunksize, current_chunksize)
+                f"maximum. Setting to {chunksize} from {current_chunksize}."
             )
 
         return chunksize
+
+
+def add_s3express_defaults(bucket, extra_args):
+    if is_s3express_bucket(bucket) and "ChecksumAlgorithm" not in extra_args:
+        # Default Transfer Operations to S3Express to use CRC32
+        extra_args["ChecksumAlgorithm"] = "crc32"

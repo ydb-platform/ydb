@@ -31,6 +31,7 @@ public:
         // Handle callables for already parsed/optimized AST
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTable));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTableScheme));
+        AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateTable));
         AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleDropTable));
         AddHandler({TYtPublish::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandlePublish));
         AddHandler({TYtSort::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
@@ -111,9 +112,12 @@ public:
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
                     break;
+                case EYtWriteMode::Upsert:
+                    tableDesc.Intents |= TYtTableIntent::Upsert;
+                    break;
                 case EYtWriteMode::Create:
-                    ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), "CREATE TABLE is not supported yet."));
-                    return TStatus::Error;
+                    tableDesc.Intents |= TYtTableIntent::Create;
+                    break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
                         << TYtWrite::CallableName() << " mode: " << mode->Child(1)->Content()));
@@ -201,6 +205,24 @@ public:
         return TStatus::Ok;
     }
 
+    TStatus HandleCreateTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        const TYtCreateTable create(input);
+        const TYtTableInfo tableInfo(create.Table(), false);
+        const auto& cluster = create.DataSink().Cluster().StringValue();
+        auto& tableDesc = State_->TablesData->GetOrAddTable(cluster, tableInfo.Name, tableInfo.Epoch);
+
+        if (NYql::HasSetting(tableInfo.Settings.Cast().Ref(), EYtSettingType::Anonymous)) {
+            tableDesc.IsAnonymous = true;
+            RegisterAnonymouseTable(cluster, tableInfo.Name);
+        }
+        tableDesc.Intents |= TYtTableIntent::Create;
+
+        UpdateDescriptorMeta(tableDesc, tableInfo);
+
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
+        return !output ? TStatus::Error : TStatus::Ok;
+    }
+
     TStatus HandleDropTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         auto drop = TYtDropTable(input);
 
@@ -254,6 +276,9 @@ public:
                     break;
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
+                    break;
+                case EYtWriteMode::Upsert:
+                    tableDesc.Intents |= TYtTableIntent::Upsert;
                     break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
@@ -315,6 +340,9 @@ public:
                     break;
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
+                    break;
+                case EYtWriteMode::Upsert:
+                    tableDesc.Intents |= TYtTableIntent::Upsert;
                     break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "

@@ -17,17 +17,20 @@ public:
 class ITableModifier {
 private:
     YDB_READONLY_DEF(TString, ModificationId);
+    YDB_READONLY_DEF(bool, SupportDbCache);
+
 protected:
     virtual bool DoExecute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& config) const = 0;
+
 public:
     using TPtr = std::shared_ptr<ITableModifier>;
+
     virtual ~ITableModifier() = default;
 
-    ITableModifier(const TString& modificationId)
+    explicit ITableModifier(const TString& modificationId, bool supportDbCache = true)
         : ModificationId(modificationId)
-    {
-
-    }
+        , SupportDbCache(supportDbCache)
+    {}
 
     bool Execute(IModifierExternalController::TPtr externalController, const NRequest::TConfig& config) const {
         return DoExecute(externalController, config);

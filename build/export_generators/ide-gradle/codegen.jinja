@@ -7,7 +7,7 @@ tasks.named("prepareMainProtos").configure {
 {%-     endif -%}
 
 {#-     Check main target codegen -#}
-{%-     if varprefix == "codegen" %}
+{%-     if varprefix == MAIN_VARPREFIX %}
 tasks.compileJava.configure {
     dependsOn({{ taskvar }})
 }
@@ -17,7 +17,7 @@ tasks.compileTestJava.configure {
 }
 {%-     if hasResources -%}
 {#-         Check main target codegen -#}
-{%-         if varprefix == "codegen" %}
+{%-         if varprefix == MAIN_VARPREFIX %}
 tasks.processResources.configure {
     dependsOn({{ taskvar }})
 }
@@ -34,7 +34,7 @@ tasks.named("delombok").configure {
 
 {%-     if with_kotlin -%}
 {#-         Check main target codegen -#}
-{%-         if varprefix == "codegen" %}
+{%-         if varprefix == MAIN_VARPREFIX %}
 tasks.compileKotlin.configure {
     dependsOn({{ taskvar }})
 }
@@ -63,10 +63,12 @@ tasks.named("{{ parent_taskvar }}").configure {
 {%-     endif  -%}
 {%- endmacro -%}
 
+{%- set codegenBindir = export_root + "/" + curdir -%}
+
 {%- if target is defined -%}
 {%-     set current_target = target -%}
 {#-     Main target codegen -#}
-{%-     set varprefix = "codegen" -%}
+{%-     set varprefix = MAIN_VARPREFIX -%}
 {%-     include "[generator]/codegen_current_target.jinja" -%}
 {%- endif -%}
 {%- if extra_targets|length -%}

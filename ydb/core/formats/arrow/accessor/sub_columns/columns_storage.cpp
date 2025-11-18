@@ -2,6 +2,8 @@
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
 
+#include <yql/essentials/types/binary_json/read.h>
+
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 TColumnsData TColumnsData::Slice(const ui32 offset, const ui32 count) const {
     auto records = Records->Slice(offset, count);
@@ -61,14 +63,18 @@ void TColumnsData::TIterator::InitArrays() {
         }
         const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
-        CurrentArrayData = static_cast<const arrow::StringArray*>(ChunkAddress->GetArray().get());
+        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
+        CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
         if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
             if (CurrentArrayData->IsNull(localIndex)) {
                 Next();
             }
             break;
         } else if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::SparsedArray) {
+            AFL_VERIFY(localIndex < CurrentArrayData->length())
+                ("localIndex", localIndex)
+                ("CurrentArrayData->length()", CurrentArrayData->length())
+                ("CurrentArrayData", CurrentArrayData->ToString());
             if (CurrentArrayData->IsNull(localIndex) &&
                 std::static_pointer_cast<TSparsedArray>(FullArrayAddress->GetArray())->GetDefaultValue() == nullptr) {
                 CurrentIndex = ChunkAddress->GetAddress().GetGlobalFinishPosition();
@@ -80,6 +86,17 @@ void TColumnsData::TIterator::InitArrays() {
         }
     }
     AFL_VERIFY(CurrentIndex <= GlobalChunkedArray->GetRecordsCount())("index", CurrentIndex)("count", GlobalChunkedArray->GetRecordsCount());
+}
+
+NJson::TJsonValue TColumnsData::TIterator::GetValue() const {
+    auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
+    if (view.empty()) {
+        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
+    }
+    auto data = NBinaryJson::SerializeToJson(TStringBuf(view.data(), view.size()));
+    NJson::TJsonValue res;
+    AFL_VERIFY(NJson::ReadJsonTree(data, &res));
+    return res;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

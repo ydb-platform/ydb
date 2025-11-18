@@ -25,6 +25,7 @@ NYT::NApi::IClientPtr CreateApiClient(const TClientContext& context)
     connectionConfig->SetDefaults();
     if (context.JobProxySocketPath) {
         connectionConfig->ProxyUnixDomainSocket = *context.JobProxySocketPath;
+        connectionConfig->EnableProxyDiscovery = false;
     } else {
         connectionConfig->ClusterUrl = context.ServerName;
     }

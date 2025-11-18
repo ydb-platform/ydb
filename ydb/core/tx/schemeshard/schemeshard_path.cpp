@@ -1723,13 +1723,6 @@ bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
         return false;
     }
 
-    ++item;
-    for (; item != Elements.rend(); ++item) {
-        if (!(*item)->IsDirectory() && !(*item)->IsSubDomainRoot()) {
-            return false;
-        }
-    }
-
     return true;
 }
 

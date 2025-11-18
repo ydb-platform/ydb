@@ -274,6 +274,8 @@ message TKqpReadRangesSourceSettings {
 
     optional bool IsTableImmutable = 23 [default = false];
     optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
+
+    optional string Database = 25;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given
@@ -307,6 +309,9 @@ message TKqpVectorResolveSettings {
 
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
+
+    // Database name for KqpReadActor
+    optional string Database = 17;
 }
 
 message TKqpTaskInfo {
@@ -1445,6 +1450,7 @@ message TEvConditionalEraseRowsRequest {
     optional uint64 SchemaVersion = 3;
     repeated TIndexDescription Indexes = 4;
     optional TLimits Limits = 5;
+    optional string DatabaseName = 6;
 
     oneof Condition {
         TExpirationCondition Expiration = 2;
@@ -1501,6 +1507,8 @@ message TEvBuildIndexCreateRequest {
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
+
+    optional string DatabaseName = 18;
 }
 
 message TEvBuildIndexProgressResponse {
@@ -1611,6 +1619,8 @@ message TEvLocalKMeansRequest {
     repeated string DataColumns = 20;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
+
+    optional string DatabaseName = 23;
 }
 
 message TEvLocalKMeansResponse {
@@ -1659,6 +1669,8 @@ message TEvReshuffleKMeansRequest {
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
+
+    optional string DatabaseName = 17;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1725,7 +1737,7 @@ message TEvIncrementalRestoreResponse {
         RETRY = 1;
         ERROR = 2;
     }
-    
+
     optional uint64 TxId = 1;
     optional uint64 TableId = 2;
     optional uint64 OperationId = 3;
@@ -1770,6 +1782,8 @@ message TEvPrefixKMeansRequest {
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 
     repeated string SourcePrimaryKeyColumns = 19;
+
+    optional string DatabaseName = 20;
 }
 
 message TEvPrefixKMeansResponse {
@@ -1806,6 +1820,8 @@ message TEvBuildFulltextIndexRequest {
     repeated string DataColumns = 10;
 
     optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+
+    optional string DatabaseName = 12;
 }
 
 message TEvBuildFulltextIndexResponse {
@@ -2087,6 +2103,8 @@ message TEvRead {
     optional NKikimrSchemeOp.EOlapProgramType ProgramType = 903;
 
     optional NKikimrDataEvents.ELockMode LockMode = 904;
+
+    optional NKikimrKqp.TReadVectorTopK VectorTopK = 905;
 }
 
 message TReadContinuationToken {

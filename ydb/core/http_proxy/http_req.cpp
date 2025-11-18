@@ -23,9 +23,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/viewer/json/json.h>
-#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/tx/scheme_board/cache.h>
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
@@ -35,7 +33,6 @@
 #include <ydb/library/grpc/actor_client/grpc_service_cache.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
-#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
@@ -48,6 +45,9 @@
 #include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/ymq/ymq_proxy.h>
 
+#include <ydb/public/api/grpc/draft/ydb_sqs_topic_v1.grpc.pb.h>
+#include <ydb/services/sqs_topic/sqs_topic_proxy.h>
+#include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <util/generic/guid.h>
 #include <util/stream/file.h>
@@ -170,6 +170,27 @@ namespace NKikimr::NHttpProxy {
             return req.stream_name().substr(databasePath.size(), -1);
         }
         return ExtractStreamNameWithoutProtoField<TProto>(req).substr(databasePath.size(), -1);
+    }
+
+    template <class TRequest>
+    TString MaybeGetQueueUrl(const TRequest& request) {
+        if constexpr (requires {request.Getqueue_url(); } ) {
+            return request.Getqueue_url();
+        }
+        return {};
+    }
+
+    template <class TRequest>
+    std::expected<TString, TString> MaybeGetDatabasePathFromSQSTopicQueueUrl(const TRequest& request) {
+        TString queueUrl = MaybeGetQueueUrl(request);
+        if (queueUrl.empty()) {
+            return {};
+        }
+        auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
+        if (!parsedQueueUrl.has_value()) {
+            return std::unexpected(std::move(parsedQueueUrl).error());
+        }
+        return parsedQueueUrl->Database;
     }
 
     constexpr TStringBuf IAM_HEADER = "x-yacloud-subjecttoken";
@@ -996,6 +1017,313 @@ namespace NKikimr::NHttpProxy {
         };
     };
 
+    template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
+    class TSqsTopicHttpRequestProcessor : public TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>{
+    using TProcessorBase = TBaseHttpRequestProcessor<TProtoService, TProtoRequest, TProtoResponse, TProtoResult, TProtoCall, TRpcEv>;
+    public:
+        TSqsTopicHttpRequestProcessor(TString method, TProtoCall protoCall) : TProcessorBase(method, protoCall)
+        {
+        }
+
+        void Execute(THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) override {
+            ctx.Register(new TSqsTopicHttpRequestActor(
+                    std::move(context),
+                    std::move(signature),
+                    TProcessorBase::ProtoCall, TProcessorBase::Method));
+        }
+
+    private:
+
+        class TSqsTopicHttpRequestActor : public NActors::TActorBootstrapped<TSqsTopicHttpRequestActor> {
+        public:
+            using TBase = NActors::TActorBootstrapped<TSqsTopicHttpRequestActor>;
+
+            TSqsTopicHttpRequestActor(THttpRequestContext&& httpContext,
+                              THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
+                              TProtoCall protoCall, const TString& method)
+                : HttpContext(std::move(httpContext))
+                , Signature(std::move(signature))
+                , ProtoCall(protoCall)
+                , Method(method)
+            {
+            }
+
+            TStringBuilder LogPrefix() const {
+                return HttpContext.LogPrefix();
+            }
+
+        private:
+            STFUNC(StateWork)
+            {
+                switch (ev->GetTypeRewrite()) {
+                    HFunc(TEvents::TEvWakeup, HandleTimeout);
+                    HFunc(TEvServerlessProxy::TEvErrorWithIssue, HandleErrorWithIssue);
+                    HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
+                    HFunc(TEvServerlessProxy::TEvToken, HandleToken);
+                    default:
+                        HandleUnexpectedEvent(ev);
+                        break;
+                }
+            }
+
+            void SendGrpcRequestNoDriver(const TActorContext& ctx) {
+                RequestState = TProcessorBase::TRequestState::StateGrpcRequest;
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                              "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
+                              "' database: '" << HttpContext.DatabasePath <<
+                              "' iam token size: " << HttpContext.IamToken.size());
+
+                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabasePath,
+                                                            HttpContext.SerializedUserToken, ctx.ActorSystem());
+                RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
+                                    (const NThreading::TFuture<TProtoResponse>& future) {
+                    auto& response = future.GetValueSync();
+                    auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                    Y_ABORT_UNLESS(response.operation().ready());
+                    if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
+                        TProtoResult rs;
+                        response.operation().result().UnpackTo(&rs);
+                        result->Message = MakeHolder<TProtoResult>(rs);
+                    }
+                    NYql::TIssues issues;
+                    NYql::IssuesFromMessage(response.operation().issues(), issues);
+                    result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
+                                                               NYdb::NAdapters::ToSdkIssues(std::move(issues)));
+                    actorSystem->Send(actorId, result.Release());
+                });
+                return;
+            }
+
+            void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev) {
+                Y_UNUSED(ev);
+            }
+
+            void TryUpdateDbInfo(const TDatabase& db, const TActorContext& ctx) {
+                if (db.Path) {
+                    HttpContext.DatabasePath = db.Path;
+                    HttpContext.DatabaseId = db.Id;
+                    HttpContext.CloudId = db.CloudId;
+                    HttpContext.FolderId = db.FolderId;
+                }
+                ReportInputCounters(ctx);
+            }
+
+            void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
+                HttpContext.ServiceAccountId = ev->Get()->ServiceAccountId;
+                HttpContext.IamToken = ev->Get()->IamToken;
+                HttpContext.SerializedUserToken = ev->Get()->SerializedUserToken;
+
+                if (TString databasePath = ev->Get()->Database.Path) {
+                    if (!AssignDatabasePath(ctx, databasePath)) {
+                        return;
+                    }
+                }
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
+
+                SendGrpcRequestNoDriver(ctx);
+            }
+
+            void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
+                ReplyWithError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
+            }
+
+            TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>> labels) const {
+                TVector<std::pair<TString, TString>> common{
+                    {"database", HttpContext.DatabasePath},
+                    {"method", Method},
+                    {"database_id", HttpContext.DatabaseId},
+                    {"topic", TopicPath},
+                    {"consumer", ConsumerName},
+                };
+                std::move(common.begin(), common.end(), std::back_inserter(labels));
+                return labels;
+            }
+
+            void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{
+                             1, true, true,
+                             AddCommonLabels({
+                                 {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
+                                 {"name", "api.http.message_queue.response.count"},
+                             })});
+                HttpContext.ResponseData.Status = status;
+                HttpContext.ResponseData.ErrorText = errorText;
+                ReplyToHttpContext(ctx, issueCode);
+
+                ctx.Send(AuthActor, new TEvents::TEvPoisonPill());
+
+                TBase::Die(ctx);
+            }
+
+            void ReplyToHttpContext(const TActorContext& ctx, std::optional<size_t> issueCode = std::nullopt) {
+                ReportLatencyCounters(ctx);
+
+                if (issueCode.has_value()) {
+                    HttpContext.DoReply(ctx, issueCode.value());
+                } else {
+                    HttpContext.DoReply(ctx);
+                }
+            }
+
+            void ReportInputCounters(const TActorContext& ctx) {
+                if (InputCountersReported) {
+                    return;
+                }
+                InputCountersReported = true;
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvCounter{1, true, true,
+                            AddCommonLabels({{"name", "api.http.message_queue.request.count"}})
+                         });
+            }
+
+            void ReportLatencyCounters(const TActorContext& ctx) {
+                TDuration dur = ctx.Now() - StartTime;
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
+                             BuildLabels(Method, HttpContext, "api.http.message_queue.response.duration_milliseconds")
+                        });
+            }
+
+            void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
+                                    const TActorContext& ctx) {
+                if (ev->Get()->Status->IsSuccess()) {
+                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body,
+                                HttpContext.ContentType == MIME_CBOR);
+                    FillOutputCustomMetrics<TProtoResult>(
+                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
+                    ctx.Send(MakeMetricsServiceID(),
+                             new TEvServerlessProxy::TEvCounter{
+                                 1, true, true,
+                                 AddCommonLabels({
+                                     {"code", "200"},
+                                     {"name", "api.http.message_queue.response.count"}})});
+                    ReplyToHttpContext(ctx);
+                } else {
+                    auto retryClass =
+                        NYdb::NTopic::GetRetryErrorClass(ev->Get()->Status->GetStatus());
+
+                    switch (retryClass) {
+                    case ERetryErrorClass::ShortRetry:
+                        [[fallthrough]];
+
+                    case ERetryErrorClass::LongRetry:
+                        RetryCounter.Click();
+                        if (RetryCounter.HasAttemps()) {
+                            SendGrpcRequestNoDriver(ctx);
+                        }
+                        [[fallthrough]];
+
+                    case ERetryErrorClass::NoRetry: {
+                        TString errorText;
+                        TStringOutput stringOutput(errorText);
+                        ev->Get()->Status->GetIssues().PrintTo(stringOutput);
+                        RetryCounter.Void();
+                        auto issues = ev->Get()->Status->GetIssues();
+                        size_t issueCode = (
+                            issues && issues.begin()->IssueCode != ISSUE_CODE_OK
+                            ) ? issues.begin()->IssueCode : ISSUE_CODE_GENERIC;
+                        return ReplyWithError(ctx, ev->Get()->Status->GetStatus(), errorText, issueCode);
+                        }
+                    }
+                }
+                TBase::Die(ctx);
+            }
+
+            void HandleTimeout(TEvents::TEvWakeup::TPtr ev, const TActorContext& ctx) {
+                Y_UNUSED(ev);
+                return ReplyWithError(ctx, NYdb::EStatus::TIMEOUT, "Request hasn't been completed by deadline");
+            }
+
+            // Fill HttpContext.DatabasePath and reply with error is databases missmatch
+            bool AssignDatabasePath(const TActorContext& ctx, const TString& databasePath) {
+                if (HttpContext.DatabasePath.empty()) {
+                    HttpContext.DatabasePath = databasePath;
+                } else {
+                    if (HttpContext.DatabasePath != databasePath) {
+                        ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Queue url database  " + databasePath + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+        public:
+            void Bootstrap(const TActorContext& ctx) {
+                StartTime = ctx.Now();
+                try {
+                    HttpContext.RequestBodyToProto(&Request);
+                } catch (const NKikimr::NSQS::TSQSException& e) {
+                    NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
+                    if (e.ErrorClass.ErrorCode == "MissingParameter")
+                        issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
+                    else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
+                        issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
+                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
+                } catch (const std::exception& e) {
+                    LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
+                                  "got new request with incorrect json from [" << HttpContext.SourceAddress << "] " <<
+                                  "database '" << HttpContext.DatabasePath << "'");
+                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                }
+
+                if (auto queueUrl = MaybeGetQueueUrl(Request)) {
+                    auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
+                    if (!parsedQueueUrl.has_value()) {
+                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url: " + parsedQueueUrl.error(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                    }
+                    TopicPath = parsedQueueUrl->TopicPath;
+                    ConsumerName = parsedQueueUrl->Consumer;
+                    IsFifo = parsedQueueUrl->Fifo;
+
+                    if (!AssignDatabasePath(ctx, parsedQueueUrl->Database)) {
+                        return;
+                    }
+                    if (TopicPath.empty()) {
+                        return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing topic path", static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                    }
+                }
+
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                              "got new request from [" << HttpContext.SourceAddress << "] " <<
+                              "database '" << HttpContext.DatabasePath << "' " <<
+                              "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
+
+                if (HttpContext.IamToken.empty() && Signature) {
+                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
+                        ctx.SelfID, HttpContext, std::move(Signature)));
+                } else {
+                    SendGrpcRequestNoDriver(ctx);
+                }
+
+                ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
+
+                TBase::Become(&TSqsTopicHttpRequestActor::StateWork);
+            }
+
+        private:
+            TInstant StartTime;
+            typename TProcessorBase::TRequestState RequestState = TProcessorBase::TRequestState::StateIdle;
+            TProtoRequest Request;
+            TDuration RequestTimeout = TDuration::Seconds(60);
+            ui32 PoolId;
+            THttpRequestContext HttpContext;
+            THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
+            THolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
+            NThreading::TFuture<TProtoResponse> RpcFuture;
+            TProtoCall ProtoCall;
+            TString Method;
+            TString TopicPath;
+            TString ConsumerName;
+            bool IsFifo{};
+            TRetryCounter RetryCounter;
+
+            TActorId AuthActor;
+            bool InputCountersReported = false;
+        };
+    };
+
     template<class TProtoRequest>
     TString ExtractQueueName(TProtoRequest& request) {
         return request.GetQueueUrl();
@@ -1065,6 +1393,27 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
+
+#define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<     \
+                                                            Ydb::SqsTopic::V1::SqsTopicService,                                       \
+                                                            Ydb::Ymq::V1::name##Request,                                              \
+                                                            Ydb::Ymq::V1::name##Response,                                             \
+                                                            Ydb::Ymq::V1::name##Result,                                               \
+                                                            decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), \
+                                                            NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name)
+
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
+
+#undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
+
+#define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
+                                                          Ydb::SqsTopic::V1::SqsTopicService,                                   \
+                                                          Ydb::SqsTopic::V1::name##Request,                                     \
+                                                          Ydb::SqsTopic::V1::name##Response,                                    \
+                                                          Ydb::SqsTopic::V1::name##Result,                                      \
+                                                          decltype(&Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name),       \
+                                                          NKikimr::NGRpcService::TEvYmq##name##Request>>(#name, &Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name)
+#undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 
     void SetApiVersionDisabledErrorText(THttpRequestContext& context) {
@@ -1074,14 +1423,18 @@ namespace NKikimr::NHttpProxy {
     bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context,
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
-        THashMap<TString, THolder<IHttpRequestProcessor>>* Name2Processor;
+        const THashMap<TString, THolder<IHttpRequestProcessor>>* Name2Processor;
         if (context.ApiVersion == "AmazonSQS") {
-            if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled()) {
+            if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled() && !context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
                 context.ResponseData.IsYmq = true;
                 context.ResponseData.YmqHttpCode = 400;
                 SetApiVersionDisabledErrorText(context);
             }
-            Name2Processor = &Name2YmqProcessor;
+            if (context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
+                Name2Processor = &Name2SqsTopicProcessor;
+            } else {
+                Name2Processor = &Name2YmqProcessor;
+            }
         } else {
             if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
                 context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;
@@ -1408,324 +1761,6 @@ namespace NKikimr::NHttpProxy {
             throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
                 "Unknown ContentType";
         }
-    }
-
-    class THttpAuthActor : public NActors::TActorBootstrapped<THttpAuthActor> {
-    public:
-        using TBase = NActors::TActorBootstrapped<THttpAuthActor>;
-
-        THttpAuthActor(const TActorId sender, THttpRequestContext& context,
-                          THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
-            : Sender(sender)
-            , Prefix(context.LogPrefix())
-            , ServiceAccountId(context.ServiceAccountId)
-            , ServiceAccountCredentialsProvider(context.ServiceAccountCredentialsProvider)
-            , RequestId(context.RequestId)
-            , Signature(std::move(signature))
-            , ServiceConfig(context.ServiceConfig)
-            , IamToken(context.IamToken)
-            , Authorize(!context.Driver)
-            , DatabasePath(CanonizePath(context.DatabasePath))
-            , StreamName(context.StreamName)
-        {
-        }
-
-        TStringBuilder LogPrefix() const {
-            return TStringBuilder() << Prefix << " [auth] ";
-        }
-
-    private:
-        STFUNC(StateWork)
-        {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
-                HFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
-                HFunc(NCloud::TEvIamTokenService::TEvCreateResponse, HandleServiceAccountIamToken);
-                HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParser);
-                HFunc(TEvents::TEvPoisonPill, HandlePoison);
-                default:
-                    HandleUnexpectedEvent(ev);
-                    break;
-                }
-        }
-
-        void SendDescribeRequest(const TActorContext& ctx) {
-            auto schemeCacheRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = NKikimr::SplitPath(DatabasePath);
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-            entry.SyncVersion = false;
-            schemeCacheRequest->ResultSet.emplace_back(entry);
-            schemeCacheRequest->DatabaseName = DatabasePath;
-            ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-            const NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
-            if (navigate->ErrorCount) {
-                return ReplyWithError(
-                    ctx, NYdb::EStatus::SCHEME_ERROR, TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists",
-                    NYds::EErrorCodes::NOT_FOUND
-                );
-            }
-            Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
-            if (navigate->ResultSet.front().PQGroupInfo) {
-                const auto& description = navigate->ResultSet.front().PQGroupInfo->Description;
-                FolderId = description.GetPQTabletConfig().GetYcFolderId();
-                CloudId = description.GetPQTabletConfig().GetYcCloudId();
-                DatabaseId = description.GetPQTabletConfig().GetYdbDatabaseId();
-                DatabasePath = CanonizePath(description.GetPQTabletConfig().GetYdbDatabasePath());
-            }
-            for (const auto& attr : navigate->ResultSet.front().Attributes) {
-                if (attr.first == "folder_id") FolderId = attr.second;
-                if (attr.first == "cloud_id") CloudId = attr.second;
-                if (attr.first == "database_id") DatabaseId = attr.second;
-            }
-            SendAuthenticationRequest(ctx);
-        }
-
-        void HandlePoison(const TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-            TBase::Die(ctx);
-        }
-
-        void HandleTicketParser(const TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
-
-            if (ev->Get()->Error) {
-                return ReplyWithError(ctx, ev->Get()->Error.Retryable ? NYdb::EStatus::UNAVAILABLE : NYdb::EStatus::UNAUTHORIZED, TString{ev->Get()->Error.Message});
-            }
-            ctx.Send(Sender, new TEvServerlessProxy::TEvToken(ev->Get()->Token->GetUserSID(), "", ev->Get()->SerializedToken, {"", DatabaseId, DatabasePath, CloudId, FolderId}));
-
-            LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "Authorized successfully");
-
-            TBase::Die(ctx);
-        }
-
-        void SendAuthenticationRequest(const TActorContext& ctx) {
-            TInstant signedAt;
-            if (!Signature.Get() && IamToken.empty()) {
-                return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
-                                      "Neither Credentials nor IAM token was provided",
-                                      NYds::EErrorCodes::INCOMPLETE_SIGNATURE
-                );
-            }
-            if (Signature) {
-                bool found = false;
-                for (auto& cr : ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion()) {
-                    if (cr == Signature->GetRegion()) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
-                        TStringBuilder() << "Wrong service region: got " << Signature->GetRegion() <<
-                        " expected " << ServiceConfig.GetHttpConfig().GetYandexCloudServiceRegion(0),
-                        NYds::EErrorCodes::INCOMPLETE_SIGNATURE
-                    );
-                }
-
-                if (!TInstant::TryParseIso8601(Signature->GetSigningTimestamp(), signedAt)) {
-                    return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST,
-                                          "Failed to parse Signature timestamp",
-                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE
-                    );
-                }
-
-                if (Signature->GetAccessKeyId().empty()) {
-                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
-                                          "Access key id should be provided",
-                                          NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN
-                    );
-                }
-            }
-
-
-            if (Authorize) {
-                auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
-                if (Signature.Get()) {
-                    TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature;
-                    signature.AccessKeyId = Signature->GetAccessKeyId();
-                    signature.StringToSign = Signature->GetStringToSign();
-                    signature.Signature = Signature->GetParsedSignature();
-                    signature.Service = "kinesis";
-                    signature.Region = Signature->GetRegion();
-                    signature.SignedAt = signedAt;
-
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-                        .Signature = std::move(signature),
-                        .Database = DatabasePath,
-                        .PeerName = "",
-                        .Entries = entries
-                    }));
-                } else {
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
-                        .Ticket = IamToken,
-                        .Database = DatabasePath,
-                        .PeerName = "",
-                        .Entries = entries
-                    }));
-                }
-                return;
-            }
-
-            THolder<NCloud::TEvAccessService::TEvAuthenticateRequest> request =
-                MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-            request->RequestId = RequestId;
-
-            auto& signature = *request->Request.mutable_signature();
-            signature.set_access_key_id(Signature->GetAccessKeyId());
-            signature.set_string_to_sign(Signature->GetStringToSign());
-            signature.set_signature(Signature->GetParsedSignature());
-
-            auto& v4params = *signature.mutable_v4_parameters();
-            v4params.set_service("kinesis");
-            v4params.set_region(Signature->GetRegion());
-
-            const ui64 nanos = signedAt.NanoSeconds();
-            const ui64 seconds = nanos / 1'000'000'000ull;
-            const ui64 nanos_left = nanos % 1'000'000'000ull;
-
-            v4params.mutable_signed_at()->set_seconds(seconds);
-            v4params.mutable_signed_at()->set_nanos(nanos_left);
-
-            ctx.Send(MakeAccessServiceID(), std::move(request));
-        }
-
-        void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev) {
-            Y_UNUSED(ev);
-        }
-
-        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,
-                                        const TActorContext& ctx) {
-            if (!ev->Get()->Status.Ok()) {
-                RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " <<
-                              "can not authenticate service account user: " << ev->Get()->Status.Msg);
-                if (RetryCounter.HasAttemps()) {
-                    SendAuthenticationRequest(ctx);
-                    return;
-                }
-                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status)
-                                                                    ? NYdb::EStatus::UNAVAILABLE
-                                                                    : NYdb::EStatus::UNAUTHORIZED,
-                                         TStringBuilder() << "requestid " << RequestId
-                                         << "; can not authenticate service account user");
-
-            } else if (!ev->Get()->Response.subject().has_service_account()) {
-                return ReplyWithError(ctx, NYdb::EStatus::INTERNAL_ERROR,
-                                      "(this error should not have been reached).");
-            }
-            RetryCounter.Void();
-
-            ServiceAccountId = ev->Get()->Response.subject().service_account().id();
-            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "authenticated to " << ServiceAccountId);
-            SendIamTokenRequest(ctx);
-        }
-
-        void SendIamTokenRequest(const TActorContext& ctx) {
-            auto request = MakeHolder<NCloud::TEvIamTokenService::TEvCreateForServiceAccountRequest>();
-            request->RequestId = RequestId;
-            request->Token = ServiceAccountCredentialsProvider->GetAuthInfo();
-            request->Request.set_service_account_id(ServiceAccountId);
-
-            ctx.Send(MakeIamTokenServiceID(), std::move(request));
-        }
-
-        void ReplyWithError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText,
-                            NYds::EErrorCodes issueCode = NYds::EErrorCodes::GENERIC_ERROR) {
-            ctx.Send(Sender, new TEvServerlessProxy::TEvErrorWithIssue(status, errorText, {"", DatabaseId, DatabasePath, CloudId, FolderId}, static_cast<size_t>(issueCode)));
-            TBase::Die(ctx);
-        }
-
-        void HandleServiceAccountIamToken(NCloud::TEvIamTokenService::TEvCreateResponse::TPtr& ev,
-                                          const TActorContext& ctx) {
-            if (!ev->Get()->Status.Ok()) {
-                RetryCounter.Click();
-                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "retry #" << RetryCounter.AttempN() << "; " <<
-                              "IAM token issue error: " << ev->Get()->Status.Msg);
-
-                if (RetryCounter.HasAttemps()) {
-                    SendIamTokenRequest(ctx);
-                    return;
-                }
-                return ReplyWithError(ctx, ev->Get()->Status.InternalError || NKikimr::IsRetryableGrpcError(ev->Get()->Status)
-                                                                    ? NYdb::EStatus::UNAVAILABLE
-                                                                    : NYdb::EStatus::UNAUTHORIZED,
-                                            TStringBuilder() << "IAM token issue error: " << ev->Get()->Status.Msg);
-            }
-            RetryCounter.Void();
-
-            Y_ABORT_UNLESS(!ev->Get()->Response.iam_token().empty());
-
-            ctx.Send(Sender,
-                     new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token(), "", {}));
-
-            LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "IAM token generated");
-
-            TBase::Die(ctx);
-        }
-
-    public:
-        void Bootstrap(const TActorContext& ctx) {
-            TBase::Become(&THttpAuthActor::StateWork);
-
-            if (Authorize) {
-                SendDescribeRequest(ctx);
-                return;
-            }
-            if (ServiceAccountId.empty()) {
-                SendAuthenticationRequest(ctx);
-            } else {
-                SendIamTokenRequest(ctx);
-            }
-        }
-
-    private:
-        const TActorId Sender;
-        const TString Prefix;
-        TString ServiceAccountId;
-        std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
-        const TString RequestId;
-        THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
-        TRetryCounter RetryCounter;
-        const NKikimrConfig::TServerlessProxyConfig& ServiceConfig;
-        TString IamToken;
-        bool Authorize;
-        TString FolderId;
-        TString CloudId;
-        TString DatabaseId;
-        TString DatabasePath;
-        TString StreamName;
-    };
-
-
-    NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
-    {
-        return new THttpAuthActor(sender, context, std::move(signature));
-    }
-
-
-    NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
-    {
-        NCloud::TIamTokenServiceSettings tsSettings;
-        tsSettings.Endpoint = config.GetHttpConfig().GetIamTokenServiceEndpoint();
-        if (config.GetCaCert()) {
-            TString certificate = TFileInput(config.GetCaCert()).ReadAll();
-            tsSettings.CertificateRootCA = certificate;
-        }
-        return NCloud::CreateIamTokenService(tsSettings);
-    }
-
-    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
-    {
-        NCloud::TAccessServiceSettings asSettings;
-        asSettings.Endpoint = config.GetHttpConfig().GetAccessServiceEndpoint();
-
-        if (config.GetCaCert()) {
-            TString certificate = TFileInput(config.GetCaCert()).ReadAll();
-            asSettings.CertificateRootCA = certificate;
-        }
-        return NCloud::CreateAccessServiceWithCache(asSettings);
     }
 
 } // namespace NKikimr::NHttpProxy

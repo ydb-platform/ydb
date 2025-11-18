@@ -766,8 +766,14 @@ int TFacadeRunner::DoMain(int argc, const char* argv[]) {
     factory.SetGatewaysConfig(RunOptions_.GatewaysConfig.Get());
     factory.SetCredentials(RunOptions_.Credentials);
     factory.EnableRangeComputeFor();
+
     if (!urlListers.empty()) {
         factory.SetUrlListerManager(MakeUrlListerManager(urlListers));
+    }
+
+    for (auto& factoryFn : RemoteLayersFactories_) {
+        auto result = factoryFn();
+        factory.AddRemoteLayersProvider(result.first, result.second);
     }
 
     int result = DoRun(factory);
@@ -1004,6 +1010,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
 
     RunOptions_.PrintInfo("");
     RunOptions_.PrintInfo("Done");
+
+    program->CommitFullCapture();
 
     return 0;
 }

@@ -689,18 +689,37 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
-        "restart_pdisk_monitoring": {
+        "restart_pdisk_database_force": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
+        },
+        "restart_pdisk_monitoring": {
+            "debugMessage": "text",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "result": false
+        },
+        "restart_pdisk_monitoring_force": {
+            "debugMessage": "text",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "result": false
         },
         "restart_pdisk_root": {
             "debugMessage": "text",
-            "error": "Calling this operation could cause at least 4 groups (2181038080, 2181038081, 2181038082, ...2181038083) to go into a dead state",
+            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
+            "forceRetryPossible": true,
             "result": false
+        },
+        "restart_pdisk_root_force": {
+            "debugMessage": "text",
+            "result": true
         },
         "restart_pdisk_viewer": {
             "status_code": 403,
-            "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+            "text": "Access denied"
+        },
+        "restart_pdisk_viewer_force": {
+            "status_code": 403,
+            "text": "Access denied"
         },
         "storage_nodes_database": {
             "FieldsAvailable": "10000000110011000000110100000011",
@@ -1230,6 +1249,38 @@
             }
         ],
         "TotalGroups": 5
+    },
+    "test.TestViewer.test_storage_stats": {
+        "Paths": [
+            {
+                "FullPath": "/Root/dedicated_db",
+                "Groups": 1,
+                "Media": 1,
+                "Path": ".",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 10
+            },
+            {
+                "DataSize": "not-zero-number",
+                "FullPath": "/Root/dedicated_db/table1",
+                "Groups": 1,
+                "Media": 1,
+                "Path": "table1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 1
+            },
+            {
+                "FullPath": "/Root/dedicated_db/topic1",
+                "Groups": 1,
+                "Media": 1,
+                "Path": "topic1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 2
+            }
+        ]
     },
     "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
@@ -4718,6 +4769,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5061,6 +5113,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5267,6 +5320,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5463,6 +5517,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -5695,6 +5750,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -6080,6 +6136,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50001,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -6276,6 +6333,7 @@
                         "Location": {},
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 50000,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -7972,6 +8030,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -8341,6 +8400,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -8710,6 +8770,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -9079,6 +9140,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [
@@ -9448,6 +9510,7 @@
                         "MaxDiskUsage": "not-zero-number",
                         "MemoryLimit": "not-zero-number-text",
                         "MemoryStats": "not-empty-object",
+                        "NetworkUtilization": "number",
                         "NodeId": 1,
                         "NumberOfCpus": "not-zero-number",
                         "PoolStats": [

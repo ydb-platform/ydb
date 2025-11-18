@@ -257,11 +257,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                     .Status = status,
                 };
                 auto forceTraversalOperation = Self->ForceTraversalOperation(operationId);
-                if (!forceTraversalOperation) {
+                if (forceTraversalOperation) {
+                    forceTraversalOperation->Tables.emplace_back(operationTable);
+                } else {
                     SA_LOG_E("[" << Self->TabletID() << "] ForceTraversalTables contains unknown operationId: " << operationId);
-                    continue;
                 }
-                forceTraversalOperation->Tables.emplace_back(operationTable);
 
                 if (!rowset.Next()) {
                     return false;

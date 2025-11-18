@@ -27,6 +27,8 @@ private:
 class TCommandProfile : public TClientCommandTree {
 public:
     TCommandProfile();
+
+    virtual void Config(TConfig& config) override;
 };
 
 class TCommandProfileCommon : public TClientCommand {

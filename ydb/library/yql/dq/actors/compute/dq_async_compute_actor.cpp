@@ -582,7 +582,7 @@ private:
         Y_ABORT_UNLESS(Checkpoints);
         auto req = GetCheckpointRequest();
         if (!req.Defined()) {
-            return true;  // handled channels syncronously
+            return true;  // handled channels synchronously
         }
         CA_LOG_D("DoHandleChannelsAfterFinishImpl");
         AskContinueRun(std::move(req), /* checkpointOnly = */ true);

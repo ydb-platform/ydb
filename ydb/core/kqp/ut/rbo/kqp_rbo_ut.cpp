@@ -624,6 +624,11 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 SET TablePathPrefix = "/Root/";
                 select sum(t1.c + 2) as sum0 from t1 group by t1.b + t1.a order by sum0;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(distinct t1.b) as sum, t1.a from t1 group by t1.a order by sum;
+            )"
         };
 
         std::vector<std::string> results = {
@@ -643,7 +648,8 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
             R"([["10";"8"];["15";"12"]])",
             R"([["4";"10"];["6";"15"]])",
             R"([["4";"2";"4"];["6";"3";"4"]])",
-            R"([["4"];["8"];["8"]])"
+            R"([["4"];["8"];["8"]])",
+            R"([["1";"1"];["1";"3"];["2";"0"];["2";"2"];["2";"4"]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

@@ -55,6 +55,7 @@ struct TEvTablet {
         EvDropLease,
         EvReady,
         EvFollowerDetached, // from leader to user tablet when a follower is removed
+        EvCompleteRecoveryBoot, // from user tablet to sys tablet
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -952,6 +953,18 @@ struct TEvTablet {
         TActorId GetUserActorId() const {
             return ActorIdFromProto(Record.GetUserActorId());
         }
+    };
+
+    struct TEvCompleteRecoveryBoot : public TEventLocal<TEvCompleteRecoveryBoot, EvCompleteRecoveryBoot> {
+        enum class EMode : ui8 {
+            WipeAllData,
+        };
+
+        TEvCompleteRecoveryBoot(EMode mode)
+            : Mode(mode)
+        {}
+
+        EMode Mode;
     };
 };
 

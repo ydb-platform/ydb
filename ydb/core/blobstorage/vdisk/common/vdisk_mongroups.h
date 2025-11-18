@@ -456,7 +456,7 @@ public:                                                                         
         public:
             GROUP_CONSTRUCTOR(TLsmLevelGroup)
             {
-                COUNTER_INIT_PRIVATE(SstNum, false);
+                COUNTER_INIT(SstNum, false);
                 COUNTER_INIT(NumItems, false);
                 COUNTER_INIT(NumItemsInplaced, false);
                 COUNTER_INIT(NumItemsHuge, false);

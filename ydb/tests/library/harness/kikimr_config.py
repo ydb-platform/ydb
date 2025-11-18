@@ -190,6 +190,7 @@ class KikimrConfigGenerator(object):
             system_tablets=None,
             protected_mode=False,
             tiny_mode=False,
+            module=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -218,6 +219,7 @@ class KikimrConfigGenerator(object):
         erasure = Erasure.NONE if erasure is None else erasure
         self.system_tablets = system_tablets
         self.protected_mode = protected_mode
+        self.module = module
         self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
         self.__grpc_tls_ca = None

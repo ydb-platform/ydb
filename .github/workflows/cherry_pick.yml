@@ -1,0 +1,59 @@
+name: Cherry-pick
+on:
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        description: Commit to get scripts
+        default: ""
+      commits:
+        type: string
+        default: ""
+        description: |
+          List of commits to cherry-pick. 
+          Can be represented as full or short commit SHA, PR number or URL to commit or PR.
+          Separated by space, comma or line end.
+          Example: "sha5682 123245"
+        required: true
+      target_branches:
+        default: ""
+        description: Comma or space separated branches to cherry-pick
+        required: true
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+jobs:
+  create-pr:
+    runs-on: [self-hosted, tiny-worker]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.commit_sha }}
+          sparse-checkout: |
+            .github
+      - name: install packages
+        shell: bash
+        run: |
+          pip install PyGithub==2.5.0 requests
+
+      - name: configure
+        shell: bash
+        run: |
+            git config --global user.name YDBot
+            git config --global user.email ydbot@ydb.tech
+            git config --local github.token ${{ env.GH_TOKEN }}
+
+      - name: run-command
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          ./.github/scripts/cherry_pick.py \
+            --commits="${{ inputs.commits }}" \
+            --target-branches="${{ inputs.target_branches }}"

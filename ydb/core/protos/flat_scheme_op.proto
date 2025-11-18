@@ -1167,6 +1167,10 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+message TTruncateTable {
+    optional NKikimrProto.TPathID PathId = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;

@@ -80,6 +80,7 @@ enum class EExecutionUnitKind: ui32 {
     MoveIndex,
     CreateIncrementalRestoreSrc,
     Count,
+    Truncate,
     Unspecified
 };
 

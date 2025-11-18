@@ -59,6 +59,8 @@ public:
             {"[true]", "true"},
             {"[-1.2]", "-1.2"},
             {"[null]", "null"},
+            {"[[1,2]]", "[1,2]"},
+            {R"([{"a": "b"}])", R"({"a": "b"})"},
         };
 
         for (const auto& testCase : testCases) {

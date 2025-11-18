@@ -92,7 +92,7 @@ namespace NFulltext {
     inline constexpr const char* DocsTable = "indexImplDocsTable";
     inline constexpr const char* DocLengthColumn = "__ydb_length";
 
-    inline constexpr const char* TokensTable = "indexImplTokensTable";
+    inline constexpr const char* DictTable = "indexImplDictTable";
 
     inline constexpr const char* StatsTable = "indexImplStatsTable";
     inline constexpr const char* DocCountColumn = "__ydb_doc_count";

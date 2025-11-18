@@ -121,13 +121,13 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
-NKikimrSchemeOp::TTableDescription CalcFulltextTokensImplTableDesc(
+NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
 
-NKikimrSchemeOp::TTableDescription CalcFulltextTokensImplTableDesc(
+NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,

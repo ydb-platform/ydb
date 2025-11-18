@@ -393,7 +393,7 @@ auto CalcFulltextDocsImplTableDescImpl(
     return implTableDesc;
 }
 
-auto CalcFulltextTokensImplTableDescImpl(
+auto CalcFulltextDictImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
@@ -408,7 +408,7 @@ auto CalcFulltextTokensImplTableDescImpl(
     auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
-    implTableDesc.SetName(NTableIndex::NFulltext::TokensTable);
+    implTableDesc.SetName(NTableIndex::NFulltext::DictTable);
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
     {
         auto col = implTableDesc.AddColumns();
@@ -615,22 +615,22 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     return CalcFulltextDocsImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
 }
 
-NKikimrSchemeOp::TTableDescription CalcFulltextTokensImplTableDesc(
+NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextTokensImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc);
+    return CalcFulltextDictImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc);
 }
 
-NKikimrSchemeOp::TTableDescription CalcFulltextTokensImplTableDesc(
+NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextTokensImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc);
+    return CalcFulltextDictImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(

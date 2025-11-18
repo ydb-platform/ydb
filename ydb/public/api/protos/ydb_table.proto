@@ -166,7 +166,7 @@ message FulltextIndexSettings {
         //     │ "quick"      │ 1  │ 2          │
         //     │ "quick"      │ 2  │ 1          │
         //     └──────────────┴────┴────────────┘
-        // Term statistics table (indexImplTokensTable):
+        // Term dictionary table (indexImplDictTable):
         //     ┌──────────────┬────────────┐
         //     │ __ydb_token  │ __ydb_freq │
         //     ├──────────────┼────────────┤

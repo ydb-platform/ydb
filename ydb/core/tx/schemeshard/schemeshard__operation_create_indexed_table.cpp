@@ -363,7 +363,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), withRelevance)));
                 if (withRelevance) {
                     result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userIndexDesc)));
-                    result.push_back(createIndexImplTable(CalcFulltextTokensImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc, indexDescription.GetFulltextIndexDescription())));
+                    result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc, indexDescription.GetFulltextIndexDescription())));
                     result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), userIndexDesc)));
                 }
                 break;

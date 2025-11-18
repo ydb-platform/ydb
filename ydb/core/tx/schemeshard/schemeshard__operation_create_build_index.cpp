@@ -207,7 +207,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             result.push_back(createImplTable(std::move(implTableDesc)));
             if (withRelevance) {
                 result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexTableDesc)));
-                result.push_back(createImplTable(CalcFulltextTokensImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc, indexDesc.GetFulltextIndexDescription())));
+                result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc, indexDesc.GetFulltextIndexDescription())));
                 result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexTableDesc)));
             }
             break;

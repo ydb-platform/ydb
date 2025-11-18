@@ -6,7 +6,10 @@ import logging
 import subprocess
 import argparse
 import re
+import hashlib
+import base64
 from typing import List, Optional, Tuple
+from urllib.parse import quote
 from github import Github, GithubException, GithubObject, Commit
 import requests
 
@@ -596,10 +599,21 @@ class CherryPickCreator:
                     # Create link to file in PR diff (if PR is created) or branch (as fallback)
                     if pr_number:
                         # Link to file in PR diff - GitHub will show conflicts
-                        # Format: https://github.com/{repo}/pull/{pr_number}/files#diff-{hash}L{line}
-                        file_link = f"https://github.com/{self.repo_name}/pull/{pr_number}/files#diff-{self._get_file_diff_hash(file_path)}"
-                        if conflict_line:
-                            file_link += f"L{conflict_line}"
+                        # Format: https://github.com/{repo}/pull/{pr_number}/files#diff-{hash}R{line}
+                        # GitHub diff hash is SHA256 of file content in hex format (64 chars)
+                        # We need to get it from PR files API
+                        diff_hash = self._get_file_diff_hash(file_path, pr_number)
+                        if diff_hash:
+                            file_link = f"https://github.com/{self.repo_name}/pull/{pr_number}/files#diff-{diff_hash}"
+                            if conflict_line:
+                                file_link += f"R{conflict_line}"
+                        else:
+                            # Fallback: use simple link to PR files page (GitHub will find the file)
+                            # GitHub can resolve files by name in PR view
+                            encoded_path = quote(file_path, safe='')
+                            file_link = f"https://github.com/{self.repo_name}/pull/{pr_number}/files#diff-{encoded_path}"
+                            if conflict_line:
+                                file_link += f"R{conflict_line}"
                     else:
                         # Fallback: link to file in branch (will be updated after PR creation)
                         file_link = f"https://github.com/{self.repo_name}/blob/{branch_for_instructions}/{file_path}"
@@ -652,16 +666,27 @@ After resolving conflicts, mark this PR as ready for review.
         
         return pr_body
     
-    def _get_file_diff_hash(self, file_path: str) -> str:
-        """Generate a hash for GitHub PR diff link anchor"""
-        import hashlib
-        import base64
-        # GitHub uses base64-encoded SHA1 of file path for diff anchors
-        # Format: base64(sha1(file_path))
-        sha1_hash = hashlib.sha1(file_path.encode('utf-8')).digest()
-        base64_hash = base64.b64encode(sha1_hash).decode('utf-8')
-        # Remove padding and replace special characters
-        return base64_hash.rstrip('=').replace('+', '-').replace('/', '_')
+    def _compute_file_hash(self, base64_content: str) -> str:
+        """Compute SHA256 hash from base64-encoded file content"""
+        decoded_content = base64.b64decode(base64_content).decode('utf-8', errors='ignore')
+        return hashlib.sha256(decoded_content.encode('utf-8')).hexdigest()
+    
+    def _get_file_diff_hash(self, file_path: str, pr_number: int) -> Optional[str]:
+        """Get diff hash for GitHub PR file link using GitHub API
+        
+        GitHub uses SHA256 hash of file content in hex format (64 chars) for diff anchors.
+        Format: #diff-{64-char-hex-sha256}R{line}
+        We fetch file content from the PR's head branch and compute SHA256 hash.
+        """
+        try:
+            pr = self.repo.get_pull(pr_number)
+            file_content = self.repo.get_contents(file_path, ref=pr.head.sha)
+            if file_content and hasattr(file_content, 'content'):
+                return self._compute_file_hash(file_content.content)
+        except (GithubException, Exception) as e:
+            self.logger.debug(f"Failed to get diff hash for {file_path} from PR #{pr_number}: {e}")
+        
+        return None
     
     def add_summary(self, msg):
         self.logger.info(msg)

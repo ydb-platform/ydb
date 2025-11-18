@@ -5,6 +5,7 @@
 
 #include "switch/switch_type.h"
 #include "validation/validation.h"
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -628,10 +629,11 @@ TInstant ArrowTimestampToInstant(const arrow::TimestampArray& timestamp, const u
     return TInstant::MicroSeconds(micros);
 }
 
-TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position, const NKikimr::NScheme::TTypeInfo* logicalType) {
     if (!array) {
         return "_NO_DATA";
     }
+
     Y_ABORT_UNLESS(position < array->length());
     TStringBuilder result;
     SwitchType(array->type_id(), [&](const auto& type) {
@@ -651,8 +653,8 @@ TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position) {
             auto v = column.Value(position);
             using V = std::decay_t<decltype(v)>;
             if constexpr (std::is_integral_v<V> && !std::is_same_v<V, bool>) {
-                if (array->type_id() == arrow::Type::UINT8 && (v == 0 || v == 1)) {
-                    result << (v == 1 ? "true" : "false");
+                if (logicalType && logicalType->GetTypeId() == NKikimr::NScheme::NTypeIds::Bool) {
+                    result << (v != 0 ? "true" : "false");
                 } else {
                     result << static_cast<i64>(v);
                 }

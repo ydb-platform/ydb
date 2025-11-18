@@ -228,7 +228,8 @@ public:
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            jsonColumn["value"] = GetPositionAddress(i).DebugString(position);
+            const NKikimr::NScheme::TTypeInfo* logicalType = (i < pkTypes.size()) ? &pkTypes[i] : nullptr;
+            jsonColumn["value"] = GetPositionAddress(i).DebugString(position, logicalType);
         }
 
         return result;

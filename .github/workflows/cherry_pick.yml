@@ -39,7 +39,7 @@ jobs:
       - name: install packages
         shell: bash
         run: |
-          pip install PyGithub==2.5.0
+          pip install PyGithub==2.5.0 requests
 
       - name: configure
         shell: bash
@@ -54,6 +54,8 @@ jobs:
           REPO: ${{ github.repository }}
           TOKEN: ${{ env.GH_TOKEN }}
           GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           ./.github/scripts/cherry_pick.py \
             --commits="${{ inputs.commits }}" \

@@ -1532,8 +1532,7 @@ public:
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
                 AFL_ENSURE(!lookup.SkipEqualRowsForUniqCheck);
             } else {
-                AFL_ENSURE(lookup.KeyIndexes.size() == lookup.Lookup->GetKeyColumnTypes().size());
-                AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.Lookup->GetKeyColumnTypes().size());
+                AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.KeyIndexes.size());
                 AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
                 AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
             }
@@ -1815,13 +1814,16 @@ private:
                         lookupInfo.FullKeyIndexes,
                         lookupInfo.PrimaryInFullKeyIndexes);
 
+                AFL_ENSURE(lookupInfo.KeyIndexes.size() == lookupInfo.OldKeyIndexes.size());
+                AFL_ENSURE(lookupInfo.KeyIndexes.size() <= lookupInfo.Lookup->GetKeyColumnTypes().size());
                 for (const auto& row : writeRows) {
-                    if (!lookupInfo.OldKeyIndexes.empty() && IsEqual(
+                    if (lookupInfo.SkipEqualRowsForUniqCheck && IsEqual(
                             row,
                             {},
                             lookupInfo.KeyIndexes,
                             lookupInfo.OldKeyIndexes,
-                            lookupInfo.Lookup->GetKeyColumnTypes())) {
+                            TConstArrayRef<NScheme::TTypeInfo>(lookupInfo.Lookup->GetKeyColumnTypes())
+                                .first(lookupInfo.KeyIndexes.size()))) {
                         // skip unchanged keys
                         continue;
                     }

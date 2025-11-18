@@ -615,7 +615,7 @@ TInstant ArrowTimestampToInstant(const arrow::TimestampArray& timestamp, const u
     } else if (unit == arrow::TimeUnit::MICRO) {
         return TInstant::MicroSeconds(micros);
     } else if (unit == arrow::TimeUnit::NANO) {
-        return TInstant::MicroSeconds(micros * 1000LL);
+        return TInstant::MicroSeconds(micros / 1000LL);
     }
 
     return TInstant::MicroSeconds(micros);

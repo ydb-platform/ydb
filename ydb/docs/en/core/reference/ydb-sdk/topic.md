@@ -1447,6 +1447,8 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - Python
 
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
+
   When working with topics, the main unit of sending data is a message. You can send messages as a stream, but streaming an individual message is not possible - the SDK does not have the appropriate tools. To read large messages, they need to be broken into parts in the client code
 
 - Java

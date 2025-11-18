@@ -1444,6 +1444,8 @@
   {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Python
+  
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
   В работе с топиками основной единицей отправки данных является сообщение. Можно передавать сообщения потоком (стримить), однако стриминг отдельного сообщения невозможен — в SDK отсутствуют соответствующие инструменты. Для чтения больших сообщений их необходимо разбить на части в клиентском коде.
 

@@ -258,9 +258,6 @@ arrow::Status ValidateArrayExpensive(arrow::Datum datum, const TType* type) {
 }
 
 arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
-    if (validateMode == NYql::NUdf::EValidateDatumMode::None) {
-        return arrow::Status::OK();
-    }
     if (datum.is_arraylike()) {
         NYql::NUdf::TArgsDechunker dechunker({datum});
         std::vector<arrow::Datum> chunk;
@@ -298,11 +295,14 @@ arrow::Status ValidateDatum(arrow::Datum datum, const TType* type, NYql::NUdf::E
 } // namespace
 
 void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode) {
+    if (validateMode == NYql::NUdf::EValidateDatumMode::None) {
+        return;
+    }
     if (expectedDescription) {
-        ARROW_DEBUG_CHECK_DATUM_TYPES(*expectedDescription, datum.descr());
+        ARROW_CHECK_DATUM_TYPES(*expectedDescription, datum.descr());
     }
     auto status = ValidateDatum(datum, type, validateMode);
-    Y_DEBUG_ABORT_UNLESS(status.ok(), "%s", (TStringBuilder() << "Type: " << datum.descr().ToString() << ". Original error is: " << status.message()).c_str());
+    Y_ABORT_UNLESS(status.ok(), "%s", (TStringBuilder() << "Type: " << datum.descr().ToString() << ". Original error is: " << status.message()).c_str());
 }
 
 } // namespace NKikimr::NMiniKQL

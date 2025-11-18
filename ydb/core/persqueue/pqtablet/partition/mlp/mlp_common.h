@@ -5,6 +5,11 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+struct TDLQMessage {
+    ui64 Offset;
+    ui64 SeqNo;
+};
+
 struct TResult {
     TResult(const NActors::TActorId& sender, ui64 cookie)
         : Sender(sender)
@@ -35,12 +40,53 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
 );
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
-    const NKikimrPQ::TPQTabletConfig::TConsumer consumer,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     ui64 offset,
     ui64 cookie = 0
 );
 
+std::unique_ptr<TEvPersQueue::TEvHasDataInfo> MakeEvHasData(
+    const TActorId& selfId,
+    ui32 partitionId,
+    ui64 offset,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer
+);
+
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
+bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev);
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 
+NActors::IActor* CreateMessageEnricher(ui64 tabletId,
+                                       const ui32 partitionId,
+                                       const TString& consumerName,
+                                       std::deque<TReadResult>&& replies);
+
+struct TDLQMoverSettings {
+    TActorId ParentActorId;
+    TString Database;
+    ui64 TabletId;
+    ui32 PartitionId;
+    TString ConsumerName;
+    ui64 ConsumerGeneration;
+    TString DestinationTopic;
+    std::deque<TDLQMessage> Messages;
+};
+
+NActors::IActor* CreateDLQMover(TDLQMoverSettings&& settings);
+
 } // namespace NKikimr::NPQ::NMLP
+
+template<>
+inline void Out<std::pair<ui64 const, ui64>>(IOutputStream& o, const std::pair<ui64 const, ui64>& p) {
+    o << "(" << p.first << ", " << p.second << ")";
+}
+
+template<>
+inline void Out<std::pair<ui64, ui64>>(IOutputStream& o, const std::pair<ui64, ui64>& p) {
+    o << "(" << p.first << ", " << p.second << ")";
+}
+
+template<>
+inline void Out<NKikimr::NPQ::NMLP::TDLQMessage>(IOutputStream& o, const NKikimr::NPQ::NMLP::TDLQMessage& p) {
+    o << "(" << p.Offset << ", " << p.SeqNo << ")";
+}

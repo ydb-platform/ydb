@@ -251,17 +251,17 @@ private:
                 Y_ENSURE(false, "Expected embedded or list from purecalc");
             }
 
-            const auto offset = Self.Offsets->at(rowId);
-            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && offset < *nextOffset) {
-                LOG_ROW_DISPATCHER_TRACE("OnData, skip historical offset: " << offset << ", next message offset: " << *nextOffset);
+            Offset = Self.Offsets->at(rowId);
+            if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
+                LOG_ROW_DISPATCHER_TRACE("OnData, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
                 return;
             }
-
-            FilteredOffsets.push_back(offset);
 
             auto newNumberRows = NumberRows;
             auto newDataPackerSize = DataPackerSize;
             if (filter) {
+                FilteredOffsets.push_back(Offset);
+
                 Y_DEFER {
                     // Values allocated on parser allocator and should be released
                     FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
@@ -280,7 +280,7 @@ private:
                 newDataPackerSize = DataPacker->PackedSizeEstimate();
             }
 
-            OnWatermark(offset, maybeWatermark);
+            OnWatermark(Offset, maybeWatermark);
 
             const auto numberRows = newNumberRows - NumberRows;
             const auto rowSize = newDataPackerSize - DataPackerSize;
@@ -289,9 +289,9 @@ private:
                 return;
             }
 
-            LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, offset: " << offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << Watermark);
+            LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, offset: " << Offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << Watermark);
 
-            Client->AddDataToClient(offset, numberRows, rowSize, Watermark);
+            Client->AddDataToClient(Offset, numberRows, rowSize, Watermark);
 
             NumberRows = newNumberRows;
             DataPackerSize = newDataPackerSize;
@@ -322,6 +322,9 @@ private:
         void FinishPacking() {
             if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
+                if (FilteredOffsets.empty()) {
+                    FilteredOffsets.push_back(Offset);
+                }
                 ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), std::move(FilteredOffsets), Watermark);
                 NumberRows = 0;
                 DataPackerSize = 0;
@@ -340,6 +343,7 @@ private:
         bool ClientStarted = false;
 
         // Filtered data
+        ui64 Offset;
         ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
@@ -673,10 +677,10 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId, bool skipJsonErrors) {
     return {
         .FunctionRegistry = functionRegistry,
-        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry),
+        .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry, skipJsonErrors),
         .FiltersConfig = {
             .CompileServiceId = compileServiceId
         }

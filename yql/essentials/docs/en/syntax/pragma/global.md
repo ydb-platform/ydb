@@ -192,6 +192,19 @@ When this mode is enabled, string literals without suffixes like "foo"/'bar'/@@m
 When this mode is enabled, a warning will be generated for string literals without suffixes like "foo"/'bar'/@@multiline@@. It can be suppressed by explicitly choosing the suffix `s` for the `String` type, or `u` for the `Utf8` type.
 `WarnUntypedStringLiterals` is a [scoped](#pragmascope) setting.
 
+## SimplePg
+
+`SimplePg`/`DisableSimplePg`
+
+| Value Type | Default |
+| --- | --- |
+| Flag | false |
+
+When enabled, functions from the [SimplePg](../../udf/list/simple_pg.md) module are imported into the global function scope.
+When disabled, the `SimplePg::` prefix is ​​required to call them.
+
+`SimplePg` is a [scoped](#pragmascope) setting.
+
 ## AllowDotInAlias
 
 | Value type | Default |

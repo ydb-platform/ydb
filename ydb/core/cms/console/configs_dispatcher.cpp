@@ -200,6 +200,7 @@ public:
             hFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
             hFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
             // Events from clients
+            hFuncTraced(TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
             hFuncTraced(TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
             hFuncTraced(TEvConfigsDispatcher::TEvRemoveConfigSubscriptionRequest, Handle);
             // Resolve
@@ -896,6 +897,7 @@ try {
     TKikimrScopeId scopeId;
     TString tenantName;
     TBasicKikimrServicesMask servicesMask;
+    bool tinyMode;
     TString clusterName;
     NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
@@ -905,8 +907,11 @@ try {
         scopeId,
         tenantName,
         servicesMask,
+        tinyMode,
         clusterName,
         configsDispatcherInitInfo);
+
+    Y_UNUSED(tinyMode);
 
     CandidateStartupConfig = appConfig;
     StartupConfigProcessError = false;

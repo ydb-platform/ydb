@@ -443,7 +443,7 @@ TLogicalTypePtr MakeLogicalType(ESimpleLogicalValueType type, bool required);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<ESimpleLogicalValueType type>
+template <ESimpleLogicalValueType type>
 constexpr ESimpleLogicalValueType GetUnderlyingDateType();
 
 ////////////////////////////////////////////////////////////////////////////////

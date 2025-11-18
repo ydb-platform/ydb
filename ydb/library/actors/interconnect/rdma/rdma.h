@@ -4,6 +4,8 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 
+#include <optional>
+
 struct ibv_qp;
 struct ibv_cq;
 struct ibv_wc;
@@ -34,7 +36,7 @@ class IIbVerbsBuilder;
 
 // Wrapper for ibv Completion Queue
 // Hides logic to controll work request count
-// https://www.rdmamojo.com/2012/11/03/ibv_create_cq/ 
+// https://www.rdmamojo.com/2012/11/03/ibv_create_cq/
 class ICq {
     ICq() {};
     friend class TCqCommon;
@@ -78,13 +80,22 @@ private:
 
 ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
 
+struct THandshakeData {
+    ui32 QpNum;
+    ui64 SubnetPrefix;
+    ui64 InterfaceId;
+    ui32 MtuIndex;
+};
+
 // Wrapper for ibv Queue Pair
 // https://www.rdmamojo.com/2012/12/21/ibv_create_qp/
 class TQueuePair: public NNonCopyable::TMoveOnly {
 public:
+    using TPtr = std::shared_ptr<TQueuePair>;
     struct TQpS {
         int State;
     };
+    static bool IsRtsState(TQpS state);
     struct TQpErr {
         int Err;
     };
@@ -96,12 +107,15 @@ public:
     int ToResetState() noexcept;
     // IBV_QPS_RTS - Ready To Send state
     // https://www.rdmamojo.com/2013/01/12/ibv_modify_qp/
-    int ToRtsState(ui32 qpNum, const ibv_gid& gid, int mtuIndex) noexcept;
+    int ToRtsState(const THandshakeData& hd) noexcept;
     int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept;
     ui32 GetQpNum() const noexcept;
+    THandshakeData GetHandshakeData() const noexcept;
     void Output(IOutputStream&) const noexcept;
     TQpState GetState(bool forseUpdate) const noexcept;
     TRdmaCtx* GetCtx() const noexcept;
+    size_t GetDeviceIndex() const noexcept;
+    ui32 GetMinMtuIndex(ui32 mtuIndex) const noexcept;
 
 private:
     static const int UnknownQpState;
@@ -124,5 +138,6 @@ private:
 };
 
 std::unique_ptr<IIbVerbsBuilder> CreateIbVerbsBuilder(size_t hint) noexcept;
+
 
 }

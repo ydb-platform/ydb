@@ -1031,9 +1031,11 @@ ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
+    IConfigUpdateTracer& ConfigUpdateTracer);
+void UpdateConfigUpdateTracer(
     IConfigUpdateTracer& ConfigUpdateTracer);
 
 NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& settings, const TString& addrs, const IEnv& env, const std::optional<TString>& authToken = std::nullopt);
@@ -1354,7 +1356,7 @@ public:
 
     class TAppConfigFieldsPreserver {
     public:
-        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig) 
+        TAppConfigFieldsPreserver(NKikimrConfig::TAppConfig& appConfig)
             : AppConfig(appConfig)
             , ConfigDirPath(appConfig.HasConfigDirPath() ? std::make_optional(appConfig.GetConfigDirPath()) : std::nullopt)
             , StoredConfigYaml(appConfig.HasStoredConfigYaml() ? std::make_optional(appConfig.GetStoredConfigYaml()) : std::nullopt)
@@ -1414,6 +1416,10 @@ public:
             AddLabelToAppConfig("node_name", Labels["node_name"]);
         }
 
+        if (CommonAppOptions.SeedNodesFile) {
+            return InitConfigFromSeedNodesDynamic();
+        }
+
         TVector<TString> addrs;
         CommonAppOptions.FillClusterEndpoints(AppConfig, addrs);
 
@@ -1436,11 +1442,7 @@ public:
         NYamlConfig::ReplaceUnmanagedKinds(result->GetConfig(), yamlConfig);
 
         InitDebug.OldConfig.CopyFrom(result->GetConfig());
-        InitDebug.YamlConfig.CopyFrom(yamlConfig);
-
-        NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
-
-        ApplyConfigForNode(appConfig);
+        ApplyActualDynConfigFromYaml(yamlConfig, result->GetConfig());
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) override {
@@ -1461,6 +1463,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
@@ -1469,6 +1472,7 @@ public:
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
+        tinyMode = CommonAppOptions.TinyMode;
         clusterName = ClusterName;
         configsDispatcherInitInfo.InitialConfig = appConfig;
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
@@ -1579,6 +1583,54 @@ public:
         } else {
             Logger.Out() << "No configs received from seed nodes" << Endl;
         }
+    }
+
+    bool ApplyActualDynConfigFromYaml(const NKikimrConfig::TAppConfig& yamlConfig, const TMaybe<NKikimrConfig::TAppConfig>& regularConfigOpt) {
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        auto appConfig = GetActualDynConfig(yamlConfig, regularConfigOpt, ConfigUpdateTracer);
+        if (!appConfig) {
+            return false;
+        }
+        Logger.Out() << "Successfully applied dynamic config from YAML" << Endl;
+        ApplyConfigForNode(*appConfig);
+        return true;
+    }
+
+    void InitConfigFromSeedNodesDynamic() {
+        if (CommonAppOptions.SeedNodes.empty()) {
+            ythrow yexception() << "No seed nodes provided";
+        }
+
+        auto cfgResult = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
+        if (!cfgResult) {
+            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
+            return;
+        }
+
+        const TString& mainYaml = cfgResult->GetMainYamlConfig();
+        if (mainYaml.empty()) {
+            Logger.Out() << "No main config received from seed nodes" << Endl;
+            return;
+        }
+
+        const TString& sourceAddress = cfgResult->GetSourceAddress();
+        NKikimrConfig::TAppConfig yamlConfig;
+        NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
+
+        yamlConfig.SetYamlConfigEnabled(true);
+        Labels["config_source"] = "seed_nodes";
+        AddLabelToAppConfig("config_source", Labels["config_source"]);
+
+        if (sourceAddress) {
+            Labels["config_source_address"] = sourceAddress;
+            AddLabelToAppConfig("config_source_address", Labels["config_source_address"]);
+        }
+
+        InitDebug.YamlConfig.CopyFrom(yamlConfig);
+        UpdateConfigUpdateTracer(ConfigUpdateTracer);
+
+        Logger.Out() << "Successfully applied dynamic config from seed nodes" << Endl;
+        ApplyConfigForNode(yamlConfig);
     }
 };
 

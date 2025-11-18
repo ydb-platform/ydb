@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
         void RunTest(ui32 initialBlobs, ui32 unsyncedBlobs, std::vector<ENodeState> nodeStates) {
             Y_VERIFY(nodeStates.size() == NodeCount);
             const ui64 blobSize = 10;
-            const ui32 unsyncedBatchSize = 10000;
+            const ui32 unsyncedBatchSize = 1;
             Initialize();
 
             ui64 tabletId = 5000;
@@ -40,6 +40,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                 .Generation = generation,
                 .Step = step,
             });
+
+            auto itMiddle = blobs.begin() + blobs.size() / 2;
 
             auto collectEverything = [&](TVector<TLogoBlobID>* keepFlags, TVector<TLogoBlobID>* doNotKeepFlags) {
                 Env->Runtime->WrapInActorContext(Edge, [&] {
@@ -80,8 +82,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
 
             AllocateEdgeActor(); // reallocate actor, in case it lived on a restarted or dead node
 
-            Ctest << "Set DoNotKeepFlags" << Endl;
-            collectEverything(nullptr, new TVector<TLogoBlobID>(blobs.begin(), blobs.end()));
+            Ctest << "Set DoNotKeepFlags on first half of blobs" << Endl;
+            collectEverything(nullptr, new TVector<TLogoBlobID>(blobs.begin(), itMiddle));
 
             for (ui32 i = 0; i < unsyncedBlobs; i += unsyncedBatchSize) {
                 Ctest << "Write batch, blobs written# " << i << Endl;
@@ -96,10 +98,28 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                     .Generation = generation,
                     .Step = step,
                 });
-                // collectEverything(new TVector<TLogoBlobID>(batch.begin(), batch.end()), nullptr);
-                // collectEverything(nullptr, new TVector<TLogoBlobID>(batch.begin(), batch.end()));
                 collectEverything(nullptr, nullptr);
             }
+
+            const TIntrusivePtr<TBlobStorageGroupInfo> groupInfo = Env->GetGroupInfo(GroupId);
+            UNIT_ASSERT(groupInfo);
+            for (ui32 orderNumber = 0; orderNumber < groupInfo->Type.BlobSubgroupSize(); ++orderNumber) {
+                const TActorId actorId = groupInfo->GetActorId(orderNumber);
+                const TVDiskID vdiskId = groupInfo->GetVDiskId(orderNumber);
+                const ui32 nodeId = actorId.NodeId();
+                if (nodeStates[nodeId - 1] == ENodeState::Dead) {
+                    continue;
+                }
+                const TActorId edge = Env->Runtime->AllocateEdgeActor(actorId.NodeId());
+                Env->Runtime->WrapInActorContext(edge, [&]{
+                    TActivationContext::Send(new IEventHandle(
+                            actorId, edge, new TEvBlobStorage::TEvVBaldSyncLog(vdiskId)));
+                });
+                Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge, false);
+            }
+
+            Ctest << "Set DoNotKeepFlags on second half of blobs" << Endl;
+            collectEverything(nullptr, new TVector<TLogoBlobID>(itMiddle, blobs.end()));
 
             Ctest << "Wait for sync" << Endl;
             Env->Sim(TDuration::Minutes(30));
@@ -183,7 +203,6 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
     }
 
     void Test(TBlobStorageGroupType erasure, std::vector<ENodeState> nodeStates) {
-        return; // require PhantomFlagStorage implementation
         auto it = std::find_if(nodeStates.begin(), nodeStates.end(),
                 [&](const ENodeState& state) { return state != ENodeState::Dead; } );
         Y_VERIFY(it != nodeStates.end());
@@ -193,8 +212,9 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .Erasure = erasure,
             .ControllerNodeId = controllerNodeId,
             .PDiskChunkSize = 32_MB,
+            .EnablePhantomFlagStorage = true,
         });
-        ctx.RunTest(1000, 3'000'000, nodeStates);
+        ctx.RunTest(1000, 10, nodeStates);
     }
 
 

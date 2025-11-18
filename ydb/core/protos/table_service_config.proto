@@ -252,7 +252,7 @@ message TTableServiceConfig {
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     reserved 34; // optional bool EnablePublishKqpProxyByRM = 34 [default = true];
     optional bool EnableKqpScanQueryStreamIdxLookupJoin = 35 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableKqpDataQueryStreamIdxLookupJoin = 49 [default = true, (InvalidateCompileCache) = true];
     reserved 36; //optional bool EnablePredicateExtractForScanQueries = 36 [default = true];
     reserved 37; //optional bool EnablePredicateExtractForDataQueries = 37 [default = true];
     reserved 38; // optional bool EnableKqpImmediateEffects = 38 [default = true];
@@ -437,4 +437,6 @@ message TTableServiceConfig {
     optional bool EnableDqHashCombineByDefault = 105 [default = true, (InvalidateCompileCache) = true];
 
     optional bool EnableBuildAggregationResultStages = 106 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnforceSqlVersionV1 = 107 [default = true, (InvalidateCompileCache) = true];
 };

@@ -1,0 +1,1 @@
+select FormatType(VoidType()),FormatType(NullType()),FormatType(EmptyListType()),FormatType(EmptyDictType())

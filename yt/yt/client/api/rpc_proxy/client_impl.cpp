@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "chaos_lease.h"
+#include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
 #include "row_batch_reader.h"
@@ -31,6 +32,7 @@
 #include <yt/yt/client/object_client/helpers.h>
 
 #include <yt/yt/client/api/distributed_table_session.h>
+#include <yt/yt/client/api/distributed_file_session.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
@@ -859,6 +861,21 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
         .ApplyUnique(BIND([=, future = promise.ToFuture()] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {
             return NRpcProxy::CreateTableFragmentWriter(std::move(outputStream), std::move(schema), std::move(future));
         }));
+}
+
+IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
+    const TSignedWriteFileFragmentCookiePtr& cookie,
+    const TFileFragmentWriterOptions& options)
+{
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.WriteFileFragment();
+    InitStreamingRequest(*req);
+
+    FillRequest(req.Get(), cookie, options);
+
+    return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
 
 TFuture<IQueueRowsetPtr> TClient::PullQueue(

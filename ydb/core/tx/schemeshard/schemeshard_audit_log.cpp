@@ -284,6 +284,8 @@ TParts ExportKindSpecificParts(const Proto& proto) {
             return ExportKindSpecificParts(proto.GetExportToYtSettings());
         case Proto::kExportToS3Settings:
             return ExportKindSpecificParts(proto.GetExportToS3Settings());
+        case Proto::kExportToFsSettings:
+            return ExportKindSpecificParts(proto.GetExportToFsSettings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
@@ -305,6 +307,13 @@ template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToS3Settings
         {"export_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).destination_prefix() : "")},
     };
 }
+template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToFsSettings& proto) {
+    return {
+        {"export_type", "fs"},
+        {"export_item_count", ToString(proto.items().size())},
+        {"export_fs_base_path", proto.base_path()},
+    };
+}
 
 template <class Proto>
 TParts ImportKindSpecificParts(const Proto& proto) {
@@ -313,6 +322,8 @@ TParts ImportKindSpecificParts(const Proto& proto) {
     switch  (proto.GetSettingsCase()) {
         case Proto::kImportFromS3Settings:
             return ImportKindSpecificParts(proto.GetImportFromS3Settings());
+        case Proto::kImportFromFsSettings:
+            return ImportKindSpecificParts(proto.GetImportFromFsSettings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
@@ -325,6 +336,13 @@ template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settin
         //NOTE: take first item's source_prefix as a "good enough approximation"
         // (each item has its own source_prefix, but in practice they are all the same)
         {"import_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).source_prefix() : "")},
+    };
+}
+template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromFsSettings& proto) {
+    return {
+        {"import_type", "fs"},
+        {"import_item_count", ToString(proto.items().size())},
+        {"import_fs_base_path", proto.base_path()},
     };
 }
 

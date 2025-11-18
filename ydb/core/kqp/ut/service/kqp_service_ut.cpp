@@ -1,3 +1,5 @@
+#include "common/simple/services.h"
+
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/shutdown/state.h>

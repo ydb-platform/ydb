@@ -184,6 +184,10 @@ public:
             settings.Add(topicKeyParser.GetDateFormat());
         }
 
+        if (topicKeyParser.GetSkipJsonErrors()) {
+            settings.Add(topicKeyParser.GetSkipJsonErrors());
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())

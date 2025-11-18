@@ -1,12 +1,12 @@
 pkgs: attrs: with pkgs; with attrs; rec {
   pname = "openmp";
-  version = "21.1.2";
+  version = "21.1.4";
 
   src = fetchFromGitHub {
     owner = "llvm";
     repo = "llvm-project";
     rev = "llvmorg-${version}";
-    hash = "sha256-SgZdBL0ivfv6/4EqmPQ+I57qT2t6i/rqnm20+T1BsFY=";
+    hash = "sha256-jcMYtoa5Rsf+CxRSrqR9PMxnYAEfaoQZXHgYFpZucWs=";
   };
 
   buildInputs = [ pkgs.python3 ];

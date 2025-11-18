@@ -324,7 +324,7 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
 void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
     InitialOrderParameters_.emplace_back(key, parameter);
-    YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
+    YT_VERIFY(Parameters_.template try_emplace(std::move(key), std::move(parameter)).second, key);
 }
 
 void TYsonStructMeta::RegisterPreprocessor(std::function<void(TYsonStructBase*)> preprocessor)

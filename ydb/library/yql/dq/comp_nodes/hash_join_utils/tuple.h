@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/public/udf/udf_types.h>
@@ -10,6 +11,10 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+struct TPackResult;
+
+using TTupleData = std::vector<ui8, TMKQLAllocator<ui8>>;
 
 template <typename TData>
 struct TCastPtrTransform {
@@ -193,11 +198,19 @@ struct TTupleLayout {
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
 
+
+    void TupleDeepCopy(
+        const ui8* inTuple, const ui8* inOverflow,
+        TTupleData& outTuple, TTupleData& outOverflow) const;
+
+
     void Concat(
         std::vector<ui8, TMKQLAllocator<ui8>>& dst,
         std::vector<ui8, TMKQLAllocator<ui8>>& dstOverflow,
         ui32 dstCount,
         const ui8 *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize) const;
+        
+    TPackResult Flatten(TArrayRef<TPackResult> chunks) const;
 
     ui32 GetTupleVarSize(const ui8* inTuple) const;
 
@@ -283,6 +296,12 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
 bool TupleKeysEqual(const TTupleLayout *layout,
     const ui8 *lhsRow, const ui8 *lhsOverflow,
     const ui8 *rhsRow, const ui8 *rhsOverflow);
+
+Y_FORCE_INLINE
+ui32 Hash(const ui8* row) {
+    return ReadUnaligned<ui32>(row);
+}
+
 
 Y_FORCE_INLINE
 bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,

@@ -127,6 +127,7 @@ public:
         , DisableDefaultTimeout(settings.DisableDefaultTimeout)
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
+        , StreamingQueryPath(settings.StreamingQueryPath)
         , Counters(settings.Counters)
     {}
 
@@ -144,6 +145,7 @@ public:
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
+        UserRequestContext->StreamingQueryPath = StreamingQueryPath;
 
         LOG_I("Bootstrap");
 
@@ -679,7 +681,11 @@ private:
         NYql::IssuesFromMessage(issueMessage, issues);
         Issues.AddIssues(TruncateIssues(issues));
 
-        LOG_I("Script query finished from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            LOG_I("Script query successfully finished from " << ev->Sender << ", Issues: " << Issues.ToOneLineString());
+        } else {
+            LOG_W("Script query failed from " << ev->Sender << " " << record.GetYdbStatus() << ", Issues: " << Issues.ToOneLineString());
+        }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
             const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
@@ -969,6 +975,7 @@ private:
     const bool DisableDefaultTimeout = false;
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    const TString StreamingQueryPath;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;

@@ -40,6 +40,8 @@ struct TEvPrivate {
         EvScanStats,
         EvReadFinished,
         EvPeriodicWakeup,
+        EvReportBaseStatistics,
+        EvReportExecutorStatistics,
         EvEviction,
         EvS3Settings,
         EvExport,
@@ -79,9 +81,14 @@ struct TEvPrivate {
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
-        
+
         EvReportScanDiagnostics,
         EvReportScanIteratorDiagnostics,
+
+        EvBackupExportRecordBatch,
+        EvBackupExportRecordBatchResult,
+        EvBackupExportState,
+        EvBackupExportError,
 
         EvEnd
     };
@@ -291,6 +298,10 @@ struct TEvPrivate {
         bool Manual;
     };
 
+    struct TEvReportBaseStatistics: public TEventLocal<TEvReportBaseStatistics, EvReportBaseStatistics> {};
+
+    struct TEvReportExecutorStatistics: public TEventLocal<TEvReportExecutorStatistics, EvReportExecutorStatistics> {};
+
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
         TEvPingSnapshotsUsage() = default;
     };
@@ -348,7 +359,7 @@ struct TEvPrivate {
             return WritesBuffer;
         }
     };
-    
+
     struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
         TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
             : RequestMessage(std::move(requestMessage))
@@ -374,6 +385,47 @@ struct TEvPrivate {
 
         ui64 RequestId;
         TString ScanIteratorDiagnostics;
+    };
+
+    // *** Backup ***
+    /*
+    1. TEvBackupExportRecordBatch -> Uploader
+    2. TEvBackupExportRecordBatchResult | TEvBackupExportError <- Uploader
+    ----
+    3. TEvBackupExportState - internal message for iscan iface
+    */
+    struct TEvBackupExportRecordBatch: public TEventLocal<TEvBackupExportRecordBatch, EvBackupExportRecordBatch> {
+        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+            : Data(data)
+            , IsLast(isLast) {
+        }
+
+        std::shared_ptr<arrow::RecordBatch> Data;
+        bool IsLast;
+    };
+
+    struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {
+        explicit TEvBackupExportRecordBatchResult(bool isFinish)
+            : IsFinish(isFinish) {
+        }
+
+        bool IsFinish = false;
+    };
+
+    struct TEvBackupExportState: public TEventLocal<TEvBackupExportState, EvBackupExportState> {
+        explicit TEvBackupExportState(NTable::EScan state)
+            : State(state) {
+        }
+
+        NTable::EScan State;
+    };
+
+    struct TEvBackupExportError: public TEventLocal<TEvBackupExportError, EvBackupExportError> {
+        explicit TEvBackupExportError(const TString& errorMessage)
+            : ErrorMessage(errorMessage) {
+        }
+
+        TString ErrorMessage;
     };
 };
 

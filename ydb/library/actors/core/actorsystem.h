@@ -16,6 +16,10 @@
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
 
+namespace NInterconnect::NRdma {
+    class IMemPool;
+}
+
 namespace NActors {
     class IActor;
     class TActorSystem;
@@ -84,6 +88,17 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
     };
 
+    class TRdmaAllocatorWithFallback : public IRcBufAllocator {
+    public:
+        TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept;
+        TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept override;
+        TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept override;
+    private:
+        template<bool pageAligned>
+        std::optional<TRcBuf> TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
+    };
+
     struct TActorSystemSetup {
         ui32 NodeId = 0;
 
@@ -101,6 +116,8 @@ namespace NActors {
 
         using TLocalServices = TVector<std::pair<TActorId, TActorSetupCmd>>;
         TLocalServices LocalServices;
+
+        std::shared_ptr<IRcBufAllocator> RcBufAllocator;
 
         ui32 GetExecutorsCount() const {
             return Executors ? ExecutorsCount : CpuManager.GetExecutorsCount();
@@ -152,6 +169,8 @@ namespace NActors {
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
 
+        mutable IRcBufAllocator* RcBufAllocator;
+
         friend class TExecutorThread;
 
         THolder<TActorSystemSetup> SystemSetup;
@@ -185,17 +204,20 @@ namespace NActors {
         bool MonitorStuckActors() const { return SystemSetup->MonitorStuckActors; }
 
     private:
-        typedef bool (IExecutorPool::*TEPSendFunction)(TAutoPtr<IEventHandle>& ev);
+        typedef bool (IExecutorPool::*TEPSendFunction)(std::unique_ptr<IEventHandle>& ev);
 
         template <TEPSendFunction EPSpecificSend>
-        bool GenericSend(TAutoPtr<IEventHandle> ev) const;
+        bool GenericSend(std::unique_ptr<IEventHandle>&& ev) const;
 
     public:
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev) const;
 
-        bool SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const;
-        bool SpecificSend(TAutoPtr<IEventHandle> ev) const;
+        template <ESendingType SendingType = ESendingType::Common>
+        bool Send(std::unique_ptr<IEventHandle>&& ev) const;
+
+        bool SpecificSend(std::unique_ptr<IEventHandle>&& ev, ESendingType sendingType) const;
+        bool SpecificSend(std::unique_ptr<IEventHandle>&& ev) const;
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
 
@@ -299,6 +321,10 @@ namespace NActors {
             return SystemSetup->GetThreadsOptional(poolId);
         }
 
+        auto GetPoolMaxThreadsCount(ui32 poolId) const {
+            return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
+        }
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
@@ -310,5 +336,8 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
+        IRcBufAllocator* GetRcBufAllocator() const {
+            return RcBufAllocator;
+        }
     };
 }

@@ -1842,6 +1842,8 @@ NProto::EQueryEngine ConvertQueryEngineToProto(
             return NProto::EQueryEngine::QE_MOCK;
         case NQueryTrackerClient::EQueryEngine::Spyt:
             return NProto::EQueryEngine::QE_SPYT;
+        case NQueryTrackerClient::EQueryEngine::SpytConnect:
+            return NProto::EQueryEngine::QE_SPYT;
     }
     YT_ABORT();
 }
@@ -1979,7 +1981,7 @@ void ParseRequest(
 
 void FillRequest(
     TReqPingDistributedWriteSession* req,
-    const TSignedDistributedWriteSessionPtr session,
+    const TSignedDistributedWriteSessionPtr& session,
     const TDistributedWriteSessionPingOptions& /*options*/)
 {
     req->set_signed_session(ToProto(ConvertToYsonString(session)));
@@ -1991,7 +1993,7 @@ void ParseRequest(
     const TReqPingDistributedWriteSession& req)
 {
     Y_UNUSED(mutableOptions);
-    *mutableSession = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+    *mutableSession = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonStringBuf(req.signed_session()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2020,10 +2022,10 @@ void ParseRequest(
 {
     mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
     for (const auto& writeResult : req.signed_write_results()) {
-        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonString(writeResult)));
+        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFragmentResultPtr>(TYsonStringBuf(writeResult)));
     }
 
-    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(req.signed_session()));
+    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonStringBuf(req.signed_session()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2045,12 +2047,110 @@ void ParseRequest(
     TTableFragmentWriterOptions* mutableOptions,
     const TReqWriteTableFragment& req)
 {
-    *mutableCookie = ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(req.signed_cookie()));
+    *mutableCookie = ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonStringBuf(req.signed_cookie()));
     if (req.has_config()) {
-        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonStringBuf(req.config()));
     } else {
         mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(TStringBuf("{}")));
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqStartDistributedWriteFileSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+    req->set_cookie_count(options.CookieCount);
+    if (options.Timeout) {
+        req->set_timeout(options.Timeout->GetValue());
+    }
+
+    if (options.TransactionId) {
+        ToProto(req->mutable_transactional_options(), options);
+    }
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteFileSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteFileSession& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    mutableOptions->CookieCount = req.cookie_count();
+    if (req.has_timeout()) {
+        mutableOptions->Timeout = TDuration::FromValue(req.timeout());
+    }
+    if (req.has_transactional_options()) {
+        FromProto(mutableOptions, req.transactional_options());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqPingDistributedWriteFileSession* req,
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& /*options*/)
+{
+    req->set_signed_session(ToProto(ConvertToYsonString(session)));
+}
+
+void ParseRequest(
+    TSignedDistributedWriteFileSessionPtr* mutableSession,
+    TDistributedWriteFileSessionPingOptions* /*mutableOptions*/,
+    const TReqPingDistributedWriteFileSession& req)
+{
+    *mutableSession = ConvertTo<TSignedDistributedWriteFileSessionPtr>(TYsonStringBuf(req.signed_session()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteFileSession* req,
+    const TDistributedWriteFileSessionWithResults& sessionWithResults,
+    const TDistributedWriteFileSessionFinishOptions& /*options*/)
+{
+    YT_VERIFY(sessionWithResults.Session);
+
+    req->set_signed_session(ToProto(ConvertToYsonString(sessionWithResults.Session)));
+    for (const auto& writeResult : sessionWithResults.Results) {
+        YT_VERIFY(writeResult);
+        req->add_signed_write_results(ConvertToYsonString(writeResult).ToString());
+    }
+}
+
+void ParseRequest(
+    TDistributedWriteFileSessionWithResults* mutableSessionWithResults,
+    TDistributedWriteFileSessionFinishOptions* /*mutableOptions*/,
+    const TReqFinishDistributedWriteFileSession& req)
+{
+    mutableSessionWithResults->Results.reserve(req.signed_write_results().size());
+    for (const auto& writeResult : req.signed_write_results()) {
+        mutableSessionWithResults->Results.push_back(ConvertTo<TSignedWriteFileFragmentResultPtr>(TYsonStringBuf(writeResult)));
+    }
+
+    mutableSessionWithResults->Session = ConvertTo<TSignedDistributedWriteFileSessionPtr>(TYsonStringBuf(req.signed_session()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteFileFragment* req,
+    const TSignedWriteFileFragmentCookiePtr& cookie,
+    const TFileFragmentWriterOptions& /*options*/)
+{
+    req->set_signed_cookie(ToProto(ConvertToYsonString(cookie)));
+}
+
+void ParseRequest(
+    TSignedWriteFileFragmentCookiePtr* mutableCookie,
+    TFileFragmentWriterOptions* /*mutableOptions*/,
+    const TReqWriteFileFragment& req)
+{
+    *mutableCookie = ConvertTo<TSignedWriteFileFragmentCookiePtr>(TYsonStringBuf(req.signed_cookie()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2084,6 +2184,7 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
+        error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
         IsChaosRetriableError(error);
 }
 

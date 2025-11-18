@@ -266,7 +266,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            if (Ctx_.YqlSelectMode != EYqlSelectMode::Disable) {
+            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
                 if (!IsBackwardCompatibleFeatureAvailable(MakeLangVersion(2025, 04))) {
                     Error() << "YqlSelect is not available before 2025.04";
                     return false;
@@ -278,7 +278,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 } else if (
                     result.error() == EYqlSelectError::Unsupported &&
-                    Ctx_.YqlSelectMode == EYqlSelectMode::Force)
+                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
                 {
                     Error() << "Translation of the statement "
                             << "to YqlSelect was forced, but unsupported";
@@ -670,6 +670,28 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (Ctx_.ParallelModeCount > 0) {
                 Error() << humanStatementName << " statement is not supported in parallel mode";
                 return false;
+            }
+
+            if (Ctx_.GetYqlSelectMode() != EYqlSelectMode::Disable) {
+                const auto langVer = GetMaxLangVersion();
+                if (!IsBackwardCompatibleFeatureAvailable(langVer)) {
+                    Error() << "YqlSelect is not available before "
+                            << FormatLangVersion(langVer);
+                    return false;
+                }
+
+                const auto stmt = core.GetAlt_sql_stmt_core21().GetRule_values_stmt1();
+                if (auto result = BuildYqlSelect(Ctx_, Mode_, stmt)) {
+                    blocks.emplace_back(std::move(*result));
+                    break;
+                } else if (
+                    result.error() == EYqlSelectError::Unsupported &&
+                    Ctx_.GetYqlSelectMode() == EYqlSelectMode::Force)
+                {
+                    Error() << "Translation of the statement "
+                            << "to YqlSelect was forced, but unsupported";
+                    return false;
+                }
             }
 
             Ctx_.BodyPart();
@@ -2491,7 +2513,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction19: {
+            // ALTER COLUMN id SET COMPRESSION(...)
+            const auto& alterRule = node.GetAlt_alter_table_action19().GetRule_alter_table_alter_column_set_compression1();
 
+            if (!AlterTableAlterColumnSetCompression(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -2575,12 +2606,17 @@ bool TSqlQuery::AlterTableDropColumn(const TRule_alter_table_drop_column& node, 
 bool TSqlQuery::AlterTableAlterColumn(const TRule_alter_table_alter_column& node,
                                       TAlterTableParameters& params)
 {
-    TString name = Id(node.GetRule_an_id3(), *this);
+    const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
     TVector<TIdentifier> families;
     const auto& familyRelation = node.GetRule_family_relation5();
     families.push_back(IdEx(familyRelation.GetRule_an_id2(), *this));
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, families, false, nullptr, TColumnSchema::ETypeOfChange::SetFamily);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .Families = std::move(families),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetFamily,
+    });
     return true;
 }
 
@@ -2827,16 +2863,37 @@ bool TSqlQuery::AlterSequenceAction(const TRule_alter_sequence_action& node, TSe
 }
 
 bool TSqlQuery::AlterTableAlterColumnDropNotNull(const TRule_alter_table_alter_column_drop_not_null& node, TAlterTableParameters& params) {
-    TString name = Id(node.GetRule_an_id3(), *this);
+    const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::DropNotNullConstraint);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::DropNotNullConstraint,
+    });
     return true;
 }
 
 bool TSqlQuery::AlterTableAlterColumnSetNotNull(const TRule_alter_table_alter_column_set_not_null& node, TAlterTableParameters& params) {
-    TString name = Id(node.GetRule_an_id3(), *this);
+    const TString name = Id(node.GetRule_an_id3(), *this);
     const TPosition pos(Context().Pos());
-    params.AlterColumns.emplace_back(pos, name, nullptr, false, TVector<TIdentifier>(), false, nullptr, TColumnSchema::ETypeOfChange::SetNotNullConstraint);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetNotNullConstraint,
+    });
+    return true;
+}
+
+bool TSqlQuery::AlterTableAlterColumnSetCompression(const TRule_alter_table_alter_column_set_compression& node, TAlterTableParameters& params) {
+    const TString name = Id(node.GetRule_an_id3(), *this);
+    const TPosition pos(Context().Pos());
+    const auto compression = ColumnCompression(node.GetRule_compression5(), *this);
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .Compression = std::move(compression),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetCompression,
+    });
     return true;
 }
 
@@ -3506,6 +3563,14 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("YqlSelect", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
+        if (!IsBackwardCompatibleFeatureAvailable(
+                ctx.Settings.LangVer,
+                MakeLangVersion(2025, 04),
+                ctx.Settings.BackportMode))
+        {
+            query.Error() << "YqlSelect is not available before 2025.04";
+            return Nothing();
+        }
 
         const TString* literal = values.size() == 1 ? values[0].GetLiteral() : nullptr;
         if (!literal) {
@@ -3514,11 +3579,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         if (*literal == "disable") {
-            ctx.YqlSelectMode = EYqlSelectMode::Disable;
+            ctx.SetYqlSelectMode(EYqlSelectMode::Disable);
         } else if (*literal == "auto") {
-            ctx.YqlSelectMode = EYqlSelectMode::Auto;
+            ctx.SetYqlSelectMode(EYqlSelectMode::Auto);
         } else if (*literal == "force") {
-            ctx.YqlSelectMode = EYqlSelectMode::Force;
+            ctx.SetYqlSelectMode(EYqlSelectMode::Force);
         } else {
             query.Error() << "Unexpected literal '" << *literal << "' for: " << pragma
                           << ", expected 'disable', 'auto' or 'force'";

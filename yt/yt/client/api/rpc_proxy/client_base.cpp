@@ -826,10 +826,10 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
             std::vector<TSignedWriteFragmentCookiePtr> cookies;
             cookies.reserve(result->signed_cookies().size());
             for (const auto& cookie : result->signed_cookies()) {
-                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonString(cookie)));
+                cookies.push_back(ConvertTo<TSignedWriteFragmentCookiePtr>(TYsonStringBuf(cookie)));
             }
             TDistributedWriteSessionWithCookies sessionWithCookies;
-            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonString(result->signed_session())),
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteSessionPtr>(TYsonStringBuf(result->signed_session())),
             sessionWithCookies.Cookies = std::move(cookies);
             return sessionWithCookies;
         }));
@@ -856,6 +856,57 @@ TFuture<void> TClientBase::FinishDistributedWriteSession(
     auto req = proxy.FinishDistributedWriteSession();
 
     FillRequest(req.Get(), sessionWithResults, options);
+    return req->Invoke().AsVoid();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TFuture<TDistributedWriteFileSessionWithCookies> TClientBase::StartDistributedWriteFileSession(
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteFileSessionStartOptions& options)
+{
+    using TRsp = TIntrusivePtr<NRpc::TTypedClientResponse<NProto::TRspStartDistributedWriteFileSession>>;
+
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.StartDistributedWriteFileSession();
+    FillRequest(req.Get(), path, options);
+
+    return req->Invoke()
+        .ApplyUnique(BIND([] (TRsp&& result) {
+            std::vector<TSignedWriteFileFragmentCookiePtr> cookies;
+            cookies.reserve(result->signed_cookies().size());
+            for (const auto& cookie : result->signed_cookies()) {
+                cookies.push_back(ConvertTo<TSignedWriteFileFragmentCookiePtr>(TYsonStringBuf(cookie)));
+            }
+            TDistributedWriteFileSessionWithCookies sessionWithCookies;
+            sessionWithCookies.Session = ConvertTo<TSignedDistributedWriteFileSessionPtr>(TYsonStringBuf(result->signed_session())),
+            sessionWithCookies.Cookies = std::move(cookies);
+            return sessionWithCookies;
+        }));
+}
+
+TFuture<void> TClientBase::PingDistributedWriteFileSession(
+    const TSignedDistributedWriteFileSessionPtr& session,
+    const TDistributedWriteFileSessionPingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingDistributedWriteFileSession();
+
+    FillRequest(req.Get(), session, options);
+    return req->Invoke().AsVoid();
+}
+
+TFuture<void> TClientBase::FinishDistributedWriteFileSession(
+    const TDistributedWriteFileSessionWithResults& session,
+    const TDistributedWriteFileSessionFinishOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FinishDistributedWriteFileSession();
+
+    FillRequest(req.Get(), session, options);
     return req->Invoke().AsVoid();
 }
 
@@ -1053,7 +1104,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
     }));
 }
 
-template<class TRequest>
+template <class TRequest>
 void FillRequestBySelectRowsOptionsBase(
     const TSelectRowsOptionsBase& options,
     const std::optional<NYPath::TYPath>& defaultUdfRegistryPath,

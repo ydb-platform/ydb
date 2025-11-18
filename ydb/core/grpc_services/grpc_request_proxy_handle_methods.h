@@ -16,8 +16,6 @@ protected:
     static void Handle(TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx);
-    static void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
-    static void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
     static void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
 };
 

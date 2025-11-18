@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
         // TODO: implement
     }
 
-    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config, bool fromBinding) {
+    bool TDistributedConfigKeeper::ApplyStorageConfig(const NKikimrBlobStorage::TStorageConfig& config) {
         if (!StorageConfig || StorageConfig->GetGeneration() < config.GetGeneration() ||
                 (!IsSelfStatic && !config.GetGeneration() && !config.GetSelfManagementConfig().GetEnabled())) {
             // extract the main config from newly applied section
@@ -130,7 +130,7 @@ namespace NKikimr::NStorage {
                 ProposedStorageConfig.reset();
             }
 
-            ReportStorageConfigToNodeWarden(0);
+            ReportStorageConfigToNodeWarden();
 
             if (IsSelfStatic) {
                 PersistConfig({});
@@ -154,20 +154,6 @@ namespace NKikimr::NStorage {
                 UnbindNodesFromOtherPiles("not primary pile anymore");
             }
 
-            // update configuration to the root
-            if (IsSelfStatic && !fromBinding) {
-                auto ev = std::make_unique<TEvNodeConfigPush>();
-                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, ev.get());
-                if (Binding && Binding->SessionId) {
-                    SendEvent(*Binding, std::move(ev));
-                }
-            }
-
-            // update configuration to bound nodes
-            if (IsSelfStatic) {
-                FanOutReversePush();
-            }
-
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
                 StorageConfig->GetFingerprint() != config.GetFingerprint()) {
@@ -177,15 +163,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleConfigConfirm(STATEFN_SIG) {
-        if (ev->Cookie) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC46, "HandleConfigConfirm", (Cookie, ev->Cookie),
-                (ProposedStorageConfigCookie, ProposedStorageConfigCookie),
-                (ProposedStorageConfigCookieUsage, ProposedStorageConfigCookieUsage));
-            if (ev->Cookie == ProposedStorageConfigCookie && ProposedStorageConfigCookieUsage) {
-                --ProposedStorageConfigCookieUsage;
-            }
-            FinishAsyncOperation(ev->Cookie);
-        }
+        Y_UNUSED(ev);
     }
 
     void TDistributedConfigKeeper::SendEvent(ui32 nodeId, ui64 cookie, TActorId sessionId, std::unique_ptr<IEventBase> ev) {
@@ -233,11 +211,20 @@ namespace NKikimr::NStorage {
 
         for (const auto& [cookie, task] : ScatterTasks) {
             for (const ui32 nodeId : task.PendingNodes) {
-                const auto it = DirectBoundNodes.find(nodeId);
-                Y_ABORT_UNLESS(it != DirectBoundNodes.end());
-                TBoundNode& info = it->second;
-                Y_ABORT_UNLESS(info.ScatterTasks.contains(cookie));
+                if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
+                    TBoundNode& info = it->second;
+                    Y_ABORT_UNLESS(info.ScatterTasks.contains(cookie));
+                } else {
+                    Y_ABORT_UNLESS(AddedNodesScatterTasks.contains({nodeId, cookie}));
+                }
             }
+        }
+
+        for (const auto& [nodeId, cookie] : AddedNodesScatterTasks) {
+            const auto it = ScatterTasks.find(cookie);
+            Y_ABORT_UNLESS(it != ScatterTasks.end());
+            TScatterTask& task = it->second;
+            Y_ABORT_UNLESS(task.PendingNodes.contains(nodeId));
         }
 
         for (const auto& [nodeId, info] : DirectBoundNodes) {
@@ -250,10 +237,12 @@ namespace NKikimr::NStorage {
         }
 
         for (const auto& [cookie, task] : ScatterTasks) {
-            if (task.Origin) {
-                Y_ABORT_UNLESS(Binding);
-                Y_ABORT_UNLESS(task.Origin == Binding);
-            }
+            std::visit(TOverloaded{
+                [&](const TBinding& origin) { Y_ABORT_UNLESS(origin == Binding); },
+                [&](const TActorId& /*actorId*/) { Y_ABORT_UNLESS(!Binding); },
+                [&](const TScatterTaskOriginFsm&) {},
+                [&](const TScatterTaskOriginTargeted&) {}
+            }, task.Origin);
         }
 
         for (const auto& [nodeId, subs] : SubscribedSessions) {
@@ -276,6 +265,10 @@ namespace NKikimr::NStorage {
             }
             if (UnsubscribeQueue.contains(nodeId)) {
                 okay = true;
+            }
+            if (!okay) {
+                const auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
+                okay = it != AddedNodesScatterTasks.end() && std::get<0>(*it) == nodeId;
             }
             Y_ABORT_UNLESS(okay);
             if (subs.SubscriptionCookie) {
@@ -377,16 +370,12 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden(ui64 cookie) {
+    void TDistributedConfigKeeper::ReportStorageConfigToNodeWarden() {
         Y_ABORT_UNLESS(StorageConfig);
         const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
         const auto& config = SelfManagementEnabled ? StorageConfig : BaseConfig;
-        auto proposedConfig = ProposedStorageConfig && SelfManagementEnabled
-            ? std::make_shared<NKikimrBlobStorage::TStorageConfig>(*ProposedStorageConfig)
-            : nullptr;
-        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(config, std::move(proposedConfig), SelfManagementEnabled,
-            BridgeInfo);
-        Send(wardenId, ev.release(), 0, cookie);
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(config, SelfManagementEnabled, BridgeInfo);
+        Send(wardenId, ev.release());
     }
 
     STFUNC(TDistributedConfigKeeper::StateFunc) {

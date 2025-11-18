@@ -32,7 +32,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
 }
 
 std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
-    const NKikimrPQ::TPQTabletConfig::TConsumer consumer,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer,
     ui64 offset,
     ui64 cookie
 ) {
@@ -48,9 +48,32 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
     );    
 }
 
+std::unique_ptr<TEvPersQueue::TEvHasDataInfo> MakeEvHasData(
+    const TActorId& selfId,
+    ui32 partitionId,
+    ui64 offset,
+    const NKikimrPQ::TPQTabletConfig::TConsumer& consumer
+) {
+
+    auto result = std::make_unique<TEvPersQueue::TEvHasDataInfo>();
+    auto& record = result->Record;
+    record.SetPartition(partitionId);
+    record.SetOffset(offset);
+    record.SetDeadline(TDuration::Seconds(5).MilliSeconds());
+    ActorIdToProto(selfId, record.MutableSender());
+    record.SetClientId(consumer.GetName());
+
+    return result;
+}
+
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
     return ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
         ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
+}
+
+bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev) {
+    return ev->Get()->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK &&
+        ev->Get()->Record.GetErrorCode() == NPersQueue::NErrorCode::OK;
 }
 
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {

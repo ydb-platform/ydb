@@ -184,12 +184,6 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> ExecuteAndCombineBatches(TQuery
     return resultBatches;
 }
 
-std::string SerializeToBinaryJsonString(const TStringBuf json) {
-    const auto binaryJson = std::get<NBinaryJson::TBinaryJson>(NBinaryJson::SerializeToBinaryJson(json));
-    const TStringBuf buffer(binaryJson.Data(), binaryJson.Size());
-    return TString(buffer);
-}
-
 void CompareCompressedAndDefaultBatches(TQueryClient& client, std::optional<TArrowFormatSettings::TCompressionCodec> codec, bool assertEqual = false) {
     std::shared_ptr<arrow::Schema> schemaCompressedBatch;
     TString compressedBatch;
@@ -920,27 +914,69 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
             UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
 
-            NColumnShard::TTableUpdatesBuilder builder(NArrow::MakeArrowSchema({
-                std::make_pair("StringValue", TTypeInfo(NTypeIds::String)),
-                std::make_pair("YsonValue", TTypeInfo(NTypeIds::Yson)),
-                std::make_pair("DyNumberValue", TTypeInfo(NTypeIds::DyNumber)),
-                std::make_pair("JsonDocumentValue", TTypeInfo(NTypeIds::JsonDocument)),
-                std::make_pair("UuidValue", TTypeInfo(NTypeIds::Uuid)),
-                std::make_pair("StringNotNullValue", TTypeInfo(NTypeIds::String)),
-                std::make_pair("YsonNotNullValue", TTypeInfo(NTypeIds::Yson)),
-                std::make_pair("JsonDocumentNotNullValue", TTypeInfo(NTypeIds::JsonDocument)),
-                std::make_pair("DyNumberNotNullValue", TTypeInfo(NTypeIds::DyNumber)),
-                std::make_pair("UuidNotNullValue", TTypeInfo(NTypeIds::Uuid))
-            }));
-
-            builder.AddRow().AddNull().Add("[4]").AddNull().AddNull().AddNull().Add("Maria").Add("[5]").Add(SerializeToBinaryJsonString("[6]")).Add(NDyNumber::ParseDyNumberString("7.0")->c_str()).Add<NYdb::TUuidValue>(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-            builder.AddRow().Add("John").Add("[1]").Add(NDyNumber::ParseDyNumberString("1.0")->c_str()).Add(SerializeToBinaryJsonString("{\"a\": 1}")).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")).Add("Mark").Add("[2]").Add(SerializeToBinaryJsonString("{\"b\": 2}")).Add(NDyNumber::ParseDyNumberString("4.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-            builder.AddRow().Add("Leo").Add("[10]").Add(NDyNumber::ParseDyNumberString("11.0")->c_str()).Add(SerializeToBinaryJsonString("[12]")).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe")).Add("Maria").Add("[13]").Add(SerializeToBinaryJsonString("[14]")).Add(NDyNumber::ParseDyNumberString("15.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-            builder.AddRow().Add("Mark").AddNull().AddNull().AddNull().AddNull().Add("Michael").Add("[7]").Add(SerializeToBinaryJsonString("[8]")).Add(NDyNumber::ParseDyNumberString("9.0")->c_str()).Add(NYdb::TUuidValue("5b99a330-04ef-4f1a-9b64-ba6d5f44eafe"));
-
-
-            auto expected = builder.BuildArrow();
-            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected->ToString());
+            const TString expected =
+R"(StringValue:   [
+    null,
+    4A6F686E,
+    4C656F,
+    4D61726B
+  ]
+YsonValue:   [
+    5B345D,
+    5B315D,
+    5B31305D,
+    null
+  ]
+DyNumberValue:   [
+    null,
+    ".1e1",
+    ".11e2",
+    null
+  ]
+JsonDocumentValue:   [
+    null,
+    "{"a":1}",
+    "[12]",
+    null
+  ]
+UuidValue:   [
+    null,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    null
+  ]
+StringNotNullValue:   [
+    4D61726961,
+    4D61726B,
+    4D61726961,
+    4D69636861656C
+  ]
+YsonNotNullValue:   [
+    5B355D,
+    5B325D,
+    5B31335D,
+    5B375D
+  ]
+JsonDocumentNotNullValue:   [
+    "[6]",
+    "{"b":2}",
+    "[14]",
+    "[8]"
+  ]
+DyNumberNotNullValue:   [
+    ".7e1",
+    ".4e1",
+    ".15e2",
+    ".9e1"
+  ]
+UuidNotNullValue:   [
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE,
+    30A3995BEF041A4F9B64BA6D5F44EAFE
+  ]
+)";
+            UNIT_ASSERT_VALUES_EQUAL(batches.front()->ToString(), expected);
         }
     }
 
@@ -1446,7 +1482,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
 
     /**
      * More tests for different types with correctness and convertations between Arrow and UV :
-     * ydb/library/yql/dq/runtime/dq_arrow_helpers_ut.cpp
+     * ydb/core/kqp/common/result_set_format/ut/kqp_formats_arrow_ut.cpp
     */
 
     // Optional<T>
@@ -1529,58 +1565,8 @@ column1:   -- is_valid: all not null
         }
     }
 
-    // Optional<Optional<Optional<Optional<T>>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
-        auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
-        auto client = kikimr.GetQueryClient();
-
-        {
-            auto batches = ExecuteAndCombineBatches(client, R"(
-                SELECT Just(Just(Just(Key1))), Just(Just(Just(Name))) FROM Join2
-                WHERE Key1 IN [104, 106, 108]
-                ORDER BY Key1;
-            )", /* assertSize */ false, 1);
-
-            UNIT_ASSERT_C(!batches.empty(), "Batches must not be empty");
-
-            const auto& batch = batches.front();
-
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 2);
-
-            ValidateOptionalColumn(batch->column(0), 3, false);
-            ValidateOptionalColumn(batch->column(1), 3, false);
-
-            const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: uint32 not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: uint32 not null>
-      -- is_valid: all not null
-      -- child 0 type: uint32
-        [
-          104,
-          106,
-          108
-        ]
-column1:   -- is_valid: all not null
-  -- child 0 type: struct<opt: struct<opt: binary not null> not null>
-    -- is_valid: all not null
-    -- child 0 type: struct<opt: binary not null>
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          4E616D6533,
-          4E616D6533,
-          null
-        ]
-)";
-            UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
-        }
-    }
-
     // Optional<Variant<T, F>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_3) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1620,7 +1606,7 @@ R"(column0:   -- is_valid: all not null
     }
 
     // Optional<Optional<Variant<T, F, G>>>
-    Y_UNIT_TEST(ArrowFormat_Types_Optional_5) {
+    Y_UNIT_TEST(ArrowFormat_Types_Optional_4) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ false);
         auto client = kikimr.GetQueryClient();
 
@@ -1640,7 +1626,7 @@ R"(column0:   -- is_valid: all not null
 
             const TString expected =
 R"(column0:   -- is_valid: all not null
-  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2> not null>
+  -- child 0 type: struct<opt: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>>
     -- is_valid: all not null
     -- child 0 type: dense_union<bar: uint8 not null=0, foo: int32 not null=1, foobar: binary not null=2>
       -- is_valid: all not null
@@ -1863,29 +1849,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected = 
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: map<binary, int32>
-    [
-      keys:
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
       [
         61,
         63,
         62
       ]
-      values:
+    -- child 1 type: int32
       [
         1,
         3,
         2
       ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);
@@ -1908,30 +1889,24 @@ R"(column0:   -- is_valid: all not null
 
             UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(batch->num_columns(), 1);
-            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::STRUCT, "Column type must be arrow::Type::STRUCT");
+            UNIT_ASSERT_C(batch->column(0)->type()->id() == arrow::Type::LIST, "Column type must be arrow::Type::LIST");
 
             const TString expected =
-R"(column0:   -- is_valid: all not null
-  -- child 0 type: list<item: struct<key: binary, payload: int32 not null>>
-    [
-      -- is_valid: all not null
-      -- child 0 type: binary
-        [
-          61,
-          62,
-          null
-        ]
-      -- child 1 type: int32
-        [
-          1,
-          2,
-          3
-        ]
-    ]
-  -- child 1 type: uint64
-    [
-      0
-    ]
+R"(column0:   [
+    -- is_valid: all not null
+    -- child 0 type: binary
+      [
+        61,
+        62,
+        null
+      ]
+    -- child 1 type: int32
+      [
+        1,
+        2,
+        3
+      ]
+  ]
 )";
 
             UNIT_ASSERT_VALUES_EQUAL(batch->ToString(), expected);

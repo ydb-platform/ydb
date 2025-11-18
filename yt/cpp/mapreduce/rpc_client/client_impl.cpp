@@ -25,6 +25,7 @@ NYT::NApi::IClientPtr CreateApiClient(const TClientContext& context)
     connectionConfig->SetDefaults();
     if (context.JobProxySocketPath) {
         connectionConfig->ProxyUnixDomainSocket = *context.JobProxySocketPath;
+        connectionConfig->EnableProxyDiscovery = false;
     } else {
         connectionConfig->ClusterUrl = context.ServerName;
     }
@@ -77,11 +78,11 @@ IClientPtr CreateRpcClient(
         retryConfigProvider = CreateDefaultRetryConfigProvider();
     }
 
+    NDetail::EnsureInitialized();
+
     auto rawClient = MakeIntrusive<NDetail::TRpcRawClient>(
         NDetail::CreateApiClient(context),
         context.Config);
-
-    NDetail::EnsureInitialized();
 
     return new NDetail::TClient(
         std::move(rawClient),

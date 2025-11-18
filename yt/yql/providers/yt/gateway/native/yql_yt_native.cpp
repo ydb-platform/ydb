@@ -623,9 +623,14 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, logCtx, abort=options.Abort(), detachSnapshotTxs=options.DetachSnapshotTxs()] () {
+            return session->Queue_->Async([
+                session, logCtx,
+                abort=options.Abort(),
+                detachSnapshotTxs=options.DetachSnapshotTxs(),
+                commitDumpTxs=options.CommitDumpTxs()
+            ] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                return ExecFinalize(session, abort, detachSnapshotTxs);
+                return ExecFinalize(session, abort, detachSnapshotTxs, commitDumpTxs);
             });
         } catch (...) {
             return MakeFuture(ResultFromCurrentException<TFinalizeResult>());
@@ -1151,10 +1156,21 @@ public:
             TSet<TString> srcColumnGroupAlts;
             bool first = true;
             const TStructExprType* itemType = nullptr;
+
+            const auto destinationRowSpec = options.DestinationRowSpec();
+            const auto dstIsDynamic = TYtTableBaseInfo::GetMeta(publish.Publish())->IsDynamic;
+            bool srcAreSortedByDstKeys = true;
             for (auto out: publish.Input()) {
                 auto outTableWithCluster = GetOutTableWithCluster(out);
                 auto outTable = outTableWithCluster.first.Cast<TYtOutTable>();
-                src.emplace_back(outTable.Name().StringValue(), outTableWithCluster.second);
+                src.emplace_back(
+                    outTable.Name().StringValue(),
+                    outTableWithCluster.second);
+
+                if (dstIsDynamic && !destinationRowSpec->CompareSortness(outTable.RowSpec(), /*checkUniqueFlag*/false)) {
+                    srcAreSortedByDstKeys = false;
+                }
+
                 if (first) {
                     itemType = GetSeqItemType(*outTable.Ref().GetTypeAnn()).Cast<TStructExprType>();
                     if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
@@ -1251,9 +1267,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, std::move(src), dst, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts);
+                return ExecPublish(execCtx, std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -1568,7 +1584,7 @@ public:
         }
     }
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         auto nodePos = ctx.GetPosition(node->Pos());
         try {
@@ -1751,6 +1767,36 @@ public:
         Clusters_->AddCluster(cluster, false);
     }
 
+    TFuture<TDumpResult> Dump(TDumpOptions&& options) override {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+
+            TVector<TFuture<void>> futures;
+            for (auto& [cluster, entries] : options.Entries()) {
+                auto execCtx = MakeExecCtx(std::move(entries), session, cluster, nullptr, nullptr);
+                futures.push_back(execCtx->Session_->Queue_->Async([execCtx]() {
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
+                    return ExecDump(execCtx);
+                }));
+            }
+
+            return WaitExceptionOrAll(futures).Apply([futures](const TFuture<void>& f) {
+                try {
+                    f.GetValue();
+
+                    TDumpResult res;
+                    res.SetSuccess();
+                    return res;
+                } catch (...) {
+                    return ResultFromCurrentException<TDumpResult>();
+                }
+            });
+        } catch (...) {
+            return MakeFuture(ResultFromCurrentException<TDumpResult>());
+        }
+    }
+
 private:
     class TNodeResultBuilder {
     public:
@@ -1886,7 +1932,7 @@ private:
         const TVector<TString> Columns_;
     };
 
-    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs) {
+    static TFinalizeResult ExecFinalize(const TSession::TPtr& session, bool abort, bool detachSnapshotTxs, bool commitDumpTxs) {
         try {
             TFinalizeResult res;
             if (detachSnapshotTxs) {
@@ -1897,7 +1943,7 @@ private:
                 YQL_CLOG(INFO, ProviderYt) << "Aborting all transactions for hidden query";
                 session->TxCache_.AbortAll();
             } else {
-                session->TxCache_.Finalize();
+                session->TxCache_.Finalize(commitDumpTxs);
             }
             res.SetSuccess();
             return res;
@@ -2540,6 +2586,8 @@ private:
         const TExecContext<TPublishOptions>::TPtr& execCtx,
         TVector<TSrcTable>&& src,
         const TString& dst,
+        bool dstIsDynamic,
+        bool srcAreSortedByDstKeys,
         const ui32 dstEpoch,
         const bool isAnonymous,
         EYtWriteMode mode,
@@ -2555,6 +2603,10 @@ private:
 
         auto cluster = execCtx->Cluster_;
         auto entry = execCtx->GetEntry();
+
+        const bool enableDynamicTablesWrite = execCtx->Options_.Config()->_EnableDynamicTablesWrite.Get(cluster).GetOrElse(false);
+        YQL_ENSURE(!dstIsDynamic || enableDynamicTablesWrite);
+
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster);
         auto dstPath = NYql::TransformPath(tmpFolder, dst, isAnonymous, execCtx->Session_->UserName_);
         if (execCtx->Hidden) {
@@ -2742,14 +2794,14 @@ private:
 
         TFuture<void> res;
         forceMerge = forceMerge || AnyOf(src, [&](const auto& entry) { return entry.Cluster != execCtx->Cluster_; });
-        if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || src.size() > 1 || forceMerge) {
+        if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || src.size() > 1 || forceMerge || dstIsDynamic) {
             TFuture<bool> cacheCheck = MakeFuture<bool>(false);
             if (EYtWriteMode::Flush != mode && isAnonymous) {
                 execCtx->SetCacheItem({dstPath}, {NYT::TNode::CreateMap()}, tmpFolder);
                 cacheCheck = execCtx->LookupQueryCacheAsync();
             }
             res = cacheCheck.Apply([mode, src, execCtx, rowSpec, forceTransform,
-                                    appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
+                                    appendToSorted, initial, entry, dstPath, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
                                     nativeYtTypeCompatibility, publishTx, cluster,
                                     commitCheckpoint, columnGroupsSpec = std::move(columnGroupsSpec),
@@ -2768,8 +2820,9 @@ private:
                     columns.emplace_back(item.first);
                 }
 
-                TMergeOperationSpec mergeSpec;
+                TVector<TRichYPath> inputs;
                 if (appendToSorted) {
+                    YQL_ENSURE(!dstIsDynamic);
                     TRichYPath input;
                     if (initial) {
                         with_lock (entry->Lock_) {
@@ -2780,7 +2833,7 @@ private:
                     } else {
                         input = TRichYPath(dstPath).Columns(columns);
                     }
-                    mergeSpec.AddInput(input);
+                    inputs.push_back(input);
                 }
                 for (auto& s: src) {
                     auto path = TRichYPath(s.Name).Columns(columns);
@@ -2791,7 +2844,7 @@ private:
                             path.Cluster(execCtx->Clusters_->GetYtName(pathCluster));
                         }
                     }
-                    mergeSpec.AddInput(path);
+                    inputs.push_back(path);
                 }
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc();
@@ -2800,10 +2853,17 @@ private:
                     spec["additional_security_tags"] = securityTagsNode;
                 }
 
+                if (dstIsDynamic) {
+                    // Otherwise, the chunks after bulk insert will be too big.
+                    forceTransform = true;
+                    // Should be set on production clusters
+                    spec["allow_output_dynamic_tables"] = true;
+                }
+
                 auto ytDst = TRichYPath(dstPath);
-                if (EYtWriteMode::Append == mode && !appendToSorted) {
+                if ((EYtWriteMode::Append == mode && !appendToSorted) || EYtWriteMode::Upsert == mode) {
                     ytDst.Append(true);
-                } else {
+                } else if (!dstIsDynamic) {
                     NYT::TNode fullSpecYson;
                     rowSpec->FillCodecNode(fullSpecYson);
                     const auto schema = RowSpecToYTSchema(fullSpecYson, nativeYtTypeCompatibility, columnGroupsSpec);
@@ -2838,33 +2898,54 @@ private:
                         yqlAttrs.Clear();
                     }
                 }
-                mergeSpec.Output(ytDst);
-                mergeSpec.ForceTransform(forceTransform);
-                FillOperationSpec(mergeSpec, execCtx);
-
-                if (rowSpec->IsSorted()) {
-                    mergeSpec.Mode(MM_SORTED);
-                    mergeSpec.MergeBy(ToYTSortColumns(rowSpec->GetForeignSort()));
-                } else {
-                    mergeSpec.Mode(MM_ORDERED);
-                }
 
                 EYtOpProps flags = EYtOpProp::PublishedAutoMerge;
                 if (combineChunks) {
                     flags |= EYtOpProp::PublishedChunkCombine;
                 }
 
-                FillSpec(spec, *execCtx, entry, 0., Nothing(), flags);
-                CheckSpecForSecrets(spec, execCtx);
+                TFuture<void> resultFuture;
+                if (dstIsDynamic && !srcAreSortedByDstKeys) {
+                    TSortOperationSpec sortSpec;
+                    sortSpec.Inputs(inputs);
+                    sortSpec.Output(ytDst);
 
-                if (combineChunks) {
-                    mergeSpec.CombineChunks(true);
+                    sortSpec.SortBy(TSortColumns(rowSpec->SortedBy));
+                    sortSpec.SchemaInferenceMode(ESchemaInferenceMode::Auto);
+
+                    FillOperationSpec(sortSpec, execCtx);
+                    FillSpec(spec, *execCtx, entry, 0., flags);
+                    CheckSpecForSecrets(spec, execCtx);
+
+                    resultFuture = execCtx->RunOperation([publishTx, sortSpec = std::move(sortSpec), spec = std::move(spec)]() {
+                        return publishTx->Sort(sortSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).CreateOutputTables(false).Spec(spec));
+                    });
+                } else {
+                    TMergeOperationSpec mergeSpec;
+                    mergeSpec.Inputs(inputs);
+                    mergeSpec.Output(ytDst);
+                    mergeSpec.ForceTransform(forceTransform);
+                    FillOperationSpec(mergeSpec, execCtx);
+
+                    if (rowSpec->IsSorted()) {
+                        mergeSpec.Mode(MM_SORTED);
+                        mergeSpec.MergeBy(ToYTSortColumns(rowSpec->GetForeignSort()));
+                    } else {
+                        mergeSpec.Mode(MM_ORDERED);
+                    }
+
+                    FillSpec(spec, *execCtx, entry, 0., Nothing(), flags);
+                    CheckSpecForSecrets(spec, execCtx);
+
+                    if (combineChunks) {
+                        mergeSpec.CombineChunks(true);
+                    }
+
+                    resultFuture = execCtx->RunOperation([publishTx, mergeSpec = std::move(mergeSpec), spec = std::move(spec)]() {
+                        return publishTx->Merge(mergeSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).CreateOutputTables(false).Spec(spec));
+                    });
                 }
-
-                return execCtx->RunOperation([publishTx, mergeSpec = std::move(mergeSpec), spec = std::move(spec)]() {
-                    return publishTx->Merge(mergeSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).CreateOutputTables(false).Spec(spec));
-                })
-                .Apply([execCtx](const auto& f){
+                return resultFuture.Apply([execCtx](const auto& f){
                     f.GetValue();
                     execCtx->StoreQueryCache();
                 });
@@ -4956,6 +5037,14 @@ private:
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                     TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                     execCtx->SetNodeExecProgress("Local run");
+
+                    if (transform.HasFilesToDump()) {
+                        YQL_ENSURE(execCtx->Session_->FullCapture_);
+                        execCtx->Session_->FullCapture_->ReportError(
+                            yexception() << "user files in local run"
+                        );
+                    }
+
                     ExecSafeFill(outYPaths, root, execCtx->GetOutSpec(!useSkiff, nativeTypeCompat), execCtx, entry, builder, alloc, tmpFiles->TmpDir.GetPath() + '/');
                     return MakeFuture();
                 }
@@ -5567,6 +5656,14 @@ private:
                 execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                 TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
                 execCtx->SetNodeExecProgress("Local run");
+
+                if (transform.HasFilesToDump()) {
+                    YQL_ENSURE(execCtx->Session_->FullCapture_);
+                    execCtx->Session_->FullCapture_->ReportError(
+                        yexception() << "user files in local run"
+                    );
+                }
+
                 TExploringNodeVisitor explorer;
                 auto localGraph = builder.BuildLocalGraph(GetGatewayNodeFactory(codecCtx.Get(), nullptr, execCtx->UserFiles_, pathPrefix),
                     execCtx->Options_.UdfValidateMode(), NUdf::EValidatePolicy::Exception,
@@ -5713,6 +5810,48 @@ private:
             });
     }
 
+    static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx) {
+        auto entry = execCtx->GetEntry();
+        YQL_ENSURE(entry->DumpTx);
+        for (auto& [srcPath, dstPath] : execCtx->Options_) {
+            NYT::TRichYPath srcRichYPath;
+            NYT::ITransactionPtr srcTx;
+            auto snapshot = entry->Snapshots.FindPtr(std::make_pair(srcPath, 0));
+            if (snapshot) {
+                // use table snapshot if present
+                auto& [tableId, txId, _] = *snapshot;
+                srcRichYPath.Path(tableId).TransactionId(txId);
+                srcTx = entry->GetSnapshotTx(txId);
+            } else {
+                srcRichYPath.Path(srcPath);
+                srcTx = entry->Tx;
+            }
+
+            NYT::TNode attrs = srcTx->Get(srcRichYPath.Path_ + "&/@", NYT::TGetOptions().AttributeFilter(
+                NYT::TAttributeFilter()
+                    .AddAttribute("type")
+                    .AddAttribute("compression_codec")
+                    .AddAttribute("erasure_codec")
+                    .AddAttribute("optimize_for")
+                    .AddAttribute("schema")
+                    .AddAttribute("media")
+                    .AddAttribute("primary_medium")
+            ));
+            auto srcType = FromString<NYT::ENodeType>(attrs.At("type").AsString());
+            attrs.AsMap().erase("type");
+
+            auto userAttrs = GetUserAttributes(srcTx, srcRichYPath.Path_, true);
+            NYT::MergeNodes(attrs, userAttrs);
+
+            entry->DumpTx->Create(dstPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
+            entry->DumpTx->Concatenate(
+                { srcRichYPath },
+                NYT::TRichYPath(dstPath),
+                TConcatenateOptions()
+            );
+        }
+    }
+
     template <class TExecParamsPtr>
     static TVector<TRichYPath> PrepareDestinations(
         const TVector<TOutputInfo>& outTables,
@@ -5821,9 +5960,9 @@ private:
         const TSession::TPtr& session,
         const TString& cluster,
         const TExprNode* root,
-        TExprContext* exprCtx) const
+        TExprContext* exprCtx)
     {
-        auto ctx = MakeIntrusive<TExecContext<TOptions>>(MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
+        auto ctx = MakeIntrusive<TExecContext<TOptions>>(TIntrusivePtr<TYtNativeGateway>(this), MakeIntrusive<TYtNativeServices>(Services_), Clusters_, MkqlCompiler_, std::move(options), session, cluster, UrlMapper_, Services_.Metrics);
         if (root) {
             YQL_ENSURE(exprCtx);
             if (TYtTransientOpBase::Match(root)) {

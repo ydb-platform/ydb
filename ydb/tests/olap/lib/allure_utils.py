@@ -898,3 +898,147 @@ def allure_test_description(
 
     allure.dynamic.description_html(html)
     allure.attach(html, "description.html", allure.attachment_type.HTML)
+
+
+def parallel_allure_test_description(
+    suite: str,
+    test: str,
+    start_time: float,
+    end_time: float,
+    addition_table_strings: dict[str, any] = None,
+    attachments: tuple[str, str, allure.attachment_type] = None,
+    refference_set: str = '',
+    node_errors: list[NodeErrors] = None,
+    verify_errors=None,
+    workload_result=None,
+    workload_params: dict = None,
+    addition_blocks: list[str] = [],
+    execution_result=None
+):
+    if addition_table_strings is None:
+        addition_table_strings = {}
+    if attachments is None:
+        attachments = []
+    if node_errors is None:
+        node_errors = []
+
+    def _pretty_str(s):
+        return ' '.join(s.split('_')).capitalize()
+
+    allure.dynamic.title(f'{suite}.{test}')
+    for body, name, type in attachments:
+        allure.attach(body, name, type)
+
+    test_info = deepcopy(YdbCluster.get_cluster_info())
+    test_info['ci_version'] = get_ci_version()
+    test_info['test_tools_version'] = get_self_version()
+    test_info.update(addition_table_strings)
+
+    _set_monitoring(test_info, start_time, end_time)
+    _set_coredumps(test_info, start_time, end_time)
+    _set_results_plot(test_info, suite, test, refference_set)
+    _set_logs_command(test_info, start_time, end_time)
+
+    service_url = YdbCluster._get_service_url()
+    db = test_info['database']
+    test_info.update(
+        {
+            'table_path': YdbCluster.get_tables_path(),
+            'db_admin': (
+                f"<a target='_blank' href='{service_url}/monitoring/tenant?"
+                f"schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query"
+                f"&diagnosticsTab=nodes&name=/{db}'>{service_url}</a>"
+            ),
+            'time': (
+                f"{datetime.fromtimestamp(start_time).strftime('%a %d %b %y %H:%M:%S')} - "
+                f"{datetime.fromtimestamp(end_time).strftime('%H:%M:%S')}"),
+        }
+    )
+    table_strings = '\n'.join([f'<tr><td>{_pretty_str(k)}</td><td>{v}</td></tr>' for k, v in test_info.items()])
+    html = f'''<table border='1' cellpadding='4px'><tbody>
+        {table_strings}
+        </tbody></table>
+    '''
+
+    html += _set_node_errors(node_errors)
+    html += _produce_verify_report(verify_errors)
+    logs_in_html = external_param_is_true('save_san_logs_in_html')
+    if logs_in_html:
+        html += _produce_sanitizer_report(node_errors)
+    else:
+        _attach_sanitizer_outputs(node_errors)
+    html += '\n'.join([f'<div>\n{b}\n</div>\n\n' for b in addition_blocks])
+
+    iterations_table = __create_parallel_test_table(workload_result, node_errors, workload_params, execution_result)
+    logging.info(f"iterations_table created, length: {len(iterations_table) if iterations_table else 0}")
+    if iterations_table:
+        html += f'''
+        <h3>Workload Iterations</h3>
+        {iterations_table}
+        '''
+        logging.info("Added iterations table to description HTML")
+    else:
+        logging.warning("iterations_table is empty, not adding to HTML")
+
+    allure.dynamic.description_html(html)
+    allure.attach(html, "description.html", allure.attachment_type.HTML)
+
+
+def __create_parallel_test_table(result, node_errors, workload_params, execution_result):
+    # Создаем заголовок таблицы с подколонками для каждой ноды
+    table_html = """
+    <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
+        <tr style='background-color: #f0f0f0;'>
+            <th>Stress type</th>
+    """
+    # Группируем ноды по хостам
+    all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
+    hosts_to_nodes = {}
+    for node in all_cluster_nodes:
+        if node.host not in hosts_to_nodes:
+            hosts_to_nodes[node.host] = []
+        hosts_to_nodes[node.host].append(node)
+
+    # Для каждого хоста берем первую ноду в качестве представителя
+    unique_hosts = sorted(hosts_to_nodes.keys())
+    # Добавляем объединенные колонки для каждого хоста
+    if unique_hosts:
+        for host in unique_hosts:
+            table_html += f'<th>{host.split('.')[0]}</th>'
+    else:
+        # Если нет нод, добавляем агрегированные колонки
+        table_html += '<th>Aggregated</th>'
+
+    table_html += """
+        </tr>
+    """
+
+    stress_grouped_results = defaultdict(lambda: [])
+    for node_result in execution_result['node_results']:
+        stress_grouped_results[node_result['stress_name']].append(node_result)
+
+    for stress_name, stress_result in stress_grouped_results.items():
+        table_html += '<tr>'
+        stress_color = '#ccffcc'
+        stress_sucesses_for_all_hosts = sum(map(lambda res: res['successful_runs'] == res['total_runs'], stress_result))
+        if stress_sucesses_for_all_hosts == 0:
+            stress_color = "#ffcccc"
+        elif stress_sucesses_for_all_hosts < len(unique_hosts):
+            stress_color = "#fff4cc"
+        table_html += f'<td style="background-color: {stress_color};">{stress_name}</td>'
+
+        hosts_stress_result = dict(map(lambda res: (res['host'], res), stress_result))
+        for host in unique_hosts:
+            color = '#ccffcc'
+            if host not in hosts_stress_result:
+                color = "#ffcccc"
+                table_html += f'<td style="background-color: {color};">Not deployed</td>'
+            else:
+                if hosts_stress_result[host]['successful_runs'] == 0:
+                    color = "#ffcccc"
+                elif hosts_stress_result[host]['successful_runs'] != hosts_stress_result[host]['total_runs']:
+                    color = "#fff4cc"
+                table_html += f'<td style="background-color: {color};">{hosts_stress_result[host]['successful_runs']}/{hosts_stress_result[host]['total_runs']}</td>'
+        table_html += '</tr>'
+
+    return table_html

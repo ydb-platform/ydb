@@ -6,9 +6,8 @@
 #include <util/network/init.h>
 #include <util/system/defaults.h>
 
+#include <ydb/library/actors/interconnect/address/interconnect_address.h>
 #include <ydb/library/actors/interconnect/poller/poller.h>
-
-#include "interconnect_address.h"
 
 #include <memory>
 
@@ -45,6 +44,7 @@ namespace NInterconnect {
         int Bind(const TAddress& addr) const;
         int Shutdown(int how) const;
         int GetConnectStatus() const;
+        std::variant<TAddress, int> GetSockName() const noexcept;
     };
 
     class TStreamSocket: public TSocket {

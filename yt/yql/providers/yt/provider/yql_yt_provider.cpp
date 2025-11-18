@@ -341,28 +341,35 @@ void TYtState::LeaveEvaluation(ui64 id) {
 
 std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
     const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-    const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper)
+    const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper, const TYtTablesData::TPtr& tablesData, const IYtFullCapture::TPtr& fullCapture,
+    const TQContext& qContext)
 {
-    auto ytState = std::make_shared<TYtState>(typeCtx.Get());
+    auto ytState = std::make_shared<TYtState>(typeCtx.Get(), qContext);
     ytState->SessionId = sessionId;
     ytState->Gateway = gateway;
+    if (tablesData) {
+        ytState->TablesData = tablesData;
+    }
     ytState->DqIntegration_ = CreateYtDqIntegration(ytState);
     ytState->OptimizerFactory_ = optFactory;
     ytState->DqHelper = helper;
     ytState->YtflowIntegration_ = CreateYtYtflowIntegration(ytState);
     ytState->YtflowOptimization_ = CreateYtYtflowOptimization(ytState);
     ytState->LayersIntegration_ = CreateYtLayersIntegration();
+    ytState->FullCapture_ = fullCapture;
 
     if (ytGatewayConfig) {
         std::unordered_set<std::string_view> groups;
+        bool isRobot = false;
         if (ytState->Types->Credentials != nullptr) {
             groups.insert(ytState->Types->Credentials->GetGroups().begin(), ytState->Types->Credentials->GetGroups().end());
+            isRobot = ytState->Types->Credentials->IsRobot();
         }
-        auto filter = [userName, ytState, groups = std::move(groups)](const NYql::TAttr& attr) -> bool {
+        auto filter = [userName, ytState, groups = std::move(groups), isRobot](const NYql::TAttr& attr) -> bool {
             if (!attr.HasActivation()) {
                 return true;
             }
-            if (NConfig::Allow(attr.GetActivation(), userName, groups)) {
+            if (NConfig::Allow(attr.GetActivation(), userName, isRobot, groups)) {
                 with_lock(ytState->StatisticsMutex) {
                     ytState->Statistics[Max<ui32>()].Entries.emplace_back(TStringBuilder() << "Activation:" << attr.GetName(), 0, 0, 0, 0, 1);
                 }
@@ -410,10 +417,17 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         Y_UNUSED(progressWriter);
         Y_UNUSED(operationOptions);
         Y_UNUSED(hiddenAborter);
+
+        IYtFullCapture::TPtr fullCapture;
+        if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full) {
+            fullCapture = CreateYtFullCapture();
+        }
+        auto tablesData = MakeIntrusive<TYtTablesData>();
+
         auto gateway = originalGateway;
         if (qContext) {
             gateway = WrapYtGatewayWithQContext(originalGateway, qContext,
-                typeCtx->RandomProvider, typeCtx->FileStorage);
+                typeCtx->RandomProvider, typeCtx->FileStorage, operationOptions, fullCapture, tablesData, *typeCtx);
         }
 
         TDataProviderInfo info;
@@ -422,14 +436,14 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         const TYtGatewayConfig* ytGatewayConfig = gatewaysConfig ? &gatewaysConfig->GetYt() : nullptr;
         TYtState::TPtr ytState;
         TStatWriter statWriter;
-        std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory, helper);
+        std::tie(ytState, statWriter) = CreateYtNativeState(gateway, userName, sessionId, ytGatewayConfig, typeCtx, optFactory, helper, tablesData, fullCapture, qContext);
         ytState->PlanLimits = planLimits;
 
         info.Names.insert({TString{YtProviderName}});
         info.Source = CreateYtDataSource(ytState);
         info.Sink = CreateYtDataSink(ytState);
         info.SupportFullResultDataSink = true;
-        info.OpenSession = [gateway, statWriter](const TString& sessionId, const TString& username,
+        info.OpenSession = [gateway, statWriter, qContext, fullCapture](const TString& sessionId, const TString& username,
             const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
             TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider) {
             gateway->OpenSession(
@@ -440,6 +454,8 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                     .RandomProvider(randomProvider)
                     .TimeProvider(timeProvider)
                     .StatWriter(statWriter)
+                    .QContext(qContext)
+                    .FullCapture(fullCapture)
             );
             return NThreading::MakeFuture();
         };
@@ -530,6 +546,7 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtWriteTable::CallableName());
         Names.insert(TYtFill::CallableName());
         Names.insert(TYtTouch::CallableName());
+        Names.insert(TYtCreateTable::CallableName());
         Names.insert(TYtDropTable::CallableName());
         Names.insert(TCoCommit::CallableName());
         Names.insert(TYtPublish::CallableName());

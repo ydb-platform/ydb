@@ -396,6 +396,12 @@ class App(Generic[ReturnType], DOMNode):
     Setting to `None` or `""` disables auto focus.
     """
 
+    ALLOW_SELECT: ClassVar[bool] = True
+    """A switch to toggle arbitrary text selection for the app.
+    
+    Note that this doesn't apply to Input and TextArea which have builtin support for selection.
+    """
+
     _BASE_PATH: str | None = None
     CSS_PATH: ClassVar[CSSPathType | None] = None
     """File paths to load CSS from."""
@@ -789,6 +795,9 @@ class App(Generic[ReturnType], DOMNode):
         self._clipboard: str = ""
         """Contents of local clipboard."""
 
+        self.supports_smooth_scrolling: bool = False
+        """Does the terminal support smooth scrolling?"""
+
         if self.ENABLE_COMMAND_PALETTE:
             for _key, binding in self._bindings:
                 if binding.action in {"command_palette", "app.command_palette"}:
@@ -802,7 +811,7 @@ class App(Generic[ReturnType], DOMNode):
                         show=False,
                         key_display=self.COMMAND_PALETTE_DISPLAY,
                         priority=True,
-                        tooltip="Open command palette",
+                        tooltip="Open the command palette",
                     )
                 )
 
@@ -916,6 +925,24 @@ class App(Generic[ReturnType], DOMNode):
         assert self._batch_count >= 0, "This won't happen if you use `batch_update`"
         if not self._batch_count:
             self.check_idle()
+
+    def _delay_update(self, delay: float = 0.05) -> None:
+        """Delay updates for a short period of time.
+
+        May be used to mask a brief transition.
+
+        Args:
+            delay: Delay before updating.
+        """
+        self._begin_batch()
+
+        def end_batch() -> None:
+            """Re-enable updates, and refresh screen."""
+            self._end_batch()
+            if not self._batch_count:
+                self.screen.refresh()
+
+        self.set_timer(delay, end_batch, name="_delay_update")
 
     @contextmanager
     def _context(self) -> Generator[None, None, None]:
@@ -1531,7 +1558,6 @@ class App(Generic[ReturnType], DOMNode):
         self._clipboard = text
         if self._driver is None:
             return
-
         import base64
 
         base64_text = base64.b64encode(text.encode("utf-8")).decode("utf-8")
@@ -2645,7 +2671,6 @@ class App(Generic[ReturnType], DOMNode):
 
         if self._screen_stack:
             self.screen.post_message(events.ScreenSuspend())
-            self.screen.refresh()
         next_screen, await_mount = self._get_screen(screen)
         try:
             message_pump = active_message_pump.get()
@@ -2655,7 +2680,6 @@ class App(Generic[ReturnType], DOMNode):
         next_screen._push_result_callback(message_pump, callback, future)
         self._load_screen_css(next_screen)
         self._screen_stack.append(next_screen)
-        self.stylesheet.update(next_screen)
         next_screen.post_message(events.ScreenResume())
         self.log.system(f"{self.screen} is current (PUSHED)")
         if wait_for_dismiss:
@@ -2845,7 +2869,7 @@ class App(Generic[ReturnType], DOMNode):
 
         Args:
             widget: Widget to focus.
-            scroll_visible: Scroll widget in to view.
+            scroll_visible: Scroll widget into view.
         """
         self.screen.set_focus(widget, scroll_visible)
 
@@ -2897,8 +2921,11 @@ class App(Generic[ReturnType], DOMNode):
     def capture_mouse(self, widget: Widget | None) -> None:
         """Send all mouse events to the given widget or disable mouse capture.
 
+        Normally mouse events are sent to the widget directly under the pointer.
+        Capturing the mouse allows a widget to receive mouse events even when the pointer is over another widget.
+
         Args:
-            widget: If a widget, capture mouse event, or `None` to end mouse capture.
+            widget: Widget to capture mouse events, or `None` to end mouse capture.
         """
         if widget == self.mouse_captured:
             return
@@ -3498,7 +3525,8 @@ class App(Generic[ReturnType], DOMNode):
         try:
             if renderable is None:
                 return
-
+            if self._batch_count:
+                return
             if (
                 self._running
                 and not self._closed
@@ -4052,7 +4080,9 @@ class App(Generic[ReturnType], DOMNode):
                     # ...settle focus back on that widget.
                     # Don't scroll the newly focused widget, as this can be quite jarring
                     self.screen.set_focus(
-                        self._last_focused_on_app_blur, scroll_visible=False
+                        self._last_focused_on_app_blur,
+                        scroll_visible=False,
+                        from_app_focus=True,
                     )
             except NoScreen:
                 pass
@@ -4190,6 +4220,12 @@ class App(Generic[ReturnType], DOMNode):
             self.query_one(HelpPanel)
         except NoMatches:
             self.mount(HelpPanel())
+
+    def action_notify(
+        self, message: str, title: str = "", severity: str = "information"
+    ) -> None:
+        """Show a notification."""
+        self.notify(message, title=title, severity=severity)
 
     def _on_terminal_supports_synchronized_output(
         self, message: messages.TerminalSupportsSynchronizedOutput
@@ -4363,6 +4399,7 @@ class App(Generic[ReturnType], DOMNode):
             self._driver.resume_application_mode()
             # ...and publish a resume signal.
             self._resume_signal()
+            self.refresh(layout=True)
         else:
             raise SuspendNotSupported(
                 "App.suspend is not supported in this environment."
@@ -4614,13 +4651,10 @@ class App(Generic[ReturnType], DOMNode):
                 "Failed to save screenshot", title="Screenshot", severity="error"
             )
 
-    @on(messages.TerminalSupportInBandWindowResize)
-    def _on_terminal_supports_in_band_window_resize(
-        self, message: messages.TerminalSupportInBandWindowResize
-    ) -> None:
-        """There isn't much we can do with this information currently, so
-        we will just log it.
-        """
+    @on(messages.InBandWindowResize)
+    def _on_in_band_window_resize(self, message: messages.InBandWindowResize) -> None:
+        """In band window resize enables smooth scrolling."""
+        self.supports_smooth_scrolling = message.enabled
         self.log.debug(message)
 
     def _on_idle(self) -> None:

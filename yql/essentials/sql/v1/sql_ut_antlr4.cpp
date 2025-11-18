@@ -97,3 +97,179 @@ Y_UNIT_TEST(Simple) {
         };)");
 }
 } // Y_UNIT_TEST_SUITE(QuerySplit)
+
+Y_UNIT_TEST_SUITE(ColumnCompression) {
+
+Y_UNIT_TEST(CreateCompressedColumn) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tbl (
+            k Uint64 NOT NULL,
+            v Uint64 COMPRESSION(algorithm=zstd, level=5),
+            PRIMARY KEY (k)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "columnCompression");
+            UNIT_ASSERT_STRING_CONTAINS(line, "algorithm (String '\"zstd");
+            UNIT_ASSERT_STRING_CONTAINS(line, "level (Uint64 '\"5");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(NoColumnCompressionAtCreationIfNotSpecified) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tbl (
+            k Uint64 NOT NULL,
+            v Uint64,
+            PRIMARY KEY (k)
+        );
+    )sql");
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("columnCompression"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateCompressedColumnEmptyAttributes) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tbl (
+            k Uint64 NOT NULL,
+            v Uint64 COMPRESSION(),
+            PRIMARY KEY (k)
+        );
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "columnCompression");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(CreateColumnDoubleCompression) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tbl (
+            k Uint64 NOT NULL,
+            v Uint64 COMPRESSION() COMPRESSION(),
+            PRIMARY KEY (k)
+        );
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:36: Error: 'COMPRESSION' option can be specified only once\n");
+}
+
+Y_UNIT_TEST(AlterColumnCompression) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(algorithm=lz4, level=1);
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "changeCompression");
+            UNIT_ASSERT_STRING_CONTAINS(line, "algorithm (String '\"lz4");
+            UNIT_ASSERT_STRING_CONTAINS(line, "level (Uint64 '\"1");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(NoColumnCompressionAtAlterIfNotSpecified) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET NOT NULL;
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_VALUES_EQUAL(TString::npos, line.find("columnCompression"));
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnCompressionEmptyAttributes) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION();
+    )sql");
+
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "changeCompression");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterColumnCompressionDoubleAlgorithm) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(algorithm=lz4, algorithm=zstd);
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:73: Error: 'algorithm' setting can be specified only once\n");
+}
+
+Y_UNIT_TEST(AlterColumnCompressionDoubleLevel) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(level=1, level=2);
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:67: Error: 'level' setting can be specified only once\n");
+}
+
+Y_UNIT_TEST(AlterColumnCompressionLevelNegative) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE tbl ALTER COLUMN val SET COMPRESSION(level=-1);
+    )sql");
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:3:63: Error: extraneous input '-' expecting");
+}
+
+} // Y_UNIT_TEST_SUITE(ColumnCompression)

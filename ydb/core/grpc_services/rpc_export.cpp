@@ -27,11 +27,14 @@ using TEvExportToYtRequest = TGrpcRequestOperationCall<Ydb::Export::ExportToYtRe
     Ydb::Export::ExportToYtResponse>;
 using TEvExportToS3Request = TGrpcRequestOperationCall<Ydb::Export::ExportToS3Request,
     Ydb::Export::ExportToS3Response>;
+using TEvExportToFsRequest = TGrpcRequestOperationCall<Ydb::Export::ExportToFsRequest,
+    Ydb::Export::ExportToFsResponse>;
 
 template <typename TDerived, typename TEvRequest>
 class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TExportConv {
     static constexpr bool IsS3Export = std::is_same_v<TEvRequest, TEvExportToS3Request>;
     static constexpr bool IsYtExport = std::is_same_v<TEvRequest, TEvExportToYtRequest>;
+    static constexpr bool IsFsExport = std::is_same_v<TEvRequest, TEvExportToFsRequest>;
 
     struct TExportItemInfo {
         TString Destination;
@@ -102,6 +105,16 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 item->set_destination_prefix(info.Destination);
             }
         }
+        if constexpr (IsFsExport) {
+            auto* exportSettings = createExport.MutableExportToFsSettings();
+            *exportSettings = request.settings();
+            exportSettings->clear_items();
+            for (const auto& [sourcePath, info] : ExportItems) {
+                auto* item = exportSettings->add_items();
+                item->set_source_path(sourcePath);
+                item->set_destination_path(info.Destination);
+            }
+        }
 
         return ev.Release();
     }
@@ -128,6 +141,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 it->second.Destination = item.destination_prefix();
             }
             if constexpr (IsYtExport) {
+                it->second.Destination = item.destination_path();
+            }
+            if constexpr (IsFsExport) {
                 it->second.Destination = item.destination_path();
             }
         }
@@ -446,6 +462,24 @@ public:
                 }
             }
         }
+        if constexpr (IsFsExport) {
+            if (!settings.base_path().StartsWith("/")) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, 
+                    "base_path must be an absolute path");
+            }
+
+            if (settings.compression()) {
+                StatusIds::StatusCode status;
+                TString error;
+                if (!CheckCompression(settings.compression(), status, error)) {
+                    return this->Reply(status, TIssuesIds::DEFAULT_ERROR, error);
+                }
+            }
+
+            if (settings.items().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
+        }
 
         if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
             if (settings.compression()) {
@@ -496,12 +530,21 @@ public:
     using TExportRPC::TExportRPC;
 };
 
+class TExportToFsRPC: public TExportRPC<TExportToFsRPC, TEvExportToFsRequest> {
+public:
+    using TExportRPC::TExportRPC;
+};
+
 void DoExportToYtRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TExportToYtRPC(p.release()));
 }
 
 void DoExportToS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TExportToS3RPC(p.release()));
+}
+
+void DoExportToFsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExportToFsRPC(p.release()));
 }
 
 } // namespace NGRpcService

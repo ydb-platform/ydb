@@ -2,6 +2,7 @@ import base64
 import binascii
 import json
 import re
+import sys
 import uuid
 import warnings
 import zlib
@@ -10,7 +11,6 @@ from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
-    AsyncIterator,
     Deque,
     Dict,
     Iterator,
@@ -47,6 +47,13 @@ from .payload import (
     payload_type,
 )
 from .streams import StreamReader
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing import TypeVar
+
+    Self = TypeVar("Self", bound="BodyPartReader")
 
 __all__ = (
     "MultipartReader",
@@ -266,6 +273,7 @@ class BodyPartReader:
     ) -> None:
         self.headers = headers
         self._boundary = boundary
+        self._boundary_len = len(boundary) + 2  # Boundary + \r\n
         self._content = content
         self._default_charset = default_charset
         self._at_eof = False
@@ -279,8 +287,8 @@ class BodyPartReader:
         self._content_eof = 0
         self._cache: Dict[str, Any] = {}
 
-    def __aiter__(self) -> AsyncIterator["BodyPartReader"]:
-        return self  # type: ignore[return-value]
+    def __aiter__(self: Self) -> Self:
+        return self
 
     async def __anext__(self) -> bytes:
         part = await self.next()
@@ -322,6 +330,31 @@ class BodyPartReader:
         else:
             chunk = await self._read_chunk_from_stream(size)
 
+        # For the case of base64 data, we must read a fragment of size with a
+        # remainder of 0 by dividing by 4 for string without symbols \n or \r
+        encoding = self.headers.get(CONTENT_TRANSFER_ENCODING)
+        if encoding and encoding.lower() == "base64":
+            stripped_chunk = b"".join(chunk.split())
+            remainder = len(stripped_chunk) % 4
+
+            while remainder != 0 and not self.at_eof():
+                over_chunk_size = 4 - remainder
+                over_chunk = b""
+
+                if self._prev_chunk:
+                    over_chunk = self._prev_chunk[:over_chunk_size]
+                    self._prev_chunk = self._prev_chunk[len(over_chunk) :]
+
+                if len(over_chunk) != over_chunk_size:
+                    over_chunk += await self._content.read(4 - len(over_chunk))
+
+                if not over_chunk:
+                    self._at_eof = True
+
+                stripped_chunk += b"".join(over_chunk.split())
+                chunk += over_chunk
+                remainder = len(stripped_chunk) % 4
+
         self._read_bytes += len(chunk)
         if self._read_bytes == self._length:
             self._at_eof = True
@@ -346,15 +379,25 @@ class BodyPartReader:
         # Reads content chunk of body part with unknown length.
         # The Content-Length header for body part is not necessary.
         assert (
-            size >= len(self._boundary) + 2
+            size >= self._boundary_len
         ), "Chunk size must be greater or equal than boundary length + 2"
         first_chunk = self._prev_chunk is None
         if first_chunk:
             self._prev_chunk = await self._content.read(size)
 
-        chunk = await self._content.read(size)
-        self._content_eof += int(self._content.at_eof())
-        assert self._content_eof < 3, "Reading after EOF"
+        chunk = b""
+        # content.read() may return less than size, so we need to loop to ensure
+        # we have enough data to detect the boundary.
+        while len(chunk) < self._boundary_len:
+            chunk += await self._content.read(size)
+            self._content_eof += int(self._content.at_eof())
+            assert self._content_eof < 3, "Reading after EOF"
+            if self._content_eof:
+                break
+        if len(chunk) > size:
+            self._content.unread_data(chunk[size:])
+            chunk = chunk[:size]
+
         assert self._prev_chunk is not None
         window = self._prev_chunk + chunk
         sub = b"\r\n" + self._boundary
@@ -518,6 +561,8 @@ class BodyPartReader:
 
 @payload_type(BodyPartReader, order=Order.try_first)
 class BodyPartReaderPayload(Payload):
+    _value: BodyPartReader
+
     def __init__(self, value: BodyPartReader, *args: Any, **kwargs: Any) -> None:
         super().__init__(value, *args, **kwargs)
 
@@ -529,6 +574,9 @@ class BodyPartReaderPayload(Payload):
 
         if params:
             self.set_content_disposition("attachment", True, **params)
+
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        raise TypeError("Unable to decode.")
 
     async def write(self, writer: Any) -> None:
         field = self._value
@@ -545,7 +593,7 @@ class MultipartReader:
     response_wrapper_cls = MultipartResponseWrapper
     #: Multipart reader class, used to handle multipart/* body parts.
     #: None points to type(self)
-    multipart_reader_cls = None
+    multipart_reader_cls: Optional[Type["MultipartReader"]] = None
     #: Body part reader class for non multipart/* content types.
     part_reader_cls = BodyPartReader
 
@@ -566,10 +614,8 @@ class MultipartReader:
         self._at_bof = True
         self._unread: List[bytes] = []
 
-    def __aiter__(
-        self,
-    ) -> AsyncIterator["BodyPartReader"]:
-        return self  # type: ignore[return-value]
+    def __aiter__(self: Self) -> Self:
+        return self
 
     async def __anext__(
         self,
@@ -748,6 +794,8 @@ _Part = Tuple[Payload, str, str]
 
 class MultipartWriter(Payload):
     """Multipart body writer."""
+
+    _value: None
 
     def __init__(self, subtype: str = "mixed", boundary: Optional[str] = None) -> None:
         boundary = boundary if boundary is not None else uuid.uuid4().hex
@@ -928,6 +976,16 @@ class MultipartWriter(Payload):
 
         total += 2 + len(self._boundary) + 4  # b'--'+self._boundary+b'--\r\n'
         return total
+
+    def decode(self, encoding: str = "utf-8", errors: str = "strict") -> str:
+        return "".join(
+            "--"
+            + self.boundary
+            + "\n"
+            + part._binary_headers.decode(encoding, errors)
+            + part.decode()
+            for part, _e, _te in self._parts
+        )
 
     async def write(self, writer: Any, close_boundary: bool = True) -> None:
         """Write body."""

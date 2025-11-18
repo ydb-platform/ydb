@@ -38,19 +38,6 @@ TTopicRef::TTopicRef(const TString& refName, const TDeferredAtom& cluster, TNode
 {
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
-                             TVector<TIdentifier> families, bool serial, TNodePtr defaultExpr, ETypeOfChange typeOfChange)
-    : Pos(pos)
-    , Name(name)
-    , Type(type)
-    , Nullable(nullable)
-    , Families(families)
-    , Serial(serial)
-    , DefaultExpr(defaultExpr)
-    , TypeOfChange(typeOfChange)
-{
-}
-
 INode::INode(TPosition pos)
     : Pos_(pos)
 {
@@ -1595,7 +1582,11 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
                            : BuildQuotedAtom(Pos_, *GetColumnName());
 
         if (IsYqlRef_) {
-            Node_ = Y("YqlColumnRef", ref);
+            if (!Source_.empty()) {
+                Node_ = Y("YqlColumnRef", Q(Source_), ref);
+            } else {
+                Node_ = Y("YqlColumnRef", ref);
+            }
         } else {
             Node_ = Y(callable, "row", ref);
         }
@@ -1654,6 +1645,7 @@ TNodePtr TColumnNode::DoClone() const {
     copy->Reliable_ = Reliable_;
     copy->UseSource_ = UseSource_;
     copy->UseSourceAsColumn_ = UseSourceAsColumn_;
+    copy->IsYqlRef_ = IsYqlRef_;
     return copy;
 }
 

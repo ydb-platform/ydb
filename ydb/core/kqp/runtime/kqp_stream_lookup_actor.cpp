@@ -40,14 +40,16 @@ public:
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
+        , HasVectorTopK(settings.HasVectorTopK())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
         , IsolationLevel(settings.GetIsolationLevel())
+        , Database(settings.GetDatabase())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -91,10 +93,10 @@ public:
             ui64 rowsReadEstimate = ReadRowsCount;
             ui64 bytesReadEstimate = ReadBytesCount;
 
-            if (mstats) {
+            if (mstats && !HasVectorTopK) {
                 switch(LookupStrategy) {
                     case NKqpProto::EStreamLookupStrategy::LOOKUP: {
-                        // in lookup case we return as result actual data, that we read from the datashard.
+                        // in lookup case without top-K pushdown we return as result actual data, that we read from the datashard.
                         rowsReadEstimate = mstats->Inputs[InputIndex]->RowsConsumed;
                         bytesReadEstimate = mstats->Inputs[InputIndex]->BytesConsumed;
                         break;
@@ -610,6 +612,13 @@ private:
         auto guard = BindAllocator();
 
         NUdf::TUnboxedValue row;
+
+        YQL_ENSURE(!Input.IsInvalid());
+        if (Input.IsFinish() || !Input.HasValue()) {
+            LastFetchStatus = NUdf::EFetchStatus::Finish;
+            return;
+        }
+
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
         }
@@ -747,6 +756,7 @@ private:
         Partitioning.reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Database;
 
         auto keyColumnTypes = StreamLookupWorker->GetKeyColumnTypes();
 
@@ -803,6 +813,7 @@ private:
     const bool AllowInconsistentReads;
     const bool UseFollowers;
     const bool IsTableImmutable;
+    const bool HasVectorTopK;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
@@ -821,6 +832,7 @@ private:
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
     NKikimrKqp::EIsolationLevel IsolationLevel;
+    const TString Database;
 
     // stats
     ui64 ReadRowsCount = 0;

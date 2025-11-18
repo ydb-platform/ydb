@@ -44,6 +44,8 @@ struct TReadIteratorSession {
     THashSet<TReadIteratorId, TReadIteratorId::THash> Iterators;
 };
 
+struct TReadIteratorVectorTop;
+
 struct TReadIteratorState {
     enum class EState {
         Init,
@@ -209,7 +211,7 @@ public:
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;
     ui64 LastAckSeqNo = 0;
-    ui32 FirstUnprocessedQuery = 0;
+    ui64 FirstUnprocessedQuery = 0; // must be unsigned
     TString LastProcessedKey;
     bool LastProcessedKeyErased = false;
 
@@ -222,6 +224,9 @@ public:
 
     // May be used to cancel enqueued transactions
     ui64 EnqueuedLocalTxId = 0;
+
+    // Vector search pushdown
+    std::shared_ptr<TReadIteratorVectorTop> VectorTopK;
 };
 
 using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;

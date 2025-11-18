@@ -1,9 +1,9 @@
 """Low level HTTP server."""
+
 import asyncio
 from typing import Any, Awaitable, Callable, Dict, List, Optional  # noqa
 
 from .abc import AbstractStreamWriter
-from .helpers import get_running_loop
 from .http_parser import RawRequestMessage
 from .streams import StreamReader
 from .web_protocol import RequestHandler, _RequestFactory, _RequestHandler
@@ -22,7 +22,7 @@ class Server:
         loop: Optional[asyncio.AbstractEventLoop] = None,
         **kwargs: Any
     ) -> None:
-        self._loop = get_running_loop(loop)
+        self._loop = loop or asyncio.get_event_loop()
         self._connections: Dict[RequestHandler, asyncio.Transport] = {}
         self._kwargs = kwargs
         self.requests_count = 0
@@ -43,7 +43,12 @@ class Server:
         self, handler: RequestHandler, exc: Optional[BaseException] = None
     ) -> None:
         if handler in self._connections:
-            del self._connections[handler]
+            if handler._task_handler:
+                handler._task_handler.add_done_callback(
+                    lambda f: self._connections.pop(handler, None)
+                )
+            else:
+                del self._connections[handler]
 
     def _make_request(
         self,

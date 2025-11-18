@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.130.13)
+VERSION(6.144.0)
 
 LICENSE(MPL-2.0)
 
@@ -65,6 +65,7 @@ PY_SRCS(
     hypothesis/internal/conjecture/junkdrawer.py
     hypothesis/internal/conjecture/optimiser.py
     hypothesis/internal/conjecture/pareto.py
+    hypothesis/internal/conjecture/provider_conformance.py
     hypothesis/internal/conjecture/providers.py
     hypothesis/internal/conjecture/shrinker.py
     hypothesis/internal/conjecture/shrinking/__init__.py
@@ -86,6 +87,7 @@ PY_SRCS(
     hypothesis/internal/floats.py
     hypothesis/internal/healthcheck.py
     hypothesis/internal/intervalsets.py
+    hypothesis/internal/lambda_sources.py
     hypothesis/internal/observability.py
     hypothesis/internal/reflection.py
     hypothesis/internal/scrutineer.py
@@ -120,6 +122,7 @@ PY_SRCS(
     hypothesis/utils/conventions.py
     hypothesis/utils/dynamicvariables.py
     hypothesis/utils/terminal.py
+    hypothesis/utils/threading.py
     hypothesis/vendor/__init__.py
     hypothesis/vendor/pretty.py
     hypothesis/version.py

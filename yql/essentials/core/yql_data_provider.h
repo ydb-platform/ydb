@@ -195,6 +195,9 @@ public:
 
     // layers
     virtual NLayers::ILayersIntegrationPtr GetLayersIntegration() const = 0;
+
+    // query capture
+    virtual bool IsFullCaptureReady() = 0;
 };
 
 struct IPipelineConfigurator;

@@ -12,7 +12,7 @@ using TSecondaryIndexes = TVector<std::pair<
     NYql::TExprNode::TPtr,
     const NYql::TIndexDescription*>>;
 
-TSecondaryIndexes BuildSecondaryIndexVector(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+TSecondaryIndexes BuildAffectedIndexTables(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx, const THashSet<TStringBuf>* filter = nullptr);
 
 struct TCondenseInputResult {
@@ -82,6 +82,7 @@ NYql::NNodes::TMaybeNode<NYql::NNodes::TExprList> KqpPhyUpsertIndexEffectsImpl(T
     const NYql::NNodes::TCoAtomList& inputColumns,
     const NYql::NNodes::TCoAtomList& returningColumns,
     const NYql::NNodes::TCoAtomList& columnsWithDefaults,
+    const NYql::NNodes::TExprBase& tableExpr,
     const NYql::TKikimrTableDescription& table, const NYql::NNodes::TMaybeNode<NYql::NNodes::TCoNameValueTupleList>& settings,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx);
 
@@ -98,7 +99,7 @@ NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKi
     NYql::NNodes::TExprBase input,
     const NYql::NNodes::TKqpTable& kqpTableNode, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx, const TVector<TString>& extraColumnsToRead = {});
 
-NYql::NNodes::TDqStageBase ReadTableToStage(const NYql::NNodes::TExprBase& expr, NYql::TExprContext& ctx);
+NYql::NNodes::TDqStageBase ReadInputToStage(const NYql::NNodes::TExprBase& expr, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
     const NYql::NNodes::TKqpTable& tableNode,

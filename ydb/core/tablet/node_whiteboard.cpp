@@ -75,6 +75,9 @@ public:
         MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
         MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
         NumThreads = utils->GetCounter("Process/NumThreads", false);
+        auto grpc = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "grpc");
+        GrpcRequestBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("requestBytes", true);
+        GrpcResponseBytes = grpc->GetSubgroup("subsystem", "serverStats")->GetCounter("responseBytes", true);
         auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
@@ -113,6 +116,10 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
     ui64 SavedMajorPageFaults = 0;
     NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
+    NMonitoring::TDynamicCounters::TCounterPtr GrpcRequestBytes;
+    ui64 SavedGrpcRequestBytes = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr GrpcResponseBytes;
+    ui64 SavedGrpcResponseBytes = 0;
 
     TSystemThreadsMonitor ThreadsMonitor;
 
@@ -1226,6 +1233,16 @@ protected:
                 threadInfo->MutableStates()->emplace(state.first, state.second);
             }
         }
+        {
+            if (SavedGrpcRequestBytes || SavedGrpcResponseBytes) {
+                auto requestBytes = GrpcRequestBytes->Val() - SavedGrpcRequestBytes;
+                auto responseBytes = GrpcResponseBytes->Val() - SavedGrpcResponseBytes;
+                SystemStateInfo.SetGrpcRequestBytes(requestBytes / UPDATE_PERIOD_SECONDS);
+                SystemStateInfo.SetGrpcResponseBytes(responseBytes / UPDATE_PERIOD_SECONDS);
+            }
+            SavedGrpcRequestBytes = GrpcRequestBytes->Val();
+            SavedGrpcResponseBytes = GrpcResponseBytes->Val();
+        }
         UpdateSystemState();
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
@@ -1285,6 +1302,12 @@ template<typename TMessage>
     return defaultFields;
 }
 
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TTabletStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TNodeStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TVDiskStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TBSGroupStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>();
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();
 }

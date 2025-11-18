@@ -81,7 +81,6 @@ public:
     bool OnUnhandledException(const std::exception& exc) override  {
         TDerived& self = static_cast<TDerived&>(*this);
         self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
-        self.PassAway();
 
         return TBase::OnUnhandledException(exc);
     }

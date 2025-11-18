@@ -2,13 +2,12 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-TMessageEnricherActor::TMessageEnricherActor(ui32 partitionId, const TActorId& partitionActor, const TString& consumerName, std::deque<TReadResult>&& replies)
+TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_ENRICHER)
+    , TabletId(tabletId)
     , PartitionId(partitionId)
-    , PartitionActorId(partitionActor)
     , ConsumerName(consumerName)
     , Queue(std::move(replies))
-    , Backoff(5, TDuration::MilliSeconds(50))
     , PendingResponse(std::make_unique<TEvPQ::TEvMLPReadResponse>())
 {
 }
@@ -16,7 +15,6 @@ TMessageEnricherActor::TMessageEnricherActor(ui32 partitionId, const TActorId& p
 void TMessageEnricherActor::Bootstrap() {
     Become(&TThis::StateWork);
     ProcessQueue();
-    Schedule(Timeout, new TEvents::TEvWakeup());
 }
 
 void TMessageEnricherActor::PassAway() {
@@ -25,25 +23,22 @@ void TMessageEnricherActor::PassAway() {
         Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
 
+    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
     TBase::PassAway();
 }
 
-void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvProxyResponse");
-    if (Cookie != GetCookie(ev)) {
-        // TODO MLP
-        LOG_D("Cookie mismatch: " << Cookie << " != " << GetCookie(ev));
-        //return PassAway();
-    }
+void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvResponse");
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Response->DebugString());
+        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
         return PassAway();
     }
 
-    auto& response = ev->Get()->Response;
-    if (response->GetPartitionResponse().HasCmdReadResult()) {
-        for (auto& result : response->GetPartitionResponse().GetCmdReadResult().GetResult()) {
+    auto& response = ev->Get()->Record;
+    if (response.GetPartitionResponse().HasCmdReadResult()) {
+        for (auto& result : response.GetPartitionResponse().GetCmdReadResult().GetResult()) {
             auto offset = result.GetOffset();
 
             while(!Queue.empty()) {
@@ -54,7 +49,6 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 while (!reply.Offsets.empty() && offset > reply.Offsets.front()) {
                     reply.Offsets.pop_front();
                 }
-                // TODO MLP multi part messages
                 if (!reply.Offsets.empty() && offset == reply.Offsets.front()) {
                     auto* message = PendingResponse->Record.AddMessage();
                     message->MutableId()->SetPartitionId(PartitionId);
@@ -66,7 +60,12 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                     reply.Offsets.pop_front();
                 }
                 if (reply.Offsets.empty()) {
-                    Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
+                    if (PendingResponse->Record.MessageSize() > 0) {
+                        Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
+                    } else {
+                        auto r = std::make_unique<TEvPQ::TEvMLPErrorResponse>(Ydb::StatusIds::INTERNAL_ERROR, "Messages was not found");
+                        Send(reply.Sender, std::move(r), 0, reply.Cookie);
+                    }
                     PendingResponse = std::make_unique<TEvPQ::TEvMLPReadResponse>();
                     Queue.pop_front();
                     continue;
@@ -82,27 +81,15 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     ProcessQueue();
 }
 
-void TMessageEnricherActor::Handle(TEvPQ::TEvError::TPtr&) {
-    LOG_D("Handle TEvPQ::TEvError");
-    ProcessQueue();
-}
-
-void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {
-    LOG_D("TEvents::TEvWakeup");
-
-    for (auto& reply : Queue) {
-        Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::TIMEOUT, "Enrich timeout"), 0, reply.Cookie);
-    }
-    Queue.clear();
-
+void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     PassAway();
 }
 
 STFUNC(TMessageEnricherActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPQ::TEvProxyResponse, Handle);
-        hFunc(TEvPQ::TEvError, Handle);
-        hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvPersQueue::TEvResponse, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateWork", ev));
@@ -122,8 +109,17 @@ void TMessageEnricherActor::ProcessQueue() {
         auto firstOffset = reply.Offsets.front();
         auto lastOffset = Queue.back().Offsets.back();
         auto count = lastOffset - firstOffset + 1;
-        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << PartitionActorId);
-        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, firstOffset, count, ++Cookie));
+        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletId);
+
+        auto request = std::make_unique<TEvPersQueue::TEvRequest>();
+        auto* partitionRequest = request->Record.MutablePartitionRequest();
+        partitionRequest->SetPartition(PartitionId);
+        auto* read = partitionRequest->MutableCmdRead();
+        read->SetClientId(ConsumerName);
+        read->SetOffset(firstOffset);
+        read->SetTimeoutMs(0);
+
+        SendToPQTablet(std::move(request));
 
         return;
     }
@@ -131,6 +127,19 @@ void TMessageEnricherActor::ProcessQueue() {
     if (Queue.empty()) {
         return PassAway();
     }
+}
+
+void TMessageEnricherActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
+    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), TabletId, FirstRequest, 1);
+    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+    FirstRequest = false;
+}
+
+NActors::IActor* CreateMessageEnricher(ui64 tabletId,
+                                       const ui32 partitionId,
+                                       const TString& consumerName,
+                                       std::deque<TReadResult>&& replies) {
+    return new TMessageEnricherActor(tabletId, partitionId, consumerName, std::move(replies));
 }
 
 } // namespace NKikimr::NPQ::NMLP

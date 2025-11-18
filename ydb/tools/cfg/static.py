@@ -53,6 +53,7 @@ class StaticConfigGenerator(object):
         cfg_home="/Berkanavt/kikimr",
         sqs_port=8771,
         enable_cores=False,
+        enable_modules=False,
         local_binary_path=None,
         skip_location=False,
         schema_validator=None,
@@ -65,11 +66,13 @@ class StaticConfigGenerator(object):
 
         self._host_info_provider = host_info_provider
 
-        self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database)
+        self._enable_cores = template.get("enable_cores", enable_cores)
+        self._enable_modules = template.get("enable_modules", enable_modules)
+
+        self.__cluster_details = base.ClusterDetailsProvider(template, host_info_provider, validator=schema_validator, database=database, enable_modules=self._enable_modules)
         if self.__cluster_details.use_k8s_api:
             self._host_info_provider._init_k8s_labels(self.__cluster_details.k8s_rack_label, self.__cluster_details.k8s_dc_label)
 
-        self._enable_cores = template.get("enable_cores", enable_cores)
         self._yaml_config_enabled = template.get("yaml_config_enabled", False)
         self.__is_dynamic_node = True if database is not None else False
         self._database = database
@@ -1509,7 +1512,8 @@ class StaticConfigGenerator(object):
             if not self._skip_location:
                 if self.__cluster_details.use_walle:
                     node.WalleLocation.DataCenter = host.datacenter
-                    node.WalleLocation.Module = host.module
+                    if self._enable_modules:
+                        node.WalleLocation.Module = host.module
                     node.WalleLocation.Rack = host.rack
                     node.WalleLocation.Body = int(host.body)
                 elif self.__cluster_details.use_k8s_api:
@@ -1518,7 +1522,8 @@ class StaticConfigGenerator(object):
                     node.Location.Body = int(host.body)
                 else:
                     node.Location.DataCenter = host.datacenter
-                    node.Location.Module = host.module
+                    if self._enable_modules:
+                        node.Location.Module = host.module
                     node.Location.Rack = host.rack
                     node.Location.Body = int(host.body)
 

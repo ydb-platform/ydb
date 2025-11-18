@@ -207,6 +207,7 @@ public:
             client->ExpectOffsets(expectedOffsets ? expectedOffsets : TVector<ui64>{messages.back().GetOffset()});
         }
         FormatHandler->ParseMessages(messages);
+        FormatHandler->ForceRefresh();
         ExtractClientsData();
     }
 
@@ -218,6 +219,7 @@ public:
             }
         }
         FormatHandler->ParseMessages(messages);
+        FormatHandler->ForceRefresh();
         ExtractClientsData();
     }
 

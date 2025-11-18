@@ -25,9 +25,6 @@ ydb/core/erasure/ut unittest.[*/*] chunk
 ydb/core/fq/libs/checkpoint_storage/ut NFq.(anonymous namespace).TStorageServiceTest<false>.ShouldNotCreateCheckpointTwice
 ydb/core/fq/libs/checkpoint_storage/ut NFq.(anonymous namespace).TStorageServiceTest<true>.ShouldNotCreateCheckpointAfterGenerationChanged
 ydb/core/fq/libs/checkpoint_storage/ut unittest.[*/*] chunk
-ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.ManyRawClients
-ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.Watermark
-ydb/core/fq/libs/row_dispatcher/format_handler/ut TestFormatHandler.WatermarkWhereFalse
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.TwoSessionsWithDifferentSchemes
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.WrongJson
 ydb/core/kafka_proxy/ut unittest.sole chunk
@@ -200,7 +197,6 @@ ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane py3test.[test_retry.py] chunk
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
-ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_restore_state

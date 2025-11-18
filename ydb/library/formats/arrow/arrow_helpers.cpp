@@ -633,6 +633,18 @@ TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position, co
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
 
         auto& column = static_cast<const TArray&>(*array);
+        if (!logicalType) {
+            auto& column = static_cast<const TArray&>(*array);
+            if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+                auto value = column.GetString(position);
+                result << TString(value.data(), value.size());
+            }
+            if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                result << column.Value(position);
+            }
+            return true;
+        }
+
         if constexpr (std::is_same_v<typename TWrap::T, arrow::BooleanType>) {
             result << (column.Value(position) ? "true" : "false");
         } else if constexpr (std::is_same_v<typename TWrap::T, arrow::TimestampType>) {

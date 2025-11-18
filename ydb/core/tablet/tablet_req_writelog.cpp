@@ -1,5 +1,6 @@
 #include "tablet_impl.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -171,7 +172,8 @@ public:
         // todo: adaptive save-with-retry and timeouts
         // todo: cancelation
 
-        const auto handleClass = NKikimrBlobStorage::TabletLog;
+        const auto handleClass = AppData()->FeatureFlags.GetEnableExternalBlobPutUserDataHandleClass() ? NKikimrBlobStorage::UserData : NKikimrBlobStorage::TabletLog;
+    
         for (const auto &ref : References) {
             NWilson::TTraceId innerTraceId;
 

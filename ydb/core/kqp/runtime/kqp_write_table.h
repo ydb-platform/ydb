@@ -101,10 +101,6 @@ bool IsEqual(
 
 std::vector<TConstArrayRef<TCell>> GetRows(
     const NKikimr::NKqp::IDataBatchPtr& batch);
-std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
-    const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
-    const std::vector<TConstArrayRef<bool>>& masks,
-    const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);

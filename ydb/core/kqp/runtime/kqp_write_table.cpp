@@ -1146,58 +1146,6 @@ std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& b
     return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
 }
 
-std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
-        const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
-        const std::vector<TConstArrayRef<bool>>& masks,
-        const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes) {
-    size_t totalRows = 0;
-    for (const auto& batch : batches) {
-        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
-        AFL_ENSURE(data);
-        totalRows += data->GetRows().Size();
-    }
-
-    std::vector<TConstArrayRef<TCell>> rows;
-    rows.reserve(totalRows);
-
-    for (size_t batchIndex = 0; batchIndex < batches.size(); ++batchIndex) {
-        const auto& batch = batches[batchIndex];
-
-        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
-        AFL_ENSURE(data);
-        const auto& batchRows = data->GetRows();
-        
-        for (size_t rowIndex = 0; rowIndex < batchRows.Size(); ++rowIndex) {
-            if (masks.empty() || masks[batchIndex][rowIndex]) {
-                rows.push_back(batchRows[rowIndex]);
-            }
-        }
-    }
-    // We need only last written row for each key
-    std::reverse(rows.begin(), rows.end());
-
-    std::stable_sort(
-        rows.begin(),
-        rows.end(),
-        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-            AFL_ENSURE(lhs.size() == rhs.size());
-            AFL_ENSURE(lhs.size() >= keyColumnTypes.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), keyColumnTypes.size()) < 0;
-        });
-
-    auto rowsToEraseBegin = std::unique(
-        rows.begin(),
-        rows.end(),
-        [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
-            AFL_ENSURE(lhs.size() == rhs.size());
-            AFL_ENSURE(lhs.size() >= keyColumnTypes.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), keyColumnTypes.size()) == 0;
-        });
-
-    rows.erase(rowsToEraseBegin, rows.end());
-    return rows;
-}
-
 std::vector<TConstArrayRef<TCell>> CutColumns(
        const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount) {
     std::vector<TConstArrayRef<TCell>> result;

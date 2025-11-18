@@ -1477,8 +1477,10 @@ public:
         std::vector<ui32> KeyIndexes;
         std::vector<ui32> FullKeyIndexes;
         std::vector<ui32> PrimaryInFullKeyIndexes; // primary key in full secondary table keys
+        std::vector<ui32> OldKeyIndexes;
 
         IKqpBufferTableLookup* Lookup = nullptr;
+        bool SkipEqualRowsForUniqCheck = false;
     };
 
 private:
@@ -1524,6 +1526,16 @@ public:
 
             if (lookup.Lookup->GetTableId().PathId == PathId) {
                 AFL_ENSURE(lookup.Lookup->GetKeyColumnTypes().size() == KeyColumnTypes.size());
+                AFL_ENSURE(lookup.KeyIndexes.empty());
+                AFL_ENSURE(lookup.OldKeyIndexes.empty());
+                AFL_ENSURE(lookup.FullKeyIndexes.empty());
+                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.empty());
+                AFL_ENSURE(!lookup.SkipEqualRowsForUniqCheck);
+            } else {
+                AFL_ENSURE(lookup.KeyIndexes.size() == lookup.Lookup->GetKeyColumnTypes().size());
+                AFL_ENSURE(lookup.OldKeyIndexes.size() == lookup.Lookup->GetKeyColumnTypes().size());
+                AFL_ENSURE(lookup.PrimaryInFullKeyIndexes.size() == KeyColumnTypes.size());
+                AFL_ENSURE(lookup.FullKeyIndexes.size() >= KeyColumnTypes.size());
             }
         }
     }
@@ -1804,7 +1816,15 @@ private:
                         lookupInfo.PrimaryInFullKeyIndexes);
 
                 for (const auto& row : writeRows) {
-                    // TODO: skip unchanged keys
+                    if (!lookupInfo.OldKeyIndexes.empty() && IsEqual(
+                            row,
+                            {},
+                            lookupInfo.KeyIndexes,
+                            lookupInfo.OldKeyIndexes,
+                            lookupInfo.Lookup->GetKeyColumnTypes())) {
+                        // skip unchanged keys
+                        continue;
+                    }
                     if (!collector.AddRow(row)) {
                         Error = DuplicateKeyErrorText;
                         return false;
@@ -2927,7 +2947,19 @@ public:
                             }
                             return result;
                         }(),
+                        .OldKeyIndexes = GetIndexes( // old secondary keys
+                                settings.Columns,
+                                settings.WriteIndex,
+                                settings.LookupColumns,
+                                TConstArrayRef{
+                                    indexSettings.KeyColumns.data(),
+                                    indexSettings.KeyPrefixSize},
+                                TConstArrayRef{
+                                    keyWriteIndex.data(),
+                                    indexSettings.KeyPrefixSize},
+                                /* preferAdditionalInputColumns */ true),
                         .Lookup = lookupActor,
+                        .SkipEqualRowsForUniqCheck = !settings.LookupColumns.empty(),
                     });
 
                     lookupActor->SetLookupSettings(
@@ -2955,7 +2987,9 @@ public:
                     .KeyIndexes = {},
                     .FullKeyIndexes = {},
                     .PrimaryInFullKeyIndexes = {},
+                    .OldKeyIndexes = {},
                     .Lookup = lookupActor,
+                    .SkipEqualRowsForUniqCheck = false,
                 });
 
                 lookupActor->SetLookupSettings(

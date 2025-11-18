@@ -48,34 +48,27 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     PushStats.Chunks++;
     PushStats.Rows += data.Rows;
     PushStats.Bytes += data.Bytes;
+
     InflightBytes += data.Bytes;
 
-    PushChunksDelta++;
-    PushBytesDelta += data.Bytes;
-    if (PushChunksDelta >= 100 || data.Finished) {
-        *Registry->LocalBufferBytes += PushBytesDelta;
-        PushBytesDelta = 0;
-        *Registry->LocalBufferChunks += PushChunksDelta;
-        PushChunksDelta = 0;
-    }
+    (*Registry->LocalBufferChunks)++;
+    *Registry->LocalBufferBytes += data.Bytes;
 
     std::lock_guard lock(Mutex);
 
     Queue.emplace(std::move(data));
 
-    if (FillLevel == EDqFillLevel::NoLimit && InflightBytes > MaxInflightBytes) {
+    if (FillLevel == EDqFillLevel::NoLimit && InflightBytes.load() > MaxInflightBytes) {
         FillLevel = EDqFillLevel::HardLimit;
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::NoLimit, EDqFillLevel::HardLimit);
         }
-        NeedToNotifyOutput = true;
+        NeedToNotifyOutput.store(true);
     }
-    if (NeedToNotifyInput) {
-        NeedToNotifyInput = false;
+    if (NeedToNotifyInput.exchange(false)) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        // ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
 }
 
@@ -86,7 +79,9 @@ bool TLocalBuffer::IsEarlyFinished() {
 bool TLocalBuffer::IsFlushed() {
     std::lock_guard lock(Mutex);
     auto result = InputBinded.load() || Queue.empty();
-    NeedToNotifyOutput |= !result;
+    if (!result) {
+        NeedToNotifyOutput.store(true);
+    }
     return result;
 }
 
@@ -94,7 +89,7 @@ bool TLocalBuffer::IsEmpty() {
     std::lock_guard lock(Mutex);
     auto result = Queue.empty();
     if (result) {
-        NeedToNotifyInput = true;
+        NeedToNotifyInput.store(true);
     }
     return result;
 }
@@ -102,7 +97,7 @@ bool TLocalBuffer::IsEmpty() {
 bool TLocalBuffer::Pop(TDataChunk& data) {
     std::lock_guard lock(Mutex);
     if (Queue.empty()) {
-        NeedToNotifyInput = true;
+        NeedToNotifyInput.store(true);
         return false;
     } else {
         data = std::move(Queue.front());
@@ -111,26 +106,24 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
         PopStats.Chunks++;
         PopStats.Rows += data.Rows;
         PopStats.Bytes += data.Bytes;
-        Y_ENSURE(InflightBytes >= data.Bytes);
+        *Registry->LocalBufferLatency += (TInstant::Now() - data.Timestamp).MicroSeconds();
+
+        Y_ENSURE(InflightBytes.load() >= data.Bytes);
         InflightBytes -= data.Bytes;
-        if (FillLevel == EDqFillLevel::HardLimit && InflightBytes <= MinInflightBytes) {
+        if (FillLevel == EDqFillLevel::HardLimit && InflightBytes.load() <= MinInflightBytes) {
             FillLevel = EDqFillLevel::NoLimit;
             if (Aggregator) {
                 Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::NoLimit);
             }
-            if (NeedToNotifyOutput) {
-                NeedToNotifyOutput = false;
+            if (NeedToNotifyOutput.exchange(false)) {
                 NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
                     new NActors::IEventHandle(Info.OutputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
                 );
-                // ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
             }
-        } else if (Queue.empty() && NeedToNotifyOutput) {
-            NeedToNotifyOutput = false;
+        } else if (Queue.empty() && NeedToNotifyOutput.exchange(false)) {
             NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
                 new NActors::IEventHandle(Info.OutputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
             );
-            // ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
 
         return true;
@@ -144,8 +137,7 @@ void TLocalBuffer::EarlyFinish() {
 void TLocalBuffer::BindInput() {
     if (!InputBinded.exchange(true)) {
         std::lock_guard lock(Mutex);
-        if (NeedToNotifyOutput) {
-            NeedToNotifyOutput = false;
+        if (NeedToNotifyOutput.exchange(false)) {
             ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
     }
@@ -211,6 +203,7 @@ bool TOutputDescriptor::CheckGenMajor(ui64 genMajor, const TString& errorMessage
     return true;
 }
 
+/*
 bool TOutputDescriptor::PushToWaitQueue(TDataChunk&& data) {
     auto bytes = data.Bytes;
     bool result = false;
@@ -229,6 +222,7 @@ bool TOutputDescriptor::PushToWaitQueue(TDataChunk&& data) {
 
     return result;
 }
+*/
 
 bool TOutputDescriptor::IsFlushed() {
     return Flushed.load();
@@ -296,6 +290,7 @@ void TOutputBuffer::Push(TDataChunk&& data) {
         PushStats.Chunks++;
         PushStats.Rows += data.Rows;
         PushStats.Bytes += data.Bytes;
+        Descriptor->AddPushBytes(data.Bytes);
         NodeState->Push(std::move(data), Descriptor);
     }
 }
@@ -502,7 +497,6 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
         if (!descriptor->WaitQueue.empty()) {
 
             descriptor->WaitQueue.push(std::move(data));
-            descriptor->AddPushBytes(bytes);
             descriptor->WaitQueueSize++;
 
             WaiterMessages++;
@@ -519,7 +513,6 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
         std::lock_guard lock(Mutex);
         if (InflightBytes < MaxInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor, "Inconsistent Send GenMajor")) {
-                descriptor->AddPushBytes(bytes);
                 descriptor->AddPopChunk(bytes, rows);
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
@@ -544,7 +537,6 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
         result = true;
     }
     descriptor->WaitQueue.push(std::move(data));
-    descriptor->AddPushBytes(bytes);
     descriptor->WaitQueueSize++;
 
     WaiterMessages++;

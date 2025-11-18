@@ -178,6 +178,8 @@ public:
         , InflightBytes(0)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
+        , NeedToNotifyOutput(false)
+        , NeedToNotifyInput(false)
         , EarlyFinished(false)
         , InputBinded(false)
     {
@@ -202,19 +204,20 @@ public:
     std::shared_ptr<TLocalBufferRegistry> Registry;
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
+
     mutable std::mutex Mutex;
     mutable std::queue<TDataChunk> Queue;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
+
     std::atomic<ui64> InflightBytes;
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
-    bool NeedToNotifyOutput = false;
-    bool NeedToNotifyInput = false;
+
+    std::atomic<bool> NeedToNotifyOutput;
+    std::atomic<bool> NeedToNotifyInput;
     std::atomic<bool> EarlyFinished;
     std::atomic<bool> InputBinded;
-    ui64 PushBytesDelta = 0;
-    ui64 PushChunksDelta = 0;
 };
 
 class TOutputBuffer;
@@ -247,7 +250,7 @@ public:
     void AddPopChunk(ui64 bytes, ui64 rows);
     void UpdatePopBytes(ui64 bytes);
     bool CheckGenMajor(ui64 genMajor, const TString& errorMessage);
-    bool PushToWaitQueue(TDataChunk&& data);
+    /* bool PushToWaitQueue(TDataChunk&& data); */
     bool IsFlushed();
     void Terminate();
     bool IsTerminatedOrAborted();
@@ -596,6 +599,7 @@ public:
         LocalBufferCount = counters->GetCounter("LocalBuffer/Count", false);
         LocalBufferBytes = counters->GetCounter("LocalBuffer/Bytes", true);
         LocalBufferChunks = counters->GetCounter("LocalBuffer/Chunks", true);
+        LocalBufferLatency = counters->GetCounter("LocalBuffer/Latency", true);
     }
     ~TLocalBufferRegistry();
     std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info);
@@ -609,6 +613,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferLatency;
 };
 
 class TDqChannelService : public IDqChannelService {

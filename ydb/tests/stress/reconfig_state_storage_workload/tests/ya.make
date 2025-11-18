@@ -11,7 +11,7 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(IAM_TOKEN="")

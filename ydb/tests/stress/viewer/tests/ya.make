@@ -10,7 +10,7 @@ IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32)
 ENDIF()
 
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/tests/stress/viewer

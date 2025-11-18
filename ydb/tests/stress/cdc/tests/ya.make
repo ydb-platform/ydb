@@ -8,7 +8,7 @@ TEST_SRCS(
 )
 
 REQUIREMENTS(ram:32 cpu:4)
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 DEPENDS(
     ydb/tests/stress/cdc

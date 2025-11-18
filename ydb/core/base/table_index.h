@@ -85,6 +85,16 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 }
 
 namespace NFulltext {
+    // Type for token frequency within a document - uint32 is OK
+    using TTokenCount = ui32;
+    inline constexpr auto TokenCountType = Ydb::Type::UINT32;
+    inline constexpr const char* TokenCountTypeName = "Uint32";
+
+    // Type for the global number of documents / number of documents with token
+    using TDocCount = ui64;
+    inline constexpr auto DocCountType = Ydb::Type::UINT64;
+    inline constexpr const char* DocCountTypeName = "Uint64";
+
     inline constexpr const char* TokenColumn = "__ydb_token";
     inline constexpr const char* FreqColumn = "__ydb_freq";
     inline constexpr const char* IdColumn = "__ydb_id";

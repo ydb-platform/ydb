@@ -1852,21 +1852,22 @@ message TEvBuildFulltextDictRequest {
 
     optional uint64 SnapshotTxId = 4;
     optional uint64 SnapshotStep = 5;
+    optional bool ReadShadowData = 6;
 
-    optional uint64 SeqNoGeneration = 6;
-    optional uint64 SeqNoRound = 7;
+    optional uint64 SeqNoGeneration = 7;
+    optional uint64 SeqNoRound = 8;
 
-    optional string OutputName = 8;
-    optional string DatabaseName = 9;
+    optional string OutputName = 9;
+    optional string DatabaseName = 10;
 
-    optional Ydb.Table.FulltextIndexSettings Settings = 10; // also has key columns
+    optional Ydb.Table.FulltextIndexSettings Settings = 11; // also has key columns
 
-    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 12;
 
     // When the posting table split point is in the middle of a key, first and last keys
     // in the shard require cross-shard aggregation which is performed by the scheme shard
-    optional bool SkipFirstToken = 12;
-    optional bool SkipLastToken = 13;
+    optional bool SkipFirstToken = 13;
+    optional bool SkipLastToken = 14;
 }
 
 message TEvBuildFulltextDictResponse {
@@ -1885,9 +1886,9 @@ message TEvBuildFulltextDictResponse {
 
     // First and last key rows if skipped in the scan
     optional string FirstToken = 9;
-    optional uint32 FirstTokenRows = 10;
+    optional uint64 FirstTokenRows = 10;
     optional string LastToken = 11;
-    optional uint32 LastTokenRows = 12;
+    optional uint64 LastTokenRows = 12;
 }
 
 message TEvCdcStreamScanRequest {

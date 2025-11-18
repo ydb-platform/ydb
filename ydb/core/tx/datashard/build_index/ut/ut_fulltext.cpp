@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvBuildFulltextIndexResponse>(server, sender, std::move(ev), tabletId, expectedError, expectedErrorSubstring, expectedStatus);
     }
 
-    TAutoPtr<TEvDataShard::TEvBuildFulltextIndexResponse> DoBuildRaw(Tests::TServer::TPtr server, TActorId sender,
+    TEvDataShard::TEvBuildFulltextIndexResponse::TPtr DoBuildRaw(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest) {
         auto ev1 = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
         auto tabletId = FillRequest(server, sender, ev1->Record, setupRequest);
@@ -86,16 +86,15 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         runtime.SendToPipe(tabletId, sender, ev1.release(), 0, GetPipeConfigWithRetries());
         runtime.SendToPipe(tabletId, sender, ev2.release(), 0, GetPipeConfigWithRetries());
 
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextIndexResponse>(handle);
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextIndexResponse>(sender);
 
-        UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE, reply->Record.ShortDebugString());
+        UNIT_ASSERT_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE, reply->Get()->Record.ShortDebugString());
 
         return reply;
     }
 
     TString DoBuild(Tests::TServer::TPtr server, TActorId sender, std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest) {
-        auto reply = DoBuildRaw(server, sender, setupRequest);
+        DoBuildRaw(server, sender, setupRequest);
         auto index = ReadShardedTable(server, kIndexTable);
         Cerr << "Index:" << Endl;
         Cerr << index << Endl;
@@ -134,7 +133,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
             options.Columns({
                 {TokenColumn, "String", true, true},
                 {"key", "Uint32", true, true},
-                {FreqColumn, "Uint32", false, true},
+                {FreqColumn, TokenCountTypeName, false, true},
             });
         } else {
             options.Columns({
@@ -154,7 +153,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         options.Columns({
             {"key", "Uint32", true, true},
             {"data", "String", false, false},
-            {DocLengthColumn, "Uint32", false, false},
+            {DocLengthColumn, TokenCountTypeName, false, false},
         });
         CreateShardedTable(server, sender, "/Root", "table-docs", options);
     }
@@ -409,9 +408,10 @@ __ydb_token = yellow, key = 3, text = yellow apple, subkey = 33, data = three
         auto reply = DoBuildRaw(server, sender, [](auto& request) {
             request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
         });
+        auto& record = reply->Get()->Record;
 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetDocCount(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetTotalDocLength(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetDocCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetTotalDocLength(), 11);
 
         auto index = ReadShardedTable(server, kIndexTable);
         Cerr << "Index:" << Endl;

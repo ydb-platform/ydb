@@ -5643,6 +5643,36 @@
                 "ColumnId": 13,
                 "ColumnName": "CpuTimeUsProcessed",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "DocCount",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "TotalDocLength",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "FirstToken",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "LastToken",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "FirstTokenRows",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "LastTokenRows",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5661,7 +5691,13 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,

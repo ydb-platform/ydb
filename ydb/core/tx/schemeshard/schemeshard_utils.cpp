@@ -354,8 +354,8 @@ auto CalcFulltextImplTableDescImpl(
     if (withFreq) {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::FreqColumn);
-        col->SetType("Uint32");
-        col->SetTypeId(Ydb::Type::UINT32);
+        col->SetType(NFulltext::TokenCountTypeName);
+        col->SetTypeId(NFulltext::TokenCountType);
         col->SetNotNull(true);
     }
 
@@ -383,8 +383,8 @@ auto CalcFulltextDocsImplTableDescImpl(
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::DocLengthColumn);
-        col->SetType("Uint32");
-        col->SetTypeId(Ydb::Type::UINT32);
+        col->SetType(NFulltext::TokenCountTypeName);
+        col->SetTypeId(NFulltext::TokenCountType);
         col->SetNotNull(true);
     }
 
@@ -421,8 +421,8 @@ auto CalcFulltextDictImplTableDescImpl(
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::FreqColumn);
-        col->SetType("Uint64");
-        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetType(NFulltext::DocCountTypeName);
+        col->SetTypeId(NFulltext::DocCountType);
         col->SetNotNull(true);
     }
 
@@ -451,15 +451,15 @@ auto CalcFulltextStatsImplTableDescImpl(
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::DocCountColumn);
-        col->SetType("Uint64");
-        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetType(NFulltext::DocCountTypeName);
+        col->SetTypeId(NFulltext::DocCountType);
         col->SetNotNull(true);
     }
     {
         auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::TotalDocLengthColumn);
-        col->SetType("Uint64");
-        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetType(NFulltext::DocCountTypeName);
+        col->SetTypeId(NFulltext::DocCountType);
         col->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NFulltext::IdColumn);

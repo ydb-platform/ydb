@@ -50,13 +50,11 @@ protected:
     TString LogPrefix;
     const TString DatabaseName;
     const TString TargetTable;
-    const bool IsPostingLevel;
 
     const NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     const TActorId ResponseActorId;
     const TIndexBuildId BuildId;
-    TIndexBuildInfo::TSample::TRows Sample;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
     std::shared_ptr<NTxProxy::TUploadRows> UploadRows;
@@ -64,43 +62,33 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 UploadBytes = 0;
-    const NTableIndex::NKMeans::TClusterId Parent = 0;
-    NTableIndex::NKMeans::TClusterId Child = 0;
-    const TString EmptyVector;
-    const ui32 EmptyLevels;
 
     NDataShard::TUploadStatus UploadStatus;
 
 public:
     TUploadSampleK(const TString& databaseName,
                    const TString& targetTable,
-                   bool isPostingLevel,
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
-                   TIndexBuildInfo::TSample::TRows sample,
-                   NTableIndex::NKMeans::TClusterId parent,
-                   NTableIndex::NKMeans::TClusterId child,
-                   const TString& emptyVector,
-                   ui32 emptyLevels)
+                   std::shared_ptr<NTxProxy::TUploadTypes> types,
+                   const TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>& rows)
         : DatabaseName(databaseName)
         , TargetTable(targetTable)
-        , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildId(buildId)
-        , Sample(std::move(sample))
-        , Parent(parent)
-        , Child(child)
-        , EmptyVector(emptyVector)
-        , EmptyLevels(emptyLevels)
+        , Types(types)
     {
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildId
             << " ResponseActorId: " << ResponseActorId;
-        Y_ENSURE(!Sample.empty() || EmptyLevels > 0);
-        Y_ENSURE(Parent < Child);
-        Y_ENSURE(Child != 0);
+        UploadRows = std::make_shared<NTxProxy::TUploadRows>();
+        UploadRows->reserve(rows.size());
+        for (const auto& row: rows) {
+            UploadBytes += NDataShard::CountRowCellBytes(row.first.GetCells(), row.second.GetCells());
+            UploadRows->emplace_back(TSerializedCellVec{row.first}, TSerializedCellVec::Serialize(row.second.GetCells()));
+        }
     }
 
     static constexpr auto ActorActivityType() {
@@ -121,46 +109,6 @@ public:
     }
 
     void Bootstrap() {
-        UploadRows = std::make_shared<NTxProxy::TUploadRows>();
-        UploadRows->reserve(Sample.size());
-        std::array<TCell, 2> pk;
-        pk[0] = TCell::Make(Parent);
-        for (auto& [_, row] : Sample) {
-            auto child = Child++;
-            if (IsPostingLevel) {
-                child = NTableIndex::NKMeans::SetPostingParentFlag(child);
-            } else {
-                NTableIndex::NKMeans::EnsureNoPostingParentFlag(child);
-            }
-            pk[1] = TCell::Make(child);
-
-            TSerializedCellVec vec(row);
-            UploadBytes += NDataShard::CountRowCellBytes(pk, vec.GetCells());
-            UploadRows->emplace_back(TSerializedCellVec{pk}, std::move(row));
-        }
-        Sample = {}; // release memory
-
-        if (EmptyLevels > 0) {
-            // Generate a fake hierarchy with N levels and 1 cluster on each level for an empty vector index
-            TVector<TCell> emptyCells = {TCell(EmptyVector.data(), EmptyVector.size())};
-            auto emptyRow = TSerializedCellVec::Serialize(emptyCells);
-            Y_ENSURE(!UploadRows->size());
-            for (ui32 level = 1; level <= EmptyLevels; level++) {
-                pk[0] = TCell::Make((ui64)(level-1));
-                pk[1] = TCell::Make(level == EmptyLevels ? NTableIndex::NKMeans::SetPostingParentFlag((ui64)level) : (ui64)level);
-                UploadBytes += NDataShard::CountRowCellBytes(pk, emptyCells);
-                UploadRows->emplace_back(TSerializedCellVec{pk}, emptyRow);
-            }
-        }
-
-        Types = std::make_shared<NTxProxy::TUploadTypes>(3);
-        Ydb::Type type;
-        type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
-        (*Types)[0] = {NTableIndex::NKMeans::ParentColumn, type};
-        (*Types)[1] = {NTableIndex::NKMeans::IdColumn, type};
-        type.set_type_id(Ydb::Type::STRING);
-        (*Types)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
-
         Become(&TThis::StateWork);
 
         Upload(false);
@@ -930,12 +878,46 @@ private:
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::LevelTable);
         Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+
+        TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> uploadRows;
+        std::array<TCell, 2> pk;
+        if (buildInfo.KMeans.IsEmpty) {
+            // Generate a fake hierarchy with N levels and 1 cluster on each level for an empty vector index
+            auto emptyVector = buildInfo.Clusters->GetEmptyRow();
+            TVector<TCell> emptyCells = {TCell(emptyVector.data(), emptyVector.size())};
+            for (ui32 level = 1; level <= buildInfo.KMeans.Levels; level++) {
+                pk[0] = TCell::Make((ui64)(level-1));
+                pk[1] = TCell::Make(level == buildInfo.KMeans.Levels ? NTableIndex::NKMeans::SetPostingParentFlag((ui64)level) : (ui64)level);
+                uploadRows.emplace_back(TSerializedCellVec{pk}, emptyCells);
+            }
+        } else {
+            Y_ENSURE(buildInfo.KMeans.Parent < buildInfo.KMeans.Child);
+            Y_ENSURE(buildInfo.KMeans.Child != 0);
+            uploadRows.reserve(buildInfo.Sample.Rows.size());
+            pk[0] = TCell::Make(buildInfo.KMeans.Parent);
+            auto child = buildInfo.KMeans.Child;
+            if (!buildInfo.KMeans.NeedsAnotherLevel()) {
+                child = NTableIndex::NKMeans::SetPostingParentFlag(child);
+            } else {
+                NTableIndex::NKMeans::EnsureNoPostingParentFlag(child);
+            }
+            for (auto& [_, row] : buildInfo.Sample.Rows) {
+                pk[1] = TCell::Make(child);
+                uploadRows.emplace_back(TSerializedCellVec{pk}, TSerializedCellVec(row));
+                child++;
+            }
+        }
+
+        auto types = std::make_shared<NTxProxy::TUploadTypes>(3);
+        Ydb::Type type;
+        type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+        (*types)[0] = {NTableIndex::NKMeans::ParentColumn, type};
+        (*types)[1] = {NTableIndex::NKMeans::IdColumn, type};
+        type.set_type_id(Ydb::Type::STRING);
+        (*types)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
+
         auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
-            !buildInfo.KMeans.NeedsAnotherLevel(),
-            buildInfo.ScanSettings, Self->SelfId(), BuildId,
-            buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child,
-            buildInfo.KMeans.IsEmpty ? buildInfo.Clusters->GetEmptyRow() : "",
-            buildInfo.KMeans.IsEmpty ? buildInfo.KMeans.Levels : 0);
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, uploadRows);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
@@ -957,11 +939,11 @@ private:
         }
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
         ev->Record.SetIndexName(buildInfo.TargetName);
+        ev->Record.SetDocsTableName(GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::DocsTable).PathString());
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings();
         *ev->Record.MutableDataColumns() = {
-            buildInfo.FillDataColumns.begin(),
-            buildInfo.FillDataColumns.end()
+            buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
@@ -969,6 +951,109 @@ private:
         LOG_N("TTxBuildProgress: TEvBuildFulltextIndexRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
+    void SendBuildFulltextDictRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvBuildFulltextDictRequest>();
+        ev->Record.SetId(ui64(BuildId));
+        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+        path->PathId.ToProto(ev->Record.MutablePathId());
+        ev->Record.SetReadShadowData(true);
+
+        path.Rise().Dive(NTableIndex::NFulltext::DictTable);
+        ev->Record.SetOutputName(path.PathString());
+
+        *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
+            buildInfo.SpecializedIndexDescription).GetSettings();
+
+        const auto& shardStatus = buildInfo.Shards.at(shardIdx);
+        if (shardStatus.Range.From.GetCells().size() > 1) {
+            // Range start is possibly split in the middle of a token
+            ev->Record.SetSkipFirstToken(true);
+        }
+        if (shardStatus.Range.To.GetCells().size() > 1) {
+            // Range end is possibly split in the middle of a token
+            ev->Record.SetSkipLastToken(true);
+        }
+
+        auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
+
+        LOG_N("TTxBuildProgress: TEvBuildFulltextDictRequest: " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
+    void SendUploadFulltextStatsRequest(TIndexBuildInfo& buildInfo) {
+        ui64 totalDocLength = 0;
+        ui64 docCount = 0;
+        for (auto& [shardIdx, shardStatus]: buildInfo.Shards) {
+            docCount += shardStatus.DocCount;
+            totalDocLength += shardStatus.TotalDocLength;
+        }
+
+        TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> uploadRows;
+        uploadRows.emplace_back(TSerializedCellVec{TVector<TCell>{TCell::Make((ui32)0)}},
+            TSerializedCellVec{TVector<TCell>{TCell::Make(docCount), TCell::Make(totalDocLength)}});
+
+        auto types = std::make_shared<NTxProxy::TUploadTypes>(3);
+        Ydb::Type type;
+        type.set_type_id(Ydb::Type::UINT32);
+        (*types)[0] = {NTableIndex::NFulltext::IdColumn, type};
+        type.set_type_id(NTableIndex::NFulltext::DocCountType);
+        (*types)[1] = {NTableIndex::NFulltext::DocCountColumn, type};
+        (*types)[2] = {NTableIndex::NFulltext::TotalDocLengthColumn, type};
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::StatsTable);
+        auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, uploadRows);
+
+        TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
+
+        LOG_N("TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
+    }
+
+    void SendUploadFulltextBordersRequest(TIndexBuildInfo& buildInfo) {
+        TMap<TString, NTableIndex::NFulltext::TDocCount> borders;
+        for (auto& [shardIdx, shardStatus]: buildInfo.Shards) {
+            if (shardStatus.FirstTokenRows) {
+                borders[shardStatus.FirstToken] += shardStatus.FirstTokenRows;
+            }
+            if (shardStatus.LastTokenRows) {
+                borders[shardStatus.LastToken] += shardStatus.LastTokenRows;
+            }
+        }
+
+        TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> uploadRows;
+        for (auto& [token, docCount]: borders) {
+            uploadRows.emplace_back(TSerializedCellVec{TVector<TCell>{TCell(token)}},
+                TSerializedCellVec{TVector<TCell>{TCell::Make(docCount)}});
+        }
+
+        auto mainTablePath = TPath::Init(buildInfo.TablePathId, Self);
+        const auto& mainTableInfo = Self->Tables.at(mainTablePath->PathId);
+
+        TColumnTypes baseColumnTypes;
+        TString error;
+        Y_ENSURE(ExtractTypes(mainTableInfo, baseColumnTypes, error), error);
+        Y_ENSURE(buildInfo.IndexColumns.size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns[0]);
+
+        auto types = std::make_shared<NTxProxy::TUploadTypes>(2);
+        Ydb::Type type;
+        NScheme::ProtoFromTypeInfo(textColumnInfo, type);
+        (*types)[0] = {NTableIndex::NFulltext::TokenColumn, type};
+        type.set_type_id(NTableIndex::NFulltext::DocCountType);
+        (*types)[1] = {NTableIndex::NFulltext::FreqColumn, type};
+
+        auto path = GetBuildPath(Self, buildInfo, NTableIndex::NFulltext::DictTable);
+        auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, uploadRows);
+
+        TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
+
+        LOG_N("TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
@@ -1113,6 +1198,8 @@ private:
             }
             return done;
         }
+        default:
+            Y_ENSURE(false);
         }
     }
 
@@ -1409,15 +1496,85 @@ private:
         return true;
     }
 
-    bool FillFulltextIndex(TIndexBuildInfo& buildInfo) {
-        LOG_D("FillFulltextIndex Start");
+    bool FillFulltextIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        bool done = false;
 
-        if (NoShardsAdded(buildInfo)) {
-            AddAllShards(buildInfo);
+        switch (buildInfo.SubState) {
+        case TIndexBuildInfo::ESubState::None:
+            // Stage 1 for FLAT_RELEVANCE - build "posting" table (token-documents)
+            LOG_D("FillFulltextIndex Posting");
+            if (NoShardsAdded(buildInfo)) {
+                AddAllShards(buildInfo);
+            }
+            done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextIndexRequest(shardIdx, buildInfo); }) &&
+                buildInfo.DoneShards.size() == buildInfo.Shards.size();
+            if (done) {
+                LOG_D("FillFulltextIndex Posting Done");
+                auto settings = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription).GetSettings();
+                if (settings.layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                    NIceDb::TNiceDb db{txc.DB};
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexStats;
+                    buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
+                    Self->PersistBuildIndexState(db, buildInfo);
+                    Progress(BuildId);
+                    done = false;
+                }
+            }
+            break;
+        case TIndexBuildInfo::ESubState::FulltextIndexStats:
+            // Stage 2 for FLAT_RELEVANCE - build statistics table (DocCount & TotalDocLength)
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+                LOG_D("FillFulltextIndex SendUploadStats " << buildInfo.DebugString());
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadFulltextStatsRequest(buildInfo);
+                Progress(BuildId);
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+                LOG_D("FillFulltextIndex UploadStats Done " << buildInfo.DebugString());
+                ClearDoneShards(txc, buildInfo);
+                NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
+                Self->PersistBuildIndexState(db, buildInfo);
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                ChangeState(BuildId, TIndexBuildInfo::EState::LockBuild);
+                Progress(BuildId);
+            }
+            break;
+        case TIndexBuildInfo::ESubState::FulltextIndexDictionary:
+            // Stage 3 for FLAT_RELEVANCE - build dictionary table
+            LOG_D("FillFulltextIndex Dictionary");
+            if (NoShardsAdded(buildInfo)) {
+                AddAllShards(buildInfo);
+            }
+            done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextDictRequest(shardIdx, buildInfo); }) &&
+                buildInfo.DoneShards.size() == buildInfo.Shards.size();
+            if (done) {
+                LOG_D("FillFulltextIndex Dictionary Done");
+                NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexBorders;
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
+                Self->PersistBuildIndexState(db, buildInfo);
+                Progress(BuildId);
+                done = false;
+            }
+            break;
+        case TIndexBuildInfo::ESubState::FulltextIndexBorders:
+            // Stage 4 for FLAT_RELEVANCE - fill border values for dictionary
+            if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+                LOG_D("FillFulltextIndex SendUploadBorders " << buildInfo.DebugString());
+                buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+                SendUploadFulltextBordersRequest(buildInfo);
+                Progress(BuildId);
+            } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+                LOG_D("FillFulltextIndex UploadBorders Done " << buildInfo.DebugString());
+                ClearDoneShards(txc, buildInfo);
+                NIceDb::TNiceDb db{txc.DB};
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                done = true;
+            }
+            break;
+        default:
+            Y_ENSURE(false);
         }
-
-        auto done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextIndexRequest(shardIdx, buildInfo); }) &&
-               buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
         if (done) {
             LOG_D("FillFulltextIndex Done");
@@ -1455,7 +1612,7 @@ private:
             case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
                 return FillPrefixedVectorIndex(txc, buildInfo);
             case TIndexBuildInfo::EBuildKind::BuildFulltext:
-                return FillFulltextIndex(buildInfo);
+                return FillFulltextIndex(txc, buildInfo);
             default:
                 Y_ENSURE(false, buildInfo.InvalidBuildKind());
                 return true;
@@ -1640,11 +1797,20 @@ public:
             }
             break;
         case TIndexBuildInfo::EState::LockBuild:
-            Y_ENSURE(buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.Level > 1 || buildInfo.IsValidatingUniqueIndex());
+            Y_ENSURE(buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.Level > 1 ||
+                buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation ||
+                buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                const TString tableName = buildInfo.IsValidatingUniqueIndex() ? NTableIndex::ImplTable : buildInfo.KMeans.ReadFrom();
+                TString tableName;
+                if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary) {
+                    tableName = NTableIndex::ImplTable;
+                } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::UniqIndexValidation) {
+                    tableName = NTableIndex::ImplTable;
+                } else {
+                    tableName = buildInfo.KMeans.ReadFrom();
+                }
                 Send(Self->SelfId(), LockPropose(Self, buildInfo, buildInfo.ApplyTxId, GetBuildPath(Self, buildInfo, tableName)), 0, ui64(BuildId));
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
@@ -1849,6 +2015,9 @@ public:
             case TIndexBuildInfo::EBuildKind::BuildSecondaryIndex:
             case TIndexBuildInfo::EBuildKind::BuildColumns:
             case TIndexBuildInfo::EBuildKind::BuildFulltext:
+                if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary) {
+                    return GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+                }
                 return TPath::Init(buildInfo.TablePathId, Self);
             case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
                 return buildInfo.IsValidatingUniqueIndex()
@@ -2332,13 +2501,13 @@ public:
         LOG_D("TTxReply : TEvUploadSampleKResponse"
             << ", TIndexBuildInfo: " << buildInfo
             << ", record: " << record.ShortDebugString());
-        Y_ENSURE(buildInfo.IsBuildVectorIndex());
+        Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsBuildFulltextIndex());
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
             LOG_I("TTxReply : TEvUploadSampleKResponse superfluous event, id# " << BuildId);
             return true;
         }
-        Y_ENSURE(buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
+        Y_ENSURE(!buildInfo.IsBuildVectorIndex() || buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -2401,6 +2570,42 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextIndex: public TTxShardReply<
     TTxReplyFulltextIndex(TSelf* self, TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
+        shardStatus.DocCount = record.GetDocCount();
+        shardStatus.TotalDocLength = record.GetTotalDocLength();
+
+        Self->PersistBuildIndexShardStatusFulltext(db, BuildId, shardIdx, shardStatus);
+    }
+};
+
+struct TSchemeShard::TIndexBuilder::TTxReplyFulltextDict: public TTxShardReply<TEvDataShard::TEvBuildFulltextDictResponse> {
+    TTxReplyFulltextDict(TSelf* self, TEvDataShard::TEvBuildFulltextDictResponse::TPtr& response)
+        : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
+    {
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+
+        if (record.GetFirstTokenRows() || record.GetLastTokenRows()) {
+            TTabletId shardId = TTabletId(record.GetTabletId());
+            TShardIdx shardIdx = Self->GetShardIdx(shardId);
+            TIndexBuildInfo::TShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+
+            shardStatus.FirstToken = record.GetFirstToken();
+            shardStatus.FirstTokenRows = record.GetFirstTokenRows();
+            shardStatus.LastToken = record.GetLastToken();
+            shardStatus.LastTokenRows = record.GetLastTokenRows();
+
+            Self->PersistBuildIndexShardStatusFulltext(db, BuildId, shardIdx, shardStatus);
+        }
     }
 };
 
@@ -2917,6 +3122,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvValidateUniqueIndexRe
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildFulltextIndexResponse::TPtr& response) {
     return new TIndexBuilder::TTxReplyFulltextIndex(this, response);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& response) {
+    return new TIndexBuilder::TTxReplyFulltextDict(this, response);
 }
 
 ITransaction* TSchemeShard::CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId) {

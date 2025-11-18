@@ -25,12 +25,10 @@ static const TString kDictTable = "/Root/table-dict";
 Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
 
     ui64 FillRequest(Tests::TServer::TPtr server, TActorId sender,
-        NKikimrTxDataShard::TEvBuildFulltextDictRequest& request,
-        std::function<void(NKikimrTxDataShard::TEvBuildFulltextDictRequest&)> setupRequest)
+        NKikimrTxDataShard::TEvBuildFulltextDictRequest& request)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
 
-        auto snapshot = CreateVolatileSnapshot(server, {kIndexTable});
         auto datashards = GetTableShards(server, sender, kIndexTable);
         TTableId tableId = ResolveTableId(server, sender, kIndexTable);
 
@@ -43,9 +41,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         request.SetTabletId(datashards[0]);
         tableId.PathId.ToProto(request.MutablePathId());
 
-        request.SetSnapshotTxId(snapshot.TxId);
-        request.SetSnapshotStep(snapshot.Step);
-
         FulltextIndexSettings settings;
         settings.set_layout(FulltextIndexSettings::FLAT_RELEVANCE);
         auto column = settings.add_columns();
@@ -56,8 +51,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         request.SetDatabaseName(kDatabaseName);
         request.SetOutputName(kDictTable);
 
-        setupRequest(request);
-
         return datashards[0];
     }
 
@@ -67,15 +60,22 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
     {
         auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextDictRequest>();
 
-        auto tabletId = FillRequest(server, sender, ev->Record, setupRequest);
+        auto tabletId = FillRequest(server, sender, ev->Record);
+
+        auto snapshot = CreateVolatileSnapshot(server, {kIndexTable});
+        ev->Record.SetSnapshotTxId(snapshot.TxId);
+        ev->Record.SetSnapshotStep(snapshot.Step);
+
+        setupRequest(ev->Record);
 
         NKikimr::DoBadRequest<TEvDataShard::TEvBuildFulltextDictResponse>(server, sender, std::move(ev), tabletId, expectedError, expectedErrorSubstring, expectedStatus);
     }
 
-    TAutoPtr<TEvDataShard::TEvBuildFulltextDictResponse> DoBuild(Tests::TServer::TPtr server, TActorId sender,
+    TEvDataShard::TEvBuildFulltextDictResponse::TPtr DoBuild(Tests::TServer::TPtr server, TActorId sender,
         std::function<void(NKikimrTxDataShard::TEvBuildFulltextDictRequest&)> setupRequest) {
         auto ev1 = std::make_unique<TEvDataShard::TEvBuildFulltextDictRequest>();
-        auto tabletId = FillRequest(server, sender, ev1->Record, setupRequest);
+        auto tabletId = FillRequest(server, sender, ev1->Record);
+        setupRequest(ev1->Record);
 
         auto ev2 = std::make_unique<TEvDataShard::TEvBuildFulltextDictRequest>();
         ev2->Record.CopyFrom(ev1->Record);
@@ -84,10 +84,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         runtime.SendToPipe(tabletId, sender, ev1.release(), 0, GetPipeConfigWithRetries());
         runtime.SendToPipe(tabletId, sender, ev2.release(), 0, GetPipeConfigWithRetries());
 
-        TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextDictResponse>(handle);
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextDictResponse>(sender);
 
-        UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE, reply->Record.ShortDebugString());
+        UNIT_ASSERT_EQUAL_C(reply->Get()->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE, reply->Get()->Record.ShortDebugString());
 
         return reply;
     }
@@ -98,16 +97,16 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         options.Shards(1);
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {TokenColumn, "Uint32", true, true},
+            {TokenColumn, "String", true, true},
             {"key", "Uint32", true, true},
-            {FreqColumn, "Uint32", false, false},
+            {FreqColumn, TokenCountTypeName, false, false},
         });
         CreateShardedTable(server, sender, "/Root", "table-index", options);
     }
 
     void FillIndexTable(Tests::TServer::TPtr server, TActorId sender) {
         ExecSQL(server, sender, Sprintf(R"(
-            UPSERT INTO `/Root/table-index` (%s, text, %s) VALUES
+            UPSERT INTO `/Root/table-index` (%s, key, %s) VALUES
                 ("and", 2, 1),
                 ("apple", 1, 1),
                 ("apple", 2, 2),
@@ -128,7 +127,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         options.AllowSystemColumnNames(true);
         options.Columns({
             {TokenColumn, "String", true, true},
-            {FreqColumn, "Uint64", false, false},
+            {FreqColumn, DocCountTypeName, false, false},
         });
         CreateShardedTable(server, sender, "/Root", "table-dict", options);
     }
@@ -165,14 +164,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
             request.SetSnapshotStep(request.GetSnapshotStep() + 1);
         }, "Error: Unknown snapshot", true);
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.ClearSnapshotStep();
-        }, "{ <main>: Error: Missing snapshot }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
             request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
         }, "Error: Unknown snapshot", true);
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.ClearSnapshotTxId();
-        }, "{ <main>: Error: Missing snapshot }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
             request.clear_settings();
@@ -187,10 +180,6 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
             request.ClearOutputName();
         }, "{ <main>: Error: Empty output table name }");
-
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
-            request.MutableSettings()->mutable_columns()->at(0).set_column("some");
-        }, "{ <main>: Error: Unknown key column: some }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvBuildFulltextDictRequest& request) {
             request.MutableSettings()->set_layout(FulltextIndexSettings::FLAT);
@@ -217,6 +206,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextDictScan) {
             request.SetSkipFirstToken(SkipFirst);
             request.SetSkipLastToken(SkipLast);
         });
+        auto& record = reply->Get()->Record;
 
         TString expected = R"(__ydb_token = apple, __ydb_freq = 3
 __ydb_token = blue, __ydb_freq = 1
@@ -226,15 +216,15 @@ __ydb_token = red, __ydb_freq = 2
 )";
 
         if (SkipFirst) {
-            UNIT_ASSERT_EQUAL(reply->Record.GetFirstToken(), "and");
-            UNIT_ASSERT_EQUAL(reply->Record.GetFirstTokenRows(), (ui32)1);
+            UNIT_ASSERT_EQUAL(record.GetFirstToken(), "and");
+            UNIT_ASSERT_EQUAL(record.GetFirstTokenRows(), 1);
         } else {
             expected = "__ydb_token = and, __ydb_freq = 1\n" + expected;
         }
 
         if (SkipLast) {
-            UNIT_ASSERT_EQUAL(reply->Record.GetFirstToken(), "and");
-            UNIT_ASSERT_EQUAL(reply->Record.GetFirstTokenRows(), (ui32)1);
+            UNIT_ASSERT_EQUAL(record.GetLastToken(), "yellow");
+            UNIT_ASSERT_EQUAL(record.GetLastTokenRows(), 1);
         } else {
             expected += "__ydb_token = yellow, __ydb_freq = 1\n";
         }

@@ -127,7 +127,7 @@ public:
             }
             if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
                 Ydb::Type type;
-                type.set_type_id(Ydb::Type::UINT32);
+                type.set_type_id(TokenCountType);
                 uploadTypes->emplace_back(FreqColumn, type);
             } else {
                 for (auto dataColumn : Request.GetDataColumns()) {
@@ -147,7 +147,7 @@ public:
             }
             {
                 Ydb::Type type;
-                type.set_type_id(Ydb::Type::UINT32);
+                type.set_type_id(TokenCountType);
                 uploadTypes->emplace_back(DocLengthColumn, type);
             }
             DocsBuf = Uploader.AddDestination(Request.GetDocsTableName(), std::move(uploadTypes));
@@ -391,7 +391,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
 {
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
-    TRowVersion rowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
+    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
+        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
+        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
@@ -482,10 +484,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
-        }
-
-        if (request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            if (!request.GetDocsTableName()) {
+            if (request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE &&
+                !request.GetDocsTableName()) {
                 badRequest(TStringBuilder() << "Empty index documents table name");
             }
         }

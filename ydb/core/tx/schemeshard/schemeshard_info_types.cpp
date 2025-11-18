@@ -2642,6 +2642,9 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
     switch (value) {
         case ESubState::None:
         case ESubState::UniqIndexValidation:
+        case ESubState::FulltextIndexStats:
+        case ESubState::FulltextIndexDictionary:
+        case ESubState::FulltextIndexBorders:
             return true;
     }
     return false;

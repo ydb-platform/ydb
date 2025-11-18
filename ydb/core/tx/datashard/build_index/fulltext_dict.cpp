@@ -57,8 +57,6 @@ protected:
 
     IDriver* Driver = nullptr;
 
-    TLead Lead;
-
     ui64 TabletId = 0;
     ui64 BuildId = 0;
 
@@ -73,14 +71,12 @@ protected:
     bool SkipLastToken = false;
     TString FirstToken;
     TString LastToken;
-    ui32 FirstTokenRows = 0;
-    ui32 LastTokenRows = 0;
+    ui64 FirstTokenRows = 0;
+    ui64 LastTokenRows = 0;
 
     ui32 RetryCount = 0;
 
     const TIndexBuildScanSettings ScanSettings;
-
-    TTags ScanTags;
 
     TUploadStatus UploadStatus;
 
@@ -110,8 +106,6 @@ public:
     {
         LOG_I("Create " << Debug());
 
-        TTags scanTags;
-
         auto types = GetAllTypes(table);
 
         auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
@@ -122,12 +116,10 @@ public:
         }
         {
             Ydb::Type type;
-            type.set_type_id(Ydb::Type::UINT64);
+            type.set_type_id(DocCountType);
             uploadTypes->emplace_back(FreqColumn, type);
         }
 
-        Lead.To({}, NTable::ESeek::Lower);
-        Lead.SetTags(scanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), uploadTypes);
     }
 
@@ -204,7 +196,7 @@ public:
                 : EScan::Sleep;
         }
 
-        lead = Lead;
+        lead.To({}, NTable::ESeek::Lower);
 
         return EScan::Feed;
     }
@@ -432,10 +424,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
-        }
-
-        if (request.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
-            badRequest(TStringBuilder() << "FLAT_RELEVANCE index layout is required");
+            if (request.GetSettings().layout() != Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+                badRequest(TStringBuilder() << "FLAT_RELEVANCE index layout is required");
+            }
         }
 
         if (trySendBadRequest()) {
@@ -446,7 +437,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextDictRequest::TPtr& ev,
             TabletID(), userTable, request, ev->Sender, std::move(response)
         );
 
-        StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+        StartScan(this, std::move(scan), id, seqNo, rowVersion, request.GetReadShadowData() ? userTable.ShadowTid : userTable.LocalTid);
     } catch (const std::exception& exc) {
         FailScan<TEvDataShard::TEvBuildFulltextDictResponse>(id, TabletID(), ev->Sender, seqNo, exc, "TBuildFulltextDictScan");
     }

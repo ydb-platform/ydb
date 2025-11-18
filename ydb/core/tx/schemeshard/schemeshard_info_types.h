@@ -3198,6 +3198,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         // Filling
         UniqIndexValidation = 100,
+
+        // Fulltext
+        FulltextIndexStats = 200,
+        FulltextIndexDictionary = 201,
+        FulltextIndexBorders = 202,
     };
 
     struct TColumnBuildInfo {
@@ -3378,6 +3383,14 @@ public:
         TString LastKeyAck;
         ui64 SeqNoRound = 0;
         size_t Index = 0; // used only in prefixed vector index: a unique number of shard in the list
+
+        // Used in fulltext index build:
+        ui64 DocCount;
+        ui64 TotalDocLength;
+        TString FirstToken;
+        TString LastToken;
+        NTableIndex::NFulltext::TDocCount FirstTokenRows;
+        NTableIndex::NFulltext::TDocCount LastTokenRows;
 
         NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
 
@@ -3791,6 +3804,13 @@ public:
         shardStatus.Processed.SetReadBytes(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0));
         shardStatus.Processed.SetCpuTimeUs(row.template GetValueOrDefault<Schema::IndexBuildShardStatus::CpuTimeUsProcessed>(0));
         Processed += shardStatus.Processed;
+
+        shardStatus.DocCount = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::DocCount>(0);
+        shardStatus.TotalDocLength = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::TotalDocLength>(0);
+        shardStatus.FirstToken = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstToken>();
+        shardStatus.FirstTokenRows = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::FirstTokenRows>();
+        shardStatus.LastToken = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastToken>();
+        shardStatus.LastTokenRows = row.template GetValueOrDefault<Schema::IndexBuildShardStatus::LastTokenRows>();
     }
 
     bool IsCancellationRequested() const {

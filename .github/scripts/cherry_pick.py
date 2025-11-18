@@ -1082,10 +1082,32 @@ After resolving conflicts, mark this PR as ready for review.
 
         if has_conflicts:
             self.logger.info(f"Created draft PR {pr.html_url} for branch {target_branch} with conflicts")
-            self.add_summary(f"Branch {target_branch}: Draft PR {pr.html_url} created with conflicts")
+            summary_msg = f"### Branch `{target_branch}`: Draft PR {pr.html_url} created with conflicts\n\n"
+            if all_conflict_files:
+                summary_msg += "**Files with conflicts:**\n\n"
+                for conflict_item in all_conflict_files:
+                    # Handle both tuple (file_path, line, message) and string (file_path) for backward compatibility
+                    if isinstance(conflict_item, tuple):
+                        file_path = conflict_item[0]
+                        conflict_line = conflict_item[1] if len(conflict_item) > 1 else None
+                        conflict_message = conflict_item[2] if len(conflict_item) > 2 else None
+                    else:
+                        file_path = conflict_item
+                        conflict_line = None
+                        conflict_message = None
+                    
+                    summary_msg += f"- `{file_path}`"
+                    if conflict_line:
+                        summary_msg += f" (line {conflict_line})"
+                    summary_msg += "\n"
+                    
+                    if conflict_message:
+                        summary_msg += f"  ```\n  {conflict_message}\n  ```\n"
+                    summary_msg += "\n"
+            self.add_summary(summary_msg)
         else:
             self.logger.info(f"Created PR {pr.html_url} for branch {target_branch}")
-            self.add_summary(f"Branch {target_branch}: PR {pr.html_url} created")
+            self.add_summary(f"### Branch `{target_branch}`: PR {pr.html_url} created\n")
 
         # Enable automerge only if there are no conflicts
         if not has_conflicts:

@@ -92,13 +92,18 @@ class CherryPickCreator:
             self.logger.debug(f"Failed to find commit via GitHub API: {e}")
         
         # If GitHub API didn't find it, use git rev-parse (after cloning)
-        result = subprocess.run(
-            ['git', 'rev-parse', short_sha],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout.strip()
+        # Note: This requires the repository to be cloned first (done in process() method)
+        try:
+            result = subprocess.run(
+                ['git', 'rev-parse', short_sha],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            return result.stdout.strip()
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            # Repository not cloned yet or git command failed
+            raise ValueError(f"Failed to expand SHA {short_sha} via git rev-parse. Repository must be cloned first. Error: {e}")
 
     def __add_commit(self, c: str, single: bool):
         """Add commit by SHA (supports short SHA)"""
@@ -146,7 +151,7 @@ class CherryPickCreator:
                 commit_author = commit.author.login if commit.author else None
                 if commit_author and commit_author not in self.pull_authors:
                     self.pull_authors.append(commit_author)
-            except:
+            except AttributeError:
                 pass
             if single:
                 self.pr_title_list.append(f'cherry-pick commit {commit.sha[:7]}')
@@ -220,9 +225,9 @@ class CherryPickCreator:
         # Validate PRs from self.pull_requests (already loaded)
         for pull in self.pull_requests:
             try:
-                pull = self.repo.get_pull(pull.number)
-                if not pull.merged and not self.allow_unmerged:
-                    raise ValueError(f"PR #{pull.number} is not merged. Use --allow-unmerged to allow backporting unmerged PRs")
+                fetched_pull = self.repo.get_pull(pull.number)
+                if not fetched_pull.merged and not self.allow_unmerged:
+                    raise ValueError(f"PR #{fetched_pull.number} is not merged. Use --allow-unmerged to allow backporting unmerged PRs")
             except GithubException as e:
                 raise ValueError(f"PR #{pull.number} does not exist or is not accessible: {e}")
 
@@ -265,10 +270,12 @@ class CherryPickCreator:
             self.git_run("fetch", "origin", branch_name)
             
             # Check via merge-base
+            # Note: --is-ancestor returns 0 if commit is ancestor, 1 if not, so non-zero is expected for "not in branch"
             result = subprocess.run(
                 ['git', 'merge-base', '--is-ancestor', commit_sha, f'origin/{branch_name}'],
                 capture_output=True,
-                text=True
+                text=True,
+                check=False  # Don't raise on non-zero exit (expected for "not ancestor")
             )
             return result.returncode == 0
         except Exception as e:
@@ -366,7 +373,7 @@ class CherryPickCreator:
         # Find the selected category - take the first non-empty category line
         # The selected category is typically the one that's not commented out
         for cat in categories:
-            cat_clean = cat.strip('* ').strip()
+            cat_clean = cat.strip()
             if cat_clean:
                 # Return the category as-is, without hardcoded validation
                 return cat_clean
@@ -453,7 +460,7 @@ class CherryPickCreator:
         authors = ', '.join([f"@{author}" for author in set(self.pull_authors)]) if self.pull_authors else "Unknown"
         
         # Determine target branch for description
-        branch_desc = target_branch if target_branch else (', '.join(self.target_branches) if len(self.target_branches) == 1 else 'multiple branches')
+        branch_desc = target_branch if target_branch else ', '.join(self.target_branches)
         
         # Get Changelog category, entry, and description from original PR
         changelog_category, changelog_entry, original_description = self._get_changelog_info()
@@ -611,29 +618,28 @@ After resolving conflicts, mark this PR as ready for review.
                             if file_path:
                                 conflict_files.append(file_path)
                 
-                if has_conflict_markers or result.stdout.strip():
-                    # If we didn't find unmerged paths, try to find files with conflict markers
-                    if not conflict_files:
-                        # Use git diff to find files with conflict markers
-                        try:
-                            diff_result = subprocess.run(
-                                ['git', 'diff', '--name-only', '--diff-filter=U'],
-                                capture_output=True,
-                                text=True,
-                                check=True
-                            )
-                            if diff_result.stdout.strip():
-                                conflict_files = [f.strip() for f in diff_result.stdout.strip().split('\n') if f.strip()]
-                        except subprocess.CalledProcessError:
-                            pass
-                    
-                    # There are changes (conflicts)
-                    self.git_run("add", "-A")
-                    self.git_run("commit", "-m", f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
-                    self.logger.info(f"Conflict committed for commit {commit_sha[:7]}")
-                    if conflict_files:
-                        self.logger.info(f"Conflicted files: {', '.join(conflict_files)}")
-                    return True, conflict_files
+                # If we didn't find unmerged paths, try to find files with conflict markers
+                if not conflict_files:
+                    # Use git diff to find files with conflict markers
+                    try:
+                        diff_result = subprocess.run(
+                            ['git', 'diff', '--name-only', '--diff-filter=U'],
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+                        if diff_result.stdout.strip():
+                            conflict_files = [f.strip() for f in diff_result.stdout.strip().split('\n') if f.strip()]
+                    except subprocess.CalledProcessError:
+                        pass
+                
+                # There are changes (conflicts or other modifications)
+                self.git_run("add", "-A")
+                self.git_run("commit", "-m", f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
+                self.logger.info(f"Conflict committed for commit {commit_sha[:7]}")
+                if conflict_files:
+                    self.logger.info(f"Conflicted files: {', '.join(conflict_files)}")
+                return True, conflict_files
         except Exception as e:
             self.logger.error(f"Error handling conflict for commit {commit_sha[:7]}: {e}")
         
@@ -778,6 +784,9 @@ After resolving conflicts, mark this PR as ready for review.
                         error_msg = f"CHERRY_PICK_CONFLICT_ERROR: Failed to handle conflict for commit {commit_sha[:7]} in branch {target_branch}"
                         self.logger.error(error_msg)
                         self.add_summary(error_msg)
+                        reason = f"cherry-pick conflict (failed to resolve)"
+                        self.skipped_branches.append((target_branch, reason))
+                        return
                 else:
                     # Another error
                     self.git_run("cherry-pick", "--abort")
@@ -824,11 +833,11 @@ After resolving conflicts, mark this PR as ready for review.
         if not has_conflicts:
             try:
                 pr.enable_automerge(merge_method='MERGE')
-            except BaseException as e:
+            except Exception as e:
                 self.logger.warning(f"AUTOMERGE_WARNING: Failed to enable automerge with method MERGE for PR {pr.html_url}: {e}")
                 try:
                     pr.enable_automerge(merge_method='SQUASH')
-                except BaseException as f:
+                except Exception as f:
                     self.logger.warning(f"AUTOMERGE_WARNING: Failed to enable automerge with method SQUASH for PR {pr.html_url}: {f}")
         
         # Store created PR for later comment
@@ -933,7 +942,7 @@ def main():
         help="List of commits to cherry-pick. Can be represented as full or short commit SHA, PR number or URL to commit or PR. Separated by space, comma or line end.",
     )
     parser.add_argument(
-        "--target-branches", help="List of branchs to cherry-pick. Separated by space, comma or line end."
+        "--target-branches", help="List of branches to cherry-pick. Separated by space, comma or line end."
     )
     parser.add_argument(
         "--merge-commits",

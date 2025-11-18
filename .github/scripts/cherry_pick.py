@@ -41,7 +41,8 @@ class CherryPickCreator:
         self.skipped_branches = []  # Store branches where PR was not created: [(target_branch, reason), ...]
         self.backport_comments = []  # Store comment objects for editing: [(pull, comment), ...]
         
-        self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M")
+        # Use datetime with seconds to avoid branch name conflicts
+        self.dtm = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
         self.logger = logging.getLogger("cherry-pick")
         # Get workflow run URL
         run_id = os.getenv('GITHUB_RUN_ID')
@@ -604,8 +605,23 @@ After resolving conflicts, mark this PR as ready for review.
         
         return False
 
+    def _find_existing_backport_comment(self, pull):
+        """Find existing backport comment in PR (created by previous workflow run)"""
+        try:
+            # Get all comments for this PR
+            comments = pull.get_issue_comments()
+            for comment in comments:
+                # Check if comment is from YDBot and contains "Backport" keyword
+                if comment.user.login == "YDBot" and "Backport" in comment.body:
+                    # Check if it's an initial comment (contains "in progress") or a result comment
+                    if "in progress" in comment.body or "Backport" in comment.body:
+                        return comment
+        except Exception as e:
+            self.logger.debug(f"Failed to find existing comment in PR #{pull.number}: {e}")
+        return None
+
     def _create_initial_backport_comment(self):
-        """Create initial comment in original PRs about backport start"""
+        """Create or update initial comment in original PRs about backport start"""
         if not self.workflow_url:
             self.logger.warning("Workflow URL not available, skipping initial comment")
             return
@@ -615,11 +631,20 @@ After resolving conflicts, mark this PR as ready for review.
         
         for pull in self.pull_requests:
             try:
-                comment = pull.create_issue_comment(initial_comment)
-                self.backport_comments.append((pull, comment))
-                self.logger.info(f"Created initial backport comment in original PR #{pull.number}")
+                # Try to find existing comment
+                existing_comment = self._find_existing_backport_comment(pull)
+                if existing_comment:
+                    # Update existing comment
+                    existing_comment.edit(initial_comment)
+                    self.backport_comments.append((pull, existing_comment))
+                    self.logger.info(f"Updated existing backport comment in original PR #{pull.number}")
+                else:
+                    # Create new comment
+                    comment = pull.create_issue_comment(initial_comment)
+                    self.backport_comments.append((pull, comment))
+                    self.logger.info(f"Created initial backport comment in original PR #{pull.number}")
             except GithubException as e:
-                self.logger.warning(f"Failed to create initial comment in original PR #{pull.number}: {e}")
+                self.logger.warning(f"Failed to create/update initial comment in original PR #{pull.number}: {e}")
 
     def _update_backport_comment(self):
         """Update comment in original PRs with backport results"""

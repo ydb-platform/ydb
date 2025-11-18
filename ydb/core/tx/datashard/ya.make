@@ -290,6 +290,7 @@ PEERDIR(
     ydb/services/lib/sharding
     yql/essentials/types/uuid
     ydb/core/io_formats/cell_maker
+    ydb/library/ut
 )
 
 YQL_LAST_ABI_VERSION()

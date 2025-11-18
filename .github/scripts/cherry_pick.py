@@ -268,16 +268,64 @@ class CherryPickCreator:
             self.git_run("fetch", "origin", branch_name)
             
             # Check via merge-base
-            # Note: --is-ancestor returns 0 if commit is ancestor, 1 if not, so non-zero is expected for "not in branch"
+            # Note: --is-ancestor returns:
+            #   - 0 if commit is ancestor (exists in branch)
+            #   - 1 if commit is NOT ancestor (normal case, not an error)
+            #   - >1 for real errors (commit doesn't exist, git problems, etc.)
             result = subprocess.run(
                 ['git', 'merge-base', '--is-ancestor', commit_sha, f'origin/{branch_name}'],
                 capture_output=True,
                 text=True,
                 check=False  # Don't raise on non-zero exit (expected for "not ancestor")
             )
-            return result.returncode == 0
+            
+            # Exit code 0: commit is ancestor (exists in branch)
+            if result.returncode == 0:
+                return True
+            
+            # Exit code 1: commit is NOT ancestor (normal case, not an error)
+            if result.returncode == 1:
+                return False
+            
+            # Exit code > 1: real error - verify if commit exists for better diagnostics
+            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
+            
+            # Try to verify if commit exists
+            try:
+                verify_result = subprocess.run(
+                    ['git', 'rev-parse', '--verify', commit_sha],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if verify_result.returncode != 0:
+                    # Commit doesn't exist - this is a real problem
+                    self.logger.error(
+                        f"Commit {commit_sha[:7]} does not exist in repository. "
+                        f"Original error: {error_msg}"
+                    )
+                    # Still return False - cherry-pick will fail with clear error
+                else:
+                    # Commit exists but merge-base failed - might be temporary issue
+                    self.logger.warning(
+                        f"git merge-base failed (exit {result.returncode}) but commit exists. "
+                        f"Error: {error_msg}. This might be a temporary issue."
+                    )
+            except Exception:
+                # Verification failed, just log original error
+                pass
+            
+            self.logger.warning(
+                f"git merge-base failed with exit code {result.returncode} "
+                f"for commit {commit_sha[:7]} in branch {branch_name}: {error_msg}"
+            )
+            return False
+            
         except Exception as e:
-            self.logger.warning(f"Failed to check if commit {commit_sha[:7]} exists in branch {branch_name}: {e}")
+            # Catch other unexpected errors (network issues, permissions, etc.)
+            self.logger.warning(
+                f"Unexpected error checking if commit {commit_sha[:7]} exists in branch {branch_name}: {e}"
+            )
             return False
 
     def _get_linked_issues_graphql(self, pr_number: int) -> List[str]:
@@ -447,7 +495,7 @@ class CherryPickCreator:
         
         return title
 
-    def pr_body(self, with_wf: bool, has_conflicts: bool = False, target_branch: Optional[str] = None, dev_branch_name: Optional[str] = None, conflict_files: Optional[List[str]] = None) -> str:
+    def pr_body(self, with_wf: bool, has_conflicts: bool = False, target_branch: Optional[str] = None, dev_branch_name: Optional[str] = None, conflict_files: Optional[List[str]] = None, pr_number: Optional[int] = None) -> str:
         """Generate PR body with improved format that passes validation"""
         commits = '\n'.join(self.pr_body_list)
         
@@ -511,11 +559,30 @@ class CherryPickCreator:
             conflicted_files_section = ""
             if conflict_files:
                 conflicted_files_section = "\n\n**Files with conflicts:**\n"
-                for file_path in conflict_files:
-                    # Create link to file in GitHub branch (will show conflict markers)
-                    # Format: https://github.com/{repo}/blob/{branch}/{file_path}
-                    file_link = f"https://github.com/{self.repo_name}/blob/{branch_for_instructions}/{file_path}"
-                    conflicted_files_section += f"- [{file_path}]({file_link})\n"
+                for conflict_item in conflict_files:
+                    # Handle both tuple (file_path, line) and string (file_path) for backward compatibility
+                    if isinstance(conflict_item, tuple):
+                        file_path, conflict_line = conflict_item
+                    else:
+                        file_path = conflict_item
+                        conflict_line = None
+                    
+                    # Create link to file in PR diff (if PR is created) or branch (as fallback)
+                    if pr_number:
+                        # Link to file in PR diff - GitHub will show conflicts
+                        # Format: https://github.com/{repo}/pull/{pr_number}/files#diff-{hash}L{line}
+                        file_link = f"https://github.com/{self.repo_name}/pull/{pr_number}/files#diff-{self._get_file_diff_hash(file_path)}"
+                        if conflict_line:
+                            file_link += f"L{conflict_line}"
+                    else:
+                        # Fallback: link to file in branch (will be updated after PR creation)
+                        file_link = f"https://github.com/{self.repo_name}/blob/{branch_for_instructions}/{file_path}"
+                        if conflict_line:
+                            file_link += f"#L{conflict_line}"
+                    
+                    # Add line number to display text if available
+                    display_text = f"{file_path} (line {conflict_line})" if conflict_line else file_path
+                    conflicted_files_section += f"- [{display_text}]({file_link})\n"
             
             description_section += f"""
 #### Conflicts Require Manual Resolution
@@ -559,6 +626,17 @@ After resolving conflicts, mark this PR as ready for review.
         
         return pr_body
     
+    def _get_file_diff_hash(self, file_path: str) -> str:
+        """Generate a hash for GitHub PR diff link anchor"""
+        import hashlib
+        import base64
+        # GitHub uses base64-encoded SHA1 of file path for diff anchors
+        # Format: base64(sha1(file_path))
+        sha1_hash = hashlib.sha1(file_path.encode('utf-8')).digest()
+        base64_hash = base64.b64encode(sha1_hash).decode('utf-8')
+        # Remove padding and replace special characters
+        return base64_hash.rstrip('=').replace('+', '-').replace('/', '_')
+    
     def add_summary(self, msg):
         self.logger.info(msg)
         summary_path = os.getenv('GITHUB_STEP_SUMMARY')
@@ -587,8 +665,8 @@ After resolving conflicts, mark this PR as ready for review.
         return output
 
     def _handle_cherry_pick_conflict(self, commit_sha: str):
-        """Handle cherry-pick conflict: commit the conflict and return list of conflicted files"""
-        conflict_files = []
+        """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with line numbers"""
+        conflict_files = []  # List of (file_path, first_conflict_line) tuples
         try:
             # Check if there are conflicts (files with conflicts or unmerged paths)
             result = subprocess.run(
@@ -614,7 +692,9 @@ After resolving conflicts, mark this PR as ready for review.
                         if len(parts) > 1:
                             file_path = parts[1].strip()
                             if file_path:
-                                conflict_files.append(file_path)
+                                # Find first conflict line in file
+                                conflict_line = self._find_first_conflict_line(file_path)
+                                conflict_files.append((file_path, conflict_line))
                 
                 # If we didn't find unmerged paths, try to find files with conflict markers
                 if not conflict_files:
@@ -627,7 +707,12 @@ After resolving conflicts, mark this PR as ready for review.
                             check=True
                         )
                         if diff_result.stdout.strip():
-                            conflict_files = [f.strip() for f in diff_result.stdout.strip().split('\n') if f.strip()]
+                            for f in diff_result.stdout.strip().split('\n'):
+                                file_path = f.strip()
+                                if file_path:
+                                    # Find first conflict line in file
+                                    conflict_line = self._find_first_conflict_line(file_path)
+                                    conflict_files.append((file_path, conflict_line))
                     except subprocess.CalledProcessError:
                         pass
                 
@@ -636,12 +721,24 @@ After resolving conflicts, mark this PR as ready for review.
                 self.git_run("commit", "-m", f"BACKPORT-CONFLICT: manual resolution required for commit {commit_sha[:7]}")
                 self.logger.info(f"Conflict committed for commit {commit_sha[:7]}")
                 if conflict_files:
-                    self.logger.info(f"Conflicted files: {', '.join(conflict_files)}")
+                    file_list = [f"{path} (line {line})" if line else path for path, line in conflict_files]
+                    self.logger.info(f"Conflicted files: {', '.join(file_list)}")
                 return True, conflict_files
         except Exception as e:
             self.logger.error(f"Error handling conflict for commit {commit_sha[:7]}: {e}")
         
         return False, []
+    
+    def _find_first_conflict_line(self, file_path: str) -> Optional[int]:
+        """Find the first line number with conflict markers in a file"""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line_num, line in enumerate(f, start=1):
+                    if line.strip().startswith('<<<<<<<'):
+                        return line_num
+        except (FileNotFoundError, IOError, UnicodeDecodeError) as e:
+            self.logger.debug(f"Failed to read file {file_path} to find conflict line: {e}")
+        return None
 
     def _find_existing_backport_comment(self, pull):
         """Find existing backport comment in PR (created by previous workflow run)"""
@@ -733,7 +830,7 @@ After resolving conflicts, mark this PR as ready for review.
         """Create PR for target branch with conflict handling"""
         dev_branch_name = f"cherry-pick-{target_branch}-{self.dtm}"
         has_conflicts = False
-        all_conflict_files = []  # Collect all conflicted files across all commits
+        all_conflict_files = []  # Collect all conflicted files: [(file_path, conflict_line), ...]
         
         # First fetch for up-to-date branch information
         self.git_run("fetch", "origin", target_branch)
@@ -771,10 +868,18 @@ After resolving conflicts, mark this PR as ready for review.
                     conflict_handled, conflict_files = self._handle_cherry_pick_conflict(commit_sha)
                     if conflict_handled:
                         has_conflicts = True
-                        # Add conflicted files to the list (avoid duplicates)
-                        for file_path in conflict_files:
-                            if file_path not in all_conflict_files:
-                                all_conflict_files.append(file_path)
+                        # Add conflicted files to the list (avoid duplicates by file path)
+                        for conflict_item in conflict_files:
+                            # conflict_item is (file_path, conflict_line) tuple
+                            file_path, conflict_line = conflict_item
+                            # Check if file_path already exists
+                            existing = next((f for f in all_conflict_files if isinstance(f, tuple) and f[0] == file_path), None)
+                            if not existing:
+                                all_conflict_files.append((file_path, conflict_line))
+                            elif conflict_line and existing[1] is None:
+                                # Update with line number if we found one and didn't have it before
+                                idx = all_conflict_files.index(existing)
+                                all_conflict_files[idx] = (file_path, conflict_line)
                     else:
                         # Failed to handle conflict, abort cherry-pick
                         self.git_run("cherry-pick", "--abort")
@@ -799,14 +904,24 @@ After resolving conflicts, mark this PR as ready for review.
 
         # Create PR (draft if there are conflicts)
         try:
+            # Create PR with initial body (without PR number for diff links)
             pr = self.repo.create_pull(
                 base=target_branch,
                 head=dev_branch_name,
                 title=self.pr_title(target_branch),
-                body=self.pr_body(True, has_conflicts, target_branch, dev_branch_name, all_conflict_files if all_conflict_files else None),
+                body=self.pr_body(True, has_conflicts, target_branch, dev_branch_name, all_conflict_files if all_conflict_files else None, pr_number=None),
                 maintainer_can_modify=True,
                 draft=has_conflicts
             )
+            
+            # If there are conflicts, update PR body with proper diff links
+            if has_conflicts and all_conflict_files:
+                try:
+                    updated_body = self.pr_body(True, has_conflicts, target_branch, dev_branch_name, all_conflict_files, pr_number=pr.number)
+                    pr.edit(body=updated_body)
+                    self.logger.info(f"Updated PR body with diff links for conflicts")
+                except GithubException as e:
+                    self.logger.warning(f"Failed to update PR body with diff links: {e}")
         except GithubException as e:
             self.has_errors = True
             self.logger.error(f"PR_CREATION_ERROR: Failed to create PR for branch {target_branch}: {e}")

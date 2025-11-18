@@ -10,12 +10,12 @@
 
 ## Алертинг в {{ ydb-short-name }} с использованием Prometheus Alerting Rules
 
-[Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) — это набор правил, написанных в формате YAML, которые определяют условия для генерации оповещений (алертов). Эти правила основаны на языке запросов PromQL (Prometheus Query Language) и позволяют автоматически выявлять проблемы на основе собранных метрик. Например, вы можете настроить правило, которое сработает, если CPU нагрузка превысит 90% или если диск заполнен более чем на 80%.
+[Prometheus Alerting Rules](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/) — это набор правил, написанных в формате YAML, которые определяют условия для генерации оповещений (алертов). Эти правила основаны на языке запросов PromQL (Prometheus Query Language) и позволяют автоматически выявлять проблемы на основе собранных метрик. Например, вы можете настроить правило, которое сработает, если CPU нагрузка превысит 70% или если диск заполнен более чем на 60%.
 
 ## Перед началом работы
 
 - Необходим базово настроенный сервер Prometheus. Подробнее об установке можно прочитать [здесь](https://prometheus.io/docs/prometheus/latest/installation/)
-- Требуется базовое понимание написания и использования [правил оповещения](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#rule)
+- Требуется базовое понимание написания и использования [правил записи](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/#rule)
 - Настроенные уведомления, чтобы получать оповещения в удобные для вас каналы. Подробнее про настройку в [документации](https://prometheus.io/docs/alerting/latest/alertmanager/)
 
 **Ключевые параметры правил:**
@@ -37,6 +37,8 @@
   - **Resolved** (решён): Условие `expr` больше не выполняется, и алерт считается закрытым.
 
 Более подробно об особенности системы и структуре правил смотрите в [официальной документации](https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+
+## Примеры правил алертинга, которые рекомендуются к настройке для каждого кластера
 
 ### {{ ydb-short-name }} Health Check
 

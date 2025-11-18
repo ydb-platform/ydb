@@ -340,6 +340,85 @@ class CherryPickCreator:
         unique_issues = list(dict.fromkeys(all_issues))
         return ' '.join(unique_issues) if unique_issues else 'None'
 
+    def _extract_changelog_category(self, pr_body: str) -> Optional[str]:
+        """Extract Changelog category from PR body"""
+        if not pr_body:
+            return None
+        
+        # Match the category section
+        category_match = re.search(r"### Changelog category.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
+        if not category_match:
+            return None
+        
+        # Extract categories (lines starting with *)
+        categories = [line.strip('* ').strip() for line in category_match.group(1).splitlines() if line.strip() and line.strip().startswith('*')]
+        
+        # Find the selected category - take the first non-empty category line
+        # The selected category is typically the one that's not commented out
+        for cat in categories:
+            cat_clean = cat.strip('* ').strip()
+            if cat_clean:
+                # Return the category as-is, without hardcoded validation
+                return cat_clean
+        
+        return None
+
+    def _extract_changelog_entry(self, pr_body: str) -> Optional[str]:
+        """Extract Changelog entry from PR body"""
+        if not pr_body:
+            return None
+        
+        entry_match = re.search(r"### Changelog entry.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
+        if not entry_match:
+            return None
+        
+        entry = entry_match.group(1).strip()
+        # Skip if it's just "..." or empty
+        if entry in ['...', '']:
+            return None
+        
+        return entry
+
+    def _extract_description_for_reviewers(self, pr_body: str) -> Optional[str]:
+        """Extract Description for reviewers section from PR body"""
+        if not pr_body:
+            return None
+        
+        desc_match = re.search(r"### Description for reviewers.*?\n(.*?)(\n###|$)", pr_body, re.DOTALL)
+        if not desc_match:
+            return None
+        
+        desc = desc_match.group(1).strip()
+        # Skip if it's just "..." or empty
+        if desc in ['...', '']:
+            return None
+        
+        return desc
+
+    def _get_changelog_info(self) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+        """Get Changelog category, entry, and description from original PRs"""
+        category = None
+        entry = None
+        description = None
+        
+        # Try to get from first PR (usually there's one main PR)
+        for pull in self.pull_requests:
+            if pull.body:
+                cat = self._extract_changelog_category(pull.body)
+                if cat:
+                    category = cat
+                ent = self._extract_changelog_entry(pull.body)
+                if ent:
+                    entry = ent
+                desc = self._extract_description_for_reviewers(pull.body)
+                if desc:
+                    description = desc
+                # If we found all, we're done
+                if category and entry and description:
+                    break
+        
+        return category, entry, description
+
     def pr_title(self, target_branch) -> str:
         """Generate PR title"""
         if len(self.pr_title_list) == 1:
@@ -354,7 +433,7 @@ class CherryPickCreator:
         return title
 
     def pr_body(self, with_wf: bool, has_conflicts: bool = False, target_branch: Optional[str] = None) -> str:
-        """Generate PR body with improved format"""
+        """Generate PR body with improved format that passes validation"""
         commits = '\n'.join(self.pr_body_list)
         
         # Get linked issues
@@ -366,21 +445,67 @@ class CherryPickCreator:
         # Determine target branch for description
         branch_desc = target_branch if target_branch else (', '.join(self.target_branches) if len(self.target_branches) == 1 else 'multiple branches')
         
-        pr_body = f"""## Description
-Backport to `{branch_desc}`.
-
-### Original PR(s)
-{commits}
-
-### Metadata
-- **Original PR author(s):** {authors}
-- **Cherry-picked by:** @{self.workflow_triggerer}
-- **Related issues:** {issue_refs}
-"""
+        # Get Changelog category, entry, and description from original PR
+        changelog_category, changelog_entry, original_description = self._get_changelog_info()
         
+        # Build changelog entry if not found
+        if not changelog_entry:
+            if len(self.pull_requests) == 1:
+                pr_num = self.pull_requests[0].number
+                changelog_entry = f"Backport of PR #{pr_num} to `{branch_desc}`"
+            else:
+                pr_nums = ', '.join([f"#{p.number}" for p in self.pull_requests])
+                changelog_entry = f"Backport of PRs {pr_nums} to `{branch_desc}`"
+        
+        # Ensure entry is at least 20 characters (validation requirement)
+        if len(changelog_entry) < 20:
+            changelog_entry = f"Backport to `{branch_desc}`: {changelog_entry}"
+        
+        # For Bugfix category, ensure there's an issue reference in changelog entry (validation requirement)
+        if changelog_category and changelog_category.startswith("Bugfix") and issue_refs and issue_refs != "None":
+            # Check if issue reference is already in entry
+            issue_patterns = [
+                r"https://github.com/ydb-platform/[a-z\-]+/issues/\d+",
+                r"https://st.yandex-team.ru/[a-zA-Z]+-\d+",
+                r"#\d+",
+                r"[a-zA-Z]+-\d+"
+            ]
+            has_issue = any(re.search(pattern, changelog_entry) for pattern in issue_patterns)
+            if not has_issue:
+                # Add issue reference to entry
+                changelog_entry = f"{changelog_entry} ({issue_refs})"
+        
+        # Build category section - use template if category not found
+        if changelog_category:
+            category_section = f"* {changelog_category}"
+        else:
+            # Use full template if category not found - let user choose
+            category_section = """* New feature
+* Experimental feature
+* Improvement
+* Performance improvement
+* User Interface
+* Bugfix
+* Backward incompatible change
+* Documentation (changelog entry is not required)
+* Not for changelog (changelog entry is not required)"""
+        
+        # Build description for reviewers section
+        description_section = f"Backport to `{branch_desc}`.\n\n"
+        description_section += f"#### Original PR(s)\n{commits}\n\n"
+        description_section += f"#### Metadata\n"
+        description_section += f"- **Original PR author(s):** {authors}\n"
+        description_section += f"- **Cherry-picked by:** @{self.workflow_triggerer}\n"
+        description_section += f"- **Related issues:** {issue_refs}"
+        
+        # If original PR had description, append it
+        if original_description:
+            description_section += f"\n\n#### Original Description\n{original_description}"
+        
+        # Add conflicts section if needed
         if has_conflicts:
-            pr_body += """
-### Conflicts Require Manual Resolution
+            description_section += """
+#### Conflicts Require Manual Resolution
 
 This PR contains merge conflicts that require manual resolution.
 
@@ -398,11 +523,26 @@ git push
 After resolving conflicts, mark this PR as ready for review.
 """
         
+        # Add workflow link if needed
         if with_wf:
             if self.workflow_url:
-                pr_body += f"\n---\n\nPR was created by cherry-pick workflow [run]({self.workflow_url})"
+                description_section += f"\n\n---\n\nPR was created by cherry-pick workflow [run]({self.workflow_url})"
             else:
-                pr_body += "\n---\n\nPR was created by cherry-pick script"
+                description_section += "\n\n---\n\nPR was created by cherry-pick script"
+        
+        # Build PR body according to template (Changelog entry and category must come first)
+        pr_body = f"""### Changelog entry <!-- a user-readable short description of the changes that goes to CHANGELOG.md and Release Notes -->
+
+{changelog_entry}
+
+### Changelog category <!-- remove all except one -->
+
+{category_section}
+
+### Description for reviewers <!-- (optional) description for those who read this PR -->
+
+{description_section}
+"""
         
         return pr_body
     

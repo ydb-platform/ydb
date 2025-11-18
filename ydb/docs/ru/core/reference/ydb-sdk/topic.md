@@ -2031,7 +2031,7 @@
   }
 
   if (stopPartitionSessionEvent) {
-      stopPartitionSessionEvent->Commit();
+      stopPartitionSessionEvent->Confirm();
   }
   ```
 

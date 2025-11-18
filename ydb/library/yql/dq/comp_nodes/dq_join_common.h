@@ -650,7 +650,7 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                                                                                                        // currently.
                 }
                 default:
-                    MKQL_ENSURE(false, "unhanded ESpillResult case");
+                    MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
                 state.FetchedPack->ForEachTuple([&](TSingleTuple tuple) {
                     int bucketIndex = Settings.BucketIndex(tuple);

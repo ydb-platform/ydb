@@ -12,7 +12,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-struct TPackResult; 
+struct TPackResult;
 
 using TTupleData = std::vector<ui8, TMKQLAllocator<ui8>>;
 
@@ -301,7 +301,6 @@ Y_FORCE_INLINE
 ui32 Hash(const ui8* row) {
     return ReadUnaligned<ui32>(row);
 }
-
 
 
 Y_FORCE_INLINE

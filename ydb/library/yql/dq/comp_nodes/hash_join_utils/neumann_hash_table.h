@@ -186,9 +186,9 @@ class TNeumannHashTable {
     }
 
 
-    // TNeumannHashTable(TNeumannHashTable&&) = default;
 
-    int64_t RequiredMemoryForBuild(int nItems) {
+
+    int64_t RequiredMemoryForBuild(int nItems) const {
         return sizeof(TDirectory)*EstimateLogSize(nItems)+BufferSlotSize_ * nItems;
     }
 
@@ -201,7 +201,7 @@ class TNeumannHashTable {
         if (!estimatedLogSize.has_value()) {
             estimatedLogSize = EstimateLogSize(nItems);
         }
-        MKQL_ENSURE(*estimatedLogSize >= 1, "estimated directories size shouldn't be 1");
+        MKQL_ENSURE(*estimatedLogSize >= 1, "estimated directories size shouldn't be less than 1");
         MKQL_ENSURE(*estimatedLogSize <= 24, "estimated directories size shouldn't be too big");
 
         Tuples_ = tuples;

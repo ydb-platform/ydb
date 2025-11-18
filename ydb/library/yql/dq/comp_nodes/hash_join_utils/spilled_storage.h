@@ -6,7 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr::NMiniKQL {
-// template<int MaxPageSize>
+
 
 void PopFront(NYql::TChunkedBuffer& buff);
 
@@ -46,10 +46,7 @@ enum ESpillResult {
     DontHavePages
 };
 
-// template<typename T>
-// concept SpillStorage = requires( T t) {
-//     {t.SpillWhile()} ->
-// };
+
 inline ESpillResult Wait() {
     return ESpillResult::Spilling;
 }
@@ -84,7 +81,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     int TotalInMemoryPages() const {
         int num = 0;
         for (auto& bucket : Buckets_) {
-            // num += bucket.SpilledPages.has_value() ? bucket.SpilledPages->size() : 0;
+
             num += bucket.InMemoryPages.size();
             MKQL_ENSURE(bucket.BuildingPage.AllocatedBytes() < Settings.BucketSizeBytes, "sanity check");
             num += bucket.BuildingPage.AllocatedBytes() > 0;
@@ -138,7 +135,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                     Buckets_[*bucketIndex].SpilledPages.emplace();
                 }
                 SpillingPages_.emplace();
-                // TMKQLVector<BlobIdAndBucketIndex> spilledPages;
+
                 int totalSpillingPages = Settings.SpillingPagesAtTime;
                 for (int index = 0; index < std::ssize(Buckets_); ++index) {
                     auto& bucket = Buckets_[index];
@@ -153,7 +150,7 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
                 MKQL_ENSURE(totalSpillingPages == 0, "not enough pages for spilling?");
             }
         }
-        MKQL_ENSURE(!condition(), "sanitiy check");
+        MKQL_ENSURE(!condition(), "sanity check");
         return ESpillResult::FinishedSpilling;
     }
 
@@ -240,7 +237,7 @@ template <TSpillerSettings Settings> class TSimpleSpiller {
     }
 
     State& GetState() {
-        MKQL_ENSURE(!SpillingPages_.has_value(), "pages shoul've finished spilling earlier");
+        MKQL_ENSURE(!SpillingPages_.has_value(), "pages should've finished spilling earlier");
         return State_;
     }
 
@@ -250,6 +247,6 @@ template <TSpillerSettings Settings> class TSimpleSpiller {
 
     std::optional<TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>>> SpillingPages_;
     ISpiller::TPtr Spiller_;
-    // std::optional<TMKQLVector<typename Type>>
+
 };
 } // namespace NKikimr::NMiniKQL

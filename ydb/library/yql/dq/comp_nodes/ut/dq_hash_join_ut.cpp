@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         try {
             Test(SpillingTestData(), true);
         } catch (...) {
-            Cout << "TestBlockSpilling failed with unknown expection" << Endl;
+            Cout << "TestBlockSpilling failed with unknown exception" << Endl;
             throw;
         }
     }

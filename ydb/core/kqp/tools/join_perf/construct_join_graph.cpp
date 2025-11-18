@@ -151,7 +151,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
 
     auto scalarGraphFrom = [&](TRuntimeNode wideStreamJoin) {
         THolder<IComputationGraph> graph = descr.Setup->BuildGraph(wideStreamJoin, args.Entrypoints);
-        // graph.
+
         SetEntryPointValues(*graph, descr.LeftSource.ValuesList, descr.RightSource.ValuesList);
         return graph;
     };

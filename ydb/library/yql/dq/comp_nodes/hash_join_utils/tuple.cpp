@@ -1701,11 +1701,11 @@ TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
     });
     flattened.PackedTuples.reserve(totalTuplesSize);
 
-    i64 totaOverflowlSize =
+    i64 totalOverflowSize =
         std::accumulate(tuples.begin(), tuples.end(), i64{0},
                         [](i64 summ, const auto& packRes) { return summ += std::ssize(packRes.Overflow); });
-    flattened.Overflow.reserve(totaOverflowlSize);
-    // todo: assertNoAllocations until the end of a function
+    flattened.Overflow.reserve(totalOverflowSize);
+
 
     int tupleSize = TotalRowSize;
     for (const TPackResult& tupleBatch : tuples) {

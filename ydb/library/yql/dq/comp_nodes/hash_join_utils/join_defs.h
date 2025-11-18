@@ -120,6 +120,6 @@ template <typename Value> struct TValueAndLocation {
     int BucketIndex;
 };
 
-// struct
+
 
 } // namespace NKikimr::NMiniKQL

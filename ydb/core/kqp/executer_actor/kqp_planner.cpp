@@ -182,8 +182,17 @@ bool TKqpPlanner::SendStartKqpTasksRequest(ui32 requestId, const TActorId& targe
     }
 
     if (requestData.RetryNumber >= 1) {
-        LOG_D("Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
+        LOG_D("[SHUTDOWN] Try to retry by ActorUnknown reason, nodeId: " << target.NodeId() << ", requestId: " << requestId);
     }
+
+    LOG_I("[SHUTDOWN] Sending TEvStartKqpTasksRequest"
+        << ", requestId: " << requestId
+        << ", target: " << target
+        << ", targetNode: " << target.NodeId()
+        << ", retryNumber: " << requestData.RetryNumber
+        << ", tasksCount: " << requestData.TaskIds.size()
+        << ", originalNode: " << requestData.NodeId
+        << ", txId: " << TxId);
 
     requestData.RetryNumber++;
 

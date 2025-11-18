@@ -135,8 +135,13 @@ private:
     STATEFN(ShuttingDownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvKqpNode::TEvStartKqpTasksRequest, HandleShuttingDown);
+            hFunc(TEvents::TEvWakeup, HandleShuttingDown);
+            hFunc(TEvents::TEvPoison, HandleShuttingDown);
             default: {
-                LOG_D("Unexpected event" << ev->GetTypeName() << " for TKqpNodeService");
+                LOG_E("[SHUTDOWN] Unexpected event in ShuttingDownState"
+                    << ", event: " << ev->GetTypeName()
+                    << ", sender: " << ev->Sender
+                    << ", recipient: " << ev->Recipient);
             }
         }
     }
@@ -385,17 +390,49 @@ private:
         }
         LOG_I("Prepare to shutdown: do not acccept any messages from this time");
         ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
+        LOG_I("[SHUTDOWN] Transitioning to ShuttingDownState, will reject new requests with SupportShuttingDown=true");
         Become(&TKqpNodeService::ShuttingDownState);
     }
 
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {
         auto& msg = ev->Get()->Record;
+        LOG_I("[SHUTDOWN] Received TEvStartKqpTasksRequest in ShuttingDownState"
+            << ", TxId: " << msg.GetTxId()
+            << ", sender: " << ev->Sender
+            << ", tasksCount: " << msg.TasksSize()
+            << ", SupportShuttingDown: " << (msg.HasSupportShuttingDown() ? (msg.GetSupportShuttingDown() ? "true" : "false") : "not set")
+            << ", cookie: " << ev->Cookie);
+        
         if (msg.HasSupportShuttingDown() && msg.GetSupportShuttingDown()) {
-            LOG_D("Can't handle StartRequest TxId" << msg.GetTxId() << " in ShuttingDown State");
+            LOG_I("[SHUTDOWN] Rejecting request with NODE_SHUTTING_DOWN"
+                << ", TxId: " << msg.GetTxId()
+                << ", executer: " << ev->Sender
+                << ", tasksCount: " << msg.TasksSize());
+            for (auto& task : msg.GetTasks()) {
+                LOG_D("[SHUTDOWN]   Task being rejected: TaskId=" << task.GetId() 
+                    << ", StageId=" << task.GetStageId());
+            }
             ReplyError(msg.GetTxId(), ev->Sender, msg, NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN, ev->Cookie);
         } else {
+            LOG_I("[SHUTDOWN] Processing legacy request (SupportShuttingDown=false or not set)"
+                << ", TxId: " << msg.GetTxId()
+                << ", tasksCount: " << msg.TasksSize());
             HandleWork(ev);
         }
+    }
+
+    void HandleShuttingDown(TEvents::TEvWakeup::TPtr&) {
+        LOG_D("[SHUTDOWN] Received TEvWakeup in ShuttingDownState, not rescheduling timer");
+        for (auto& bucket : State_->Buckets) {
+            auto expiredRequests = bucket.ClearExpiredRequests();
+            for (auto& cxt : expiredRequests) {
+                LOG_D("[SHUTDOWN] Terminating expired request, TxId: " << cxt.TxId);
+                TerminateTx(cxt.TxId, "reached execution deadline during shutdown", NYql::NDqProto::StatusIds::TIMEOUT);
+            }
+        }
+    }
+    void HandleShuttingDown(TEvents::TEvPoison::TPtr&) {
+        PassAway();
     }
 private:
     static void HandleWork(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -543,6 +580,14 @@ private:
     void ReplyError(ui64 txId, TActorId executer, const NKikimrKqp::TEvStartKqpTasksRequest& request,
         NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason reason, ui64 requestId, const TString& message = "")
     {
+        LOG_I("[SHUTDOWN] Sending TEvStartKqpTasksResponse with error"
+            << ", TxId: " << txId
+            << ", executer: " << executer
+            << ", reason: " << NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(reason)
+            << ", requestId: " << requestId
+            << ", tasksCount: " << request.TasksSize()
+            << ", message: " << message);
+        
         auto ev = MakeHolder<TEvKqpNode::TEvStartKqpTasksResponse>();
         ev->Record.SetTxId(txId);
         for (auto& task : request.GetTasks()) {
@@ -551,7 +596,14 @@ private:
             resp->SetReason(reason);
             resp->SetMessage(message);
             resp->SetRequestId(requestId);
+            
+            LOG_D("[SHUTDOWN]   NotStartedTask added"
+                << ", TaskId: " << task.GetId()
+                << ", StageId: " << task.GetStageId()
+                << ", RequestId: " << requestId);
         }
+        
+        LOG_D("[SHUTDOWN] Sending error response to: " << executer);
         Send(executer, ev.Release());
     }
 

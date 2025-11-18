@@ -853,9 +853,29 @@ protected:
                         break;
                     }
                     for (auto& task : record.GetNotStartedTasks()) {
+                        LOG_D("[SHUTDOWN] NotStartedTask details"
+                            << ", TaskId: " << task.GetTaskId()
+                            << ", RequestId: " << task.GetRequestId()
+                            << ", Reason: " << NKikimrKqp::TEvStartKqpTasksResponse_ENotStartedTaskReason_Name(task.GetReason()));
+                        
                         if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
                               and ev->Sender.NodeId() != SelfId().NodeId()) {
-                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
+                            auto targetNode = MakeKqpNodeServiceID(SelfId().NodeId());
+                            LOG_I("[SHUTDOWN] Retrying task on local node"
+                                << ", TaskId: " << task.GetTaskId()
+                                << ", RequestId: " << task.GetRequestId()
+                                << ", originalNode: " << ev->Sender.NodeId()
+                                << ", targetNode: " << targetNode);
+                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), targetNode);
+                        } else {
+                            LOG_W("[SHUTDOWN] Skip retry for task"
+                                << ", TaskId: " << task.GetTaskId()
+                                << ", reason: sender is local node or not NODE_SHUTTING_DOWN"
+                                << ", senderNode: " << ev->Sender.NodeId()
+                                << ", selfNode: " << SelfId().NodeId());
+                            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, 
+                                MakeIssue(NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, TStringBuilder() <<
+                            "All compute node are shutting down"));
                         }
                     }
                     break;

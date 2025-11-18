@@ -107,8 +107,10 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
         return true;
     }
 
-    void Complete(const TActorContext& /*ctx*/) override {
+    void Complete(const TActorContext& ctx) override {
         SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyze::Complete");
+
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
     }
 };
 

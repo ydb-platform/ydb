@@ -813,20 +813,30 @@ After resolving conflicts, mark this PR as ready for review.
             return
         
         target_branches_str = ', '.join([f"`{b}`" for b in self.target_branches])
-        initial_comment = f"Backport to {target_branches_str} in progress: [workflow run]({self.workflow_url})"
+        new_line = f"Backport to {target_branches_str} in progress: [workflow run]({self.workflow_url})"
         
         for pull in self.pull_requests:
             try:
                 # Try to find existing comment
                 existing_comment = self._find_existing_backport_comment(pull)
                 if existing_comment:
-                    # Update existing comment
-                    existing_comment.edit(initial_comment)
-                    self.backport_comments.append((pull, existing_comment))
-                    self.logger.info(f"Updated existing backport comment in original PR #{pull.number}")
+                    # Check if this workflow's branches are already mentioned
+                    existing_body = existing_comment.body
+                    branches_already_mentioned = all(f"`{b}`" in existing_body for b in self.target_branches)
+                    
+                    if branches_already_mentioned and self.workflow_url in existing_body:
+                        # This workflow run already mentioned, skip update
+                        self.backport_comments.append((pull, existing_comment))
+                        self.logger.debug(f"Backport comment already contains info for branches {self.target_branches}, skipping update")
+                    else:
+                        # Append new line to existing comment
+                        updated_comment = f"{existing_body}\n\n{new_line}"
+                        existing_comment.edit(updated_comment)
+                        self.backport_comments.append((pull, existing_comment))
+                        self.logger.info(f"Updated existing backport comment in original PR #{pull.number}")
                 else:
                     # Create new comment
-                    comment = pull.create_issue_comment(initial_comment)
+                    comment = pull.create_issue_comment(new_line)
                     self.backport_comments.append((pull, comment))
                     self.logger.info(f"Created initial backport comment in original PR #{pull.number}")
             except GithubException as e:
@@ -839,38 +849,106 @@ After resolving conflicts, mark this PR as ready for review.
         
         for pull, comment in self.backport_comments:
             try:
+                # Get existing comment body
+                existing_body = comment.body
+                
+                # Build new results section for this workflow run
                 total_branches = len(self.created_backport_prs) + len(self.skipped_branches)
                 
                 if total_branches == 0:
                     # No branches processed (should not happen)
-                    updated_comment = f"Backport to {', '.join([f'`{b}`' for b in self.target_branches])} completed with no results"
+                    new_results = f"Backport to {', '.join([f'`{b}`' for b in self.target_branches])} completed with no results"
                     if self.workflow_url:
-                        updated_comment += f" - [workflow run]({self.workflow_url})"
+                        new_results += f" - [workflow run]({self.workflow_url})"
                 elif total_branches == 1 and len(self.created_backport_prs) == 1:
                     # Single branch with PR - simple comment
                     target_branch, pr, has_conflicts, conflict_files = self.created_backport_prs[0]
                     status = "draft PR" if has_conflicts else "PR"
-                    updated_comment = f"Backported to `{target_branch}`: {status} {pr.html_url}"
+                    new_results = f"Backported to `{target_branch}`: {status} {pr.html_url}"
                     if has_conflicts:
-                        updated_comment += " (contains conflicts requiring manual resolution)"
+                        new_results += " (contains conflicts requiring manual resolution)"
                     if self.workflow_url:
-                        updated_comment += f" - [workflow run]({self.workflow_url})"
+                        new_results += f" - [workflow run]({self.workflow_url})"
                 else:
                     # Multiple branches or mixed results - list all
-                    updated_comment = "Backport results:\n"
+                    new_results = "Backport results:\n"
                     
                     # List created PRs
                     for target_branch, pr, has_conflicts, conflict_files in self.created_backport_prs:
                         status = "draft PR" if has_conflicts else "PR"
                         conflict_note = " (contains conflicts requiring manual resolution)" if has_conflicts else ""
-                        updated_comment += f"- `{target_branch}`: {status} {pr.html_url}{conflict_note}\n"
+                        new_results += f"- `{target_branch}`: {status} {pr.html_url}{conflict_note}\n"
                     
                     # List skipped branches
                     for target_branch, reason in self.skipped_branches:
-                        updated_comment += f"- `{target_branch}`: skipped ({reason})\n"
+                        new_results += f"- `{target_branch}`: skipped ({reason})\n"
                     
                     if self.workflow_url:
-                        updated_comment += f"\n[workflow run]({self.workflow_url})"
+                        new_results += f"\n[workflow run]({self.workflow_url})"
+                
+                # Replace the "in progress" line for this workflow run, or append results
+                if self.workflow_url in existing_body:
+                    # Find and replace the "in progress" line for this workflow
+                    # Handle both single-line and multi-line results
+                    lines = existing_body.split('\n')
+                    updated_lines = []
+                    workflow_found = False
+                    in_results_block = False  # Track if we're inside a multi-line results block
+                    
+                    for line in lines:
+                        if self.workflow_url in line:
+                            if "in progress" in line:
+                                # Replace "in progress" line with results
+                                updated_lines.append(new_results)
+                                workflow_found = True
+                                # If results are multi-line, mark that we're in a results block
+                                if new_results.count('\n') > 0:
+                                    in_results_block = True
+                            elif in_results_block:
+                                # We're inside a results block for this workflow
+                                # Skip lines until we find an empty line or a line with different workflow URL
+                                if line.strip() == '':
+                                    in_results_block = False
+                                    updated_lines.append(line)
+                                elif self.workflow_url not in line:
+                                    # Different workflow or end of results block
+                                    in_results_block = False
+                                    updated_lines.append(line)
+                                # else: skip this line (it's part of old results)
+                            else:
+                                # Workflow URL found but not "in progress" - might be old results
+                                # Check if this line is part of results for this workflow
+                                is_result_line = (
+                                    any(f"`{b}`" in line for b in self.target_branches) or
+                                    "Backport results:" in line or
+                                    line.strip().startswith("- `")
+                                )
+                                if is_result_line and self.workflow_url in line:
+                                    # This is a results line for this workflow, replace with new results
+                                    updated_lines.append(new_results)
+                                    workflow_found = True
+                                    if new_results.count('\n') > 0:
+                                        in_results_block = True
+                                else:
+                                    updated_lines.append(line)
+                        elif in_results_block:
+                            # We're inside a results block, skip until empty line
+                            if line.strip() == '':
+                                in_results_block = False
+                                updated_lines.append(line)
+                            # else: skip this line
+                        else:
+                            updated_lines.append(line)
+                    
+                    if not workflow_found:
+                        # Workflow line not found, append results
+                        updated_lines.append("")
+                        updated_lines.append(new_results)
+                    
+                    updated_comment = '\n'.join(updated_lines)
+                else:
+                    # Workflow URL not in comment, append results
+                    updated_comment = f"{existing_body}\n\n{new_results}"
                 
                 comment.edit(updated_comment)
                 self.logger.info(f"Updated backport comment in original PR #{pull.number}")

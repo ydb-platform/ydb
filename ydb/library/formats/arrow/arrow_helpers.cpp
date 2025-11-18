@@ -608,22 +608,14 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui3
 TInstant ArrowTimestampToInstant(const arrow::TimestampArray& timestamp, const ui32 position) {
     int64_t micros = timestamp.Value(position);
     const auto unit = std::static_pointer_cast<arrow::TimestampType>(timestamp.type())->unit();
-    switch (unit) {
-        case arrow::TimeUnit::SECOND: {
-            micros *= 1000000LL;
-            break;
-        }
-        case arrow::TimeUnit::MILLI: {
-            micros *= 1000LL;
-            break;
-        }
-        case arrow::TimeUnit::MICRO: {
-            break;
-        }
-        case arrow::TimeUnit::NANO: {
-            micros /= 1000LL;
-            break;
-        }
+    if (unit == arrow::TimeUnit::SECOND) {
+        return TInstant::MicroSeconds(micros * 1000000LL);
+    } else if (unit == arrow::TimeUnit::MILLI) {
+        return TInstant::MicroSeconds(micros * 1000LL);
+    } else if (unit == arrow::TimeUnit::MICRO) {
+        return TInstant::MicroSeconds(micros);
+    } else if (unit == arrow::TimeUnit::NANO) {
+        return TInstant::MicroSeconds(micros * 1000LL);
     }
 
     return TInstant::MicroSeconds(micros);

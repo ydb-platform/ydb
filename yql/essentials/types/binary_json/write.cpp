@@ -780,7 +780,10 @@ TString SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const 
             } else {
                 return TString("Unexpected top value scalar in container iterator");
             }
+            break;
         }
+        default:
+            return TString("Unexpected entry type");
     }
 
     return {};

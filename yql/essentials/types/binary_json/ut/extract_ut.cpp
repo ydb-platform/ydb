@@ -13,11 +13,20 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonExtractTest);
+    UNIT_TEST(TestInvalidCursor);
     UNIT_TEST(TestTopLevelScalar);
     UNIT_TEST(TestTopLevelArray);
     UNIT_TEST(TestTopLevelMap);
     UNIT_TEST(TestComplexCases);
     UNIT_TEST_SUITE_END();
+
+    void TestInvalidCursor() {
+        TEntryCursor invalidCursor({}, TEntry(EEntryType(31), 0));
+        auto result = SerializeToBinaryJson(invalidCursor);
+        UNIT_ASSERT(std::holds_alternative<TString>(result));
+
+        UNIT_ASSERT_EQUAL("Unexpected entry type", std::get<TString>(result));
+    }
 
     void TestTopLevelScalar() {
         const TVector<TString> testCases = {

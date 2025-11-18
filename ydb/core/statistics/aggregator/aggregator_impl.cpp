@@ -80,6 +80,10 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
         }
+
+        const auto& statsConfig = config.GetStatisticsConfig();
+        EnableBackgroundColumnStatsCollection =
+            statsConfig.GetEnableBackgroundColumnStatsCollection();
     }
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);

@@ -17,7 +17,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 READ_TOOL_TIMEOUT = plain_or_under_sanitizer(30, 300)
 
 
-def write_stream(path, data, partition_key=None, database = None, endpoint = None):
+def write_stream(path, data, partition_key=None, database=None, endpoint=None):
     request_metadata = [("x-ydb-database", os.getenv("YDB_DATABASE"))]
     if database is None:
         database = os.getenv("YDB_DATABASE")
@@ -44,7 +44,7 @@ def write_stream(path, data, partition_key=None, database = None, endpoint = Non
 
 
 #  Data plane grpc API is not implemented in datastreams.
-def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=READ_TOOL_TIMEOUT, database = None, endpoint = None):
+def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=READ_TOOL_TIMEOUT, database=None, endpoint=None):
     result_file_name = "{}-{}-read-result-{}-{}-out".format(
         os.getenv("PYTEST_CURRENT_TEST").replace(":", "_").replace(" (call)", ""),
         path.replace("/", "_"),

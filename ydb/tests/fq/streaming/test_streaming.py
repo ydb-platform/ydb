@@ -441,9 +441,9 @@ class TestStreamingInYdb(TestYdsBase):
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {source_name}.`{output_topic}` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        query_id = "query_id"  # TODO
+        path = f"/Root/{query_name}"
         kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-        self.wait_completed_checkpoints(kikimr, query_id)
+        self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
@@ -460,9 +460,9 @@ class TestStreamingInYdb(TestYdsBase):
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {source_name}.`{output_topic}` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        query_id = "query_id"  # TODO
+        path = f"/Root/{query_name}"
         kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-        self.wait_completed_checkpoints(kikimr, query_id)
+        self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
@@ -482,9 +482,9 @@ class TestStreamingInYdb(TestYdsBase):
                 $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
                 INSERT INTO {source_name}.`{output_topic}` SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
             END DO;'''
-        query_id = "query_id"  # TODO
+        path = f"/Root/{query_name}"
         kikimr.YdbClient.query(sql.format(query_name=query_name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-        self.wait_completed_checkpoints(kikimr, query_id)
+        self.wait_completed_checkpoints(kikimr, path)
 
         data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
         expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']

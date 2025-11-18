@@ -31,7 +31,6 @@ void TCommandTestShardCreate::Config(TConfig& config) {
         .DefaultValue(1).RequiredArgument("NUM").StoreResult(&Count);
     config.Opts->AddLongOption('f', "config-file", "Path to YAML configuration file")
         .RequiredArgument("PATH").StoreResult(&ConfigFile);
-    config.Opts->MutuallyExclusive("config", "config-file");
     config.SetFreeArgsNum(0);
 }
 

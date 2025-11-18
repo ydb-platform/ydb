@@ -271,73 +271,6 @@ class CherryPickCreator:
         self._validate_branches()
         self.logger.info("Input validation successful")
 
-    def _is_commit_in_branch(self, commit_sha: str, branch_name: str) -> bool:
-        """Check if commit already exists in target branch"""
-        try:
-            # First fetch for up-to-date branch information
-            self.git_run("fetch", "origin", branch_name)
-            
-            # Check via merge-base
-            # Note: --is-ancestor returns:
-            #   - 0 if commit is ancestor (exists in branch)
-            #   - 1 if commit is NOT ancestor (normal case, not an error)
-            #   - >1 for real errors (commit doesn't exist, git problems, etc.)
-            result = subprocess.run(
-                ['git', 'merge-base', '--is-ancestor', commit_sha, f'origin/{branch_name}'],
-                capture_output=True,
-                text=True,
-                check=False  # Don't raise on non-zero exit (expected for "not ancestor")
-            )
-            
-            # Exit code 0: commit is ancestor (exists in branch)
-            if result.returncode == 0:
-                return True
-            
-            # Exit code 1: commit is NOT ancestor (normal case, not an error)
-            if result.returncode == 1:
-                return False
-            
-            # Exit code > 1: real error - verify if commit exists for better diagnostics
-            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            
-            # Try to verify if commit exists
-            try:
-                verify_result = subprocess.run(
-                    ['git', 'rev-parse', '--verify', commit_sha],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-                if verify_result.returncode != 0:
-                    # Commit doesn't exist - this is a real problem
-                    self.logger.error(
-                        f"Commit {commit_sha[:7]} does not exist in repository. "
-                        f"Original error: {error_msg}"
-                    )
-                    # Still return False - cherry-pick will fail with clear error
-                else:
-                    # Commit exists but merge-base failed - might be temporary issue
-                    self.logger.warning(
-                        f"git merge-base failed (exit {result.returncode}) but commit exists. "
-                        f"Error: {error_msg}. This might be a temporary issue."
-                    )
-            except Exception:
-                # Verification failed, just log original error
-                pass
-            
-            self.logger.warning(
-                f"git merge-base failed with exit code {result.returncode} "
-                f"for commit {commit_sha[:7]} in branch {branch_name}: {error_msg}"
-            )
-            return False
-            
-        except Exception as e:
-            # Catch other unexpected errors (network issues, permissions, etc.)
-            self.logger.warning(
-                f"Unexpected error checking if commit {commit_sha[:7]} exists in branch {branch_name}: {e}"
-            )
-            return False
-
     def _get_linked_issues_graphql(self, pr_number: int) -> List[str]:
         """Get linked issues via GraphQL API"""
         query = """
@@ -982,31 +915,23 @@ After resolving conflicts, mark this PR as ready for review.
         self.git_run("checkout", "-B", target_branch, f"origin/{target_branch}")
         self.git_run("checkout", "-b", dev_branch_name)
         
-        # Filter commits that already exist in branch
-        commits_to_pick = []
-        for commit_sha in self.commit_shas:
-            if self._is_commit_in_branch(commit_sha, target_branch):
-                self.logger.info(f"Commit {commit_sha[:7]} already exists in branch {target_branch}, skipping")
-                self.add_summary(f"Commit {commit_sha[:7]} already exists in branch {target_branch}, skipped")
-            else:
-                commits_to_pick.append(commit_sha)
-        
-        if not commits_to_pick:
-            reason = "all commits already exist in target branch"
-            self.logger.info(f"All commits already exist in branch {target_branch}, skipping PR creation")
-            self.add_summary(f"All commits already exist in branch {target_branch}, skipping PR creation")
-            self.skipped_branches.append((target_branch, reason))
-            return
-        
         # Cherry-pick commits
         # Note: git cherry-pick by default skips empty commits, so we don't need --empty=drop (which doesn't exist)
-        for commit_sha in commits_to_pick:
+        for commit_sha in self.commit_shas:
             try:
                 self.git_run("cherry-pick", commit_sha)
             except subprocess.CalledProcessError as e:
                 error_output = e.output.decode() if e.output else ""
+                stderr_output = e.stderr.decode() if e.stderr else ""
+                full_output = error_output + stderr_output
+                
+                # Check if commit is already applied (git cherry-pick returns error but commit is already in branch)
+                if "empty" in full_output.lower() or "nothing to commit" in full_output.lower():
+                    self.logger.info(f"Commit {commit_sha[:7]} changes is already in branch {target_branch}, skipping")
+                    continue
+                
                 # Check if this is a conflict or another error
-                if "CONFLICT" in error_output or "conflict" in error_output.lower():
+                if "conflict" in full_output.lower():
                     self.logger.warning(f"Conflict during cherry-pick of commit {commit_sha[:7]}")
                     conflict_handled, conflict_files = self._handle_cherry_pick_conflict(commit_sha)
                     if conflict_handled:

@@ -496,8 +496,10 @@ struct TCommonAppOptions {
                             }
                         }
                     }
-                    xdsBootstrapConfig->MutableNode()->MutableLocality()->SetZone(dataCenter);
-                    ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+                    if (!dataCenter.empty()) {
+                        xdsBootstrapConfig->MutableNode()->MutableLocality()->SetZone(dataCenter);
+                        ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+                    }
                 }
             }
         }

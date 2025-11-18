@@ -829,33 +829,44 @@ message TGRpcConfig {
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 
+// TXdsBootstrap is used to configure XDS (Envoy's discovery service) support for gRPC endpoints.
+// This enables dynamic service discovery, load balancing, and configuration via an XDS server.
+// Configure these fields when you want your gRPC endpoints to use XDS for advanced traffic management.
+// For more details, see: https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/bootstrap/v3/bootstrap.proto
+
     message TXdsBootstrap {
+        // TXdsServer describes an XDS server to connect to for configuration and service discovery.
         message TXdsServer {
+            // TChannelCred specifies the credentials used to connect to the XDS server.
+            // Example Type: "google_default", "insecure", "tls"
+            // Example Config: JSON string with credential-specific options.
             message TChannelCred {
-                optional string Type = 1;
+                optional string Type = 1; // Type of channel credentials (e.g., "insecure", "tls")
                 optional string Config = 2; // String in JSON format containing config for the type
             }
 
-            optional string ServerUri = 1;
-            repeated TChannelCred ChannelCreds = 2;
-            repeated string ServerFeatures = 3;
+            optional string ServerUri = 1; // URI of the XDS server (e.g., "xds.example.com:443")
+            repeated TChannelCred ChannelCreds = 2; // Credentials for connecting to the XDS server
+            repeated string ServerFeatures = 3; // List of supported XDS server features (e.g., "xds_v3")
         }
 
+        // TNode describes the node identity and locality information sent to the XDS server.
         message TNode {
+            // TLocality specifies the region, zone, and subzone of the node.
             message TLocality {
-                optional string Region = 1;
-                optional string Zone = 2;
-                optional string SubZone = 3;
+                optional string Region = 1; // Cloud region (e.g., "us-central1")
+                optional string Zone = 2; // Availability zone (e.g., "us-central1-a")
+                optional string SubZone = 3; // Optional subzone
             }
 
-            optional string Id = 1;
-            optional string Cluster = 2;
-            optional TLocality Locality = 3;
+            optional string Id = 1; // Unique node identifier (e.g., "node-123")
+            optional string Cluster = 2; // Cluster name (e.g., "my-grpc-cluster")
+            optional TLocality Locality = 3; // Locality information for the node
             optional string Meta = 4; // String in JSON format containing opaque metadata extending the node identifier
         }
 
-        repeated TXdsServer XdsServers = 1;
-        optional TNode Node = 2;
+        repeated TXdsServer XdsServers = 1; // List of XDS servers to connect to
+        optional TNode Node = 2; // Node identity and locality information
     }
 }
 

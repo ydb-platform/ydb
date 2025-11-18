@@ -1334,6 +1334,7 @@ void TKikimrRunner::InitializeXdsBootstrapConfig(const TKikimrRunConfig& runConf
         void ConvertStringToJsonValue(const TString& jsonString, NJson::TJsonValue* const out) const {
             NJson::TJsonReaderConfig jsonConfig;
             if (!NJson::ReadJsonTree(jsonString, &jsonConfig, out)) {
+                Cerr << "Warning: Failed to parse JSON string in ConvertStringToJsonValue: \"" << jsonString << "\"" << Endl;
                 *out = NJson::TJsonValue();
             }
         }

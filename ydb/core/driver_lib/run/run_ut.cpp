@@ -50,7 +50,7 @@ Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnv) {
     UNIT_ASSERT_STRINGS_EQUAL_C(jsonXdsBootstrapConfig, expectedJson, "The checked value: " + jsonXdsBootstrapConfig);
 }
 
-Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnvWithSomeNumbersXdsServers) {
+Y_UNIT_TEST(CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers) {
     NKikimrConfig::TAppConfig appConfig;
     auto* xdsBootstrapConfig = appConfig.MutableGRpcConfig()->MutableXdsBootstrap();
     {

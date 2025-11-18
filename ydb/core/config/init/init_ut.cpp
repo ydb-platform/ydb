@@ -433,7 +433,7 @@ config:
         UNIT_ASSERT_EQUAL(xdsBootstrap.GetNode().GetLocality().GetZone(), "vla");
     }
 
-    Y_UNIT_TEST(CanSetDataCenterFromYbdNodeArgument) {
+    Y_UNIT_TEST(CanSetDataCenterFromYdbNodeArgument) {
       TString tmpConfig(config);
       tmpConfig.append(R"(
   grpc_config:

@@ -132,8 +132,8 @@ private:
 
     std::vector<std::vector<TCell>> Cells;
     TKeysSet UniqueCellsSet;
-    THashMap<std::vector<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
-    THashMap<std::vector<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
+    THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PrimaryToSecondary;
+    THashMap<TConstArrayRef<TCell>, size_t, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> SecondaryToPrimary;
 };
 
 class IShardedWriteController : public TThrRefBase {

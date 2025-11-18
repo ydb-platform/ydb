@@ -45,7 +45,9 @@ struct TConfig {
     ui32 Concurrency = 32;
     ui64 SizeMiBPerFile = 512;
     TString KeysFile = "keys.txt";
-    TString SaveDir; // empty => don't write
+    ui64 RangeOffsetBytes = 0;     // custom start offset
+    ui64 RangeSizeBytes = 0;       // custom size; if 0, use SizeMiBPerFile
+    TString SaveDir;               // empty => don't write
     TString AccessKey;
     TString SecretKey;
 };
@@ -68,6 +70,7 @@ public:
                   const TString& bucket,
                   ui32 concurrency,
                   ui64 sizeBytes,
+                  ui64 startOffsetBytes,
                   const NThreading::TPromise<void>& donePromise,
                   const TString& saveDir)
         : S3Wrapper(s3Wrapper)
@@ -75,6 +78,7 @@ public:
         , Bucket(bucket)
         , MaxInFlight(concurrency)
         , RangeSizeBytes(sizeBytes)
+        , StartOffsetBytes(startOffsetBytes)
         , SaveDir(saveDir)
         , Done(donePromise)
     {}
@@ -128,6 +132,9 @@ private:
                 }
             }
         } else {
+            if (/* verbose */ false) {
+                // placeholder to keep patch minimal; we'll wire actual flag below
+            }
             ++Errors;
         }
 
@@ -147,7 +154,10 @@ private:
         Aws::S3::Model::GetObjectRequest req;
         req.WithBucket(Bucket.c_str());
         req.WithKey(key.c_str());
-        req.WithRange(Sprintf("bytes=0-%" PRIu64, RangeSizeBytes ? (RangeSizeBytes - 1) : 0).c_str());
+        const ui64 start = StartOffsetBytes;
+        const ui64 length = RangeSizeBytes ? RangeSizeBytes : 1;
+        const ui64 end = start + length - 1;
+        req.WithRange(Sprintf("bytes=%" PRIu64 "-%" PRIu64, start, end).c_str());
         Send(S3Wrapper, new TEvGetObjectRequest(req));
     }
 
@@ -170,6 +180,7 @@ private:
     const TString Bucket;
     const ui32 MaxInFlight;
     const ui64 RangeSizeBytes;
+    const ui64 StartOffsetBytes;
     const TString SaveDir;
 
     ui64 BytesRead = 0;
@@ -208,6 +219,8 @@ i32 main(i32 argc, const char** argv) {
     opts.AddLongOption("size-mib-per-file", "MiB read per object (range from 0)").StoreResult(&cfg.SizeMiBPerFile);
     opts.AddLongOption("keys", "path to keys.txt").StoreResult(&cfg.KeysFile);
     opts.AddLongOption("path-style", "use path-style addressing (disable virtual addressing)").NoArgument().SetFlag(&cfg.PathStyle);
+    opts.AddLongOption("range-offset-bytes", "read range start offset in bytes").StoreResult(&cfg.RangeOffsetBytes);
+    opts.AddLongOption("range-size-bytes", "read range size in bytes (overrides size-mib-per-file)").StoreResult(&cfg.RangeSizeBytes);
     opts.AddLongOption("save-dir", "directory to save downloaded data").StoreResult(&cfg.SaveDir);
     opts.AddLongOption("access-key", "AWS access key").StoreResult(&cfg.AccessKey);
     opts.AddLongOption("secret-key", "AWS secret key").StoreResult(&cfg.SecretKey);
@@ -262,10 +275,10 @@ i32 main(i32 argc, const char** argv) {
         system->Start();
 
         const TActorId wrapperId = system->Register(CreateS3Wrapper(storageOperator));
-        const ui64 sizeBytes = cfg.SizeMiBPerFile * 1024ull * 1024ull;
+        const ui64 sizeBytes = cfg.RangeSizeBytes ? cfg.RangeSizeBytes : (cfg.SizeMiBPerFile * 1024ull * 1024ull);
         auto done = NThreading::NewPromise<void>();
         auto future = done.GetFuture();
-        const TActorId bench = system->Register(new TS3BenchActor(wrapperId, std::move(keys), cfg.Bucket, cfg.Concurrency, sizeBytes, done, cfg.SaveDir));
+        const TActorId bench = system->Register(new TS3BenchActor(wrapperId, std::move(keys), cfg.Bucket, cfg.Concurrency, sizeBytes, cfg.RangeOffsetBytes, done, cfg.SaveDir));
         Y_UNUSED(bench);
 
         future.Wait();

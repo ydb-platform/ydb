@@ -123,6 +123,7 @@ private:
     TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
     THashMap<TIntervalBordersView, TIntervalInFlightInfo> IntervalsInFlight;
     ui64 ExpectedIntersectionCount = 0;
+    std::shared_ptr<TAtomicCounter> AbortionFlag;
 
 private:
     static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
@@ -171,6 +172,7 @@ private:
     }
 
     void AbortAndPassAway(const TString& reason) {
+        AbortionFlag->Inc();
         for (auto& [_, info] : IntervalsInFlight) {
             info.OnError(reason);
         }

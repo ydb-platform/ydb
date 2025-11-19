@@ -172,6 +172,7 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
 
     AFL_VERIFY(intervals.empty() == portionIds.empty());
     if (intervals.empty()) {
+        AFL_VERIFY(Portions.IsDone());
         return false;
     }
 

@@ -304,6 +304,9 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
                 reinterpret_cast<const sb_symbol*>(token.data()),
                 token.size()
             );
+            if (Y_UNLIKELY(stemmed == nullptr)) {
+                ythrow yexception() << "unable to allocate memory for sb_stemmer_stem result";
+            }
 
             const size_t resultLength = sb_stemmer_length(stemmer);
             token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);

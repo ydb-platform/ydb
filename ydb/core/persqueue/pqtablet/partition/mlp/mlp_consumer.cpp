@@ -2,6 +2,8 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -407,7 +409,7 @@ STFUNC(TConsumerActor::StateInit) {
         hFunc(TEvPQ::TEvEndOffsetChanged, HandleInit);
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
-        hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
+        hFunc(TEvPersQueue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
@@ -428,6 +430,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
@@ -450,6 +453,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFunc(TEvKeyValue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
+        hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
@@ -658,67 +662,80 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     auto maxMessages = RequiredToFetchMessageCount();
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
-    Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
+    Send(TabletActorId, MakeEvPQRead(Config.GetName(), PartitionId, Storage->GetLastOffset(), maxMessages));
 
     return true;
 }
 
-void TConsumerActor::HandleOnInit(TEvPQ::TEvProxyResponse::TPtr& ev) {
+void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr&) {
+    LOG_D("Handle TEvPQ::TEvProxyResponse");
+    // commit
+}
+
+void TConsumerActor::HandleOnInit(TEvPersQueue::TEvResponse::TPtr& ev) {
     LOG_D("Initialized");
     Become(&TConsumerActor::StateWork);
     Handle(ev);
 }
 
-void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvProxyResponse");
-    if (FetchCookie != GetCookie(ev)) {
-        // TODO MLP
-        LOG_D("Cookie mismatch: " << FetchCookie << " != " << GetCookie(ev));
-        //return;
-    }
+void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
+    LOG_D("Handle TEvPersQueue::TEvResponse");
 
     FetchInProgress = false;
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Response->DebugString());
+        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
         return;
     }
 
+    auto& response = ev->Get()->Record;
+    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
+    auto& results = response.GetPartitionResponse().GetCmdReadResult();
+
     bool allMessagesAdded = false;
     size_t messageCount = 0;
-    auto& response = ev->Get()->Response;
-    if (response->GetPartitionResponse().HasCmdReadResult()) {
-        auto lastOffset = Storage->GetLastOffset();
-        for (auto& result : response->GetPartitionResponse().GetCmdReadResult().GetResult()) {
-            if (lastOffset > result.GetOffset()) {
-                continue;
-            }
 
-            if (result.GetPartNo() > 0) {
-                continue;
-            }
-
-            allMessagesAdded = Storage->AddMessage(
-                result.GetOffset(),
-                result.HasSourceId() && !result.GetSourceId().empty(),
-                static_cast<ui32>(Hash(result.GetSourceId())),
-                TInstant::MilliSeconds(result.GetWriteTimestampMS())
-            );
-            if (!allMessagesAdded) {
-                break;
-            }
-            ++messageCount;
+    auto lastOffset = Storage->GetLastOffset();
+    for (auto& result : results.GetResult()) {
+        if (lastOffset > result.GetOffset()) {
+            continue;
         }
 
-        LOG_D("Fetched " << messageCount << " messages");
+        TString messageGroupId;
+        size_t delaySeconds = 0;
 
-        if (allMessagesAdded) {
-            FetchMessagesIfNeeded();
+        NKikimrPQClient::TDataChunk proto;
+        bool res = proto.ParseFromString(result.GetData());
+        AFL_ENSURE(res)("o", result.GetOffset());
+
+        for (auto& attr : *proto.MutableMessageMeta()) {
+            if (attr.key() == NMessageConsts::MessageId) {
+                messageGroupId = std::move(*attr.mutable_value());
+            } else if (attr.key() == NMessageConsts::DelaySeconds) {
+                delaySeconds = std::stoul(attr.value());
+            }
         }
 
-        if (CurrentStateFunc() == &TConsumerActor::StateWork) {
-            ProcessEventQueue();
+        allMessagesAdded = Storage->AddMessage(
+            result.GetOffset(),
+            !messageGroupId.empty(),
+            static_cast<ui32>(Hash(messageGroupId)),
+            TInstant::MilliSeconds(result.GetWriteTimestampMS()),
+            TDuration::Seconds(delaySeconds)
+        );
+        if (!allMessagesAdded) {
+            break;
         }
+        ++messageCount;
+    }
+
+    LOG_D("Fetched " << messageCount << " messages");
+    if (allMessagesAdded) {
+        FetchMessagesIfNeeded();
+    }
+
+    if (CurrentStateFunc() == &TConsumerActor::StateWork) {
+        ProcessEventQueue();
     }
 }
 

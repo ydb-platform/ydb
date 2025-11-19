@@ -277,7 +277,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
     }
 }
 
-bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp) {
+bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     while (!Messages.empty() && offset > GetLastOffset()) {
@@ -323,10 +323,12 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         Batch.MoveBaseTime(TimeProvider->Now(), BaseWriteTimestamp);
     }
 
+    ui32 deadlineDelta = NormalizeDeadline(writeTimestamp + delay);
+
     Messages.push_back({
-        .Status = EMessageStatus::Unprocessed,
+        .Status = deadlineDelta ? EMessageStatus::Locked : EMessageStatus::Unprocessed,
         .ProcessingCount = 0,
-        .DeadlineDelta = 0,
+        .DeadlineDelta = deadlineDelta,
         .HasMessageGroupId = hasMessagegroup,
         .MessageGroupIdHash = messageGroupIdHash,
         .WriteTimestampDelta = static_cast<ui32>((TrimToSeconds(writeTimestamp) - BaseWriteTimestamp).Seconds())

@@ -1,0 +1,31 @@
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================COPYRIGHT====================
+    Value *NotC = Builder.CreateNot(C);
+    Value *RHS = Builder.CreateAnd(B, NotC);
+    return BinaryOperator::CreateOr(LHS, RHS);
+
+
+====================COPYRIGHT====================
+  //   icmp <pred> iK %E, trunc(C)
+  Value *Vec;
+  ArrayRef<int> Mask;
+
+
+====================COPYRIGHT====================
+  // The instruction has the form "(A op' B) op (C)".  Try to factorize common
+  // term.
+  if (Op0)
+
+
+====================COPYRIGHT====================
+  if (C) {
+    SmallVector<Value *, 4> NewIncomingValues;
+    auto CanFoldIncomingValuePair = [&](std::tuple<Use &, Use &> T) {

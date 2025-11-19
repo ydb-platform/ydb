@@ -18,7 +18,7 @@ SRCS(
 )
 
 PEERDIR(
-    yql/essentials/minikql/computation/llvm16
+    yql/essentials/minikql/computation/llvm20
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/python/python_udf

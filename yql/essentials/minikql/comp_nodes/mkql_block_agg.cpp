@@ -513,7 +513,7 @@ protected:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), getStateMethodPtr);
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType}, false);
@@ -1017,7 +1017,7 @@ protected:
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
         const auto statePtrType = PointerType::getUnqual(stateType);
 
-        const auto atTop = &ctx.Func->getEntryBlock().back();
+        const auto atTop = ctx.GetEntryBlockEnd();
 
         const auto getFunc = ConstantInt::get(Type::getInt64Ty(context), getStateMethodPtr);
         const auto getType = FunctionType::get(valueType, {statePtrType, indexType, ctx.GetFactory()->getType(), indexType}, false);
@@ -1354,7 +1354,7 @@ public:
 
                     if constexpr (UseArena) {
                         // prefetch payloads only
-                        auto* payload = hash->GetMutablePayloadPtr(iter);
+                        auto payload = hash->GetMutablePayloadPtr(iter);
                         char* ptr;
                         if (isNew) {
                             ptr = (char*)Arena_.Alloc(TotalStateSize_);

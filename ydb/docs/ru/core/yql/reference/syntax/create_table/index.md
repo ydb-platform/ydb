@@ -14,7 +14,7 @@
 
 ```yql
 CREATE TABLE [IF NOT EXISTS] <table_name> (
-  <column_name> <column_data_type> [FAMILY <family_name>] [NULL | NOT NULL]
+  [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
   [, ...],
     INDEX <index_name>
       [GLOBAL]
@@ -26,7 +26,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
       [WITH ( <parameter_name> = <parameter_value>[, ...])]
     [, ...]
   PRIMARY KEY ( <column>[, ...]),
-  FAMILY <column_family> ( family_options[, ...])
+  [FAMILY <column_family> ( family_options[, ...])]
 )
 [WITH (<setting_name> = <setting_value>[, ...])]
 
@@ -37,53 +37,51 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 ## Параметры запроса
 
-**table_name:**
+### table_name
 
-Имя создаваемой таблицы.
-
-{% note info %}
+Путь создаваемой таблицы.
 
 При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
-{% endnote %}
-
-**IF NOT EXISTS:**
+### IF NOT EXISTS
 
 Если таблица с указанным именем уже существует, выполнение оператора полностью пропускается — не происходит никаких проверок или сопоставления схемы, и никакой ошибки не возникает. Обратите внимание, что существующая таблица может отличаться по структуре от той, которую вы хотели бы создать этим запросом — сравнение или проверка эквивалентности не производится.
 
-**column_name:**
+### column_name
 
-Имена колонок, создаваемых в новой таблице.
+Имя колонки, создаваемой в новой таблице.
 
-**column_data_type:**
+При выборе имени для колонки учитывайте общие [правила именования колонок](../../../../concepts/datamodel/table.md#column-naming-rules).
+
+### column_data_type
 
 Тип данных колонки. Полный список типов данных, которые поддерживает {{ ydb-short-name }} доступен в разделе [{#T}](../../types/index.md).
 
-**FAMILY <family_name> (настройка колонки):**
+### FAMILY <family_name> (настройка колонки)
 
-Указание группы колонок для конкретной колонки. Подробнее в разделе [{#T}](family.md).
+Указание принадлежности данной колонки к указанной группе колонок. Подробнее в разделе [{#T}](family.md).
 
-**NULL:**
+### NULL
 
 Данная колонка может содержать значения `NULL` (по умолчанию).
 
-**NOT NULL:**
+### NOT NULL
 
 Данная колонка не принимает значения `NULL`.
 
-**INDEX <index_name>:**
+### INDEX
 
 Определение индекса на таблице. Поддерживаются [вторичные индексы](secondary_index.md) и [векторные индексы](vector_index.md).
 
-**PRIMARY KEY:**
+### PRIMARY KEY
 
 Определение первичного ключа таблицы. Указывает колонки, которые составляют первичный ключ в порядке перечисления. Подробнее о выборе первичного ключа в разделе [{#T}](../../../../dev/primary-key/index.md).
 
-**FAMILY <column_family> (настройка группы колонок):**
+### FAMILY <column_family> (настройка группы колонок)
 
 Определение группы колонок с заданными параметрами. Подробнее в разделе [{#T}](family.md).
 
-**WITH:**
+### WITH
 
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
@@ -111,9 +109,9 @@ WITH (
 
 {% endnote %}
 
-**AS SELECT:**
+### AS SELECT
 
-Создание и заполнение таблицы на основе результатов запроса SELECT. Подробнее в разделе [{#T}](as_select.md).
+Создание и заполнение таблицы на основе результатов запроса `SELECT`. Подробнее в разделе [{#T}](as_select.md).
 
 
 ## Примеры создания таблиц

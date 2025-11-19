@@ -716,6 +716,35 @@ After resolving conflicts, mark this PR as ready for review.
         
         return conflict_messages
 
+    def _find_conflict_message_for_file(self, file_path: str, conflict_messages: List[str]) -> Optional[str]:
+        """Find matching conflict message for a file from git output
+        
+        Args:
+            file_path: Path to the conflicted file
+            conflict_messages: List of conflict messages from git output
+            
+        Returns:
+            Matching conflict message if found, None otherwise
+        """
+        file_basename = os.path.basename(file_path)
+        for msg in conflict_messages:
+            # Git format: "CONFLICT (type): filename ..."
+            # Extract filename from message (first word after ": ")
+            if ': ' in msg:
+                msg_file_part = msg.split(': ', 1)[1]
+                # Extract filename (first word after ": ")
+                msg_filename = msg_file_part.split()[0] if msg_file_part.split() else ""
+                # Match if filename matches (handle both relative and absolute paths)
+                if msg_filename == file_path or msg_filename == file_basename:
+                    return msg
+            # Fallback: check if file_path appears right after "CONFLICT (type): "
+            elif file_path in msg:
+                # Make sure it's not a substring match (e.g., "file.py" in "file.pyc")
+                # Check if file_path appears as a word boundary match
+                if re.search(rf'\b{re.escape(file_path)}\b', msg) or re.search(rf'\b{re.escape(file_basename)}\b', msg):
+                    return msg
+        return None
+
     def _handle_cherry_pick_conflict(self, commit_sha: str, git_output: str = ""):
         """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with conflict messages
         
@@ -760,28 +789,7 @@ After resolving conflicts, mark this PR as ready for review.
                                 conflict_line = self._find_first_conflict_line(file_path)
                                 
                                 # Find matching conflict message from git output
-                                # Git outputs messages like "CONFLICT (type): filename ..."
-                                # We need to match the message that specifically mentions this file
-                                conflict_message = None
-                                file_basename = os.path.basename(file_path)
-                                for msg in conflict_messages:
-                                    # Git format: "CONFLICT (type): filename ..."
-                                    # Extract filename from message (first word after ": ")
-                                    if ': ' in msg:
-                                        msg_file_part = msg.split(': ', 1)[1]
-                                        # Extract filename (first word after ": ")
-                                        msg_filename = msg_file_part.split()[0] if msg_file_part.split() else ""
-                                        # Match if filename matches (handle both relative and absolute paths)
-                                        if msg_filename == file_path or msg_filename == file_basename:
-                                            conflict_message = msg
-                                            break
-                                    # Fallback: check if file_path appears right after "CONFLICT (type): "
-                                    elif file_path in msg:
-                                        # Make sure it's not a substring match (e.g., "file.py" in "file.pyc")
-                                        # Check if file_path appears as a word boundary match
-                                        if re.search(rf'\b{re.escape(file_path)}\b', msg) or re.search(rf'\b{re.escape(file_basename)}\b', msg):
-                                            conflict_message = msg
-                                            break
+                                conflict_message = self._find_conflict_message_for_file(file_path, conflict_messages)
                                 
                                 conflict_files.append((file_path, conflict_line, conflict_message))
                 
@@ -803,27 +811,7 @@ After resolving conflicts, mark this PR as ready for review.
                                     conflict_line = self._find_first_conflict_line(file_path)
                                     
                                     # Find matching conflict message
-                                    # Git outputs messages like "CONFLICT (type): filename ..."
-                                    conflict_message = None
-                                    file_basename = os.path.basename(file_path)
-                                    for msg in conflict_messages:
-                                        # Git format: "CONFLICT (type): filename ..."
-                                        # Extract filename from message (first word after ": ")
-                                        if ': ' in msg:
-                                            msg_file_part = msg.split(': ', 1)[1]
-                                            # Extract filename (first word after ": ")
-                                            msg_filename = msg_file_part.split()[0] if msg_file_part.split() else ""
-                                            # Match if filename matches (handle both relative and absolute paths)
-                                            if msg_filename == file_path or msg_filename == file_basename:
-                                                conflict_message = msg
-                                                break
-                                        # Fallback: check if file_path appears right after "CONFLICT (type): "
-                                        elif file_path in msg:
-                                            # Make sure it's not a substring match (e.g., "file.py" in "file.pyc")
-                                            # Check if file_path appears as a word boundary match
-                                            if re.search(rf'\b{re.escape(file_path)}\b', msg) or re.search(rf'\b{re.escape(file_basename)}\b', msg):
-                                                conflict_message = msg
-                                                break
+                                    conflict_message = self._find_conflict_message_for_file(file_path, conflict_messages)
                                     
                                     conflict_files.append((file_path, conflict_line, conflict_message))
                     except subprocess.CalledProcessError:

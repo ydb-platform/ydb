@@ -46,10 +46,11 @@ namespace {
         auto shutdownState = new TKqpShutdownState();
         auto nodeId = runtime.GetNodeId(nodeIndexToShutdown);
         runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, 
-                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)), nodeIndexToShutdown);
+                     new TEvKqp::TEvInitiateShutdownRequest(shutdownState)));
         Sleep(TDuration::MilliSeconds(100));
 
-        auto result = kikimr.RunCall([&]{
+        // Execute query from a different node (not the one shutting down)
+        auto result = kikimr.RunCall([&](){
             auto db = kikimr.GetTableClient();
             return db.StreamExecuteScanQuery(query).GetValueSync();
         });
@@ -633,7 +634,9 @@ struct TDictCase {
     }
 
     Y_UNIT_TEST_TWIN(ShuttingDownNodeCheckRequestSuccess, FirstNodeShuttingDown) {
-        TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags).SetNodeCount(2));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
@@ -647,7 +650,9 @@ struct TDictCase {
     }
 
     Y_UNIT_TEST(ShuttingDownAllTheNodes) {
-        TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+        TKikimrRunner kikimr(TKikimrSettings().SetFeatureFlags(featureFlags).SetNodeCount(2));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
@@ -665,11 +670,18 @@ struct TDictCase {
 
     Y_UNIT_TEST(ThreeNodesGradualShutdown) {
         NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
-        TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(3)
-                                        .SetUseRealThreads(false)
-                                        .SetWithSampleTables(false));
+        appConfig.MutableFeatureFlags()->SetEnableShuttingDownNodeState(true);
+        // force distributed execution        
+        auto* tableServiceConfig = appConfig.MutableTableServiceConfig();
+        tableServiceConfig->MutableResourceManager()->SetMaxNonParallelTasksExecutionLimit(0);
         
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableShuttingDownNodeState(true);
+        
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetFeatureFlags(featureFlags)
+                                        .SetNodeCount(3)
+                                        .SetUseRealThreads(false)
+                                        .SetWithSampleTables(false));        
         kikimr.RunCall([&]() { CreateLargeTable(kikimr, 100, 2, 2, 10, 3); });
 
         auto query = R"(SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";)";

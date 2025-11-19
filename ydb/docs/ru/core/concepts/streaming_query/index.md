@@ -23,13 +23,13 @@
 
 ## Использование [читателя](../glossary.md#consumer)
 
-По умолчанию чтение из топика происходит [без использования читателя](../../reference/ydb-sdk/topic.md#no-consumer)).
-Чтобы использовать читателя необходимо вручную его создать и указать его имя в тексте запроса через `PRAGMA pq.Consumer = ...` (см. пример в [CREATE STREAMING QUERY](../../../yql/reference/syntax/create-streaming-query),).
+По умолчанию чтение из топика происходит [без использования читателя](../../reference/ydb-sdk/topic.md#no-consumer).
+Чтобы использовать читателя необходимо вручную его создать и указать его имя в тексте запроса через `PRAGMA pq.Consumer = ...` (см. пример в [CREATE STREAMING QUERY](../../../yql/reference/syntax/create-streaming-query)).
 
 ## Состояние запроса
 
 Запросы могут быть в 2-х статусах: запущен или остановлен.
-Подробную информацию о запросе можно получить через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries)).
+Подробную информацию о запросе можно получить через системную таблицу [streaming_queries](../../dev/system-views.md#streaming_queries).
 
 ### Поддерживаемые типы данных
 

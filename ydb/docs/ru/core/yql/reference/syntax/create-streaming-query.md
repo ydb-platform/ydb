@@ -37,7 +37,7 @@ END DO;
 
 Данный формат позволяет считывать содержимое сообщений как есть, в "сыром" виде. Считанные таким образом данные можно обработать средствами [YQL](../../../yql/reference/udf/list/string). Cхема по умолчанию: `SCHEMA(Data String)`.
 
-### Поддерживаемые типы данных (#schema)
+### Поддерживаемые типы данных {#schema}
 
 Таблица всех поддерживаемых типов  в схеме запроса:
 |Тип                                  |json_each_row|raw|
@@ -93,5 +93,5 @@ DO BEGIN
         SCHEMA=(data String));
     $parsed = SELECT JSON_VALUE(json, "$.field1") as field1, JSON_VALUE(json, "$.field2") as field2 FROM $input;
     INSERT INTO `source_name`.`output_topic_name` SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
-END DO;'''
+END DO;
 ```

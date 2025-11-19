@@ -298,6 +298,8 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
         if (Y_UNLIKELY(stemmer == nullptr)) {
             ythrow yexception() << "sb_stemmer_new returned nullptr";
         }
+        Y_DEFER { sb_stemmer_delete(stemmer); };
+
         for (auto& token : tokens) {
             const sb_symbol* stemmed = sb_stemmer_stem(
                 stemmer,
@@ -311,7 +313,6 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
             const size_t resultLength = sb_stemmer_length(stemmer);
             token = std::string(reinterpret_cast<const char*>(stemmed), resultLength);
         }
-        sb_stemmer_delete(stemmer);
     }
 
     if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {

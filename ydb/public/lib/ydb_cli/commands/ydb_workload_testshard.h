@@ -13,9 +13,9 @@ public:
     TCommandTestShard();
 };
 
-class TCommandTestShardCreate : public TYdbCommand {
+class TCommandTestShardInit : public TYdbCommand {
 public:
-    TCommandTestShardCreate();
+    TCommandTestShardInit();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -28,9 +28,9 @@ private:
     TString ConfigYaml;
 };
 
-class TCommandTestShardDelete : public TYdbCommand {
+class TCommandTestShardClean : public TYdbCommand {
 public:
-    TCommandTestShardDelete();
+    TCommandTestShardClean();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;

@@ -11,16 +11,16 @@ namespace NYdb::NConsoleClient {
 TCommandTestShard::TCommandTestShard()
     : TClientCommandTree("testshard", {}, "Manage TestShard tablets for load testing")
 {
-    AddCommand(std::make_unique<TCommandTestShardCreate>());
-    AddCommand(std::make_unique<TCommandTestShardDelete>());
+    AddCommand(std::make_unique<TCommandTestShardInit>());
+    AddCommand(std::make_unique<TCommandTestShardClean>());
 }
 
-TCommandTestShardCreate::TCommandTestShardCreate()
-    : TYdbCommand("create", {}, "Create TestShard tablets with load generation (like tstool)")
+TCommandTestShardInit::TCommandTestShardInit()
+    : TYdbCommand("init", {}, "Create and initialize TestShard tablets with load generation (like tstool)")
 {
 }
 
-void TCommandTestShardCreate::Config(TConfig& config) {
+void TCommandTestShardInit::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("owner-idx", "Unique owner index for idempotent tablet creation")
         .Required().RequiredArgument("IDX").StoreResult(&OwnerIdx);
@@ -35,7 +35,7 @@ void TCommandTestShardCreate::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 }
 
-void TCommandTestShardCreate::Parse(TConfig& config) {
+void TCommandTestShardInit::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
 
     if (OwnerIdx == 0) {
@@ -53,7 +53,7 @@ void TCommandTestShardCreate::Parse(TConfig& config) {
     ConfigYaml = TFileInput(ConfigFile).ReadAll();
 }
 
-int TCommandTestShardCreate::Run(TConfig& config) {
+int TCommandTestShardInit::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
     auto client = NYdb::NTestShard::TTestShardClient(*driver);
 
@@ -74,12 +74,12 @@ int TCommandTestShardCreate::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandTestShardDelete::TCommandTestShardDelete()
-    : TYdbCommand("delete", {}, "Delete TestShard tablets by owner_idx range")
+TCommandTestShardClean::TCommandTestShardClean()
+    : TYdbCommand("clean", {}, "Delete TestShard tablets by owner_idx range")
 {
 }
 
-void TCommandTestShardDelete::Config(TConfig& config) {
+void TCommandTestShardClean::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("owner-idx", "Owner index identifying tablets to delete")
         .Required().RequiredArgument("IDX").StoreResult(&OwnerIdx);
@@ -88,7 +88,7 @@ void TCommandTestShardDelete::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 }
 
-void TCommandTestShardDelete::Parse(TConfig& config) {
+void TCommandTestShardClean::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
 
     if (OwnerIdx == 0) {
@@ -96,7 +96,7 @@ void TCommandTestShardDelete::Parse(TConfig& config) {
     }
 }
 
-int TCommandTestShardDelete::Run(TConfig& config) {
+int TCommandTestShardClean::Run(TConfig& config) {
     auto driver = std::make_unique<TDriver>(CreateDriver(config));
     auto client = NYdb::NTestShard::TTestShardClient(*driver);
 

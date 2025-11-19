@@ -285,8 +285,8 @@ TCell MakeDefaultCellByPrimitiveType() {
     if constexpr (sizeof(T) <= TCell::MaxInlineSize()) {
         return TCell::Make<T>(T());
     } else {
-        alignas(T) static const unsigned char kZero[sizeof(T)] = {0};
-        return TCell(reinterpret_cast<const char*>(kZero), sizeof(T));
+        alignas(T) static const T kDefault{};
+        return TCell(reinterpret_cast<const char*>(&kDefault), sizeof(T));
     }
 }
 

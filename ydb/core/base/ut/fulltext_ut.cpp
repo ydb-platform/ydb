@@ -80,6 +80,20 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "Invalid filter_length_max: 3000 should be between 1 and 1000");
 
+        columnAnalyzers->set_use_filter_snowball(true);
+        columnAnalyzers->clear_language();
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language required when use_filter_snowball is set");
+
+        columnAnalyzers->set_language("klingon");
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by snowball");
+
+        columnAnalyzers->set_language("english");
+        columnAnalyzers->set_use_filter_ngram(true);
+        UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time");
+
         columnSettings = settings.add_columns();
         columnSettings->set_column("text2");
         UNIT_ASSERT_C(!ValidateSettings(settings, error), error);

@@ -14,6 +14,7 @@
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <util/system/getpid.h>
 #include <util/random/entropy.h>
+#include <util/generic/overloaded.h>
 
 #include <google/protobuf/text_format.h>
 

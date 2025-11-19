@@ -6,7 +6,7 @@
 
 Чекпойнт состоит из:
 
-- стейтов агрегаций для тасок, содержащих потоковую агрегацию (таких как [MATCH RECOGNIZE](../../../yql/reference/syntax/select/match_recognize) и [GROUP BY HOP](../../..//yql/reference/syntax/select/group-by#group-by-hop)),
+- стейтов агрегаций для тасок, содержащих потоковую агрегацию (таких как [MATCH RECOGNIZE](../../../yql/reference/syntax/select/match_recognize) и [GROUP BY HOP](../../../yql/reference/syntax/select/group-by#group-by-hop)),
 - текущих [смещения](../topic#consumer-offset) во входных топиках,
 - текущих [порядковых номеров сообщений](../topic#seqno) в выходных топиков.
 

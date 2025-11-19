@@ -1,5 +1,6 @@
 package NYql.NYtflow.NProto;
 
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
 message TQYTSourceMessage {
    optional string Cluster = 1;
@@ -13,4 +14,18 @@ message TQYTSinkMessage {
    optional bytes RowType = 3;
    optional bool DoesExist = 5;
    optional bool Truncate = 6;
+}
+
+message TPQSourceMessage {
+   optional string Cluster = 1;
+   optional TPqClusterConfig.EClusterType ClusterType = 2;
+   optional string Database = 3;
+   optional string TopicPath = 4;
+}
+
+message TPQSinkMessage {
+   optional string Cluster = 1;
+   optional TPqClusterConfig.EClusterType ClusterType = 2;
+   optional string Database = 3;
+   optional string TopicPath = 4;
 }

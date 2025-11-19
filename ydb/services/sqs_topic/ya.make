@@ -24,6 +24,7 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/services/persqueue_v1
     ydb/services/sqs_topic/queue_url
+    ydb/services/sqs_topic/queue_url/holder
     ydb/services/ydb
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/mlp

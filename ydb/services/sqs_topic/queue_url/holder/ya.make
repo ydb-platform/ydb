@@ -1,14 +1,12 @@
 LIBRARY()
 
 SRCS(
-    utils.cpp
+    queue_url_holder.cpp
 )
 
 PEERDIR(
     library/cpp/string_utils/url
+    ydb/core/base
 )
 
 END()
-
-RECURSE_FOR_TESTS(ut)
-RECURSE(holder)

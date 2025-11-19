@@ -198,7 +198,9 @@ namespace {
                 return false;
             }
         } else if (settings.has_language()) {
-            error = "Unsupported language setting";
+            // Currently, language is only used for stemming (use_filter_snowball).
+            // In the future, it may be used for other language-sensitive operations (e.g., stopword filtering).
+            error = "language setting is only supported with use_filter_snowball at present; other uses may be supported in the future";
             return false;
         }
 

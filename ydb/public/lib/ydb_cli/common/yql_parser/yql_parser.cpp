@@ -44,11 +44,11 @@ public:
 
 private:
     struct TypeNode {
-        TTypeParser::ETypeKind TypeKind;
+        std::optional<TTypeParser::ETypeKind> TypeKind = std::nullopt;
         std::vector<TypeNode> Children;
 
         // For primitive type
-        EPrimitiveType PrimitiveType;
+        std::optional<EPrimitiveType> PrimitiveType = std::nullopt;
 
         // For struct type
         TString Name;
@@ -136,6 +136,14 @@ private:
                 return std::nullopt;
             }
             node = *parseResult;
+        } else if (lowerContent == "emptylist") {
+            node.TypeKind = TTypeParser::ETypeKind::EmptyList;
+        } else if (lowerContent == "emptydict") {
+            node.TypeKind = TTypeParser::ETypeKind::EmptyDict;
+        } else if (lowerContent == "void") {
+            node.TypeKind = TTypeParser::ETypeKind::Void;
+        } else if (lowerContent == "null") {
+            node.TypeKind = TTypeParser::ETypeKind::Null;
         } else {
             auto parseResult = ParsePrimitive(lowerContent);
             if (!parseResult) {
@@ -218,14 +226,6 @@ private:
             node.PrimitiveType = EPrimitiveType::JsonDocument;
         } else if (content == "dynumber") {
             node.PrimitiveType = EPrimitiveType::DyNumber;
-        } else if (content == "emptylist") {
-            node.TypeKind = TTypeParser::ETypeKind::EmptyList;
-        } else if (content == "emptydict") {
-            node.TypeKind = TTypeParser::ETypeKind::EmptyDict;
-        } else if (content == "void") {
-            node.TypeKind = TTypeParser::ETypeKind::Void;
-        } else if (content == "null") {
-            node.TypeKind = TTypeParser::ETypeKind::Null;
         } else {
             return std::nullopt;
         }
@@ -273,39 +273,58 @@ private:
     }
 
     bool BuildType(const TypeNode& node, TTypeBuilder& builder) {
-        if (node.TypeKind == TTypeParser::ETypeKind::Optional) {
+        if (!node.TypeKind.has_value()) {
+            return false;
+        }
+
+        if (*node.TypeKind == TTypeParser::ETypeKind::Optional) {
             builder.BeginOptional();
-            BuildType(node.Children[0], builder);
+            if (!BuildType(node.Children[0], builder)) {
+                return false;
+            }
             builder.EndOptional();
-        } else if (node.TypeKind == TTypeParser::ETypeKind::List) {
+        } else if (*node.TypeKind == TTypeParser::ETypeKind::List) {
             builder.BeginList();
-            BuildType(node.Children[0], builder);
+            if (!BuildType(node.Children[0], builder)) {
+                return false;
+            }
             builder.EndList();
-        } else if (node.TypeKind == TTypeParser::ETypeKind::Struct) {
+        } else if (*node.TypeKind == TTypeParser::ETypeKind::Struct) {
             builder.BeginStruct();
             for (const auto& field : node.Children) {
                 builder.AddMember(field.Name);
-                BuildType(field, builder);
+                if (!BuildType(field, builder)) {
+                    return false;
+                }
             }
             builder.EndStruct();
-        } else if (node.TypeKind == TTypeParser::ETypeKind::Tuple) {
+        } else if (*node.TypeKind == TTypeParser::ETypeKind::Tuple) {
             builder.BeginTuple();
             for (const auto& element : node.Children) {
                 builder.AddElement();
-                BuildType(element, builder);
+                if (!BuildType(element, builder)) {
+                    return false;
+                }
             }
             builder.EndTuple();
-        } else if (node.TypeKind == TTypeParser::ETypeKind::Dict) {
+        } else if (*node.TypeKind == TTypeParser::ETypeKind::Dict) {
             builder.BeginDict();
             builder.DictKey();
-            BuildType(node.Children[0], builder);
+            if (!BuildType(node.Children[0], builder)) {
+                return false;
+            }
             builder.DictPayload();
-            BuildType(node.Children[1], builder);
+            if (!BuildType(node.Children[1], builder)) {
+                return false;
+            }
             builder.EndDict();
-        } else if (node.TypeKind == TTypeParser::ETypeKind::Decimal) {
+        } else if (*node.TypeKind == TTypeParser::ETypeKind::Decimal) {
             builder.Decimal(TDecimalType(node.precision, node.scale));
-        } else if (node.TypeKind == TTypeParser::ETypeKind::Primitive) {
-            builder.Primitive(node.PrimitiveType);
+        } else if (*node.TypeKind == TTypeParser::ETypeKind::Primitive) {
+            if (!node.PrimitiveType.has_value()) {
+                return false;
+            }
+            builder.Primitive(*node.PrimitiveType);
         } else {
             return false;
         }

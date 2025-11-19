@@ -364,6 +364,58 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 }
 
+Y_UNIT_TEST(AddMessageWithDelay) {
+    TUtils utils;
+    utils.Begin();
+
+    utils.Storage.AddMessage(3, false, 0, utils.TimeProvider->Now(), TDuration::Seconds(137));
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, utils.TimeProvider->Now() + TDuration::Seconds(137));
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
+Y_UNIT_TEST(AddMessageWithZeroDelay) {
+    TUtils utils;
+    utils.Begin();
+
+    utils.Storage.AddMessage(3, false, 0, utils.TimeProvider->Now(), TDuration::Seconds(0));
+
+    auto it = utils.Storage.begin();
+    UNIT_ASSERT(it != utils.Storage.end());
+    auto message = *it;
+    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
+}
+
 Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
@@ -1518,10 +1570,10 @@ Y_UNIT_TEST(ProccessDeadlines) {
 
     TStorage storage(timeProvider);
     storage.SetKeepMessageOrder(true);
-    storage.AddMessage(3, true, 5, TInstant::Now());
-    storage.AddMessage(4, true, 7, TInstant::Now());
-    storage.AddMessage(5, true, 11, TInstant::Now());
-    storage.AddMessage(6, true, 13, TInstant::Now());
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+    storage.AddMessage(4, true, 7, timeProvider->Now());
+    storage.AddMessage(5, true, 11, timeProvider->Now());
+    storage.AddMessage(6, true, 13, timeProvider->Now());
 
     TStorage::TPosition position;
     storage.Next(timeProvider->Now() + TDuration::Seconds(10), position);
@@ -1558,9 +1610,9 @@ Y_UNIT_TEST(MoveBaseDeadline) {
 
     TStorage storage(timeProvider);
     storage.SetKeepMessageOrder(true);
-    storage.AddMessage(3, true, 5, TInstant::Now());
-    storage.AddMessage(4, true, 7, TInstant::Now());
-    storage.AddMessage(5, true, 11, TInstant::Now());
+    storage.AddMessage(3, true, 5, timeProvider->Now());
+    storage.AddMessage(4, true, 7, timeProvider->Now());
+    storage.AddMessage(5, true, 11, timeProvider->Now());
 
     TStorage::TPosition position;
     storage.Next(timeProvider->Now() + TDuration::Seconds(3), position);

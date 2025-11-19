@@ -35,6 +35,7 @@ public:
     // The maximum supported time delta. If it has reached this value, then it is necessary
     // to shift the BaseDeadline. Allows you to store deadlines for up to 18 hours.
     static constexpr size_t MaxDeadlineDelta = Max<ui16>();
+    static constexpr TDuration MaxDeadline = TDuration::Hours(12);
 
 public:
     enum EMessageStatus {

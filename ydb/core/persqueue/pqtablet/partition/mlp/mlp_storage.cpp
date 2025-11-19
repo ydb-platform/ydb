@@ -337,7 +337,12 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     Batch.AddNewMessage(offset);
 
     ++Metrics.InflyMessageCount;
-    ++Metrics.UnprocessedMessageCount;
+    if (deadlineDelta) {
+        ++Metrics.LockedMessageCount;
+        Batch.AddChange(offset);
+    } else {
+        ++Metrics.UnprocessedMessageCount;
+    }
 
     return true;
 }

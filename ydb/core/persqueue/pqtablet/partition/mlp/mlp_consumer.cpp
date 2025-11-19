@@ -667,9 +667,10 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     return true;
 }
 
-void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr&) {
+void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D("Handle TEvPQ::TEvProxyResponse");
-    // commit
+    
+    AFL_ENSURE(IsSucess(ev))("e", ev->Get()->Response->DebugString());
 }
 
 void TConsumerActor::HandleOnInit(TEvPersQueue::TEvResponse::TPtr& ev) {

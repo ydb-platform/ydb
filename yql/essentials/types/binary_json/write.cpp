@@ -765,7 +765,7 @@ void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBi
                 while (it.HasNext()) {
                     auto [key, value] = it.Next();
                     if (key.GetType() != NBinaryJson::EEntryType::String) {
-                        ythrow yexception() << "Unexpected non-string key: " << key.GetType();
+                        throw yexception() << "Unexpected non-string key: " << key.GetType();
                     }
 
                     callbacks.OnMapKey(key.GetString());
@@ -774,12 +774,12 @@ void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBi
 
                 callbacks.OnCloseMap();
             } else {
-                ythrow yexception() << "Unexpected type in container iterator: " << container.GetType();
+                throw yexception() << "Unexpected type in container iterator: " << container.GetType();
             }
             break;
         }
         default:
-            ythrow yexception() << "Unexpected entry type: " << value.GetType();
+            throw yexception() << "Unexpected entry type: " << value.GetType();
     }
 }
 } // namespace

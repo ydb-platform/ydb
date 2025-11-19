@@ -342,4 +342,154 @@ namespace {
         }
 
 
-    } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)
+        static constexpr std::initializer_list<TStringBuf> CommonReceiveMessageAttributes{
+            //"MD5OfMessageBody",
+            //"MessageId",
+        };
+
+        Y_UNIT_TEST_F(TestReceiveMessageEmpty, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageInvalidQueueUrl, TFixture) {
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", "/invalid/queue/url/"}, {"WaitTimeSeconds", 1}}, 400);
+            TString resultType = GetByPath<TString>(jsonReceived, "__type");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageNonExistingQueue, TFixture) {
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", "/v1/5//Root/16/ExampleQueueName/16/ydb-sqs-consumer"}, {"WaitTimeSeconds", 1}}, 400);
+            TString resultType = GetByPath<TString>(jsonReceived, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageInvalidSize, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            for (int num : {-10, 0, 50, Max<int>(), Min<int>()}) {
+                auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}, {"MaxNumberOfMessages", num}}, 400);
+                TString resultType = GetByPath<TString>(jsonReceived, "__type");
+                UNIT_ASSERT_VALUES_EQUAL_C(resultType, "InvalidParameterValue", LabeledOutput(num)) ;
+            }
+        }
+
+         Y_UNIT_TEST_F(TestReceiveMessage, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            auto jsonSend = SendMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"MessageBody", "MessageBody-0"},
+            });
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 5}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
+            for (const TStringBuf attrName : CommonReceiveMessageAttributes) {
+                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, attrName), GetByPath<TString>(jsonReceived["Messages"][0], attrName), LabeledOutput(attrName));
+            }
+            // Second call during visibility timeout
+            jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageReturnToQueue, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            auto jsonSend = SendMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"MessageBody", "MessageBody-0"},
+            });
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 5}, {"VisibilityTimeout", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
+            for (const TStringBuf attrName : CommonReceiveMessageAttributes) {
+                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, attrName), GetByPath<TString>(jsonReceived["Messages"][0], attrName), LabeledOutput(attrName));
+            }
+
+            do {
+                Sleep(TDuration::MilliSeconds(350));
+                // Second call after visibility timeout
+                jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+                Cerr << (TStringBuilder() << "jsonReceived = " << WriteJson(jsonReceived, true, true) << '\n');
+            } while (jsonReceived["Messages"].GetArray().size() == 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
+            for (const TStringBuf attrName :CommonReceiveMessageAttributes) {
+                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, attrName), GetByPath<TString>(jsonReceived["Messages"][0], attrName), LabeledOutput(attrName));
+            }
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            THashSet<TString> messages;
+            const int n = 300;
+
+            for (int i = 0; i < n; i += 10) {
+                NJson::TJsonMap req{
+                    {"QueueUrl", path.QueueUrl},
+                    {"Entries", NJson::TJsonArray{}},
+                };
+                for (int j = i; j < i + 10; j++) {
+                    TString body = TStringBuilder() << "MessageBody-" << j;
+                    req["Entries"].AppendValue(
+                        NJson::TJsonMap{
+                            {"Id", std::format("Id-{}", j)},
+                            {"MessageBody", body},
+                        }
+                    );
+                    messages.insert(body);
+                }
+                auto json = SendMessageBatch(req);
+            };
+
+            TMap<size_t, size_t> batchSizesHistogram;
+            THashSet<TString> receipts;
+            size_t iteration = 0;
+            while (!messages.empty()) {
+                ++iteration;
+                size_t maxNumberOfMessages = 1 + iteration % 9;
+                auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 5}, {"MaxNumberOfMessages", maxNumberOfMessages}});
+                for (const auto& message : jsonReceived["Messages"].GetArray()) {
+                    const TString body = message["Body"].GetString();
+
+                    size_t cnt = messages.erase(body);
+                    UNIT_ASSERT_VALUES_EQUAL_C(cnt, 1, LabeledOutput(body, maxNumberOfMessages, iteration, messages.size()));
+
+                    auto [_, unique] = receipts.insert(message["ReceiptHandle"].GetStringSafe());
+                    UNIT_ASSERT_C(unique,  LabeledOutput(body, maxNumberOfMessages, iteration, messages.size()));
+                }
+                size_t batchSize = jsonReceived["Messages"].GetArray().size();
+                batchSizesHistogram[batchSize]++;
+                UNIT_ASSERT_LE_C(batchSize, maxNumberOfMessages, LabeledOutput(maxNumberOfMessages, iteration, messages.size()));
+            }
+
+            Cerr << "batchSizesHistogram (" << batchSizesHistogram.size() << ":\n";
+            for (const auto& [size, cnt] : batchSizesHistogram) {
+                Cerr << "    " << size << ": " << cnt << "\n";
+            }
+
+            UNIT_ASSERT(!batchSizesHistogram.empty());
+            UNIT_ASSERT(batchSizesHistogram.size() > 1 || batchSizesHistogram.begin()->first > 1);
+        }
+
+    } // Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy)

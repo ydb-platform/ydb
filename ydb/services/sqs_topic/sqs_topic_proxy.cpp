@@ -2,6 +2,7 @@
 #include "actor.h"
 #include "error.h"
 #include "request.h"
+#include "receive_message.h"
 #include "send_message.h"
 #include "utils.h"
 
@@ -136,7 +137,6 @@ namespace NKikimr::NGRpcService {
 
     DECLARE_RPC(GetQueueUrl);
     DECLARE_RPC_NI(CreateQueue);
-    DECLARE_RPC_NI(ReceiveMessage);
     DECLARE_RPC_NI(GetQueueAttributes);
     DECLARE_RPC_NI(ListQueues);
     DECLARE_RPC_NI(DeleteMessage);
@@ -159,6 +159,11 @@ namespace NKikimr::NGRpcService {
     template <>
     IActor* TEvSqsTopicSendMessageBatchRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
         return CreateSendMessageBatchActor(msg).release();
+    }
+
+    template <>
+    IActor* TEvSqsTopicReceiveMessageRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+        return CreateReceiveMessageActor(msg).release();
     }
 
 } // namespace NKikimr::NGRpcService

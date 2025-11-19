@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     actor.cpp
     error.cpp
+    receive_message.cpp
     send_message.cpp
     sqs_topic_proxy.cpp
     statuses.cpp

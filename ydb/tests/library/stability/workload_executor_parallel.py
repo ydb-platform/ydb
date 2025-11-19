@@ -267,7 +267,7 @@ class ParallelWorkloadTestBase:
                         start_time=getattr(result, "start_time", None),
                         attach_name="kikimr",
                         query_text="",
-                        ignore_roles=True  # Собираем логи со всех уникальных хостов
+                        ignore_roles=True  # Collect logs from all unique hosts
                     )
             except Exception as e:
                 logging.warning(f"Failed to attach kikimr logs: {e}")

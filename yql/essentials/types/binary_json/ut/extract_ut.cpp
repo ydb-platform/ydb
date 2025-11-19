@@ -21,11 +21,11 @@ public:
     UNIT_TEST_SUITE_END();
 
     void TestInvalidCursor() {
-        TEntryCursor invalidCursor({}, TEntry(EEntryType(31), 0));
+        TEntryCursor invalidCursor({}, TEntry(EEntryType(15), 0));
         auto result = SerializeToBinaryJson(invalidCursor);
         UNIT_ASSERT(std::holds_alternative<TString>(result));
 
-        UNIT_ASSERT_EQUAL("Unexpected entry type", std::get<TString>(result));
+        UNIT_ASSERT_VALUES_EQUAL("Undefined value 15 in NKikimr::NBinaryJson::EEntryType. ", std::get<TString>(result));
     }
 
     void TestTopLevelScalar() {
@@ -48,7 +48,7 @@ public:
             const auto cursor = container.GetElement(0);
             const auto extractedBinaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(cursor));
 
-            UNIT_ASSERT_EQUAL(SerializeToJson(binaryJson), SerializeToJson(extractedBinaryJson));
+            UNIT_ASSERT_VALUES_EQUAL(SerializeToJson(binaryJson), SerializeToJson(extractedBinaryJson));
         }
     }
 
@@ -72,7 +72,7 @@ public:
 
             const auto expectedBinaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.second));
 
-            UNIT_ASSERT_EQUAL(SerializeToJson(expectedBinaryJson), SerializeToJson(extractedBinaryJson));
+            UNIT_ASSERT_VALUES_EQUAL(SerializeToJson(expectedBinaryJson), SerializeToJson(extractedBinaryJson));
         }
     }
 
@@ -98,7 +98,7 @@ public:
 
             const auto expectedBinaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.second));
 
-            UNIT_ASSERT_EQUAL(SerializeToJson(expectedBinaryJson), SerializeToJson(extractedBinaryJson));
+            UNIT_ASSERT_VALUES_EQUAL(SerializeToJson(expectedBinaryJson), SerializeToJson(extractedBinaryJson));
         }
     }
 
@@ -122,7 +122,7 @@ public:
 
             const auto expectedBinaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.second));
 
-            UNIT_ASSERT_EQUAL(SerializeToJson(expectedBinaryJson), SerializeToJson(extractedBinaryJson));
+            UNIT_ASSERT_VALUES_EQUAL(SerializeToJson(expectedBinaryJson), SerializeToJson(extractedBinaryJson));
         }
     }
 };

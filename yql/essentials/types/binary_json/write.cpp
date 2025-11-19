@@ -728,7 +728,7 @@ template <typename TOnDemandValue>
 #undef RETURN_IF_NOT_SUCCESS
 }
 
-TString SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBinaryJson::TEntryCursor& value) {
+void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBinaryJson::TEntryCursor& value) {
     switch (value.GetType()) {
         case NBinaryJson::EEntryType::BoolFalse:
             callbacks.OnBoolean(false);
@@ -753,9 +753,7 @@ TString SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const 
                 auto it = container.GetArrayIterator();
                 while (it.HasNext()) {
                     auto value = it.Next();
-                    if (auto error = SerializeEntryCursorToBinaryJson(callbacks, value); !error.empty()) {
-                        return error;
-                    }
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
                 }
 
                 callbacks.OnCloseArray();
@@ -767,26 +765,22 @@ TString SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const 
                 while (it.HasNext()) {
                     auto [key, value] = it.Next();
                     if (key.GetType() != NBinaryJson::EEntryType::String) {
-                        return TString("Unexpected non-string key");
+                        ythrow yexception() << "Unexpected non-string key: " << key.GetType();
                     }
 
                     callbacks.OnMapKey(key.GetString());
-                    if (auto error = SerializeEntryCursorToBinaryJson(callbacks, value); !error.empty()) {
-                        return error;
-                    }
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
                 }
 
                 callbacks.OnCloseMap();
             } else {
-                return TString("Unexpected top value scalar in container iterator");
+                ythrow yexception() << "Unexpected type in container iterator: " << container.GetType();
             }
             break;
         }
         default:
-            return TString("Unexpected entry type");
+            ythrow yexception() << "Unexpected entry type: " << value.GetType();
     }
-
-    return {};
 }
 } // namespace
 
@@ -826,10 +820,12 @@ TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
 }
 
 std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
-    TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ true, /* allowInf */ false);
 
-    if (auto error = SerializeEntryCursorToBinaryJson(callbacks, value); !error.empty()) {
-        return error;
+    try {
+        SerializeEntryCursorToBinaryJson(callbacks, value);
+    } catch (const yexception& ex) {
+        return TString(ex.what());
     }
 
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());

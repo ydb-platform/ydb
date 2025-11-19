@@ -495,7 +495,7 @@ void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAna
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 }
 
-void AnalyzeTable(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
+void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
     auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
     auto& record = ev->Record;
     table.ToProto(*record.MutableTable());

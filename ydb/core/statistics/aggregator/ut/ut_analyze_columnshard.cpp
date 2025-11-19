@@ -10,13 +10,13 @@ namespace NKikimr {
 namespace NStat {
 
 Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
-    Y_UNIT_TEST(AnalyzeTable) {
+    Y_UNIT_TEST(AnalyzeShard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
         const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 1);
         const auto& tableInfo = databaseInfo.Tables[0];
 
-        AnalyzeTable(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
+        AnalyzeShard(runtime, tableInfo.ShardIds[0], tableInfo.PathId);
     }
 
     Y_UNIT_TEST(Analyze) {

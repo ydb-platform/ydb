@@ -249,7 +249,6 @@ Y_UNIT_TEST(AddIndexSnowball) {
     UpsertTexts(db);
     AddIndexSnowball(db, "english");
     const auto index = ReadIndex(db);
-    Cerr << index.RowsCount() << Endl;
     CompareYson(R"([
         [[100u];"anim"];
         [[100u];"cat"];

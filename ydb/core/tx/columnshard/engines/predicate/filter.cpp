@@ -5,6 +5,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <type_traits>
 
 namespace NKikimr::NOlap {
 
@@ -281,14 +282,12 @@ TConclusion<TPKRangesFilter> TRangesBuilder::Finish() {
 namespace {
 template <typename T>
 TCell MakeDefaultCellByPrimitiveType() {
-    return TCell::Make<T>(T());
-}
-
-// Specialization for Decimal storage type: std::pair<ui64, i64> (16 bytes)
-template <>
-inline TCell MakeDefaultCellByPrimitiveType<std::pair<ui64, i64>>() {
-    static const std::pair<ui64, i64> kZeroDecimal{0, 0};
-    return TCell(reinterpret_cast<const char*>(&kZeroDecimal), sizeof(kZeroDecimal));
+    if constexpr (sizeof(T) <= TCell::MaxInlineSize()) {
+        return TCell::Make<T>(T());
+    } else {
+        alignas(T) static const unsigned char kZero[sizeof(T)] = {0};
+        return TCell(reinterpret_cast<const char*>(kZero), sizeof(T));
+    }
 }
 
 }   // namespace

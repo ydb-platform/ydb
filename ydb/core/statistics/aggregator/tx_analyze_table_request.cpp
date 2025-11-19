@@ -16,8 +16,8 @@ struct TStatisticsAggregator::TTxAnalyzeTableRequest : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE_REQUEST; }
 
-    static std::unique_ptr<TEvStatistics::TEvAnalyzeTable> MakeRequest(const TString& operationId, const TForceTraversalTable& operationTable) {
-        auto request = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
+    static std::unique_ptr<TEvStatistics::TEvAnalyzeShard> MakeRequest(const TString& operationId, const TForceTraversalTable& operationTable) {
+        auto request = std::make_unique<TEvStatistics::TEvAnalyzeShard>();
         auto& record = request->Record;
         record.SetOperationId(operationId);
         auto& table = *record.MutableTable();

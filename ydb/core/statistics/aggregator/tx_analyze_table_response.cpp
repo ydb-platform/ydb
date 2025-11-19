@@ -8,9 +8,9 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
-    NKikimrStat::TEvAnalyzeTableResponse Record;
+    NKikimrStat::TEvAnalyzeShardResponse Record;
     
-    TTxAnalyzeTableResponse(TSelf* self, NKikimrStat::TEvAnalyzeTableResponse&& record)
+    TTxAnalyzeTableResponse(TSelf* self, NKikimrStat::TEvAnalyzeShardResponse&& record)
         : TTxBase(self)
         , Record(std::move(record))
     {}
@@ -58,7 +58,7 @@ struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
     }
 };
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeTableResponse::TPtr& ev) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeShardResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
     Execute(new TTxAnalyzeTableResponse(this, std::move(record)),
         TActivationContext::AsActorContext());

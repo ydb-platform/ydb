@@ -496,14 +496,14 @@ void Analyze(TTestActorRuntime& runtime, ui64 saTabletId, const std::vector<TAna
 }
 
 void AnalyzeShard(TTestActorRuntime& runtime, ui64 shardTabletId, const TAnalyzedTable& table) {
-    auto ev = std::make_unique<TEvStatistics::TEvAnalyzeTable>();
+    auto ev = std::make_unique<TEvStatistics::TEvAnalyzeShard>();
     auto& record = ev->Record;
     table.ToProto(*record.MutableTable());
     record.AddTypes(NKikimrStat::EColumnStatisticType::TYPE_COUNT_MIN_SKETCH);
 
     auto sender = runtime.AllocateEdgeActor();
     runtime.SendToPipe(shardTabletId, sender, ev.release());
-    runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeTableResponse>(sender);
+    runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeShardResponse>(sender);
 }
 
 void AnalyzeStatus(TTestActorRuntime& runtime, TActorId sender, ui64 saTabletId, const TString operationId, const NKikimrStat::TEvAnalyzeStatusResponse::EStatus expectedStatus) {

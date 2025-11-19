@@ -136,14 +136,6 @@ private:
                 return std::nullopt;
             }
             node = *parseResult;
-        } else if (lowerContent == "emptylist") {
-            node.TypeKind = TTypeParser::ETypeKind::EmptyList;
-        } else if (lowerContent == "emptydict") {
-            node.TypeKind = TTypeParser::ETypeKind::EmptyDict;
-        } else if (lowerContent == "void") {
-            node.TypeKind = TTypeParser::ETypeKind::Void;
-        } else if (lowerContent == "null") {
-            node.TypeKind = TTypeParser::ETypeKind::Null;
         } else {
             auto parseResult = ParsePrimitive(lowerContent);
             if (!parseResult) {

@@ -905,7 +905,11 @@ public:
         Counters->CreatedIterators->Inc();
         ReadIdByTabletId[state->TabletId].push_back(id);
 
-        Send(PipeCacheId, new TEvPipeCache::TEvForward(ev.Release(), state->TabletId, true),
+        bool newPipe = HasEstablishedPipe.insert(state->TabletId).second;
+        Send(PipeCacheId, new TEvPipeCache::TEvForward(
+            ev.Release(), state->TabletId, TEvPipeCache::TEvForwardOptions{
+                .AutoConnect = newPipe,
+                .Subscribe = newPipe}),
             IEventHandle::FlagTrackDelivery, 0, ReadActorSpan.GetTraceId());
 
         if (!FirstShardStarted) {
@@ -1092,6 +1096,7 @@ public:
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& msg = *ev->Get();
 
+        HasEstablishedPipe.erase(msg.TabletId);
         TVector<ui32> reads;
         reads = ReadIdByTabletId[msg.TabletId];
         CA_LOG_W("Got EvDeliveryProblem, TabletId: " << msg.TabletId << ", NotDelivered: " << msg.NotDelivered);
@@ -1404,7 +1409,10 @@ public:
                         }
                         Counters->SentIteratorAcks->Inc();
                         CA_LOG_D("sending ack for read #" << id << " limit " << limit << " seqno = " << record.GetSeqNo());
-                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, true),
+                        bool newPipe = HasEstablishedPipe.insert(Reads[id].Shard->TabletId).second;
+                        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), Reads[id].Shard->TabletId, TEvPipeCache::TEvForwardOptions{
+                            .AutoConnect = newPipe,
+                            .Subscribe = newPipe}),
                             IEventHandle::FlagTrackDelivery);
 
                         if (auto delay = ShardTimeout()) {
@@ -1658,6 +1666,8 @@ private:
         ui64 SeqNo;
         ui64 RowIndex;
     };
+
+    THashSet<ui64> HasEstablishedPipe;
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;

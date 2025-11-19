@@ -15,6 +15,11 @@ struct TJoinTableAliases {
     THashSet<TString> RightSideAliases;
 };
 
+struct TAggregationTraits {
+    TVector<TExprNode::TPtr> AggTraitsList;
+    TVector<TInfoUnit> KeyColumns;
+};
+
 THashSet<TString> SupportedAggregationFunctions{"sum", "min", "max", "count"};
 ui64 KqpUniqueAggColumnId{0};
 
@@ -316,8 +321,7 @@ TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext &ctx) {
                 .Seal()
             .Build();
             // clnag-format on
-        }
-        else if (input->IsCallable()){
+    } else if (input->IsCallable()){
             TVector<TExprNode::TPtr> newChildren;
             for (auto c : input->Children()) {
                 newChildren.push_back(ReplacePgOps(c, ctx));
@@ -566,10 +570,16 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
             filterExpr = Build<TKqpOpEmptySource>(ctx, node->Pos()).Done().Ptr();
         }
 
+        // Columns to for `PgCast`
         THashSet<TString> aggregationColumnsRequireCastToPgType;
+        // Group by fields for renames or expressions.
         TVector<std::pair<TInfoUnit, TInfoUnit>> groupByKeysRenamesMap;
         THashMap<uint32_t, std::pair<TInfoUnit, TExprNode::TPtr>> groupByKeysExpressionsMap;
-        TVector<TInfoUnit> groupByKeys;
+        // Aggregate.
+        TAggregationTraits aggTraits;
+        // Pre/Post distinct aggregations.
+        TAggregationTraits distinctAggregationTraitsPreAggregate;
+        TAggregationTraits distinctAggregationTraitsPostAggregate;
         auto groupOps = GetSetting(setItem->Tail(), "group_exprs");
         if (groupOps) {
             const auto groupByList = groupOps->TailPtr();
@@ -590,13 +600,13 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
 
                     const auto newColName = TInfoUnit(GenerateUniqueColumnName("_group_expr_"));
                     groupByKeysExpressionsMap[i] = std::make_pair(newColName, groupExprLambda);
-                    groupByKeys.push_back(newColName);
+                    aggTraits.KeyColumns.push_back(newColName);
                 } else {
                     TVector<TInfoUnit> keys;
                     GetAllMembers(body, keys);
                     Y_ENSURE(keys.size() == 1, "Invalid size of the group keys.");
                     const auto groupKeyName = keys.front();
-                    groupByKeys.push_back(groupKeyName);
+                    aggTraits.KeyColumns.push_back(groupKeyName);
                     groupByKeysRenamesMap.push_back({groupKeyName, groupKeyName});
                 }
             }
@@ -607,14 +617,13 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         Y_ENSURE(result);
         auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-        THashSet<TString> columnNames;
-        // Collect PgAgg for each result item at first pass.
-        TVector<TExprNode::TPtr> aggTraitsList;
-        TVector<TExprNode::TPtr> distinctAggTraitsList;
-        TVector<TInfoUnit> distinctAggKeyColumns;
+        // Unique column names.
+        THashSet<TString> uniqueColumnNames;
+        bool needRenameMap = false;
+        // Aggregations.
         TVector<std::pair<TInfoUnit, TInfoUnit>> aggFieldsRenamesMap;
         TVector<std::pair<TInfoUnit, TExprNode::TPtr>> aggFieldsExpressionsMap;
-        bool needRenameMap = false;
+        bool distinctPreAggregate = false;
         for (ui32 i = 0; i < result->Child(1)->ChildrenSize(); ++i) {
             const auto resultItem = result->Child(1)->ChildPtr(i);
             auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
@@ -625,15 +634,18 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
             auto pgAgg = GetPgCallable(lambda.Body().Ptr(), "PgAgg");
             if (pgAgg) {
                 // Collect original column names processing `PgAgg` callable.
-                TVector<TInfoUnit> originalColNames;
-                GetAllMembers(pgAgg, originalColNames);
+                TInfoUnit originalColName;
+                TInfoUnit renamedColName;
+
+                auto lambdaBody = lambda.Body().Ptr();
                 auto pgResolvedOp = GetPgCallable(lambda.Body().Ptr(), "PgResolvedOp");
-
-                auto originalColName = originalColNames.front();
-                auto renamedColName = originalColName;
-
-                if (pgResolvedOp) {
+                if (pgResolvedOp && !lambdaBody->IsCallable("PgResolvedOp")) {
+                    // Aggregation on expression f(a x b).
+                    // We pull expression outside a given aggregation and rename result of a given expression with unique name
+                    // to later process result with aggregate function.
+                    // For example: (a x b) as uqique_result_name -> f(unique_result_name)
                     auto fromPg = ctx.NewCallable(node->Pos(), "FromPg", {pgResolvedOp});
+
                     // clang-format off
                     auto exprLambda = Build<TCoLambda>(ctx, node->Pos())
                         .Args(lambda.Args())
@@ -641,68 +653,131 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     .Done().Ptr();
                     // clang-format on
 
-                    // Just any unique name for expression result, physical plan should be AsSturct(`unique_name (expression))
+                    // Just any unique name for expression result, physical plan should be AsSturct(`unique_name (expression)).
                     originalColName = TInfoUnit(GenerateUniqueColumnName("_expr_"));
                     renamedColName = originalColName;
                     aggFieldsExpressionsMap.push_back({originalColName, exprLambda});
                 } else {
-                    // Rename agg column we will add a map to map same column to different renames.
-                    if (columnNames.count(originalColName.GetFullName())) {
+                    // Either an aggregation f(a) or expression on aggregation f(a) x b.
+                    // Here we want to get just a column name for aggregation.
+                    Y_ENSURE(pgAgg->ChildrenSize() == 3, "Invalid children size for `PgAgg`");
+                    auto toPg = pgAgg->ChildPtr(2);
+                    Y_ENSURE(toPg->IsCallable("ToPg") && toPg->ChildPtr(0)->IsCallable("Member"), "PgAgg not a member");
+                    auto member = TCoMember(toPg->ChildPtr(0));
+                    originalColName = TInfoUnit(member.Name().StringValue());
+                    renamedColName = originalColName;
+
+                    // Aggregation columns should be unique, so we have to add rename map.
+                    // For example f(a), g(a) => map((a -> a), (a -> a_0)) -> f(a), g(a_0).
+                    if (uniqueColumnNames.count(originalColName.GetFullName())) {
                         renamedColName = TInfoUnit(originalColName.Alias, GenerateUniqueColumnName(originalColName.ColumnName));
                         needRenameMap = true;
                     }
                     aggFieldsRenamesMap.push_back({originalColName, renamedColName});
                 }
+                uniqueColumnNames.insert(renamedColName.GetFullName());
 
-                columnNames.insert(renamedColName.GetFullName());
-                Y_ENSURE(!GetAtom(pgAgg->ChildPtr(1), "distinct"), "Aggregation on distinct is not supported");
+                // Distinct for column or expression f(distinct a) => distinct a as result -> f(result).
+                if (!!GetAtom(pgAgg->ChildPtr(1), "distinct")) {
+                    const auto colName = renamedColName.GetFullName();
+                    auto distinctAggTraits =
+                        BuildAggregationTraits(colName, colName, "distinct", aggFuncResultType, ctx, node->Pos());
+                    distinctAggregationTraitsPreAggregate.AggTraitsList.push_back(distinctAggTraits);
+                    distinctAggregationTraitsPreAggregate.KeyColumns.push_back(renamedColName);
+                    distinctPreAggregate = true;
+                }
 
+                // Aggregation on pg columns requires type cast from yql type to pg type.
                 aggregationColumnsRequireCastToPgType.insert(resultColName);
                 const TString aggFuncName = TString(pgAgg->ChildPtr(0)->Content());
+                // Build an aggregation traits.
                 auto aggregationTraits = BuildAggregationTraits(renamedColName.GetFullName(), resultColName, aggFuncName,
                                                                 aggFuncResultType, ctx, node->Pos());
-                aggTraitsList.push_back(aggregationTraits);
+                aggTraits.AggTraitsList.push_back(aggregationTraits);
 
+                // Case for distinct after aggregation.
                 if (distinctAll) {
                     auto distinctAggTraits =
-                        BuildAggregationTraits(resultColName, resultColName, "distinct_all", aggFuncResultType, ctx, node->Pos());
-                    distinctAggTraitsList.push_back(distinctAggTraits);
-                    distinctAggKeyColumns.push_back(TInfoUnit(resultColName));
+                        BuildAggregationTraits(resultColName, resultColName, "distinct", aggFuncResultType, ctx, node->Pos());
+                    distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                    distinctAggregationTraitsPostAggregate.KeyColumns.push_back(TInfoUnit(resultColName));
                 }
             // This case covers distinct all on just columns without aggregation functions.
             } else if (!pgAgg && distinctAll) {
-                aggregationColumnsRequireCastToPgType.insert(resultColName);
-                Y_ENSURE(aggFuncResultType, "Cannot find type for aggregation result.");
-                TVector<TInfoUnit> originalColNames;
-                GetAllMembers(resultItem->ChildPtr(2), originalColNames);
-                Y_ENSURE(originalColNames.size() == 1, "Invalid column size for aggregation columns.");
+                auto pgGroupRef = GetPgCallable(lambda.Body().Ptr(), "PgGroupRef");
+                TInfoUnit colName;
+                if (pgGroupRef) {
+                    if (pgGroupRef->ChildrenSize() == 4) {
+                        colName = TInfoUnit(TString(pgGroupRef->ChildPtr(3)->Content()));
+                    } else {
+                        Y_ENSURE(false, "Invalid column size");
+                    }
+                } else {
+                    TVector<TInfoUnit> originalColNames;
+                    GetAllMembers(resultItem->ChildPtr(2), originalColNames);
+                    Y_ENSURE(originalColNames.size() == 1, "Invalid column size for aggregation columns.");
+                    colName = originalColNames.front();
+                }
+                aggregationColumnsRequireCastToPgType.insert(colName.ColumnName);
 
-                const auto originalColName = originalColNames.front().GetFullName();
                 auto distinctAggTraits =
-                    BuildAggregationTraits(originalColName, originalColName, "distinct_all", aggFuncResultType, ctx, node->Pos());
-                distinctAggTraitsList.push_back(distinctAggTraits);
-                distinctAggKeyColumns.push_back(originalColNames.front());
+                    BuildAggregationTraits(colName.GetFullName(), colName.GetFullName(), "distinct", aggFuncResultType, ctx, node->Pos());
+                distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+            }
+        }
+
+        // Distinct pre aggregate fro group by keys.
+        if (distinctPreAggregate) {
+            for (const auto& key : aggTraits.KeyColumns) {
+                const auto colName = key.GetFullName();
+                const auto* aggFuncResultType = finalType->FindItemType(key.ColumnName);
+                Y_ENSURE(aggFuncResultType, "Cannot find type for aggregation result");
+                auto distinctAggTraits = BuildAggregationTraits(colName, colName, "distinct", aggFuncResultType, ctx, node->Pos());
+                distinctAggregationTraitsPreAggregate.AggTraitsList.push_back(distinctAggTraits);
+                distinctAggregationTraitsPreAggregate.KeyColumns.push_back(colName);
+                aggregationColumnsRequireCastToPgType.insert(key.ColumnName);
+            }
+        }
+
+        // Distinct post aggregate for group by keys.
+        if (distinctAll) {
+            for (const auto& key : aggTraits.KeyColumns) {
+                const auto colName = key.GetFullName();
+                const auto* aggFuncResultType = finalType->FindItemType(key.ColumnName);
+                // agg key in result set.
+                if (aggFuncResultType) {
+                    auto distinctAggTraits = BuildAggregationTraits(colName, colName, "distinct", aggFuncResultType, ctx, node->Pos());
+                    distinctAggregationTraitsPostAggregate.AggTraitsList.push_back(distinctAggTraits);
+                    distinctAggregationTraitsPostAggregate.KeyColumns.push_back(colName);
+                    aggregationColumnsRequireCastToPgType.insert(key.ColumnName);
+                }
             }
         }
 
         TExprNode::TPtr resultExpr = filterExpr;
-        // Build aggregate
-        if (!aggTraitsList.empty()) {
-            // In case we have a multiple consumers for the single column we have to map and rename it.
-            if (needRenameMap) {
-                resultExpr = BuildRenameMap(resultExpr, aggFieldsRenamesMap, groupByKeysRenamesMap, ctx, node->Pos());
-            }
-            // In case we have an expression for aggregation - f(a + b ..) or group by.
-            if (!aggFieldsExpressionsMap.empty() || !groupByKeysExpressionsMap.empty()) {
-                resultExpr = BuildExpressionMap(resultExpr, aggFieldsExpressionsMap, aggFieldsRenamesMap, groupByKeysRenamesMap,
-                                                groupByKeysExpressionsMap, ctx, node->Pos());
-            }
-            resultExpr = BuildAggregate(resultExpr, groupByKeys, aggTraitsList, distinctAll, ctx, node->Pos());
+        // In case we have a multiple consumers for the single column we have to map and rename it.
+        if (needRenameMap) {
+            resultExpr = BuildRenameMap(resultExpr, aggFieldsRenamesMap, groupByKeysRenamesMap, ctx, node->Pos());
         }
-
-        // Build distinct aggregate
-        if (!distinctAggTraitsList.empty()) {
-            resultExpr = BuildAggregate(resultExpr, distinctAggKeyColumns, distinctAggTraitsList, distinctAll, ctx, node->Pos());
+        // In case we have an expression for aggregation - f(a + b ..) or group by.
+        if (!aggFieldsExpressionsMap.empty() || !groupByKeysExpressionsMap.empty()) {
+            resultExpr = BuildExpressionMap(resultExpr, aggFieldsExpressionsMap, aggFieldsRenamesMap, groupByKeysRenamesMap,
+                                            groupByKeysExpressionsMap, ctx, node->Pos());
+        }
+        // Build distinct aggregate pre aggregate.
+        if (!distinctAggregationTraitsPreAggregate.AggTraitsList.empty()) {
+            resultExpr = BuildAggregate(resultExpr, distinctAggregationTraitsPreAggregate.KeyColumns,
+                                        distinctAggregationTraitsPreAggregate.AggTraitsList, true, ctx, node->Pos());
+        }
+        // Build Aggreegate.
+        if (!aggTraits.AggTraitsList.empty()) {
+            resultExpr = BuildAggregate(resultExpr, aggTraits.KeyColumns, aggTraits.AggTraitsList, false, ctx, node->Pos());
+        }
+        // Build distinct aggregate post aggregate.
+        if (!distinctAggregationTraitsPostAggregate.AggTraitsList.empty()) {
+            resultExpr = BuildAggregate(resultExpr, distinctAggregationTraitsPostAggregate.KeyColumns,
+                                        distinctAggregationTraitsPostAggregate.AggTraitsList, true, ctx, node->Pos());
         }
 
         finalColumnOrder.clear();
@@ -732,16 +807,33 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                 Y_ENSURE(SupportedAggregationFunctions.count(pgAgg->ChildPtr(0)->Content()),
                          "Aggregation function " + TString(pgAgg->ChildPtr(0)->Content()) + " is not supported ");
 
+                // clang-format off
+                auto newBody = Build<TCoMember>(ctx, node->Pos())
+                    .Struct(lambda.Args().Arg(0))
+                    .Name<TCoAtom>()
+                        .Value(columnName)
+                    .Build()
+                .Done().Ptr();
+                // clang-format on
+
+                auto lambdaBody = lambda.Body().Ptr();
                 // Build a projection lambda, we do not need `PgAgg` inside.
+                if (lambdaBody->IsCallable("PgResolvedOp")) {
+                    // Replace PgResolvedOp(PgAgg(arg)) -> PgResolvedOp(PgCast(ToPg(Member(arg, columnName))))
+                    auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {newBody});
+                    auto pgType =
+                        ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
+                    auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {toPg, pgType});
+
+                    TNodeOnNodeOwnedMap replaces;
+                    replaces[pgAgg.Get()] = pgCast;
+                    newBody = ctx.ReplaceNodes(lambda.Body().Ptr(), replaces);
+                }
+
                 // clang-format off
                 lambda = Build<TCoLambda>(ctx, node->Pos())
                     .Args(lambda.Args())
-                    .Body<TCoMember>()
-                        .Struct(lambda.Args().Arg(0))
-                        .Name<TCoAtom>()
-                            .Value(columnName)
-                        .Build()
-                    .Build()
+                    .Body(newBody)
                 .Done();
                 // clang-format on
             }
@@ -792,7 +884,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                     .Body(toPg)
                 .Done();
                 // clang-format on
-            } else if (needPgCast || needPgCastForAgg) {
+            } else if ((needPgCast || needPgCastForAgg)) {
 
                 auto pgType =
                     ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
@@ -900,6 +992,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
         .ColumnOrder(columnOrder)
     .Done().Ptr();
     // clang-format on
+
 }
 
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
@@ -1020,7 +1113,8 @@ IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPt
 
     Y_UNUSED(ctx);
 
-    //YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << output->Dump();
+    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << KqpExprToPrettyString(TExprBase(output), ctx) << Endl;
+
 
     if (output->IsList() && output->ChildrenSize() >= 1) {
         auto child_level_1 = output->Child(0);

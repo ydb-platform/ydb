@@ -19,4 +19,4 @@ namespace NKikimr::NSqsTopic {
     std::expected<TRichQueueUrl, TString> ParseQueueUrlPath(const TStringBuf path);
 
     TString PackQueueUrlPath(const TRichQueueUrl& queueUrl);
-}
+} // namespace NKikimr::NSqsTopic

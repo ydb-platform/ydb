@@ -4,14 +4,15 @@ protobuf {
         // Download from repositories
         artifact = "com.google.protobuf:protoc:{%- if target.proto_compiler_version -%}{{ target.proto_compiler_version }}{%- else -%}3.22.5{%- endif -%}"
     }
-{%- if target.proto_grpc or target.proto_plugins|length %}
+{%- set proto_plugins = target.proto_plugins|rejectattr('name', 'eq', 'grpc_java') -%}
+{%- if target.proto_grpc or proto_plugins|length %}
 
     plugins {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:{%- if target.proto_grpc_version -%}{{ target.proto_grpc_version }}{%- else -%}1.45.0{%- endif -%}"
         }
-{%-     if target.proto_plugins|length -%}
-{%-         for proto_plugin in target.proto_plugins %}
+{%-     if proto_plugins|length -%}
+{%-         for proto_plugin in proto_plugins %}
         create("{{ proto_plugin.name }}") {
             path = {{ PatchRoots(proto_plugin.bin, true) }}
             rules
@@ -26,11 +27,11 @@ protobuf {
     }
 {%- endif %}
 
-{%- if target.proto_kotlin or target.proto_grpc or target.proto_plugins|length %}
+{%- if target.proto_kotlin or target.proto_grpc or proto_plugins|length %}
 
     generateProtoTasks {
         all().forEach {
-{%-     if target.proto_grpc or target.proto_plugins|length %}
+{%-     if target.proto_grpc or proto_plugins|length %}
             it.plugins {
 {%-         if target.proto_grpc %}
                 id("grpc")
@@ -38,8 +39,8 @@ protobuf {
 {%-         if target.proto_kotlin_grpc %}
                 id("grpckt")
 {%-         endif -%}
-{%-         if target.proto_plugins|length -%}
-{%-             for proto_plugin in target.proto_plugins %}
+{%-         if proto_plugins|length -%}
+{%-             for proto_plugin in proto_plugins %}
                 create("{{ proto_plugin.name }}") {
                     outputSubDir = "java"
                 }

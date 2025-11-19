@@ -152,19 +152,17 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
 }
 
 TConclusionStatus TCPULimits::DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
+    const static auto maxThreadsCount = TActivationContext::ActorSystem()->GetPoolMaxThreadsCount(TActivationContext::AsActorContext().SelfID.PoolID());
     const auto share = config.GetPoolMaxCpuShare();
     if (share <= 0 || 1 < share) {
         return TConclusionStatus::Fail("cpu share have to be in (0, 1] interval");
     }
-    NActors::TExecutorPoolStats poolStats;
-    TVector<NActors::TExecutorThreadStats> threadsStats;
-    TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
-    CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
+    CPUGroupThreadsLimit = Max<ui64>(1, maxThreadsCount) * share;
     CPUGroupName = config.GetPoolId();
     return TConclusionStatus::Success();
 }
 
-}
+} // namespace NKqp
 } // namespace NKikimr
 
 namespace NKikimr::NKqp {

@@ -1250,6 +1250,38 @@
         ],
         "TotalGroups": 5
     },
+    "test.TestViewer.test_storage_stats": {
+        "Paths": [
+            {
+                "FullPath": "/Root/dedicated_db",
+                "Groups": 1,
+                "Media": 1,
+                "Path": ".",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 10
+            },
+            {
+                "DataSize": "not-zero-number",
+                "FullPath": "/Root/dedicated_db/table1",
+                "Groups": 1,
+                "Media": 1,
+                "Path": "table1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 1
+            },
+            {
+                "FullPath": "/Root/dedicated_db/topic1",
+                "Groups": 1,
+                "Media": 1,
+                "Path": "topic1",
+                "StorageCount": "not-zero-number",
+                "StorageSize": "not-zero-number",
+                "Tablets": 2
+            }
+        ]
+    },
     "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
             "status_code": 400,

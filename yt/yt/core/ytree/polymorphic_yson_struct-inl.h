@@ -30,13 +30,13 @@ CreateInstance(TEnum value)
 
     TIntrusivePtr<TBase> ret;
 
-    ([&ret, value] {
+    Y_UNUSED(([&ret, value] {
         if (value == Values) {
             ret = TLeaf<Values, TDerived>::CreateInstance();
             return false;
         }
         return true;
-    } () && ...);
+    } () && ...));
 
     return ret;
 }

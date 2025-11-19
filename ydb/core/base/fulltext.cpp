@@ -177,7 +177,7 @@ namespace {
 
         if (settings.use_filter_snowball()) {
             if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
-                error = "cannot set use_filter_snowball with use_filter_ngam or use_filter_edge_ngram at the same time";
+                error = "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time";
                 return false;
             }
 

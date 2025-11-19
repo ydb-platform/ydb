@@ -230,10 +230,10 @@ message FulltextIndexSettings {
         // Must be used with use_filter_length
         optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
 
-        // Wether to apply snowball stemming to each token
+        // Whether to apply snowball stemming to each token
         // Must be used with language option
         // Example: language = "english"
-        //   Tokens: ["cars", "beautifully", "conspirated"]
+        //   Tokens: ["cars", "beautifully", "conspired"]
         //   Output: ["car", "beauti", "conspir"]
         optional bool use_filter_snowball = 140;
     }

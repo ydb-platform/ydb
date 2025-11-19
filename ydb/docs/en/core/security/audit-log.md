@@ -15,7 +15,7 @@ Examples of typical audit log events:
 * Changes to permissions or access-control settings.
 * Administrative user actions.
 
-The [`audit_config`](#audit-log-configuration) section in the cluster configuration defines which audit logs are collected, how they need to be serialized and where they are delivered.
+The `audit_config` section in the [cluster configuration](../reference/configuration/index.md) defines which audit logs are collected, how they need to be serialized and where they are delivered. See the [audit log configuration](#audit-log-configuration) section for details.
 
 ## Key concepts {#audit-log-concepts}
 
@@ -84,7 +84,7 @@ The table below summarizes the built-in audit event sources. Use it to identify 
 || [gRPC services](#grpc-proxy) </br>`grpc-proxy` | Non-internal requests handled by {{ ydb-short-name }} gRPC endpoints. | Enable the relevant [log classes](#log-class-config) and optional [log phases](#log-phases). ||
 || [gRPC connection](#grpc-connection) </br>`grpc-conn` | Client connection and disconnection events. | Enable the [`enable_grpc_audit`](../reference/configuration/feature_flags.md) feature flag. ||
 || [gRPC authentication](#grpc-login) </br>`grpc-login` | gRPC authentication attempts. | Enable the `Login` class in [`log_class_config`](#log-class-config). ||
-|| [Monitoring service](#monitoring) </br>`monitoring` | HTTP requests handled by the monitoring endpoint. | Enable the `ClusterAdmin` class in [`log_class_config`](#log-class-config). ||
+|| [Monitoring service](#monitoring) </br>`monitoring` | HTTP requests handled by the [monitoring endpoint](../reference/configuration/tls.md#http). | Enable the `ClusterAdmin` class in [`log_class_config`](#log-class-config). ||
 || [Heartbeat](#heartbeat) </br>`audit` | Synthetic heartbeat events proving that audit logging is alive. | Enable the `AuditHeartbeat` class in [`log_class_config`](#log-class-config) and optionally adjust [heartbeat settings](#heartbeat-settings). ||
 || [BlobStorage Controller](#bsc) </br>`bsc` | Console-driven BlobStorage Controller configuration changes. | Included in the [basic audit configuration](#enabling-audit-log). ||
 || [Distconf](#distconf) </br>`distconf` | Distributed configuration updates. | Included in the [basic audit configuration](#enabling-audit-log). ||
@@ -123,9 +123,9 @@ The table below lists the common attributes.
 
 ### Schemeshard {#schemeshard}
 
-* **UID:** `schemeshard`.
-* **Logged operations:** Schema operations triggered by DDL queries, ACL modifications, and user management operations.
-* **How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
+**UID:** `schemeshard`.
+**Logged operations:** Schema operations triggered by DDL queries, ACL modifications, and user management operations.
+**How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
 
 The table below lists additional attributes specific to the `Schemeshard` source.
 
@@ -168,11 +168,11 @@ The table below lists additional attributes specific to the `Schemeshard` source
 
 ### gRPC services {#grpc-proxy}
 
-* **UID:** `grpc-proxy`.
-* **Logged operations:** All non-internal gRPC requests.
-* **How to enable:** Requires specifying log classes in audit configuration.
-* **Log classes:** Depends on the RPC request type: `Ddl`, `Dml`, `Operations`, `ClusterAdmin`, `DatabaseAdmin`, or other classes.
-* **Log phases:** `Received`, `Completed`.
+**UID:** `grpc-proxy`.
+**Logged operations:** All non-internal gRPC requests.
+**How to enable:** Requires specifying log classes in audit configuration.
+**Log classes:** Depends on the RPC request type: `Ddl`, `Dml`, `Operations`, `ClusterAdmin`, `DatabaseAdmin`, or other classes.
+**Log phases:** `Received`, `Completed`.
 
 Тhe table below lists additional attributes specific to the `gRPC services` source.
 
@@ -188,7 +188,7 @@ The table below lists additional attributes specific to the `Schemeshard` source
 || `begin_tx`                 | Flag set to `1` when the request starts a new transaction. ||
 || `commit_tx`                | Shows whether the request commits the transaction. Possible values: `true`, `false`. ||
 || **Request fields**         | **>** ||
-|| `query_text`               | Sanitized [YQL](../core/yql/reference/index.md) query text. ||
+|| `query_text`               | Sanitized [YQL](../yql/reference/index.md) query text. ||
 || `prepared_query_id`        | Identifier of a prepared query. ||
 || `program_text`             | [MiniKQL program](../concepts/glossary.md#minikql) sent with the request. ||
 || `schema_changes`           | Description of schema modifications requested in the operation. ||
@@ -199,19 +199,19 @@ The table below lists additional attributes specific to the `Schemeshard` source
 
 ### gRPC connection {#grpc-connection}
 
-* **UID:** `grpc-conn`.
-* **Logged operations:** Connection state changes (connect/disconnect).
-* **How to enable:** Enable the `enable_grpc_audit` [feature flag](../reference/configuration/feature_flags.md).
+**UID:** `grpc-conn`.
+**Logged operations:** Connection state changes (connect/disconnect).
+**How to enable:** Enable the `enable_grpc_audit` [feature flag](../reference/configuration/feature_flags.md).
 
 *This source uses only common attributes.*
 
 ### gRPC authentication {#grpc-login}
 
-* **UID:** `grpc-login`.
-* **Logged operations:** gRPC authentication.
-* **How to enable:** Requires specifying log classes in [audit configuration](#audit-log-configuration).
-* **Log classes:** `Login`.
-* **Log phases:** `Completed`.
+**UID:** `grpc-login`.
+**Logged operations:** gRPC authentication.
+**How to enable:** Requires specifying log classes in [audit configuration](#audit-log-configuration).
+**Log classes:** `Login`.
+**Log phases:** `Completed`.
 
 The table below lists additional attributes specific to the `gRPC authentication` source.
 
@@ -223,11 +223,11 @@ The table below lists additional attributes specific to the `gRPC authentication
 
 ### Monitoring service {#monitoring}
 
-* **UID:** `monitoring`.
-* **Logged operations:** HTTP requests handled by the monitoring service.
-* **How to enable:** Requires specifying log classes in [audit configuration](#audit-log-configuration).
-* **Log classes:** `ClusterAdmin`.
-* **Log phases:** `Received`, `Completed`.
+**UID:** `monitoring`.
+**Logged operations:** HTTP requests handled by the monitoring service.
+**How to enable:** Requires specifying log classes in [audit configuration](#audit-log-configuration).
+**Log classes:** `ClusterAdmin`.
+**Log phases:** `Received`, `Completed`.
 
 The table below lists additional attributes specific to the `Monitoring service` source.
 
@@ -241,11 +241,11 @@ The table below lists additional attributes specific to the `Monitoring service`
 
 ### Heartbeat {#heartbeat}
 
-* **UID:** `audit`.
-* **Logged operations:** Periodic audit [heartbeat](#heartbeat-settings) messages.
-* **How to enable:** Enable this source by specifying log classes in [audit configuration](#audit-log-configuration).
-* **Log classes:** `AuditHeartbeat`.
-* **Log phases:** `Completed`.
+**UID:** `audit`.
+**Logged operations:** Periodic audit [heartbeat](#heartbeat-settings) messages.
+**How to enable:** Enable this source by specifying log classes in [audit configuration](#audit-log-configuration).
+**Log classes:** `AuditHeartbeat`.
+**Log phases:** `Completed`.
 
 The table below lists additional attributes specific to the `Heartbeat` source.
 
@@ -256,9 +256,9 @@ The table below lists additional attributes specific to the `Heartbeat` source.
 
 ### BlobStorage Controller {#bsc}
 
-* **UID:** `bsc`.
-* **Logged operations:** Configuration replacement requests (`TEvControllerReplaceConfigRequest`) emitted by the console.
-* **How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
+**UID:** `bsc`.
+**Logged operations:** Configuration replacement requests (`TEvControllerReplaceConfigRequest`) emitted by the console.
+**How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
 
 The table below lists additional attributes specific to the `BlobStorage Controller` source.
 
@@ -270,9 +270,9 @@ The table below lists additional attributes specific to the `BlobStorage Control
 
 ### Distconf {#distconf}
 
-* **UID:** `distconf`.
-* **Logged operations:** Distributed configuration changes.
-* **How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
+**UID:** `distconf`.
+**Logged operations:** Distributed configuration changes.
+**How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
 
 The table below lists additional attributes specific to the `Distconf` source.
 
@@ -284,17 +284,17 @@ The table below lists additional attributes specific to the `Distconf` source.
 
 ### Web login {#web-login}
 
-* **UID:** `web-login`.
-* **Logged operations:** Tracks interactions with the {{ ydb-short-name }} web console authentication widget.
-* **How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
+**UID:** `web-login`.
+**Logged operations:** Tracks interactions with the {{ ydb-short-name }} web console authentication widget.
+**How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
 
 *This source uses only common attributes.*
 
 ### Console {#console}
 
-* **UID:** `console`.
-* **Logged operations:** Database lifecycle operations and dynamic configuration changes.
-* **How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
+**UID:** `console`.
+**Logged operations:** Database lifecycle operations and dynamic configuration changes.
+**How to enable:** Only [basic audit configuration](#enabling-audit-log) required.
 
 The table below lists additional attributes specific to the `Console` source.
 
@@ -327,7 +327,7 @@ audit_config:
 All fields are optional.
 
 #|
-#| Field                    | Description ||
+|| Field                    | Description ||
 || `stderr_backend`         | Forward the audit log to the standard error stream (`stderr`). See the [backend settings](#backend-settings) for details. ||
 || `file_backend`           | Write the audit log to a file at each cluster node. See the [backend settings](#backend-settings) for details. ||
 || `unified_agent_backend`  | Stream the audit log to the [Unified Agent](https://yandex.cloud/docs/monitoring/concepts/data-collection/unified-agent/). In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md). See the [backend settings](#backend-settings) for details. ||
@@ -393,7 +393,7 @@ Heartbeat events help you monitor the health of the audit logging subsystem. The
 
 ### Config samples {#config-samples}
 
-Below is a simple configuration that saves the audit log text to a file in `TXT` format.
+**Simple configuration.** Below is a simple configuration that saves the audit log text to a file in `TXT` format.
 
 ```yaml
 audit_config:
@@ -402,7 +402,10 @@ audit_config:
     file_path: "/var/log/ydb-audit.log"
 ```
 
-Sample configuration that sends the audit log to Unified Agent in `TXT` format with the `audit` label and also outputs it to `stderr` in `JSON` format. The `Default` settings enable logging for all classes in the `Completed` phase. Additionally, `ClusterAdmin` is configured to log the `Received` phase, and `DatabaseAdmin` is configured to exclude events from anonymous users:
+**Advanced configuration**. The following configuration demonstrates more advanced settings:
+* It sends the audit log to Unified Agent in `TXT` format with the `audit` label and also outputs it to `stderr` in `JSON` format.
+* The `Default` settings enable logging for all classes in the `Completed` phase.
+* Additionally, `ClusterAdmin` is configured to log the `Received` phase, and `DatabaseAdmin` is configured to exclude events from anonymous users:
 
 ```yaml
 audit_config:

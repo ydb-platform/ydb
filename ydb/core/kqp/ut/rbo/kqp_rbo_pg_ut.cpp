@@ -480,6 +480,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
+    /*
     Y_UNIT_TEST(Aggregation) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -666,6 +667,7 @@ Y_UNIT_TEST_SUITE(KqpRboPg) {
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
+    */
 
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;

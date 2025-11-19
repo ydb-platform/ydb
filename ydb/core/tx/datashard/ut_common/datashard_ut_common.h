@@ -811,7 +811,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml = true,
              Ydb::StatusIds::StatusCode code = Ydb::StatusIds::SUCCESS,
-             NYdb::NUnitTest::TTestContext testCtx = NYdb::NUnitTest::TTestContext());
+             NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext());
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex = 0);
 

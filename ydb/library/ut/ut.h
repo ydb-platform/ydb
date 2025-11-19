@@ -4,7 +4,7 @@
 
 #include <ydb/core/util/source_location.h>
 
-namespace NYdb::NUnitTest {
+namespace NYdb::NUt {
 class TTestContextBase {
 public:
   TTestContextBase(const NKikimr::NCompat::TSourceLocation &loc =
@@ -31,7 +31,7 @@ struct TTestContext : public TTestContextBase {
 
   TString Format() const override { return FormatLocation(); }
 };
-} // namespace NYdb::NUnitTest
+} // namespace NYdb::NUt
 
 // Context-aware fail implementation
 // TODO: After library/cpp/testing/unittest extension we won't need any custom
@@ -43,7 +43,7 @@ struct TTestContext : public TTestContextBase {
     if constexpr (                                                             \
         requires { testCtx; } &&                                               \
         std::derived_from<decltype(testCtx),                                   \
-                          ::NYdb::NUnitTest::TTestContextBase> &&              \
+                          ::NYdb::NUt::TTestContextBase> &&              \
         requires {                                                             \
           { testCtx.Format() } -> std::convertible_to<TString>;                \
         }) {                                                                   \

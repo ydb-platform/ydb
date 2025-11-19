@@ -19,7 +19,7 @@ When using helper functions in unit tests that contain assertions, if an asserti
 
 2. Define your helper function to accept `TTestContext` as a default argument:
    ```cpp
-   void MyHelper(int expected, int actual, NYdb::NUnitTest::TTestContext testCtx = NYdb::NUnitTest::TTestContext()) {
+   void MyHelper(int expected, int actual, NYdb::NUt::TTestContext testCtx = NYdb::NUt::TTestContext()) {
    ```
 
 3. Call the helper as usual:

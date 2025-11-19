@@ -2100,7 +2100,7 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml,
              Ydb::StatusIds::StatusCode code,
-             NYdb::NUnitTest::TTestContext testCtx)
+             NYdb::NUt::TTestContext testCtx)
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml);

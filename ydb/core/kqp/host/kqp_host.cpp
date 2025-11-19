@@ -1989,6 +1989,7 @@ private:
         const TGatewaysConfig* gatewaysConfig = nullptr; // TODO: can we get real gatewaysConfig here?
         auto allowSettings = [](TStringBuf settingName) {
             return settingName == "OrderedColumns"
+                || settingName == "DeriveColumnOrder"
                 || settingName == "DisableOrderedColumns"
                 || settingName == "Warning"
                 || settingName == "UseBlocks"

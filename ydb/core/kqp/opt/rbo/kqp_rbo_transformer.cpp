@@ -14,7 +14,12 @@ namespace {
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
     Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
-    if (auto root = take.Input().Maybe<TKqpOpRoot>()) {
+    auto takeInput = take.Input();
+    if (takeInput.Maybe<TCoUnordered>()) {
+        takeInput = takeInput.Cast<TCoUnordered>().Input();
+    }
+
+    if (auto root = takeInput.Maybe<TKqpOpRoot>()) {
         // clang-format off
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpLimit>()

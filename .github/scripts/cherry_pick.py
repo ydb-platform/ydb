@@ -727,6 +727,12 @@ After resolving conflicts, mark this PR as ready for review.
         - UD (updated by us, deleted by them): File modified in HEAD, deleted in cherry-pick
         - AA (both added): File added in both branches with different content
         
+        Note on multiple conflicts in the same file:
+        - If a file already has conflict markers (from a previous commit or Git-generated),
+          this function will skip it to avoid overwriting existing conflict information.
+        - When cherry-picking multiple commits, conflicts should be resolved sequentially:
+          resolve the first conflict, then continue with the next commit.
+        
         To disable this feature, simply comment out or remove the call to this function
         in _handle_cherry_pick_conflict.
         
@@ -735,6 +741,7 @@ After resolving conflicts, mark this PR as ready for review.
             commit_sha: SHA of the commit being cherry-picked
         """
         self.logger.debug(f"_add_missing_conflict_markers called with {len(status_lines)} status lines for commit {commit_sha[:7]}")
+        processed_files = set()  # Track files we've already processed to avoid duplicates
         for line in status_lines:
             # Extract status code and file path
             if len(line) < 3:
@@ -755,11 +762,24 @@ After resolving conflicts, mark this PR as ready for review.
             if status_code not in ('DU', 'UD', 'AA'):
                 continue
             
+            # Skip if we've already processed this file in this call
+            if file_path in processed_files:
+                self.logger.debug(f"File {file_path} already processed in this call, skipping")
+                continue
+            
             self.logger.debug(f"Processing {status_code} conflict for {file_path}")
             
             # Check if file already has conflict markers
-            if self._find_first_conflict_line(file_path) is not None:
-                self.logger.debug(f"File {file_path} already has conflict markers, skipping")
+            existing_marker_line = self._find_first_conflict_line(file_path)
+            if existing_marker_line is not None:
+                # File already has conflict markers - this can happen if:
+                # 1. Git already generated markers for this conflict (UU, AU, UA)
+                # 2. We already added markers in a previous call
+                # 3. There are multiple conflicts in the same file from different commits
+                self.logger.debug(f"File {file_path} already has conflict markers at line {existing_marker_line}, skipping. "
+                                f"This may indicate: (1) Git generated markers automatically, "
+                                f"(2) Markers were added previously, or (3) Multiple conflicts in same file.")
+                processed_files.add(file_path)  # Mark as processed even if we skip
                 continue  # Markers already present, skip
             
             try:
@@ -799,6 +819,7 @@ After resolving conflicts, mark this PR as ready for review.
                     # File exists in cherry-pick but not in HEAD
                     self.logger.debug(f"DU conflict: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}")
                     if cherry_pick_content is not None:
+                        # Format: <<<<<<< HEAD (empty) ======= (cherry-pick content) >>>>>>>
                         conflict_markers_content = f"<<<<<<< HEAD\n=======\n{cherry_pick_content}>>>>>>> {commit_sha[:7]}\n"
                     else:
                         self.logger.warning(f"DU conflict for {file_path}: cherry_pick_content is None, cannot add markers")
@@ -808,6 +829,10 @@ After resolving conflicts, mark this PR as ready for review.
                     # File exists in HEAD but not in cherry-pick
                     self.logger.debug(f"UD conflict: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}")
                     if head_content is not None:
+                        # Format: <<<<<<< HEAD (head content) ======= (empty) >>>>>>>
+                        # Ensure head_content ends with newline if it doesn't
+                        if head_content and not head_content.endswith('\n'):
+                            head_content = head_content + '\n'
                         conflict_markers_content = f"<<<<<<< HEAD\n{head_content}=======\n>>>>>>> {commit_sha[:7]}\n"
                     else:
                         self.logger.warning(f"UD conflict for {file_path}: head_content is None, cannot add markers")
@@ -816,6 +841,10 @@ After resolving conflicts, mark this PR as ready for review.
                     # Both added - file added in both branches with different content
                     self.logger.debug(f"AA conflict: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}")
                     if head_content is not None and cherry_pick_content is not None:
+                        # Format: <<<<<<< HEAD (head content) ======= (cherry-pick content) >>>>>>>
+                        # Ensure head_content ends with newline if it doesn't
+                        if head_content and not head_content.endswith('\n'):
+                            head_content = head_content + '\n'
                         conflict_markers_content = f"<<<<<<< HEAD\n{head_content}=======\n{cherry_pick_content}>>>>>>> {commit_sha[:7]}\n"
                     else:
                         self.logger.warning(f"AA conflict for {file_path}: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}, cannot add markers")
@@ -833,11 +862,14 @@ After resolving conflicts, mark this PR as ready for review.
                         f.write(conflict_markers_content)
                     
                     self.logger.info(f"Added conflict markers to {file_path} for {status_code} conflict")
+                    processed_files.add(file_path)  # Mark as processed
                 else:
                     self.logger.warning(f"Could not generate conflict markers for {file_path} (status_code={status_code})")
+                    processed_files.add(file_path)  # Mark as processed even if we couldn't generate markers
             
             except Exception as e:
                 self.logger.warning(f"Failed to add conflict markers to {file_path}: {e}", exc_info=True)
+                processed_files.add(file_path)  # Mark as processed even if we failed
 
     def _handle_cherry_pick_conflict(self, commit_sha: str, git_output: str = ""):
         """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with conflict messages

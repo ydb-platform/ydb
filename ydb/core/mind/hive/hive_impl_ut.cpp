@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            tablet.GetMutableResourceValues().SetMemory(RandomNumber<double>());
+            tablet.GetMutableResourceValues().Memory = RandomNumber<double>();
         }
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl;

@@ -8947,6 +8947,37 @@ Y_UNIT_TEST_SUITE(THeavyPerfTest) {
         }
 
     }
+
+    Y_UNIT_TEST(TTestTabletMetrics) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        NTestSuiteTHiveTest::MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId senderB = runtime.AllocateEdgeActor(0);
+        runtime.SendToPipe(hiveTablet, senderB, new NHive::TEvPrivate::TEvGenerateTestData(), 0, GetPipeConfigWithRetries());
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvTablet::TEvCommit::EventType, 2);
+            runtime.DispatchEvents(options);
+        }
+
+        auto rand = CreateDeterministicRandomProvider(9000);
+        for (size_t j = 0; j < 1000; ++j) {
+            THolder<TEvHive::TEvTabletMetrics> metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
+            for (size_t i = 0; i < 100; ++i) {
+                NKikimrHive::TTabletMetrics* metric = metrics->Record.AddTabletMetrics();
+                metric->SetTabletID(0x10000 + (rand->GenRand() % 1'000'000));
+                metric->MutableResourceUsage()->SetCPU(rand->GenRand() % 1'000'000);
+                metric->MutableResourceUsage()->SetMemory((rand->GenRand() % 1'000'000));
+            }
+
+            runtime.SendToPipe(hiveTablet, senderB, metrics.Release());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
+        }
+
+    }
 }
 
 Y_UNIT_TEST_SUITE(TStorageBalanceTest) {

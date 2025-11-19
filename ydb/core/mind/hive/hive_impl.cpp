@@ -1942,7 +1942,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
         }
         tabletInfo.SetRestartsPerPeriod(info->GetRestartsPerPeriod(restartsBarrierTime));
         if (req.GetReturnMetrics()) {
-            tabletInfo.MutableMetrics()->CopyFrom(info->GetResourceValues());
+            info->GetResourceValues().ToProto(tabletInfo.MutableMetrics());
         }
         if (info->InWaitQueue) {
             tabletInfo.SetInWaitQueue(true);
@@ -1976,7 +1976,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
                 }
                 tabletInfo.SetRestartsPerPeriod(follower.GetRestartsPerPeriod(restartsBarrierTime));
                 if (req.GetReturnMetrics()) {
-                    tabletInfo.MutableMetrics()->CopyFrom(follower.GetResourceValues());
+                    //tabletInfo.MutableMetrics()->CopyFrom(follower.GetResourceValues());
                 }
             }
         }
@@ -2047,7 +2047,7 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
         THashMap<TTabletInfo::EVolatileState, ui32> StateCounter;
         THashSet<TNodeId> NodeIds;
         ui32 AliveNodes = 0;
-        NKikimrTabletBase::TMetrics Metrics;
+        TMetrics Metrics;
     };
 
     THashMap<TSubDomainKey, TSubDomainStats> subDomainStats;
@@ -2081,7 +2081,7 @@ void THive::Handle(TEvHive::TEvRequestHiveDomainStats::TPtr& ev) {
         domainStats.SetShardId(pr1.first.first);
         domainStats.SetPathId(pr1.first.second);
         if (ev->Get()->Record.GetReturnMetrics()) {
-            domainStats.MutableMetrics()->CopyFrom(pr1.second.Metrics);
+            pr1.second.Metrics.ToProto(domainStats.MutableMetrics());
         }
         for (const auto& pr2 : pr1.second.StateCounter) {
             auto& stateStats = *domainStats.AddStateStats();
@@ -2432,6 +2432,16 @@ std::optional<EResourceToBalance> THive::CheckScatter(const TResourceNormalizedV
     return std::nullopt;
 }
 
+void THive::EnqueueUpdateMetrics(TTabletInfo* tablet) {
+    if (std::exchange(tablet->UpdateMetricsEnqueued, true)) {
+        return;
+    }
+    ProcessMetricsQueue.push(tablet->GetFullTabletId());
+    if (!std::exchange(ProcessMetricsScheduled, true)) {
+        Schedule(TDuration::MilliSeconds(5), new TEvPrivate::TEvProcessMetrics);
+    }
+}
+
 void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     BLOG_W("Received TEvProcessTabletBalancer while in StateInit");
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessTabletBalancer());
@@ -2611,8 +2621,8 @@ void THive::Handle(TEvPrivate::TEvProcessStorageBalancer::TPtr&) {
 void THive::UpdateTotalResourceValues(
         const TNodeInfo* node,
         const TTabletInfo* tablet,
-        const NKikimrTabletBase::TMetrics& before,
-        const NKikimrTabletBase::TMetrics& after,
+        const TMetrics& before,
+        const TMetrics& after,
         TResourceRawValues deltaRaw,
         TResourceNormalizedValues deltaNormalized) {
     TotalRawResourceValues = TotalRawResourceValues + deltaRaw;
@@ -2633,15 +2643,9 @@ void THive::UpdateTotalResourceValues(
         auto& objectMetrics = ObjectToTabletMetrics[tablet->GetObjectId()];
         auto beforeMetrics = objectMetrics.Metrics;
         objectMetrics.AggregateDiff(before, after, tablet);
-        BLOG_TRACE("UpdateTotalResources: ObjectId " << tablet->GetObjectId() <<
-                   ": {" << beforeMetrics.ShortDebugString() <<
-                   "} -> {" << objectMetrics.Metrics.ShortDebugString() << "}");
         auto& typeMetrics = TabletTypeToTabletMetrics[tablet->GetTabletType()];
         beforeMetrics = typeMetrics.Metrics;
         typeMetrics.AggregateDiff(before, after, tablet);
-        BLOG_TRACE("UpdateTotalResources: Type " << tablet->GetTabletType() <<
-                   ": {" << beforeMetrics.ShortDebugString() <<
-                   "} -> {" << typeMetrics.Metrics.ShortDebugString() << "}");
     }
     TabletCounters->Simple()[NHive::COUNTER_METRICS_COUNTER].Set(std::get<NMetrics::EResource::Counter>(TotalRawResourceValues));
     TabletCounters->Simple()[NHive::COUNTER_METRICS_CPU].Set(std::get<NMetrics::EResource::CPU>(TotalRawResourceValues));
@@ -2676,20 +2680,20 @@ void THive::WaitToMoveTablets(TActorId actor) {
     }
 }
 
-bool THive::IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics) {
+bool THive::IsValidMetrics(const TMetrics& metrics) {
     return IsValidMetricsCPU(metrics) || IsValidMetricsMemory(metrics) || IsValidMetricsNetwork(metrics);
 }
 
-bool THive::IsValidMetricsCPU(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetCPU() > 1'000/*1ms*/;
+bool THive::IsValidMetricsCPU(const TMetrics& metrics) {
+    return metrics.CPU > 1'000/*1ms*/;
 }
 
-bool THive::IsValidMetricsMemory(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetMemory() > 128'000/*128KB*/;
+bool THive::IsValidMetricsMemory(const TMetrics& metrics) {
+    return metrics.Memory > 128'000/*128KB*/;
 }
 
-bool THive::IsValidMetricsNetwork(const NKikimrTabletBase::TMetrics& metrics) {
-    return metrics.GetNetwork() > 1024/*1KBps*/;
+bool THive::IsValidMetricsNetwork(const TMetrics& metrics) {
+    return metrics.Network > 1024/*1KBps*/;
 }
 
 TString THive::DebugDomainsActiveNodes() const {
@@ -2706,67 +2710,68 @@ void THive::AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NK
     aggregate.SetWriteThroughput(std::max(aggregate.GetWriteThroughput(), value.GetWriteThroughput()));
 }
 
-template <void (NKikimrTabletBase::TMetrics::* setter)(ui64), ui64 (NKikimrTabletBase::TMetrics::* getter)() const, void (NKikimrTabletBase::TMetrics::* clear)()>
-static void AggregateDiff(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after, TTabletId tabletId, const TString& name) {
-    i64 oldValue = (aggregate.*getter)();
-    i64 delta = (after.*getter)() - (before.*getter)();
+template <ui64 TMetrics::* field>
+static void AggregateDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, TTabletId tabletId, const TString& name) {
+    i64 oldValue = aggregate.*field;
+    i64 delta = after.*field - before.*field;
     i64 newValue = oldValue + delta;
     Y_ENSURE_LOG(newValue >= 0, "tablet " << tabletId << " name=" << name << " oldValue=" << oldValue << " delta=" << delta << " newValue=" << newValue);
     newValue = Max(newValue, (i64)0);
-    if (newValue != 0) {
-        (aggregate.*setter)(newValue);
-    } else {
-        (aggregate.*clear)();
-    }
+    //BLOG_D("AggregateDiff: " << name << " -> " << newValue);
+    aggregate.*field = newValue;
 }
 
-void THive::AggregateMetricsDiff(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after, const TTabletInfo* tablet) {
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetCPU, &NKikimrTabletBase::TMetrics::GetCPU, &NKikimrTabletBase::TMetrics::ClearCPU>(aggregate, before, after, tablet->GetLeader().Id, "cpu");
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetMemory, &NKikimrTabletBase::TMetrics::GetMemory, &NKikimrTabletBase::TMetrics::ClearMemory>(aggregate, before, after, tablet->GetLeader().Id, "memory");
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetNetwork, &NKikimrTabletBase::TMetrics::GetNetwork, &NKikimrTabletBase::TMetrics::ClearNetwork>(aggregate, before, after, tablet->GetLeader().Id, "network");
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetCounter, &NKikimrTabletBase::TMetrics::GetCounter, &NKikimrTabletBase::TMetrics::ClearCounter>(aggregate, before, after, tablet->GetLeader().Id, "counter");
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetStorage, &NKikimrTabletBase::TMetrics::GetStorage, &NKikimrTabletBase::TMetrics::ClearStorage>(aggregate, before, after, tablet->GetLeader().Id, "storage");
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetReadThroughput, &NKikimrTabletBase::TMetrics::GetReadThroughput, &NKikimrTabletBase::TMetrics::ClearReadThroughput>(aggregate, before, after, tablet->GetLeader().Id, "read");
-    AggregateDiff<&NKikimrTabletBase::TMetrics::SetWriteThroughput, &NKikimrTabletBase::TMetrics::GetWriteThroughput, &NKikimrTabletBase::TMetrics::ClearWriteThroughput>(aggregate, before, after, tablet->GetLeader().Id, "write");
+void THive::AggregateMetricsDiff(TMetrics& aggregate, const TMetrics& before, const TMetrics& after, const TTabletInfo* tablet) {
+    AggregateDiff<&TMetrics::CPU>(aggregate, before, after, tablet->GetLeader().Id, "cpu");
+    AggregateDiff<&TMetrics::Memory>(aggregate, before, after, tablet->GetLeader().Id, "memory");
+    AggregateDiff<&TMetrics::Network>(aggregate, before, after, tablet->GetLeader().Id, "network");
+    AggregateDiff<&TMetrics::Counter>(aggregate, before, after, tablet->GetLeader().Id, "counter");
+    AggregateDiff<&TMetrics::Storage>(aggregate, before, after, tablet->GetLeader().Id, "storage");
+    AggregateDiff<&TMetrics::ReadThroughput>(aggregate, before, after, tablet->GetLeader().Id, "read");
+    AggregateDiff<&TMetrics::WriteThroughput>(aggregate, before, after, tablet->GetLeader().Id, "write");
+    AggregateDiff<&TMetrics::ReadIops>(aggregate, before, after, tablet->GetLeader().Id, "readiops");
+    AggregateDiff<&TMetrics::WriteIops>(aggregate, before, after, tablet->GetLeader().Id, "writeiops");
 }
 
-void THive::DivideMetrics(NKikimrTabletBase::TMetrics& metrics, ui64 divider) {
-    metrics.SetCPU(metrics.GetCPU() / divider);
-    metrics.SetMemory(metrics.GetMemory() / divider);
-    metrics.SetNetwork(metrics.GetNetwork() / divider);
-    metrics.SetCounter(metrics.GetCounter() / divider);
-    metrics.SetStorage(metrics.GetStorage() / divider);
-    metrics.SetReadThroughput(metrics.GetReadThroughput() / divider);
-    metrics.SetWriteThroughput(metrics.GetWriteThroughput() / divider);
+void THive::DivideMetrics(TMetrics& metrics, ui64 divider) {
+    metrics.CPU /= divider;
+    metrics.Memory /= divider;
+    metrics.Network /= divider;
+    metrics.Counter /= divider;
+    metrics.Storage /= divider;
+    metrics.ReadThroughput /= divider;
+    metrics.WriteThroughput /= divider;
+    metrics.ReadIops /= divider;
+    metrics.WriteIops /= divider;
 }
 
-NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForObject(TFullObjectId objectId) {
-    NKikimrTabletBase::TMetrics metrics;
+TMetrics THive::GetDefaultResourceValuesForObject(TFullObjectId objectId) {
+    TMetrics metrics;
     auto itTablets = ObjectToTabletMetrics.find(objectId);
     if (itTablets != ObjectToTabletMetrics.end()) {
         metrics = itTablets->second.GetAverage();
-        metrics.ClearCounter();
+        metrics.Counter = 0;
     }
     return metrics;
 }
 
-NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForTabletType(TTabletTypes::EType type) {
-    NKikimrTabletBase::TMetrics metrics;
+TMetrics THive::GetDefaultResourceValuesForTabletType(TTabletTypes::EType type) {
+    TMetrics metrics;
     auto it = TabletTypeToTabletMetrics.find(type);
     if (it != TabletTypeToTabletMetrics.end()) {
         metrics = it->second.GetAverage();
-        metrics.ClearCounter();
+        metrics.Counter = 0;
     }
     return metrics;
 }
 
-NKikimrTabletBase::TMetrics THive::GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile) {
-    NKikimrTabletBase::TMetrics resourceValues;
+TMetrics THive::GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile) {
+    TMetrics resourceValues;
     // copy default resource usage from resource profile
     if (ResourceProfiles) {
         // TODO: provide Hive with resource profile used by the tablet instead of default one.
         auto profile = ResourceProfiles->GetProfile(type, resourceProfile);
-        resourceValues.SetMemory(profile->GetDefaultTabletMemoryUsage());
+        resourceValues.Memory = profile->GetDefaultTabletMemoryUsage();
     }
     return resourceValues;
 }
@@ -3248,6 +3253,7 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvPrivate::TEvUpdateBalanceCounters, Handle);
         hFunc(TEvHive::TEvSetDown, Handle);
         hFunc(TEvHive::TEvRequestDrainInfo, Handle);
+        hFunc(TEvPrivate::TEvProcessMetrics, Handle);
     }
 }
 
@@ -3362,6 +3368,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvPrivate::TEvUpdateBalanceCounters::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestDrainInfo::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvSetDown::EventType, EnqueueIncomingEvent);
+        fFunc(TEvPrivate::TEvProcessMetrics::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3470,9 +3477,9 @@ void THive::Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev) {
         entry->SetNodeId(tablet.NodeId);
 
         const auto& resourceValues = tablet.GetResourceValues();
-        entry->SetCPU(resourceValues.GetCPU());
-        entry->SetMemory(resourceValues.GetMemory());
-        entry->SetNetwork(resourceValues.GetNetwork());
+        entry->SetCPU(resourceValues.CPU);
+        entry->SetMemory(resourceValues.Memory);
+        entry->SetNetwork(resourceValues.Network);
 
         for (const auto& follower : tablet.Followers) {
             auto* entry = record.AddEntries();
@@ -3489,9 +3496,9 @@ void THive::Handle(NSysView::TEvSysView::TEvGetTabletsRequest::TPtr& ev) {
             entry->SetNodeId(follower.NodeId);
 
             const auto& resourceValues = follower.GetResourceValues();
-            entry->SetCPU(resourceValues.GetCPU());
-            entry->SetMemory(resourceValues.GetMemory());
-            entry->SetNetwork(resourceValues.GetNetwork());
+            entry->SetCPU(resourceValues.CPU);
+            entry->SetMemory(resourceValues.Memory);
+            entry->SetNetwork(resourceValues.Network);
         }
 
         if (count >= limit && i < request.TabletIdsSize() - 1) {
@@ -3739,6 +3746,10 @@ void THive::Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr&) {
 
 void THive::Handle(TEvHive::TEvSetDown::TPtr& ev) {
     Execute(CreateSetDown(ev));
+}
+
+void THive::Handle(TEvPrivate::TEvProcessMetrics::TPtr&) {
+    Execute(CreateProcessMetrics());
 }
 
 void THive::MakeScaleRecommendation() {

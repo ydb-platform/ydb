@@ -1,6 +1,6 @@
 ## Параметризованные запросы
 
-{{ ydb-short-name }} поддерживает и рекомендует к использованию так называемые [параметризованные запросы](https://en.wikipedia.org/wiki/Prepared_statement). В таких запросах данные передаются отдельно от самого тела запроса, а в SQL-запросе используются специальные параметры для обозначения местоположения данных.
+{{ ydb-short-name }} поддерживает [параметризованные запросы](https://en.wikipedia.org/wiki/Prepared_statement). В таких запросах данные передаются отдельно от самого тела запроса, а в SQL-запросе используются специальные параметры для обозначения местоположения данных.
 
 Запрос с данными в теле запроса:
 
@@ -106,3 +106,100 @@ func queryRetry(sessionPool, query, args) (res, err) {
 С помощью `<Execute+KeepInCache>` обеспечиваются преимущества клиентской балансировки: запросы равномерно распределяются по узлам {{ ydb-short-name }} и компилируются по первому `Execute` запросу на каждом новом узле, поэтому кэш запросов также дублируется на узлах {{ ydb-short-name }}.
 
 {{ ydb-short-name }} SDK автоматически кэшируют планы параметризованных запросов по умолчанию, для этого обычно используется настройка `KeepInCache = true`.
+
+В SDK обеспечивается комфортное для пользователя и максимально ожидаемое поведение по умолчанию, в том числе касательно серверного кэша. Примеры явного управления серверным кэшем скомпилированных запросов из SDK:
+
+{% list tabs %}
+
+- YDB-GO-SDK
+
+  Флаг `KeepInCache` устанавливается автоматически (если передан хотя бы один аргумент запроса), чтобы явно отключить серверное кэширование запроса, можно передать опцию с `Keepincache(false)`
+
+  ``` go
+  err = db.Table().Do(ctx, func(ctx context.Context, s table.Session) (err error) {
+    _, res, err = s.Execute(ctx, table.DefaultTxControl(), query,
+        table.NewQueryParameters(params...),
+        // uncomment if need to disable query caching
+        // options.WithKeepInCache(false), 
+    )
+    return err
+  })
+  ```
+
+- YDB-JAVA-SDK
+
+  Флаг `KeepInCache` по умолчанию установлен в значение `true` в объекте класса ExecuteDataQuerySettings. При необходимости флаг `KeepInCache` можно отключить:
+
+  ``` java
+  CompletableFuture<Result<DataQueryResult>> result = session.executeDataQuery(
+    query,
+    txControl,
+    params,
+    new ExecuteDataQuerySettings()
+        // uncomment if need to disable query caching
+        // .disableQueryCache()
+  );
+  ```
+
+- YDB-JDBC-DRIVER
+
+  Cерверное кеширование задается через параметр строки подключения `&keepInQueryCache=true&alwaysPrepareDataQuery=false` параметрами строки подключения JDBC.
+
+- YDB-CPP-SDK
+
+  Чтобы поместить запрос в кэш, используйте метод `KeepInQueryCache` объекта класса `TExecDataQuerySettings`.
+
+  ``` cpp
+  NYdb::NTable::TExecDataQuerySettings execSettings;
+  // uncomment if need to enable query caching
+  // execSettings.KeepInQueryCache(true);
+  auto result = session.ExecuteDataQuery(
+  query, TTxControl::BeginTx().CommitTx(), execSettings
+  )
+  ```
+
+- YDB-PYTHON-SDK
+
+  Флаг `KeepInCache` устанавливается автоматически, если передается хотя бы один аргумент запроса. Это поведение нельзя переопределить. Если кэш запросов на стороне сервера не требуется, рекомендуется использовать `Prepare` явно.
+
+- YDB-DOTNET-SDK
+
+  Флаг `KeepInQueryCache` по умолчанию установлен в значение `true` в объекте класса `ExecuteDataQuerySettings`. При необходимости флаг `KeepInQueryCache` можно отменить:
+
+  ```
+  var response = await tableClient.SessionExec(async session =>
+    await session.ExecuteDataQuery(
+        query: query,
+        txControl: txControl,
+        settings: new ExecuteDataQuerySettings { KeepInQueryCache = false }
+    ));
+  ``` 
+
+- YDB-RS-SDK
+
+  На данный момент в Rust нет отдельного метода для компиляции запроса, серверный кэш также пока не используется.
+
+- YDB-PHP-SDK
+
+  Флаг `keepInCache` по умолчанию установлен в значение `true` в объекте класса `query`. При необходимости флаг `keepInCache` можно отменить:
+
+  ``` php
+  $table->retryTransaction(function(Session $session){
+    $query = $session->newQuery($yql);
+    $query->parameters($params);
+    $query->keepInCache(false);
+    return $query->execute();
+  }, $idempotent);
+  ```
+
+- YDB-NODEJS-SDK
+
+  4-й аргумент метода `session.ExecuteQuery()` является необязательным объектом настроек типа `ExecuteQuerySettings`, он имеет флаг `keepInCache`, по умолчанию он имеет значение `false`. Можно установить для него значение `true` следующим образом:
+
+  ``` javascript
+  const settings = new ExecuteQuerySettings();
+  settings.withKeepInCache(true);
+  await session.executeQuery(..., settings);
+  ```
+
+{% endlist %}  

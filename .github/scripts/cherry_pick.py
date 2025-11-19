@@ -718,6 +718,112 @@ After resolving conflicts, mark this PR as ready for review.
         
         return conflict_messages
 
+    def _add_missing_conflict_markers(self, status_lines: List[str], commit_sha: str) -> None:
+        """Add conflict markers for conflict types where Git doesn't generate them automatically
+        
+        This function handles conflicts where Git leaves files without conflict markers.
+        It adds standard Git conflict markers (<<<<<<<, =======, >>>>>>>) to make conflicts visible in PR diffs.
+        
+        Handled conflict types (where Git doesn't generate markers):
+        - DU (deleted by us, updated by them): File deleted in HEAD, modified in cherry-pick
+        - UD (updated by us, deleted by them): File modified in HEAD, deleted in cherry-pick
+        - AA (both added): File added in both branches with different content
+        
+        To disable this feature, simply comment out or remove the call to this function
+        in _handle_cherry_pick_conflict.
+        
+        Args:
+            status_lines: List of git status lines (from 'git status --porcelain')
+            commit_sha: SHA of the commit being cherry-picked
+        """
+        for line in status_lines:
+            # Extract status code and file path
+            if len(line) < 3:
+                continue
+            
+            status_code = line[:2]
+            parts = line.split(None, 1)
+            if len(parts) < 2:
+                continue
+            
+            file_path = parts[1].strip()
+            if not file_path:
+                continue
+            
+            # Only process conflict types where Git doesn't generate markers by default
+            # DU, UD, AA: Git doesn't generate markers
+            # UU, AU, UA: Git generates markers, so we skip them
+            if status_code not in ('DU', 'UD', 'AA'):
+                continue
+            
+            # Check if file already has conflict markers
+            if self._find_first_conflict_line(file_path) is not None:
+                continue  # Markers already present, skip
+            
+            try:
+                # Get content from HEAD (if file exists there)
+                head_content = None
+                try:
+                    result = subprocess.run(
+                        ['git', 'show', f'HEAD:{file_path}'],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    head_content = result.stdout
+                except subprocess.CalledProcessError:
+                    # File doesn't exist in HEAD
+                    head_content = None
+                
+                # Get content from cherry-pick commit (if file exists there)
+                cherry_pick_content = None
+                try:
+                    result = subprocess.run(
+                        ['git', 'show', f'{commit_sha}:{file_path}'],
+                        capture_output=True,
+                        text=True,
+                        check=True
+                    )
+                    cherry_pick_content = result.stdout
+                except subprocess.CalledProcessError:
+                    # File doesn't exist in cherry-pick commit
+                    cherry_pick_content = None
+                
+                # Build conflict markers based on status code
+                conflict_markers_content = None
+                
+                if status_code == 'DU':
+                    # Deleted by us (HEAD), updated by them (cherry-pick)
+                    # File exists in cherry-pick but not in HEAD
+                    if cherry_pick_content is not None:
+                        conflict_markers_content = f"<<<<<<< HEAD\n=======\n{cherry_pick_content}>>>>>>> {commit_sha[:7]}\n"
+                
+                elif status_code == 'UD':
+                    # Updated by us (HEAD), deleted by them (cherry-pick)
+                    # File exists in HEAD but not in cherry-pick
+                    if head_content is not None:
+                        conflict_markers_content = f"<<<<<<< HEAD\n{head_content}=======\n>>>>>>> {commit_sha[:7]}\n"
+                
+                elif status_code == 'AA':
+                    # Both added - file added in both branches with different content
+                    if head_content is not None and cherry_pick_content is not None:
+                        conflict_markers_content = f"<<<<<<< HEAD\n{head_content}=======\n{cherry_pick_content}>>>>>>> {commit_sha[:7]}\n"
+                
+                # Write conflict markers to file if we have content
+                if conflict_markers_content is not None:
+                    # Ensure directory exists
+                    file_dir = os.path.dirname(file_path)
+                    if file_dir:
+                        os.makedirs(file_dir, exist_ok=True)
+                    
+                    with open(file_path, 'w', encoding='utf-8') as f:
+                        f.write(conflict_markers_content)
+                    
+                    self.logger.info(f"Added conflict markers to {file_path} for {status_code} conflict")
+            
+            except Exception as e:
+                self.logger.warning(f"Failed to add conflict markers to {file_path}: {e}")
+
     def _handle_cherry_pick_conflict(self, commit_sha: str, git_output: str = ""):
         """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with conflict messages
         
@@ -739,6 +845,11 @@ After resolving conflicts, mark this PR as ready for review.
             if result.stdout.strip():
                 # Check for conflict markers in files
                 status_lines = result.stdout.strip().split('\n')
+                
+                # Add conflict markers for special conflict types (DU, UD, AA) where Git doesn't generate them
+                # To disable this feature, comment out the next line:
+                self._add_missing_conflict_markers(status_lines, commit_sha)
+                
                 for line in status_lines:
                     # Git status codes for conflicts:
                     # UU: both modified (content conflict)

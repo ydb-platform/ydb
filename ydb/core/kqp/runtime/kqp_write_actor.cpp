@@ -2951,12 +2951,16 @@ public:
             }
         }
 
-        ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
-            actor->Terminate();
-        });
+        Clear();
 
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpBufferWriteActor>::PassAway();
+    }
+
+    void Clear() {
+        ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
+            actor->Terminate();
+        });
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev) {
@@ -3815,6 +3819,8 @@ public:
             std::move(issues),
             BuildStats()
         });
+
+        Clear();
     }
 
     TString GetPathes(ui64 shardId) const {

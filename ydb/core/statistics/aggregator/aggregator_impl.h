@@ -47,9 +47,9 @@ private:
     struct TTxConfigure;
     struct TTxSchemeShardStats;
     struct TTxAnalyze;
-    struct TTxAnalyzeTableRequest;
-    struct TTxAnalyzeTableResponse;
-    struct TTxAnalyzeTableDeliveryProblem;
+    struct TTxAnalyzeShardRequest;
+    struct TTxAnalyzeShardResponse;
+    struct TTxAnalyzeShardDeliveryProblem;
     struct TTxAnalyzeDeadline;
     struct TTxNavigate;
     struct TTxResolve;

@@ -7,35 +7,35 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
+struct TStatisticsAggregator::TTxAnalyzeShardResponse : public TTxBase {
     NKikimrStat::TEvAnalyzeShardResponse Record;
     
-    TTxAnalyzeTableResponse(TSelf* self, NKikimrStat::TEvAnalyzeShardResponse&& record)
+    TTxAnalyzeShardResponse(TSelf* self, NKikimrStat::TEvAnalyzeShardResponse&& record)
         : TTxBase(self)
         , Record(std::move(record))
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_ANALYZE_TABLE_RESPONSE; }
+    TTxType GetTxType() const override { return TXTYPE_ANALYZE_SHARD_RESPONSE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute");
 
         const TString operationId = Record.GetOperationId();
         const TPathId pathId = TPathId::FromProto(Record.GetPathId());
         auto operationTable = Self->ForceTraversalTable(operationId, pathId);
         if (!operationTable) {
-            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute. Unknown OperationTable. Record: " << Record.ShortDebugString());
+            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. Unknown OperationTable. Record: " << Record.ShortDebugString());
             return true;
         }
 
         auto analyzedShard = std::find_if(operationTable->AnalyzedShards.begin(), operationTable->AnalyzedShards.end(), 
             [tabletId = Record.GetShardTabletId()] (TAnalyzedShard& analyzedShard) { return analyzedShard.ShardTabletId == tabletId;});
         if (analyzedShard == operationTable->AnalyzedShards.end()) {
-            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute. Unknown AnalyzedShards. Record: " << Record.ShortDebugString() << ", ShardTabletId " << Record.GetShardTabletId());
+            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards. Record: " << Record.ShortDebugString() << ", ShardTabletId " << Record.GetShardTabletId());
             return true;
         }
         if (analyzedShard->Status != TAnalyzedShard::EStatus::AnalyzeStarted) {
-            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute. Unknown AnalyzedShards Status. Record: " << Record.ShortDebugString() << ", ShardTabletId " << Record.GetShardTabletId());
+            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards Status. Record: " << Record.ShortDebugString() << ", ShardTabletId " << Record.GetShardTabletId());
         }
 
         analyzedShard->Status = TAnalyzedShard::EStatus::AnalyzeFinished;
@@ -44,23 +44,23 @@ struct TStatisticsAggregator::TTxAnalyzeTableResponse : public TTxBase {
             [] (const TAnalyzedShard& analyzedShard) { return analyzedShard.Status == TAnalyzedShard::EStatus::AnalyzeFinished;});
 
         if (!completeResponse) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute. There are shards which are not analyzed");
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. There are shards which are not analyzed");
             return true;   
         }
         NIceDb::TNiceDb db(txc.DB);
         Self->UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeFinished, operationId, *operationTable,  db);
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Execute. All shards are analyzed");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. All shards are analyzed");
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeTableResponse::Complete.");
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Complete.");
     }
 };
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeShardResponse::TPtr& ev) {
     auto& record = ev->Get()->Record;
-    Execute(new TTxAnalyzeTableResponse(this, std::move(record)),
+    Execute(new TTxAnalyzeShardResponse(this, std::move(record)),
         TActivationContext::AsActorContext());
 }
 

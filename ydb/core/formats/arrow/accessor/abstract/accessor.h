@@ -13,6 +13,10 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
 
+namespace NKikimr::NScheme {
+    class TTypeInfo;
+}
+
 namespace NKikimr::NArrow::NSerialization {
 class ISerializer;
 }
@@ -182,7 +186,7 @@ public:
         YDB_ACCESSOR_DEF(TAddressChain, Address);
 
     public:
-        TString DebugString(const ui64 position) const;
+        TString DebugString(const ui64 position, const NKikimr::NScheme::TTypeInfo* logicalType = nullptr) const;
 
         std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
 

@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -12,6 +13,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/system/types.h>
+#include <util/datetime/base.h>
 
 namespace NKikimr::NArrow::NMerger {
 
@@ -192,17 +194,26 @@ public:
         return true;
     }
 
-    NJson::TJsonValue DebugJson(const ui64 position) const {
+    NJson::TJsonValue DebugJson(const ui64 position, const std::vector<NScheme::TTypeInfo>& pkTypes = {}) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
-        for (auto&& i : Fields) {
-            jsonFields.AppendValue(i->ToString());
+        for (ui32 i = 0; i < Fields.size(); ++i) {
+            if (i < pkTypes.size()) {
+                TStringBuilder sb;
+                sb << Fields[i]->name() << ": " << NScheme::TypeName(pkTypes[i]);
+                jsonFields.AppendValue(sb);
+            } else {
+                jsonFields.AppendValue(Fields[i]->ToString());
+            }
         }
+
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            jsonColumn["value"] = PositionAddress[i].DebugString(position);
+            const NKikimr::NScheme::TTypeInfo* logicalType = (i < pkTypes.size()) ? &pkTypes[i] : nullptr;
+            jsonColumn["value"] = GetPositionAddress(i).DebugString(position, logicalType);
         }
+
         return result;
     }
 

@@ -138,30 +138,81 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
+        TString GenerateMessageId(const NPQ::NMLP::TMessageId& pos) const {
+            MD5 md5;
+            md5.Init();
+            md5.Update(QueueUrl_->Database);
+            md5.Update("/");
+            md5.Update(FullTopicPath_);
+            md5.Update("/");
+            md5.Update(ToString(pos.PartitionId));
+            md5.Update("/");
+            md5.Update(ToString(pos.Offset));
+            ui8 digest[16];
+            md5.Final(digest);
+            // make guid v3 like
+            digest[8] &= 0b10111111;
+            digest[8] |= 0b10000000;
+            digest[6] &= 0b01011111;
+            digest[6] |= 0b01010000;
 
+            TStringBuilder res;
+            for (int i = 0; i < std::ssize(digest); ++i) {
+                res << (EqualToOneOf(i, 4, 6, 8, 10) ? "-" : "") << Hex(digest[i], HF_FULL);
+            }
+            return res;
+        }
 
-        Ydb::Ymq::V1::Message ConvertMessage(NKikimr::NPQ::NMLP::TEvReadResponse::TMessage&& message) const {
+        Ydb::Ymq::V1::Message ConvertMessage(NKikimr::NPQ::NMLP::TEvReadResponse::TMessage&& message, const TActorContext& ctx) const {
             Ydb::Ymq::V1::Message result;
-
 
             result.set_body(std::move(message.Data));
             AFL_ENSURE(message.Codec == Ydb::Topic::Codec::CODEC_RAW)("codec", Ydb::Topic::Codec_Name(message.Codec));
-            result.set_m_d_5_of_body("m_d_5_of_body");
-            result.set_m_d_5_of_message_attributes("");//
-/*
-            • ApproximateReceiveCount
-        • ApproximateFirstReceiveTimestamp
-        • MessageDeduplicationId
-        • MessageGroupId
-        • SenderId
-        • SentTimestamp
-        • SequenceNumber
-*/
-        result.message_attributes(); // XX
-        result.set_message_id("Fake");///
-        result.receipt_handle();
+            result.set_m_d_5_of_body(MD5::Calc(result.body()));
 
 
+            if (!message.MessageGroupId.empty()) {
+                if (TString v = NPQ::NSourceIdEncoding::Decode(message.MessageGroupId); !v.empty()) {
+                    result.mutable_attributes()->emplace("MessageGroupId", std::move(v));
+                }
+            }
+            if (message.SentTimestamp) {
+                result.mutable_attributes()->emplace("SentTimestamp", ToString(message.SentTimestamp.MilliSeconds()));
+            }
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageDeduplicationId)) {
+                result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
+            }
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageId)) {
+                result.set_message_id(*value);
+            } else {
+                // probably message was written not via the sqs api
+                result.set_message_id(GenerateMessageId(message.MessageId));
+            }
+            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageAttributes)) {
+                NKikimr::NSQS::TMessageAttributes messageAttributes;
+                if (messageAttributes.ParseFromString(*value)) {
+                    result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));
+                    auto* mma = result.mutable_message_attributes();
+                    for (const auto& attribute : messageAttributes.attributes()) {
+                        Ydb::Ymq::V1::MessageAttribute value;
+                        if (attribute.has_binaryvalue()) {
+                            value.set_binary_value(attribute.binaryvalue());
+                        } else if (attribute.has_stringvalue()) {
+                            value.set_string_value(attribute.stringvalue());
+                        } else {
+                            continue;
+                        }
+                        mma->emplace(attribute.name(), std::move(value));
+                    }
+                } else {
+                    LOG_WARN_S(
+                        ctx,
+                        NKikimrServices::SQS,
+                        "Unable to deserialize message attributes");
+                }
+            }
+
+            result.receipt_handle();
 
             return result;
         }
@@ -186,7 +237,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             Ydb::Ymq::V1::ReceiveMessageResult result;
             for (auto& message : response.Messages) {
-                Ydb::Ymq::V1::Message m = ConvertMessage(std::move(message));
+                Ydb::Ymq::V1::Message m = ConvertMessage(std::move(message), ctx);
                 *result.add_messages() = std::move(m);
             }
 

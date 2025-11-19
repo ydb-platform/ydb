@@ -342,10 +342,16 @@ namespace {
         }
 
 
-        static constexpr std::initializer_list<TStringBuf> CommonReceiveMessageAttributes{
-            //"MD5OfMessageBody",
-            //"MessageId",
+        static constexpr std::initializer_list<std::pair<TStringBuf, TStringBuf>> CommonReceiveMessageAttributes{
+            {"MD5OfMessageBody", "MD5OfBody"},
+            {"MessageId", "MessageId"},
         };
+
+        static void CompareCommonSendAndRecievedAttrubutes(const NJson::TJsonValue& jsonSend, const NJson::TJsonValue& jsonReceived, TStringBuf caseName = {}) {
+            for (const auto& [keyS, keyR] : CommonReceiveMessageAttributes) {
+                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, keyS), GetByPath<TString>(jsonReceived, keyR), LabeledOutput(keyS, caseName));
+            }
+        }
 
         Y_UNIT_TEST_F(TestReceiveMessageEmpty, TFixture) {
             auto driver = MakeDriver(*this);
@@ -395,9 +401,7 @@ namespace {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 5}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            for (const TStringBuf attrName : CommonReceiveMessageAttributes) {
-                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, attrName), GetByPath<TString>(jsonReceived["Messages"][0], attrName), LabeledOutput(attrName));
-            }
+            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
@@ -417,9 +421,7 @@ namespace {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 5}, {"VisibilityTimeout", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            for (const TStringBuf attrName : CommonReceiveMessageAttributes) {
-                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, attrName), GetByPath<TString>(jsonReceived["Messages"][0], attrName), LabeledOutput(attrName));
-            }
+            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
 
             do {
                 Sleep(TDuration::MilliSeconds(350));
@@ -430,9 +432,7 @@ namespace {
 
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
-            for (const TStringBuf attrName :CommonReceiveMessageAttributes) {
-                UNIT_ASSERT_VALUES_EQUAL_C(GetByPath<TString>(jsonSend, attrName), GetByPath<TString>(jsonReceived["Messages"][0], attrName), LabeledOutput(attrName));
-            }
+            CompareCommonSendAndRecievedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageGroup, TFixture) {

@@ -1549,7 +1549,7 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
 
     timeProvider->Tick(TDuration::Seconds(12));
 
-    Cerr << "BEFOR: " << storage.DebugString() << Endl;
+    Cerr << "BEFORE: " << storage.DebugString() << Endl;
     auto result = storage.Compact();
     Cerr << "AFTER: " << storage.DebugString() << Endl;
     UNIT_ASSERT_VALUES_EQUAL_C(result, 2, "must remove message with offset 3 and 4");
@@ -1591,7 +1591,7 @@ Y_UNIT_TEST(CompactStorage_ByDeadline) {
 
     timeProvider->Tick(TDuration::Seconds(5));
 
-    Cerr << "BEFOR: " << storage.DebugString() << Endl;
+    Cerr << "BEFORE: " << storage.DebugString() << Endl;
     auto result = storage.Compact();
     Cerr << "AFTER: " << storage.DebugString() << Endl;
     UNIT_ASSERT_VALUES_EQUAL_C(result, 0, "they should not be deleted by deadline");

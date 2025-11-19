@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: hypothesis
-Version: 6.144.0
+Version: 6.145.1
 Summary: A library for property-based testing
 Author-email: "David R. MacIver and Zac Hatfield-Dodds" <david@drmaciver.com>
 License-Expression: MPL-2.0
@@ -33,7 +33,6 @@ Classifier: Typing :: Typed
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 License-File: LICENSE.txt
-Requires-Dist: attrs>=22.2.0
 Requires-Dist: exceptiongroup>=1.0.0; python_version < "3.11"
 Requires-Dist: sortedcontainers<3.0.0,>=2.1.0
 Provides-Extra: cli

@@ -17,12 +17,12 @@ LOGGER = logging.getLogger(__name__)
 @pytest.mark.parametrize(
     'stress_name', all_workloads.keys(),
 )
-@allure.title("{stress_name}")
+@allure.title("{stress_name}[{nemesis_enabled}]")
 class TestPerWorkload(ParallelWorkloadTestBase):
     timeout = int(get_external_param('workload_duration', 120))
 
-    def test_stress_util(self, stress_name, nemesis_enabled: bool, stress_executor: StressRunExecutor, binary_deployer):
-
+    def test_stress_util(self, stress_name, nemesis_enabled: bool, stress_executor: StressRunExecutor, binary_deployer, olap_load_base):
+        allure.dynamic.title(f'{stress_name}[nemesis_{nemesis_enabled}]')
         stress_util = all_workloads[stress_name]
         stress_util['args'] += ["--database", f"/{YdbCluster.ydb_database}"]
 
@@ -31,6 +31,7 @@ class TestPerWorkload(ParallelWorkloadTestBase):
         self.execute_parallel_workloads_test(
             stress_executor,
             binary_deployer,
+            olap_load_base,
             workload_params=stress_dict,
             duration_value=self.timeout,
             nemesis_enabled=nemesis_enabled,

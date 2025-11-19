@@ -122,7 +122,7 @@ class RemoteExecutor:
     @classmethod
     def execute_command(
         cls, host: str, cmd: Union[str, list], raise_on_error: bool = True,
-        timeout: Optional[float] = None, raise_on_timeout: bool = True
+        timeout: Optional[float] = 10, raise_on_timeout: bool = True
     ) -> ExecutionResult:
         """
         Выполняет команду на хосте через SSH или локально
@@ -361,7 +361,7 @@ class RemoteExecutor:
 # Удобные функции для прямого использования
 def execute_command(
     host: str, cmd: Union[str, list], raise_on_error: bool = True,
-    timeout: Optional[float] = None, raise_on_timeout: bool = True
+    timeout: Optional[float] = 10, raise_on_timeout: bool = True
 ) -> ExecutionResult:
     """
     Удобная функция для выполнения команды на хосте
@@ -480,7 +480,7 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
             with tempfile.NamedTemporaryFile(delete=False, prefix="deploy_") as tmp_file:
                 temp_path = tmp_file.name
             shutil.copy2(local_path, temp_path)
-            execute_command("localhost", f"sudo mv {temp_path} {remote_path}")
+            execute_command("localhost", f"sudo mv {temp_path} {remote_path}", timeout=30)
             return f"Local copy with sudo successful: {remote_path}"
     else:
         # Удаленное копирование через SCP + временный файл
@@ -503,8 +503,8 @@ def _copy_file_unified(local_path: str, host: str, remote_path: str, is_local: b
         yatest.common.execute(scp_cmd, wait=True, check_exit_code=True)
 
         # Перемещаем из /tmp в целевое место
-        if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False).exit_code != 0:
-            execute_command(host, f"sudo mv {tmp_path} {remote_path}", raise_on_error=True)
+        if execute_command(host, f"mv {tmp_path} {remote_path}", raise_on_error=False, timeout=30).exit_code != 0:
+            execute_command(host, f"sudo mv {tmp_path} {remote_path}", raise_on_error=True, timeout=30)
         return f"SCP copy successful: {remote_path}"
 
 

@@ -6,22 +6,12 @@ import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ydb.tests.library.stability.aggregate_results import process_single_run_result
+from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult, StressUtilTestResults, process_single_run_result, StressUtilResult, StressUtilRunResult
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 
 from ydb.tests.library.stability import deploy
 from ydb.tests.olap.lib.utils import external_param_is_true
 from ydb.tests.olap.lib.remote_execution import execute_command
-
-
-class NodeResult:
-    node: str = None
-    stress_name: str = None
-    host: str = None
-    successful_runs: str = None
-    total_runs: str = None
-    runs: str = None
-    total_execution_time: str = None
 
 
 class StressRunExecutor:
@@ -35,36 +25,36 @@ class StressRunExecutor:
         run_config: dict
     ) -> str:
         """
-        Подставляет переменные в шаблон command_args
+        Substitutes variables in command_args template
 
-        Поддерживаемые переменные:
-        - {node_host} - хост ноды
-        - {iteration_num} - номер итерации
-        - {thread_id} - ID потока (обычно хост ноды)
-        - {run_id} - уникальный ID запуска
-        - {timestamp} - timestamp запуска
-        - {uuid} - короткий UUID
+        Supported variables:
+        - {node_host} - node host
+        - {iteration_num} - iteration number
+        - {thread_id} - thread ID (usually node host)
+        - {run_id} - unique run ID
+        - {timestamp} - run timestamp
+        - {uuid} - short UUID
 
         Args:
-            command_args_template: Шаблон аргументов командной строки
-            target_node: Нода для выполнения
-            run_config: Конфигурация запуска
+            command_args_template: Command line arguments template
+            target_node: Target node for execution
+            run_config: Run configuration
 
         Returns:
-            Строка с подставленными переменными
+            String with substituted variables
         """
 
-        # Получаем значения переменных
+        # Get variable values
         node_host = target_node.host
         iteration_num = run_config.get("iteration_num", 1)
         thread_id = run_config.get("thread_id", node_host)
         timestamp = int(time_module.time())
         short_uuid = uuid.uuid4().hex[:8]
 
-        # Создаем уникальный run_id
+        # Create unique run_id
         run_id = f"{node_host}_{iteration_num}_{timestamp}"
 
-        # Словарь подстановок
+        # Substitution dictionary
         substitutions = {
             "{node_host}": node_host,
             "{iteration_num}": str(iteration_num),
@@ -74,7 +64,7 @@ class StressRunExecutor:
             "{uuid}": short_uuid,
         }
 
-        # Выполняем подстановки
+        # Perform substitutions
         result = command_args_template
         for placeholder, value in substitutions.items():
             result = result.replace(placeholder, value)
@@ -86,33 +76,32 @@ class StressRunExecutor:
         stress_deployer: StressUtilDeployer,
         workload_params: dict,
         duration_value: float,
-        node_percentage: int,
-        preparation_result: dict,
+        preparation_result: dict[str, StressUtilDeployResult],
         nemesis: bool = False,
-    ):
+    ) -> StressUtilTestResults:
         """
-        ФАЗА 2: Параллельное выполнение workload на всех нодах
+        PHASE 2: Parallel workload execution on all nodes
 
         Args:
-            workload_name: Имя workload для отчетов
-            command_args_template: Шаблон аргументов командной строки
-            duration_param: Параметр для передачи времени выполнения
-            use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
-            preparation_result: Результаты подготовительной фазы
-            nemesis: Запускать ли сервис nemesis
+            workload_name: Workload name for reports
+            command_args_template: Command line arguments template
+            duration_param: Parameter for passing execution time
+            use_chunks: Whether to use iteration splitting (deprecated parameter)
+            preparation_result: Preparation phase results
+            nemesis: Whether to start nemesis service
 
         Returns:
-            Словарь с результатами выполнения
+            Dictionary with execution results
         """
 
         with allure.step("Phase 2: Execute workload runs in parallel"):
             deployed_nodes = preparation_result["deployed_nodes"]
-            overall_result = preparation_result["overall_result"]
-
+            execution_result = StressUtilTestResults()
+            execution_result.start_time = time_module.time()
             if not deployed_nodes:
                 logging.error("No deployed nodes available for execution")
                 return {
-                    "overall_result": overall_result,
+                    # "overall_result": overall_result,
                     "successful_runs": 0,
                     "total_runs": 0,
                     "total_execution_time": 0,
@@ -126,54 +115,55 @@ class StressRunExecutor:
             ):
                 workload_start_time = time_module.time()
 
-                # Запускаем nemesis через 15 секунд после начала выполнения
-                # workload
+                # Start nemesis 15 seconds after workload
+                # execution begins
                 if nemesis:
-                    # Устанавливаем флаг сразу при запуске nemesis потока
+                    # Set flag immediately when nemesis thread starts
                     deploy.nemesis_started = True
                     logging.info("Nemesis flag set to True - will start in 15 seconds")
 
                     nemesis_thread = threading.Thread(
                         target=stress_deployer.delayed_nemesis_start,
                         args=(15,),  # 15 секунд задержки
-                        daemon=False,  # Убираем daemon=True чтобы поток не прерывался
+                        daemon=False,  # Remove daemon=True so thread isn't interrupted
                     )
                     nemesis_thread.start()
                     logging.info("Scheduled nemesis to start in 15 seconds")
 
-                # Результаты выполнения для каждой ноды
+                # Execution results for each node
                 node_results = []
 
-                # Функция для выполнения workload на одной ноде
-                def execute_on_node(workload_config, stress_name, node):
+                # Function to execute workload on a single node
+                def execute_on_node(workload_config, stress_name, node) -> StressUtilResult:
                     node_host = node['node'].host
                     deployed_binary_path = node['binary_path']
 
-                    node_result = {
-                        "node": node['node'],
-                        "stress_name": stress_name,
-                        "host": node_host,
-                        "successful_runs": 0,
-                        "total_runs": 0,
-                        "runs": [],
-                        "total_execution_time": 0,
-                    }
+                    node_result = StressUtilResult()
+
+                    node_result.node = node['node']
+                    node_result.stress_name = stress_name
+                    node_result.host = node_host
+                    node_result.successful_runs = 0
+                    node_result.total_runs = 0
+                    node_result.runs = []
+                    start_time = time_module.time()
+                    node_result.start_time = time_module.time()
+                    node_result.total_execution_time = 0
 
                     logging.info(f"Starting execution on node {node_host}")
 
-                    start_time = time_module.time()
-                    planned_end_time = start_time + duration_value
+                    planned_end_time = node_result.start_time + duration_value
 
                     run_duration = duration_value
                     current_iteration = 0
-                    # Выполняем план для этой ноды
+                    # Execute plan for this node
                     while time_module.time() < planned_end_time:
 
-                        # Используем формат iter_N без добавления префикса iter_ в _execute_single_workload_run
-                        # так как он будет добавлен там
+                        # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
+                        # since it will be added there
                         run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"
 
-                        # Устанавливаем флаг, что префикс iter_ уже добавлен
+                        # Set flag that iter_ prefix is already added
                         run_config_copy = {}
                         run_config_copy["iteration_num"] = current_iteration
                         run_config_copy["node_host"] = node_host
@@ -183,7 +173,7 @@ class StressRunExecutor:
                             node_host  # Идентификатор потока - хост ноды
                         )
 
-                        # Выполняем один run
+                        # Execute one run
                         success, execution_time, stdout, stderr, is_timeout = (
                             self._execute_single_workload_run(
                                 deployed_binary_path,
@@ -195,22 +185,25 @@ class StressRunExecutor:
                             )
                         )
 
-                        # Сохраняем результат запуска
-                        run_result = {
-                            "run_num": current_iteration,
-                            "run_config": run_config_copy,
-                            "success": success,
-                            "execution_time": execution_time,
-                            "start_time": start_time,
-                            "stdout": stdout,
-                            "stderr": stderr,
-                            "is_timeout": is_timeout,
-                        }
-                        node_result["runs"].append(run_result)
-                        # Обновляем статистику ноды
-                        node_result["total_execution_time"] += execution_time
+                        # Save run result
+                        run_result = StressUtilRunResult()
+                        run_result.run_config = run_config_copy
+                        run_result.iteration_number = current_iteration
+                        run_result.is_success = success
+                        run_result.is_timeout = is_timeout
+                        run_result.execution_time = execution_time
+                        run_result.start_time = start_time
+                        run_result.end_time = time_module.time()
+                        run_result.stdout = stdout
+                        run_result.stderr = stderr
+
+                        start_time = time_module.time()
+                        node_result.runs.append(run_result)
+
+                        # Update node statistics
+                        node_result.total_execution_time += execution_time
                         if success:
-                            node_result["successful_runs"] += 1
+                            node_result.successful_runs += 1
                             logging.info(
                                 f"Run {current_iteration} on {node_host} completed successfully"
                             )
@@ -219,27 +212,31 @@ class StressRunExecutor:
                                 f"Run {current_iteration} on {node_host} failed")
                         current_iteration += 1
                         run_duration = planned_end_time - time_module.time()
-                    node_result['total_runs'] = len(node_result["runs"])
+                        break
+                    node_result.total_runs = len(node_result.runs)
+                    node_result.end_time = time_module.time()
                     logging.info(
                         f"Execution on {node_host} completed: "
-                        f"{node_result['successful_runs']}/{node_result['total_runs']} successful"
+                        f"{node_result.successful_runs}/{node_result.total_runs} successful"
                     )
 
                     return node_result
 
-                # Запускаем параллельное выполнение на всех нодах
+                # Start parallel execution on all nodes
                 with ThreadPoolExecutor(
                     max_workers=len(workload_params) * len(preparation_result["total_hosts"])
                 ) as executor:
                     future_to_node = {}
                     for name, stress_config in workload_params.items():
-                        for node in deployed_nodes[name]:
+                        execution_result.stress_util_runs[name] = []
+                        for node in deployed_nodes[name].nodes:
                             future_to_node[executor.submit(execute_on_node, stress_config, name, node)] = (name, node)
 
                     for future in as_completed(future_to_node):
                         try:
                             node_result = future.result()
                             node_results.append(node_result)
+                            execution_result.stress_util_runs[node_result.stress_name].append(node_result)
                         except Exception as e:
                             node_plan = future_to_node[future]
                             node_host = node_plan[1]['node'].host
@@ -247,64 +244,30 @@ class StressRunExecutor:
                                 f"Error executing on {node_host}: {e}")
                             logging.error(traceback.format_exc())
                             # Добавляем информацию об ошибке
-                            node_results.append(
-                                {
-                                    "node": node_plan[1]['node'],
-                                    "host": node_host,
-                                    "stress_name": node_plan[0],
-                                    "error": str(e),
-                                    "successful_runs": 0,
-                                    "total_runs": 1,
-                                    "runs": [],
-                                    "total_execution_time": 0,
-                                }
-                            )
+                            error_result = StressUtilRunResult()
+                            error_result.node = node_plan[1]['node']
+                            error_result.host = node_host
+                            error_result.stress_name = node_plan[0]
+                            error_result.error = str(e)
+                            error_result.successful_runs = 0
+                            error_result.total_runs = 1
+                            error_result.runs = []
+                            error_result.total_execution_time = 0
+                            node_results.append(error_result)
+                            execution_result.stress_util_runs[node_plan[0]] = [error_result]
 
-                # Обрабатываем результаты всех нод
-                successful_runs = 0
-                total_runs = 0
-                total_execution_time = 0
-
-                # Обрабатываем результаты каждой ноды и добавляем их в общий
-                # результат
-                for node_idx, node_result in enumerate(node_results):
-                    node_host = node_result["host"]
-
-                    # Добавляем статистику ноды в общую статистику
-                    successful_runs += node_result["successful_runs"]
-                    total_runs += node_result["total_runs"]
-                    total_execution_time += node_result["total_execution_time"]
-
-                    # Обрабатываем результаты каждого запуска на этой ноде
-                    for run_result in node_result.get("runs", []):
-                        # Генерируем уникальный номер запуска для всех нод
-                        global_run_num = (
-                            node_idx * 10000 +
-                            run_result["run_num"]
-                        )
-
-                        # Обрабатываем результат запуска
-                        process_single_run_result(
-                            overall_result,
-                            node_result["stress_name"],
-                            global_run_num,
-                            run_result["run_config"],
-                            run_result["success"],
-                            run_result["execution_time"],
-                            run_result["start_time"],
-                            run_result["stdout"],
-                            run_result["stderr"],
-                            run_result["is_timeout"],
-                            self._ignore_stderr_content
-                        )
+                # Process results from all nodes
+                successful_runs = sum(execution_result.get_stress_successful_runs(stress_name) for stress_name in execution_result.stress_util_runs.keys())
+                total_runs = sum(execution_result.get_stress_total_runs(stress_name) for stress_name in execution_result.stress_util_runs.keys())
+                total_execution_time = time_module.time() - workload_start_time
 
                 logging.info(
                     f"Parallel execution completed: {successful_runs}/{total_runs} successful runs "
                     f"on {len(node_results)} nodes"
                 )
-
+                execution_result.end_time = time_module.time()
                 return {
-                    "overall_result": overall_result,
+                    "overall_result": execution_result,
                     "successful_runs": successful_runs,
                     "total_runs": total_runs,
                     "total_execution_time": total_execution_time,
@@ -323,41 +286,41 @@ class StressRunExecutor:
         run_config: dict,
     ):
         """
-        Выполняет один запуск workload
+        Executes a single workload run
 
         Args:
-            deployed_binary_path: Путь к бинарному файлу workload
-            target_node: Нода для выполнения
-            run_name: Базовое имя запуска
-            command_args_template: Шаблон аргументов командной строки
-            duration_param: Параметр для передачи времени выполнения
-            run_config: Конфигурация запуска с информацией об итерации
+            deployed_binary_path: Path to workload binary
+            target_node: Target node for execution
+            run_name: Base run name
+            command_args_template: Command line arguments template
+            duration_param: Parameter for passing execution time
+            run_config: Run configuration with iteration info
 
         Returns:
-            Кортеж (успех, время выполнения, stdout, stderr, флаг таймаута)
+            Tuple (success, execution_time, stdout, stderr, timeout_flag)
         """
-        # Подставляем переменные в command_args_template для уникальности путей
+        # Substitute variables in command_args_template for unique paths
         command_args = self.__substitute_variables_in_template(
             command_args_template, target_node, run_config
         )
 
-        # Формируем команду
+        # Build command
         if duration_param is None:
-            # Используем command_args как есть (для обратной совместимости)
+            # Use command_args as-is (for backward compatibility)
             pass
         else:
-            # Добавляем duration параметр
+            # Add duration parameter
             command_args = (
                 f"{command_args} {duration_param} {
                     run_config['duration']}"
             )
 
-        # Добавляем информацию об итерации в имя запуска только если префикс
-        # еще не добавлен
+        # Add iteration info to run name only if prefix
+        # hasn't been added yet
         if "iteration_num" in run_config and not run_config.get(
             "iter_prefix_added", False
         ):
-            # Используем формат iter_N
+            # Use iter_N format
             run_name = f"{run_name}_iter_{run_config['iteration_num']}"
 
         run_start_time = time_module.time()
@@ -380,14 +343,14 @@ class StressRunExecutor:
                     attachment_type=allure.attachment_type.TEXT,
                 )
 
-                # Формируем и выполняем команду
+                # Build and execute command
                 with allure.step("Execute workload command"):
-                    # Отключаем буферизацию для гарантии захвата вывода
+                    # Disable buffering to ensure output capture
                     cmd = f"stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
 
                     run_timeout = (
                         run_config["duration"] + 150
-                    )  # Добавляем буфер для завершения
+                    )  # Add buffer for completion
 
                     allure.attach(
                         cmd, "Full Command", attachment_type=allure.attachment_type.TEXT
@@ -410,7 +373,7 @@ class StressRunExecutor:
                     stderr = execution_result.stderr
                     is_timeout = execution_result.is_timeout
 
-                    # Прикрепляем результаты выполнения команды
+                    # Attach command execution results
                     if stdout:
                         allure.attach(
                             stdout,
@@ -440,8 +403,8 @@ class StressRunExecutor:
                     if self._ignore_stderr_content:
                         success = not is_timeout
                     else:
-                        # success=True только если stderr пустой (исключая SSH
-                        # warnings) И нет timeout
+                        # success=True only if stderr is empty (excluding SSH
+                        # warnings) AND no timeout
                         success = not bool(stderr.strip()) and not is_timeout
 
                     execution_time = time_module.time() - run_start_time

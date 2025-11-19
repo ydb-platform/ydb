@@ -1,10 +1,88 @@
 import logging
+from typing import Optional
 
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+
+
+class StressUtilRunResult:
+    run_config: dict = None
+    is_success: bool = None
+    is_timeout: bool = None
+    iteration_number: int = None
+    stdout: str = None
+    stderr: str = None
+    start_time: float = None
+    end_time: float = None
+    execution_time: str = None
+
+
+class StressUtilResult:
+    stress_name: str = None
+    node: str = None
+    host: str = None
+    resolution: str = None
+    start_time: float = None
+    end_time: float = None
+    total_execution_time: str = None
+    successful_runs: int = None
+    total_runs: int = None
+    runs: list[StressUtilRunResult] = []
+
+    def __init__(self):
+        self.runs = []
+
+
+class StressUtilDeployResult:
+    stress_name: str = None
+    nodes: list[YdbCluster.Node] = None
+    hosts: list[str] = None
+
+    def __init__(self):
+        self.nodes = None
+        self.hosts = None
+
+
+class StressUtilTestResults:
+    start_time: float = None
+    end_time: float = None
+    stress_util_runs: dict[str, list[StressUtilResult]] = dict()
+    nemesis_deploy_results: dict[str, list[str]] = dict()
+    errors: list[str] = []
+    error_message: str = ''
+
+    def __init__(self):
+        self.start_time = None
+        self.end_time = None
+        self.stress_util_runs = dict()
+        self.nemesis_deploy_results = dict()
+        self.errors = []
+        self.error_message = ''
+
+    def add_error(self, msg: Optional[str]) -> bool:
+        if msg:
+            self.errors.append(msg)
+            if len(self.error_message) > 0:
+                self.error_message += f'\n\n{msg}'
+            else:
+                self.error_message = msg
+            return True
+        return False
+
+    def get_stress_successful_runs(self, stress_name: str) -> int:
+        return sum(run_result.successful_runs for run_result in self.stress_util_runs[stress_name])
+
+    def get_stress_total_runs(self, stress_name: str) -> int:
+        return sum(run_result.total_runs for run_result in self.stress_util_runs[stress_name])
+
+    def is_all_success(self) -> bool:
+        return all(all(run_result.successful_runs == run_result.total_runs for run_result in result) for result in self.stress_util_runs.values())
+
+    def __repr__(self):
+        return f"StressUtilTestResults(start_time={self.start_time}, end_time={self.end_time}, stress_util_runs={self.stress_util_runs}, nemesis_deploy_results={self.nemesis_deploy_results}, errors={self.errors})"
 
 
 def process_single_run_result(
-    overall_result,
     workload_name: str,
     run_num: int,
     run_config: dict,
@@ -15,7 +93,7 @@ def process_single_run_result(
     stderr: str,
     is_timeout: bool,
     ignore_stderr_content: bool
-):
+) -> YdbCliHelper.WorkloadRunResult:
     """
     Обрабатывает результат одного запуска
 
@@ -55,19 +133,7 @@ def process_single_run_result(
         start_time=start_time,
         ignore_stderr_content=ignore_stderr_content,
     )
-
-    # Добавляем iteration в общий результат
-    overall_result.iterations[run_num] = run_result.iterations[run_num]
-
-    # Накапливаем stdout/stderr
-    if overall_result.stdout is None:
-        overall_result.stdout = ""
-    if overall_result.stderr is None:
-        overall_result.stderr = ""
-
-    overall_result.stdout += f"\n=== Run {run_num} ===\n{stdout or ''}"
-    overall_result.stderr += f"\n == = Run {run_num} stderr == =\n{
-        stderr or ''}"
+    return run_result
 
 
 def create_workload_result(
@@ -327,22 +393,22 @@ def analyze_execution_results(
     use_iterations: bool,
 ):
     """
-    Анализирует результаты выполнения и добавляет ошибки/предупреждения
+    Analyzes execution results and adds errors/warnings
 
     Args:
-        overall_result: Общий результат для добавления информации
-        successful_runs: Количество успешных запусков
-        total_runs: Общее количество запусков
-        use_iterations: Использовались ли итерации
+        overall_result: Overall result to add info to
+        successful_runs: Number of successful runs
+        total_runs: Total number of runs
+        use_iterations: Whether iterations were used
     """
-    # Группируем итерации по их номеру, чтобы определить реальное
-    # количество итераций
+    # Group iterations by number to determine actual
+    # iteration count
     iterations_by_number = {}
     threads_by_iteration = {}
 
-    # Анализируем все итерации и группируем их по номеру итерации
+    # Analyze all iterations and group them by iteration number
     for iter_num, iteration in overall_result.iterations.items():
-        # Получаем номер итерации из статистики или из имени
+        # Get iteration number from stats or name
         real_iter_num = None
         node_host = None
 
@@ -360,7 +426,7 @@ def analyze_execution_results(
                     elif "chunk_num" in stat_value:  # Для обратной совместимости
                         real_iter_num = stat_value["chunk_num"]
 
-        # Если не нашли в статистике, пробуем извлечь из имени
+        # If not found in stats, try to extract from name
         if real_iter_num is None and hasattr(
                 iteration, "name") and iteration.name:
             name_parts = iteration.name.split("_")
@@ -372,11 +438,11 @@ def analyze_execution_results(
                     except (ValueError, IndexError):
                         pass
 
-        # Если все еще не определили, используем номер итерации
+        # If still not determined, use iteration number
         if real_iter_num is None:
             real_iter_num = iter_num
 
-        # Добавляем итерацию в группу по её номеру
+        # Add iteration to its number group
         if real_iter_num not in iterations_by_number:
             iterations_by_number[real_iter_num] = []
             threads_by_iteration[real_iter_num] = set()
@@ -385,14 +451,14 @@ def analyze_execution_results(
         if node_host:
             threads_by_iteration[real_iter_num].add(node_host)
 
-    # Определяем реальное количество итераций и потоков
+    # Determine actual iteration and thread counts
     real_iteration_count = len(iterations_by_number)
     failed_iterations = 0
 
-    # Проверяем каждую итерацию на наличие ошибок
+    # Check each iteration for errors
     for iter_num, iterations in iterations_by_number.items():
-        # Если хотя бы один поток в итерации завершился успешно, считаем
-        # итерацию успешной
+        # If at least one thread in iteration succeeded, consider
+        # iteration successful
         iteration_success = any(
             not hasattr(
                 iter_obj, "error_message") or not iter_obj.error_message
@@ -402,16 +468,16 @@ def analyze_execution_results(
         if not iteration_success:
             failed_iterations += 1
 
-    # Формируем сообщение об ошибке или предупреждение
+    # Create error or warning message
     if failed_iterations == real_iteration_count and real_iteration_count > 0:
-        # Все итерации завершились с ошибкой
+        # All iterations failed
         threads_info = ""
         if (
             real_iteration_count == 1
             and sum(len(threads) for threads in threads_by_iteration.values()) > 1
         ):
-            # Если была только одна итерация с несколькими потоками,
-            # указываем это
+            # If there was only one iteration with multiple threads,
+            # indicate this
             thread_count = sum(
                 len(threads) for threads in threads_by_iteration.values()
             )
@@ -421,7 +487,7 @@ def analyze_execution_results(
             f"All {real_iteration_count} iterations{threads_info} failed to execute successfully"
         )
     elif failed_iterations > 0:
-        # Некоторые итерации завершились с ошибкой
+        # Some iterations failed
         overall_result.add_warning(
             f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully"
         )
@@ -436,28 +502,28 @@ def add_execution_statistics(
     use_iterations: bool,
 ):
     """
-    Собирает и добавляет статистику выполнения
+    Collects and adds execution statistics
 
     Args:
-        overall_result: Общий результат для добавления статистики
-        workload_name: Имя workload
-        execution_result: Результаты выполнения
-        additional_stats: Дополнительная статистика
-        duration_value: Время выполнения в секундах
-        use_iterations: Использовались ли итерации
+        overall_result: Overall result to add stats to
+        workload_name: Workload name
+        execution_result: Execution results
+        additional_stats: Additional statistics
+        duration_value: Execution time in seconds
+        use_iterations: Whether iterations were used
     """
     successful_runs = execution_result["successful_runs"]
     total_runs = execution_result["total_runs"]
     total_execution_time = execution_result["total_execution_time"]
 
-    # Группируем итерации по их номеру для определения реального количества
-    # итераций и потоков
+    # Group iterations by number to determine actual
+    # iteration and thread counts
     iterations_by_number = {}
     threads_by_iteration = {}
 
-    # Анализируем все итерации и группируем их по номеру итерации
+    # Analyze all iterations and group them by iteration number
     for iter_num, iteration in overall_result.iterations.items():
-        # Получаем номер итерации из статистики или из имени
+        # Get iteration number from stats or name
         real_iter_num = None
         node_host = None
         # actual_time = None
@@ -478,7 +544,7 @@ def add_execution_statistics(
                     elif "chunk_num" in stat_value:  # Для обратной совместимости
                         real_iter_num = stat_value["chunk_num"]
 
-        # Если не нашли в статистике, пробуем извлечь из имени
+        # If not found in stats, try to extract from name
         if real_iter_num is None and hasattr(
                 iteration, "name") and iteration.name:
             name_parts = iteration.name.split("_")
@@ -490,11 +556,11 @@ def add_execution_statistics(
                     except (ValueError, IndexError):
                         pass
 
-        # Если все еще не определили, используем номер итерации
+        # If still not determined, use iteration number
         if real_iter_num is None:
             real_iter_num = iter_num
 
-        # Добавляем итерацию в группу по её номеру
+        # Add iteration to its number group
         if real_iter_num not in iterations_by_number:
             iterations_by_number[real_iter_num] = []
             threads_by_iteration[real_iter_num] = set()
@@ -503,17 +569,17 @@ def add_execution_statistics(
         if node_host:
             threads_by_iteration[real_iter_num].add(node_host)
 
-    # Определяем реальное количество итераций и потоков
+    # Determine actual iteration and thread counts
     real_iteration_count = len(iterations_by_number)
     total_thread_count = sum(
         len(threads) for threads in threads_by_iteration.values()
     )
 
-    # Считаем успешные итерации
+    # Count successful iterations
     successful_iterations = 0
     for iter_num, iterations in iterations_by_number.items():
-        # Если хотя бы один поток в итерации завершился успешно, считаем
-        # итерацию успешной
+        # If at least one thread in iteration succeeded, consider
+        # iteration successful
         iteration_success = any(
             not hasattr(
                 iter_obj, "error_message") or not iter_obj.error_message
@@ -523,7 +589,7 @@ def add_execution_statistics(
         if iteration_success:
             successful_iterations += 1
 
-    # Вычисляем фактическое время выполнения как среднее по всем итерациям
+    # Calculate actual execution time as average across iterations
     actual_execution_times = []
     for iter_list in iterations_by_number.values():
         for iteration in iter_list:
@@ -539,14 +605,14 @@ def add_execution_statistics(
                             stat_value["actual_execution_time"]
                         )
 
-    # Вычисляем среднее фактическое время выполнения
+    # Calculate average actual execution time
     avg_actual_time = (
         sum(actual_execution_times) / len(actual_execution_times)
         if actual_execution_times
         else duration_value
     )
 
-    # Базовая статистика
+    # Basic statistics
     stats = {
         "total_runs": total_runs,
         "successful_runs": successful_runs,
@@ -567,10 +633,10 @@ def add_execution_statistics(
         ),
     }
 
-    # Добавляем дополнительную статистику
+    # Add additional statistics
     if additional_stats:
         stats.update(additional_stats)
 
-    # Добавляем всю статистику в результат
+    # Add all statistics to result
     for key, value in stats.items():
         overall_result.add_stat(workload_name, key, value)

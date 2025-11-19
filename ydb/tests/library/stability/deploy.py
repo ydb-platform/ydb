@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from ydb.tests.olap.lib.remote_execution import execute_command
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult
 from concurrent.futures import ThreadPoolExecutor
 import logging
 from ydb.tests.olap.lib.remote_execution import (
@@ -91,12 +91,13 @@ class StressUtilDeployer:
 
             total_hosts = []
             for deploy_future, future_workload_name in deploy_futures:
-                deployed_nodes[future_workload_name] = deploy_future.result()
-                total_hosts += list(map(lambda node: node['node'].host, deployed_nodes[future_workload_name]))
+                result = StressUtilDeployResult()
+                result.nodes = deploy_future.result()
+                deployed_hosts = list(map(lambda node: node['node'].host, result.nodes))
+                result.hosts = deployed_hosts
+                deployed_nodes[future_workload_name] = result
 
-            # Инициализируем результат
-            overall_result = YdbCliHelper.WorkloadRunResult()
-            overall_result.start_time = time_module.time()
+                total_hosts += deployed_hosts
 
             logging.info(
                 f"Preparation completed: {deployed_nodes} nodes in parallel mode"
@@ -105,20 +106,19 @@ class StressUtilDeployer:
             return {
                 "deployed_nodes": deployed_nodes,
                 "total_hosts": set(total_hosts),
-                "overall_result": overall_result,
                 "workload_start_time": time_module.time(),
             }
 
-    def _deploy_workload_binary(self, workload_name: str, workload_path: str, nodes_percentage: int = 100):
+    def _deploy_workload_binary(self, workload_name: str, workload_path: str, nodes_percentage: int = 100) -> list[YdbCluster.Node]:
         """
-        Выполняет deploy workload binary на указанный процент нод кластера
+        Deploys workload binary to specified percentage of cluster nodes
 
         Args:
-            workload_name: Имя workload для отчетов
-            nodes_percentage: Процент нод кластера для деплоя (от 1 до 100)
+            workload_name: Workload name for reports
+            nodes_percentage: Percentage of cluster nodes to deploy to (1-100)
 
         Returns:
-            Список словарей с информацией о нодах, на которые выполнен деплой:
+            List of dictionaries with info about deployed nodes:
             [{'node': node_object, 'binary_path': path_to_binary}, ...]
         """
         with allure.step("Deploy workload binary"):
@@ -126,7 +126,7 @@ class StressUtilDeployer:
                 f"Starting deployment for {workload_name} on {nodes_percentage}% of nodes"
             )
 
-            # Получаем бинарный файл
+            # Get binary file
             with allure.step("Get workload binary"):
                 logging.info(f"Binary path from: {workload_path}")
                 binary_files = [
@@ -139,13 +139,13 @@ class StressUtilDeployer:
                 )
                 logging.info(f"Binary path resolved: {binary_files[0]}")
 
-            # Получаем уникальные хосты кластера
+            # Get unique cluster hosts
             with allure.step("Select unique cluster hosts"):
                 nodes = YdbCluster.get_cluster_nodes()
                 if not nodes:
                     raise Exception("No cluster nodes found")
 
-                # Собираем уникальные хосты и соответствующие им ноды
+                # Collect unique hosts and their corresponding nodes
                 unique_hosts = {}
                 for node in nodes:
                     if node.host not in unique_hosts:
@@ -153,11 +153,11 @@ class StressUtilDeployer:
 
                 unique_nodes = list(unique_hosts.values())
 
-                # Определяем количество нод для деплоя на основе процента
+                # Determine number of nodes to deploy based on percentage
                 num_nodes = max(
                     1, int(
                         len(unique_nodes) * nodes_percentage / 100))
-                # Выбираем первые N нод из списка уникальных
+                # Select first N nodes from unique list
                 selected_nodes = unique_nodes[:num_nodes]
 
                 allure.attach(
@@ -173,7 +173,7 @@ class StressUtilDeployer:
                         len(unique_nodes)} unique hosts for deployment"
                 )
 
-            # Развертываем бинарный файл на выбранных нодах
+            # Deploy binary to selected nodes
             with allure.step(
                 f"Deploy {
                     workload_name} to {
@@ -187,7 +187,7 @@ class StressUtilDeployer:
                 )
                 logging.info(f"Deploy results: {deploy_results}")
 
-                # Собираем информацию о результатах деплоя
+                # Collect deployment results info
                 deployed_nodes = []
                 failed_nodes = []
 
@@ -219,7 +219,7 @@ class StressUtilDeployer:
                                     'Unknown error')}"
                         )
 
-                # Прикрепляем детали развертывания
+                # Attach deployment details
                 allure.attach(
                     f"Successful deployments: {
                         len(deployed_nodes)} / {
@@ -229,9 +229,9 @@ class StressUtilDeployer:
                     attachment_type=allure.attachment_type.TEXT,
                 )
 
-                # Проверяем, что хотя бы одна нода успешно развернута
+                # Verify at least one node was successfully deployed
                 if not deployed_nodes:
-                    # Создаем детальное сообщение об ошибке деплоя
+                    # Create detailed deployment error message
                     deploy_error_details = []
                     deploy_error_details.append(
                         f"DEPLOYMENT FAILED: {workload_name}"
@@ -244,7 +244,7 @@ class StressUtilDeployer:
                     deploy_error_details.append(
                         f"Local binary path: {binary_files[0]}")
 
-                    # Детали ошибок
+                    # Error details
                     deploy_error_details.append("\nDeployment errors:")
                     for failed in failed_nodes:
                         deploy_error_details.append(
@@ -268,21 +268,21 @@ class StressUtilDeployer:
         existing_log: list = None,
     ):
         """
-        Управляет сервисом nemesis на всех уникальных хостах кластера (параллельное выполнение)
+        Manages nemesis service on all unique cluster hosts (parallel execution)
 
         Args:
-            enable_nemesis: True для запуска, False для остановки
-            operation_context: Контекст операции для логирования
-            existing_log: Существующий лог для добавления информации
+            enable_nemesis: True to start, False to stop
+            operation_context: Operation context for logging
+            existing_log: Existing log to append info to
 
         Returns:
-            Список строк с логом операции
+            List of strings with operation log
         """
         # Создаем сводный лог для Allure
         nemesis_log = existing_log if existing_log is not None else []
 
         try:
-            # Получаем все уникальные хосты кластера
+            # Get all unique cluster hosts
             nodes = YdbCluster.get_cluster_nodes()
             unique_hosts = set(node.host for node in nodes)
 
@@ -294,12 +294,12 @@ class StressUtilDeployer:
                         len(unique_hosts)} hosts in parallel"
                 )
 
-                # Деплоим бинарный файл nemesis на все ноды
+                # Deploy nemesis binary to all nodes
                 nemesis_log.append(
                     f"Deploying nemesis binary to {len(unique_hosts)} hosts"
                 )
 
-                # Получаем путь к бинарному файлу nemesis
+                # Get path to nemesis binary
                 nemesis_binary_path = os.getenv("NEMESIS_BINARY")
                 if nemesis_binary_path:
                     nemesis_binary = yatest.common.binary_path(
@@ -312,18 +312,18 @@ class StressUtilDeployer:
 
                 nemesis_log.append(f"Nemesis binary path: {nemesis_binary}")
 
-                # Создаем сводный лог для Allure для файловых операций
+                # Create summary log for Allure for file operations
                 file_ops_log = []
                 file_ops_log.append(
                     f"Preparing nemesis configuration and binary on {
                         len(unique_hosts)} hosts in parallel"
                 )
 
-                # Добавляем информацию о времени операций
+                # Add operation timing info
                 current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 file_ops_log.append(f"Time: {current_time}")
 
-                # Деплоим бинарный файл nemesis используя
+                # Deploy nemesis binary using
                 # deploy_binaries_to_hosts
                 nemesis_binaries = [nemesis_binary]
                 nemesis_deploy_path = "/Berkanavt/nemesis/bin/"
@@ -335,7 +335,7 @@ class StressUtilDeployer:
                     nemesis_binaries, list(unique_hosts), nemesis_deploy_path
                 )
 
-                # Анализируем результаты деплоя
+                # Analyze deployment results
                 successful_deploys = 0
                 failed_deploys = 0
                 deploy_errors = []
@@ -372,7 +372,7 @@ class StressUtilDeployer:
                     for error in deploy_errors:
                         file_ops_log.append(f"- {error}")
 
-                # Функция для выполнения файловых операций на одном хосте
+                # Function to perform file operations on single host
                 def prepare_nemesis_config(host):
                     host_log = []
                     host_log.append(f"\n--- {host} ---")
@@ -380,7 +380,7 @@ class StressUtilDeployer:
                         f"Starting nemesis config preparation for {host}")
 
                     try:
-                        # 1. Устанавливаем права на выполнение для nemesis
+                        # 1. Set execute permissions for nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
                             host=host, cmd=chmod_cmd, raise_on_error=False, timeout=30
@@ -402,7 +402,7 @@ class StressUtilDeployer:
                             host_log.append(
                                 "Set executable permissions for nemesis")
 
-                        # 2. Удаляем cluster.yaml
+                        # 2. Delete cluster.yaml
                         delete_cmd = "sudo rm -f /Berkanavt/kikimr/cfg/cluster.yaml"
                         delete_result = execute_command(
                             host=host, cmd=delete_cmd, raise_on_error=False
@@ -423,7 +423,7 @@ class StressUtilDeployer:
                         else:
                             host_log.append("Deleted cluster.yaml")
 
-                        # 3. Копируем config.yaml в cluster.yaml
+                        # 3. Copy config.yaml to cluster.yaml
                         copy_result = self._copy_cluster_config(host, host_log)
                         if not copy_result["success"]:
                             return copy_result
@@ -444,7 +444,7 @@ class StressUtilDeployer:
                             "log": host_log,
                         }
 
-                # Выполняем файловые операции параллельно
+                # Execute file operations in parallel
                 file_ops_start_time = time_module.time()
                 success_count = 0
                 error_count = 0
@@ -480,7 +480,7 @@ class StressUtilDeployer:
 
                 file_ops_time = time_module.time() - file_ops_start_time
 
-                # Добавляем итоговую статистику файловых операций
+                # Add final file operations statistics
                 file_ops_log.append("\n--- File Operations Summary ---")
                 file_ops_log.append(
                     f"Successful hosts: {success_count}/{len(unique_hosts)}"
@@ -494,7 +494,7 @@ class StressUtilDeployer:
                     for error in errors:
                         file_ops_log.append(f"- {error}")
 
-                # Добавляем сводный лог файловых операций в Allure
+                # Add file operations summary log to Allure
                 allure.attach(
                     "\n".join(file_ops_log),
                     "Nemesis Config and Binary Preparation (Parallel)",
@@ -508,7 +508,7 @@ class StressUtilDeployer:
                         len(unique_hosts)} hosts in parallel"
                 )
 
-            # Добавляем в лог информацию об операции
+            # Add operation info to log
             if operation_context:
                 nemesis_log.append(
                     f"{operation_context}: {action_name} nemesis service on {
@@ -520,11 +520,11 @@ class StressUtilDeployer:
                         len(unique_hosts)} hosts in parallel"
                 )
 
-            # Добавляем информацию о времени запуска/остановки
+            # Add start/stop timing info
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             nemesis_log.append(f"Time: {current_time}")
 
-            # Функция для выполнения команды сервиса на одном хосте
+            # Function to execute service command on single host
             def execute_service_command(host):
                 host_log = []
                 host_log.append(f"\n--- {host} ---")
@@ -574,7 +574,7 @@ class StressUtilDeployer:
                         "log": host_log,
                     }
 
-            # Выполняем команды сервиса параллельно
+            # Execute service commands in parallel
             service_start_time = time_module.time()
             success_count = 0
             error_count = 0
@@ -608,7 +608,7 @@ class StressUtilDeployer:
 
             service_time = time_module.time() - service_start_time
 
-            # Добавляем итоговую статистику
+            # Add final statistics
             nemesis_log.append("\n--- Summary ---")
             nemesis_log.append(
                 f"Successful hosts: {success_count}/{len(unique_hosts)}")
@@ -621,7 +621,7 @@ class StressUtilDeployer:
                 for error in errors:
                     nemesis_log.append(f"- {error}")
 
-            # Устанавливаем флаг запуска nemesis
+            # Set nemesis startup flag
             if enable_nemesis:
                 self.nemesis_started = True
                 nemesis_log.append("Nemesis service started successfully")
@@ -629,7 +629,7 @@ class StressUtilDeployer:
                 self.nemesis_started = False
                 nemesis_log.append("Nemesis service stopped successfully")
 
-            # Добавляем сводный лог в Allure
+            # Add summary log to Allure
             allure.attach(
                 "\n".join(nemesis_log),
                 f"Nemesis {action_name} Summary (Parallel)",
@@ -648,10 +648,10 @@ class StressUtilDeployer:
 
     def delayed_nemesis_start(self, delay_seconds: int):
         """
-        Запускает nemesis с задержкой после начала выполнения workload
+        Starts nemesis with delay after workload begins
 
         Args:
-            delay_seconds: Задержка в секундах перед запуском nemesis
+            delay_seconds: Delay in seconds before starting nemesis
         """
         try:
             # Создаем лог для Allure
@@ -679,10 +679,10 @@ class StressUtilDeployer:
                 attachment_type=allure.attachment_type.TEXT,
             )
 
-            # Ждем указанное время
+            # Wait specified time
             time_module.sleep(delay_seconds)
 
-            # Обновляем лог
+            # Update log
             actual_start_time = datetime.now()
             nemesis_log.append(
                 f"Actual start time: {
@@ -694,7 +694,7 @@ class StressUtilDeployer:
             )
 
             with allure.step(f"Start nemesis after {delay_seconds}s delay"):
-                # Запускаем nemesis через общий метод класса
+                # Start nemesis using class common method
                 allure.attach(
                     "\n".join(nemesis_log),
                     "Nemesis Delayed Start Info",

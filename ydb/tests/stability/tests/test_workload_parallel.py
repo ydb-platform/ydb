@@ -16,7 +16,7 @@ LOGGER = logging.getLogger(__name__)
 class TestWorkloadParallel(ParallelWorkloadTestBase):
     timeout = int(get_external_param('workload_duration', 120))
 
-    def test_all_workloads_parallel(self, nemesis_enabled: bool, stress_executor: StressRunExecutor, binary_deployer):
+    def test_all_workloads_parallel(self, nemesis_enabled: bool, stress_executor: StressRunExecutor, binary_deployer, olap_load_base):
 
         runnable_workloads = all_workloads
 
@@ -26,6 +26,7 @@ class TestWorkloadParallel(ParallelWorkloadTestBase):
         self.execute_parallel_workloads_test(
             stress_executor,
             binary_deployer,
+            olap_load_base,
             workload_params=runnable_workloads,
             duration_value=self.timeout,
             nemesis_enabled=nemesis_enabled,

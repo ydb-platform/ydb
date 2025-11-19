@@ -1,36 +1,38 @@
+from typing import Optional
 import allure
 import logging
 import time as time_module
 import pytest
 
-from ydb.tests.library.stability.aggregate_results import add_execution_statistics, analyze_execution_results
+from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
+from ydb.tests.library.stability.build_report import create_parallel_allure_report
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
-# Импортируем LoadSuiteBase чтобы наследоваться от него
-from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 
 
-class ParallelWorkloadTestBase(LoadSuiteBase):
+class ParallelWorkloadTestBase:
     """
-    Базовый класс для workload тестов с общей функциональностью
+    Base class for workload tests with common functionality
     """
 
-    # Переопределяемые атрибуты в наследниках
+    # Attributes that can be overridden in child classes
     binaries_deploy_path: str = (
-        "/tmp/stress_binaries/"  # Путь для деплоя бинарных файлов
+        "/tmp/stress_binaries/"  # Path for deploying binary files
     )
-    timeout: float = 1800.0  # Таймаут по умолчанию
-    _nemesis_started: bool = False  # Флаг для отслеживания запуска nemesis
+    timeout: float = 1800.0  # Default timeout
+    _nemesis_started: bool = False  # Flag to track nemesis startup
     cluster_path: str = str(
         get_external_param(
             "cluster_path",
-            ""))  # Путь к кластеру
+            ""))  # Path to cluster
     yaml_config: str = str(
         get_external_param(
             "yaml-config",
-            ""))  # Путь к yaml конфигурации
+            ""))  # Path to yaml configuration
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self) -> StressUtilDeployer:
@@ -57,8 +59,8 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
     @pytest.fixture(autouse=True, scope="session")
     def context_setup(self, binary_deployer, olap_load_base) -> None:
         """
-        Общая инициализация для workload тестов.
-        НЕ выполняем _Verification здесь - будем делать это перед каждым тестом.
+        Common initialization for workload tests.
+        Do NOT perform _Verification here - we'll do it before each test.
         """
         with allure.step("Workload test setup: initialize"):
             self._setup_start_time = time_module.time()
@@ -68,25 +70,26 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
         self,
         stress_executor: StressRunExecutor,
         stress_deployer: StressUtilDeployer,
+        olap_load_base: LoadSuiteBase,
         workload_params: dict,
         duration_value: float = None,
         nemesis_enabled: bool = False,
         nodes_percentage: int = 100,
     ):
         """
-        Выполняет полный цикл workload теста
+        Executes full workload test cycle
 
         Args:
-            workload_params: Имя workload для отчетов
-            duration_value: Время выполнения в секундах (если None, используется self.timeout)
-            nemesis_enabled: Запускать ли сервис nemesis через 15 секунд после начала выполнения workload
-            nodes_percentage: Процент нод кластера для запуска workload (от 1 до 100)
+            workload_params: Workload name for reports
+            duration_value: Execution time in seconds (if None, uses self.timeout)
+            nemesis_enabled: Whether to start nemesis service 15 seconds after workload starts
+            nodes_percentage: Percentage of cluster nodes to run workload on (1-100)
         """
 
         if duration_value is None:
             duration_value = self.timeout
 
-        # Проверяем корректность процента нод
+        # Validate nodes percentage
         if nodes_percentage < 1 or nodes_percentage > 100:
             raise ValueError(
                 f"nodes_percentage должен быть от 1 до 100, получено: {nodes_percentage}"
@@ -98,54 +101,52 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
         logging.info("=== Starting env preparation ===")
 
-        # ФАЗА 1: ПОДГОТОВКА
-        preparation_result = stress_deployer.prepare_stress_execution(self, workload_params, nodes_percentage)
+        # PHASE 1: PREPARATION
+        preparation_result = stress_deployer.prepare_stress_execution(olap_load_base, workload_params, nodes_percentage)
 
         logging.debug(f"Deploy finished with {preparation_result}")
 
-        # ФАЗА 2: ВЫПОЛНЕНИЕ
+        # PHASE 2: EXECUTION
         execution_result = stress_executor.execute_stress_runs(
             stress_deployer,
             workload_params,
             duration_value,
-            nodes_percentage,
             preparation_result,
             nemesis_enabled,
         )
         logging.debug(f"Execution finished with {execution_result}")
         logging.debug(f"Additional stats {additional_stats}")
 
-        # ФАЗА 3: РЕЗУЛЬТАТЫ
-        final_result = self._finalize_workload_results(
-            workload_params,
+        # PHASE 3: RESULTS
+        self._finalize_workload_results(
+            olap_load_base,
             execution_result,
             additional_stats,
             duration_value
         )
 
         logging.info("=== Workload test completed ===")
-        logging.debug(f"Execution final result {final_result}")
-        # return final_result
+        # logging.debug(f"Execution final result {final_result}")
 
     def _finalize_workload_results(
         self,
-        workload_params: dict,
+        olap_load_base: LoadSuiteBase,
         execution_result: dict,
         additional_stats: dict,
         duration_value: float
     ):
         """
-        ФАЗА 3: Финализация результатов и диагностика
+        PHASE 3: Finalizing results and diagnostics
 
         Args:
-            workload_name: Имя workload для отчетов
-            execution_result: Результаты выполнения
-            additional_stats: Дополнительная статистика
-            duration_value: Время выполнения в секундах
-            use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
+            workload_name: Workload name for reports
+            execution_result: Execution results
+            additional_stats: Additional statistics
+            duration_value: Execution time in seconds
+            use_chunks: Whether to use iteration splitting (deprecated parameter)
 
         Returns:
-            Финальный результат выполнения
+            Final execution result
         """
 
         with allure.step("Phase 3: Finalize results and diagnostics"):
@@ -153,106 +154,55 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Анализируем результаты и добавляем ошибки/предупреждения
-            analyze_execution_results(
-                overall_result, successful_runs, total_runs, False
-            )
+            # Analyze results and add errors/warnings
+            # analyze_execution_results(
+            #     overall_result, successful_runs, total_runs, False
+            # )
 
-            # Собираем и добавляем статистику
-            add_execution_statistics(
-                overall_result,
-                'parallel_run',
-                execution_result,
-                additional_stats,
-                duration_value,
-                False
-            )
-
-            # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
+            # Final processing with diagnostics (prepares data for upload)
             overall_result.workload_start_time = execution_result["workload_start_time"]
-            self.process_workload_result_with_diagnostics(
-                overall_result, 'parallel_run', execution_result
-            )
+            node_errors, verify_errors = self.process_workload_result_with_diagnostics(olap_load_base, overall_result, 'parallel_run')
 
-            # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
-            # Используем node_errors, сохраненные из диагностики
-            node_errors = getattr(overall_result, '_node_errors', [])
-            self._handle_final_status(overall_result, 'parallel_run', node_errors)
+            # Final status processing (may throw exception, but results are already uploaded)
+            # Use node_errors saved from diagnostics
+            self._handle_final_status(overall_result, 'parallel_run', node_errors, verify_errors)
 
-            # Отдельный шаг для выгрузки результатов (ПОСЛЕ подготовки всех данных)
+            # Separate step for uploading results (AFTER all data preparation)
             # self.__class__._safe_upload_results(overall_result, 'all')
 
             logging.info(
-                f"Final result: success={
-                    overall_result.success}, successful_runs={successful_runs} / {total_runs}"
+                f"Final result: successful_runs={successful_runs} / {total_runs}"
             )
             return overall_result
 
     def process_workload_result_with_diagnostics(
         self,
-        result: YdbCliHelper.WorkloadRunResult,
-        workload_name: str,
-        execution_result=None
+        olap_load_base: LoadSuiteBase,
+        result: StressUtilTestResults,
+        workload_name: str
     ):
         """
-        Обрабатывает результат workload с добавлением диагностической информации
+        Processes workload result with diagnostic information
 
         Args:
-            result: Результат выполнения workload
-            workload_name: Имя workload для отчетов
-            check_scheme: Проверять ли схему базы данных
-            use_node_subcols: Использовать ли подколонки для нод в таблице итераций
+            result: Workload execution result
+            workload_name: Workload name for reports
+            check_scheme: Whether to check database schema
+            use_node_subcols: Whether to use node subcolumns in iterations table
         """
         with allure.step(f"Process workload result for {workload_name}"):
-            # Собираем информацию о параметрах workload для заголовка
-            workload_params = {}
-
-            # Извлекаем параметры из статистики
-            workload_stats = result.get_stats(workload_name)
-            if workload_stats:
-                # Добавляем важные параметры в начало
-                important_params = [
-                    "total_runs",
-                    "planned_duration",
-                    "actual_duration",
-                    "use_iterations",
-                    "workload_type",
-                    "table_type",
-                ]
-                for param in important_params:
-                    if param in workload_stats:
-                        workload_params[param] = workload_stats[param]
-
-                # Информация об итерациях и потоках
-                if "total_iterations" in workload_stats:
-                    workload_params["total_iterations"] = workload_stats[
-                        "total_iterations"
-                    ]
-                if "total_threads" in workload_stats:
-                    workload_params["total_threads"] = workload_stats["total_threads"]
-
-                # Добавляем остальные параметры
-                for key, value in workload_stats.items():
-                    if key not in workload_params and key not in [
-                        "success_rate",
-                        "successful_runs",
-                        "failed_runs",
-                    ]:
-                        workload_params[key] = value
-
-            # Собираем информацию об ошибках нод
             node_errors = []
             verify_errors = {}
 
-            # Проверяем состояние нод и собираем ошибки
+            # Check node status and collect errors
             try:
-                # Используем метод родительского класса для диагностики нод
+                # Use parent class method for node diagnostics
                 end_time = time_module.time()
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
-                verify_errors = self.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
-                node_errors = self.check_nodes_diagnostics_with_timing(
+                verify_errors = olap_load_base.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
+                node_errors = olap_load_base.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
 
@@ -260,105 +210,138 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
-                node_errors = []  # Устанавливаем пустой список если диагностика не удалась
+                node_errors = []  # Set empty list if diagnostics failed
 
             # Вычисляем время выполнения
             end_time = time_module.time()
 
-            # Добавляем дополнительную информацию для отчета
-            additional_table_strings = {}
+            # --- IMPORTANT: set nodes_with_issues for proper fail ---
 
-            # Добавляем информацию о фактическом времени выполнения
-            if workload_params.get("actual_duration") is not None:
-                actual_duration = workload_params["actual_duration"]
-                planned_duration = workload_params.get(
-                    "planned_duration", self.timeout)
+            # Prepare error lists for upload
+            node_error_messages = []
+            workload_error_messages = []
 
-                # Форматируем время в минуты и секунды
-                actual_minutes = int(actual_duration) // 60
-                actual_seconds = int(actual_duration) % 60
-                planned_minutes = int(planned_duration) // 60
-                planned_seconds = int(planned_duration) % 60
+            # Collect node errors with details
+            for node_error in node_errors:
+                if node_error.core_hashes:
+                    for core_id, core_hash in node_error.core_hashes:
+                        node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
+                if node_error.was_oom:
+                    node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                    node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                    node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
-                # Добавляем информацию о времени выполнения
-                additional_table_strings["execution_time"] = (
-                    f"Actual: {actual_minutes}m {actual_seconds}s (Planned: {planned_minutes}m {planned_seconds}s)"
-                )
+            # Collect workload errors (not related to nodes)
+            if result.errors:
+                for err in result.errors:
+                    if "coredump" not in err.lower() and "oom" not in err.lower():
+                        workload_error_messages.append(err)
 
-            # Информация об итерациях и потоках
-            if (
-                "total_iterations" in workload_params
-                and "total_threads" in workload_params
-            ):
-                total_iterations = workload_params["total_iterations"]
-                total_threads = workload_params["total_threads"]
+            # 4. Generate allure report
+            create_parallel_allure_report(result, workload_name, node_errors, verify_errors)
 
-                if total_iterations == 1 and total_threads > 1:
-                    additional_table_strings["execution_mode"] = (
-                        f"Single iteration with {total_threads} parallel threads"
+            # Save node_errors for use after upload
+            # result._node_errors = node_errors
+
+            # Data is ready, now we can upload results
+            return node_errors, verify_errors
+
+    def _handle_final_status(self, result: StressUtilTestResults, workload_name, node_errors, verify_errors):
+        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        nodes_with_issues = len(node_errors) + len(verify_errors)
+        workload_errors = []
+        if result.errors:
+            for err in result.errors:
+                if "coredump" not in err.lower() and "oom" not in err.lower():
+                    workload_errors.append(err)
+
+        # --- Переключатель: если cluster_log=all, то всегда прикладываем логи ---
+        cluster_log_mode = get_external_param('cluster_log', 'default')
+        attach_logs_method = getattr(type(self), "_LoadSuiteBase__attach_logs", None)
+        if attach_logs_method:
+            try:
+                if cluster_log_mode == 'all' or nodes_with_issues > 0 or workload_errors:
+                    attach_logs_method(
+                        start_time=getattr(result, "start_time", None),
+                        attach_name="kikimr",
+                        query_text="",
+                        ignore_roles=True  # Собираем логи со всех уникальных хостов
                     )
-                elif total_iterations > 1:
-                    avg_threads = workload_params.get(
-                        "avg_threads_per_iteration", 1)
-                    additional_table_strings["execution_mode"] = (
-                        f"{total_iterations} iterations with avg {
-                            avg_threads: .1f} threads per iteration"
-                    )
+            except Exception as e:
+                logging.warning(f"Failed to attach kikimr logs: {e}")
 
-            # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
+        # --- FAIL TEST IF CORES OR OOM FOUND ---
+        if nodes_with_issues > 0:
+            error_msg = f"Test failed: found {nodes_with_issues} node(s) with coredump(s), OOM(s), VERIFY fail(s) or SAN errors"
+            pytest.fail(error_msg)
+        # --- MARK TEST AS BROKEN IF WORKLOAD ERRORS (not cores/oom) ---
+        if workload_errors:
+            raise Exception("Test marked as broken due to workload errors: " + "; ".join(workload_errors))
+
+        # В диагностическом режиме не падаем из-за предупреждений о coredump'ах/OOM
+        if not result.is_all_success() and result.error_message:
+            # Создаем детальное сообщение об ошибке с контекстом
+            error_details = []
+            error_details.append(f"WORKLOAD EXECUTION FAILED: {workload_name}")
+            error_details.append(f"Main error: {result.error_message}")
+            if result.iterations:
+                error_details.append("\nExecution details:")
+                error_details.append(f"Total iterations attempted: {len(result.iterations)}")
+                failed_iterations = []
+                successful_iterations = []
+                for iter_num, iteration in result.iterations.items():
+                    if iteration.error_message:
+                        failed_iterations.append({
+                            'iteration': iter_num,
+                            'error': iteration.error_message,
+                            'time': iteration.time
+                        })
+                    else:
+                        successful_iterations.append({
+                            'iteration': iter_num,
+                            'time': iteration.time
+                        })
+                if failed_iterations:
+                    error_details.append(f"\nFAILED ITERATIONS ({len(failed_iterations)}):")
+                    for fail_info in failed_iterations:
+                        error_details.append(f"  - Iteration {fail_info['iteration']}: {fail_info['error']} (time: {fail_info['time']:.1f}s)")
+                if successful_iterations:
+                    error_details.append(f"\nSuccessful iterations ({len(successful_iterations)}):")
+                    for success_info in successful_iterations:
+                        error_details.append(f"  - Iteration {success_info['iteration']}: OK (time: {success_info['time']:.1f}s)")
+            if result.stderr and result.stderr.strip():
+                stderr_preview = result.stderr.strip()
+                if len(stderr_preview) > 500:
+                    stderr_preview = "..." + stderr_preview[-500:]
+                error_details.append(f"\nSTDERR (last 500 chars):\n{stderr_preview}")
+            if result.stdout and "error" in result.stdout.lower():
+                stdout_lines = result.stdout.split('\n')
+                error_lines = [line for line in stdout_lines if 'error' in line.lower()]
+                if error_lines:
+                    error_details.append("\nError lines from STDOUT:")
+                    for line in error_lines[:5]:
+                        error_details.append(f"  {line.strip()}")
             stats = result.get_stats(workload_name)
-            if stats is not None:
-                result.add_stat(
-                    workload_name,
-                    "nodes_with_issues",
-                    len(node_errors))
-
-                # Формируем списки ошибок для выгрузки
-                node_error_messages = []
-                workload_error_messages = []
-
-                # Собираем ошибки нод с подробностями
-                for node_error in node_errors:
-                    if node_error.core_hashes:
-                        for core_id, core_hash in node_error.core_hashes:
-                            node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
-                    if node_error.was_oom:
-                        node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
-                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
-                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
-                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
-                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
-
-                # Собираем workload ошибки (не связанные с нодами)
-                if result.errors:
-                    for err in result.errors:
-                        if "coredump" not in err.lower() and "oom" not in err.lower():
-                            workload_error_messages.append(err)
-
-                # Добавляем в статистику
-                result.add_stat(workload_name, "node_error_messages", node_error_messages)
-                result.add_stat(workload_name, "workload_error_messages", workload_error_messages)
-
-                # Добавляем boolean флаги
-                result.add_stat(workload_name, "node_errors", len(node_error_messages) > 0)
-                result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
-
-                # Собираем workload предупреждения (исключая node-специфичные)
-                workload_warning_messages = []
-                if result.warnings:
-                    for warn in result.warnings:
-                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
-                            workload_warning_messages.append(warn)
-
-                result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
-                result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
-
-            # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
-
-            # 4. Формирование allure-отчёта
-            self._create_parallel_allure_report(result, workload_name, workload_params, node_errors, verify_errors, execution_result)
-
-            # Сохраняем node_errors для использования после выгрузки
-            result._node_errors = node_errors
-
-            # Данные подготовлены, теперь можно выгружать результаты
+            if stats:
+                if 'successful_runs' in stats and 'total_runs' in stats:
+                    error_details.append("\nRUN STATISTICS:")
+                    error_details.append(f"  Successful runs: {stats['successful_runs']}/{stats['total_runs']}")
+                    if 'failed_runs' in stats:
+                        error_details.append(f"  Failed runs: {stats['failed_runs']}")
+                    if 'success_rate' in stats:
+                        error_details.append(f"  Success rate: {stats['success_rate']:.1%}")
+                if any(key.startswith('deployment_') for key in stats.keys()):
+                    deployment_info = {k: v for k, v in stats.items() if k.startswith('deployment_')}
+                    if deployment_info:
+                        error_details.append("\nDEPLOYMENT INFO:")
+                        for key, value in deployment_info.items():
+                            error_details.append(f"  {key}: {value}")
+            detailed_error_message = "\n".join(error_details)
+            exc = pytest.fail.Exception(detailed_error_message)
+            if result.traceback is not None:
+                exc = exc.with_traceback(result.traceback)
+            raise exc
+        # if result.warning_message:
+        #     logging.warning(f"Workload completed with warnings: {result.warning_message}")

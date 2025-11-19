@@ -3,6 +3,7 @@ RECURSE(
     datetime2
     digest
     file
+    fulltext
     histogram
     hyperloglog
     ip_base

@@ -13,7 +13,6 @@
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
@@ -79,6 +78,7 @@ struct TEvPrivate {
         EvReceivedClusters,
         EvDescribeTopicResult,
         EvExecuteTopicEvent,
+        EvPartitionIdleness,
 
         EvEnd
     };
@@ -88,6 +88,12 @@ struct TEvPrivate {
     // Events
 
     struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
+    struct TEvPartitionIdleness : public TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
+        explicit TEvPartitionIdleness(TInstant notifyTime)
+            : NotifyTime(notifyTime)
+        {}
+        TInstant NotifyTime;
+    };
     struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
     struct TEvReceivedClusters : public NActors::TEventLocal<TEvReceivedClusters, EvReceivedClusters> {
         explicit TEvReceivedClusters(
@@ -263,7 +269,6 @@ public:
 
     void LoadState(const TSourceState& state) override {
         TDqPqReadActorBase::LoadState(state);
-        InitWatermarkTracker();
 
         Clusters.clear();
         AsyncInit = {};
@@ -301,9 +306,10 @@ public:
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
             if (WatermarkTracker) {
                 TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
+                auto now = TInstant::Now();
                 for (const auto partitionId : GetPartitionsToRead(clusterState)) { // XXX duplicated, but rare
                     partitionKey.PartitionId = partitionId;
-                    WatermarkTracker->RegisterPartition(partitionKey);
+                    WatermarkTracker->RegisterPartition(partitionKey, now);
                 }
             }
         }
@@ -334,6 +340,7 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
@@ -353,9 +360,19 @@ private:
                 clusterState.WaitEventStartedAt.Clear();
             }
         }
+        NotifyCA();
+    }
+
+    void NotifyCA() {
         Metrics.InFlyAsyncInputData->Set(1);
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    void Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
+        if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+            NotifyCA();
+        }
     }
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
@@ -386,23 +403,6 @@ private:
         }
         FederatedTopicClient.Reset();
         TActor<TDqPqReadActor>::PassAway();
-    }
-
-    void MaybeScheduleNextIdleCheck(TInstant systemTime) {
-        if (!WatermarkTracker) {
-            return;
-        }
-
-        const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-        if (!nextIdleCheckAt) {
-            return;
-        }
-
-        if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
-            NextIdlenessCheckAt = *nextIdleCheckAt;
-            SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-            Schedule(*nextIdleCheckAt, new TEvPrivate::TEvSourceDataReady());
-        }
     }
 
     void StartClusterDiscovery() {
@@ -533,7 +533,6 @@ private:
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
-        MaybeScheduleNextIdleCheck(now);
 
         if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
             Metrics.ReconnectRate->Inc();
@@ -583,11 +582,11 @@ private:
             const auto watermark = WatermarkTracker->HandleIdleness(now);
 
             if (watermark) {
-                const auto t = watermark;
-                SRC_LOG_T("SessionId: " << GetSessionId() << " Fake watermark " << t << " was produced");
+                SRC_LOG_T("SessionId: " << GetSessionId() << " Idleness watermark " << *watermark << " was produced");
                 PushWatermarkToReady(*watermark);
                 recheckBatch = true;
             }
+            MaybeSchedulePartitionIdlenessCheck(now);
         }
 
         if (recheckBatch) {
@@ -617,20 +616,14 @@ private:
         return res;
     }
 
-    void InitWatermarkTracker() {
-        SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
+    void InitWatermarkTracker() override {
+        auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+        auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
+    }
 
-        if (!SourceParams.GetWatermarks().GetEnabled()) {
-            return;
-        }
-
-        WatermarkTracker.ConstructInPlace(
-            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
-            SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()),
-            TInstant::Now()
-        );
+    void SchedulePartitionIdlenessCheck(TInstant at) override {
+        Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
     }
 
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState& clusterState) const {
@@ -886,8 +879,6 @@ private:
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
-    TMaybe<TInstant> NextIdlenessCheckAt;
     IPqGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;

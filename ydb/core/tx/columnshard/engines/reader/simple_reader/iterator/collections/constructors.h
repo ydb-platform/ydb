@@ -15,7 +15,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 class TSourceConstructor: public ICursorEntity, public TMoveOnly {
 private:
     TCompareKeyForScanSequence Start;
-    YDB_READONLY(ui32, SourceId, 0);
+    YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
     ui32 RecordsCount = 0;
     bool IsStartedByCursorFlag = false;
@@ -44,8 +44,10 @@ public:
         return Start;
     }
 
-    TSourceConstructor(const std::shared_ptr<TPortionInfo>&& portion, const NReader::ERequestSorting sorting)
-        : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+    TSourceConstructor(
+        const std::shared_ptr<TPortionInfo>&& portion, 
+        const NReader::ERequestSorting sorting
+    ) : Start(TReplaceKeyAdapter((sorting == NReader::ERequestSorting::DESC) ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
                     sorting == NReader::ERequestSorting::DESC),
               portion->GetPortionId())
         , SourceId(portion->GetPortionId())
@@ -75,7 +77,6 @@ class TPortionsSources: public NCommon::TSourcesConstructorWithAccessors<TSource
 private:
     using TBase = NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>;
     ui32 CurrentSourceIdx = 0;
-    std::vector<TInsertWriteId> Uncommitted;    
 
     virtual void DoFillReadStats(TReadStats& stats) const override {
         ui64 compactedPortionsBytes = 0;
@@ -108,15 +109,14 @@ private:
     }
 
 public:
-    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting, std::vector<TInsertWriteId>&& uncommitted)
-        : TBase(sorting)
-        , Uncommitted(std::move(uncommitted))
-    {
+    TPortionsSources(std::deque<TSourceConstructor>&& sources, const ERequestSorting sorting)
+        : TBase(sorting) {
         InitializeConstructors(std::move(sources));
     }
 
     static std::unique_ptr<TPortionsSources> BuildEmpty() {
-        return std::make_unique<TPortionsSources>(std::deque<TSourceConstructor>{}, ERequestSorting::NONE, std::vector<TInsertWriteId>{});
+        std::deque<TSourceConstructor> sources;
+        return std::make_unique<TPortionsSources>(std::move(sources), ERequestSorting::NONE);
     }
 };
 

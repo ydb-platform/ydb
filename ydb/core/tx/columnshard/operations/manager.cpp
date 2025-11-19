@@ -71,16 +71,41 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
+void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
+    for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
+        if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", lockIdToBreak);
+            lockToBreak->SetBroken();
+        }
+    }
+    for (auto&& lockIdToNotify : lock.GetNotifyOnCommit()) {
+        if (auto lockToNotify = GetLockOptional(lockIdToNotify)) {
+            lockToNotify->NotifyAboutCommit(lock.GetLockId());
+        }
+    }
+}
+
+void TOperationsManager::BreakConflictingTxs(const ui64 txId) {
+    auto& lock = GetLockFeaturesForTxVerified(txId);
+    BreakConflictingTxs(lock);
+}
+
 void TOperationsManager::CommitTransactionOnExecute(
     TColumnShard& owner, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) {
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
+    if (lock.GetWriteOperations().size() > 0) {
+        AFL_VERIFY(!lock.IsBroken())("error", "the tx has writes, it is broken, and we are committing it")("writes_count", lock.GetWriteOperations().size());
+    }
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : lock.GetWriteOperations()) {
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
+
+    BreakConflictingTxs(lock);
+
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
 
@@ -89,18 +114,6 @@ void TOperationsManager::CommitTransactionOnComplete(
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
-    for (auto&& i : lock.GetBrokeOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-            lockNotify->SetBroken();
-        }
-    }
-
-    for (auto&& i : lock.GetNotifyOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            lockNotify->AddNotifyCommit(lock.GetLockId());
-        }
-    }
 
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : lock.GetWriteOperations()) {
@@ -287,15 +300,18 @@ void TOperationsManager::AddEventForLock(
     NOlap::NTxInteractions::TTxConflicts txConflicts;
     auto& txLock = GetLockVerified(lockId);
     writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
-    for (auto&& i : txConflicts) {
-        if (auto lock = GetLockOptional(i.first)) {
-            GetLockVerified(i.first).AddBrokeOnCommit(i.second);
-        } else if (txLock.IsCommitted(i.first)) {
+    for (auto& [commitLockId, breakLockIds] : txConflicts) {
+        // if commitLockId not found, it means the conflicting tx is already committed or aborted
+        if (GetLockOptional(commitLockId)) {
+            GetLockVerified(commitLockId).AddBreakOnCommit(breakLockIds);
+        } 
+        // if the conflicting tx is already committed, we cannot commit the given tx, so break its lock
+        if (txLock.IsCommitted(commitLockId)) {
             txLock.SetBroken();
         }
     }
-    for (auto&& i : txNotifications) {
-        GetLockVerified(i.first).AddNotificationsOnCommit(i.second);
+    for (auto& [commitLockId, lockIdsToNotify] : txNotifications) {
+        GetLockVerified(commitLockId).AddNotifyOnCommit(lockIdsToNotify);
     }
     if (auto txEvent = writer->BuildEvent()) {
         NOlap::NTxInteractions::TTxEventContainer container(lockId, txEvent);

@@ -305,11 +305,7 @@ public:
         auto txId = TTxId::FromString(txControl.tx_id());
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
             ReplySuccess();
         } else {
             ReplyTransactionNotFound(txControl.tx_id());
@@ -2108,7 +2104,7 @@ public:
         }
 
         if (ExecuterId) {
-            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues)}, IEventHandle::FlagTrackDelivery);
+            Send(ExecuterId, new TEvKqpBuffer::TEvError{msg.StatusCode, std::move(msg.Issues), std::move(msg.Stats)}, IEventHandle::FlagTrackDelivery);
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.Issues));
         }
@@ -2287,6 +2283,7 @@ public:
         }
 
         if (QueryState->Commit) {
+            TerminateBufferActor(QueryState->TxCtx);
             ResetTxState();
             Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             QueryState->TxId.Reset();
@@ -2423,11 +2420,7 @@ public:
 
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
         }
 
         auto* record = &QueryResponse->Record;
@@ -2448,11 +2441,7 @@ public:
         auto txId = TTxId();
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {
             ctx->Invalidate();
-            if (!ctx->BufferActorId) {
-                Transactions.AddToBeAborted(std::move(ctx));
-            } else {
-                TerminateBufferActor(ctx);
-            }
+            Transactions.AddToBeAborted(std::move(ctx));
         }
 
         FillTxInfo(record.MutableResponse());
@@ -2658,7 +2647,6 @@ public:
 
     void ResetTxState() {
         if (QueryState->TxCtx) {
-            TerminateBufferActor(QueryState->TxCtx);
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
             QueryState->TxCtx->TxManager.reset();
@@ -2676,18 +2664,11 @@ public:
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
             if (txCtx->IsInvalidated()) {
-                if (!txCtx->BufferActorId) {
-                    Transactions.AddToBeAborted(txCtx);
-                } else {
-                    TerminateBufferActor(txCtx);
-                }
+                Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
             }
             DiscardPersistentSnapshot(txCtx->SnapshotHandle);
         }
-
-        if (isFinal && QueryState)
-            TerminateBufferActor(QueryState->TxCtx);
 
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
@@ -2784,6 +2765,12 @@ public:
             TIssues issues;
             IssuesFromMessage(response.GetIssues(), issues);
             LOG_E("Failed to cleanup: " << issues.ToString());
+
+            for (const auto& txCtx : CleanupCtx->TransactionsToBeAborted) {
+                AFL_ENSURE(txCtx);
+                // Terminate BufferActors without waiting
+                TerminateBufferActor(txCtx);
+            }
             EndCleanup(CleanupCtx->Final);
             return;
         }

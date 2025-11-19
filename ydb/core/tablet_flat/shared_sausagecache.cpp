@@ -1064,7 +1064,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection, std::move(pages), bytes);
         if (cookie == EBlockIOFetchTypeCookie::AsyncQueue || cookie == EBlockIOFetchTypeCookie::ScanQueue) {
             // Note: queued requests can fetch multiple times, so copy trace id
-            fetch->TraceId = request.TraceId.GetTraceId();
+            fetch->TraceId = NWilson::TTraceId(request.TraceId);
         } else {
             fetch->TraceId = std::move(request.TraceId);            
         }

@@ -2961,6 +2961,12 @@ public:
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
             actor->Terminate();
         });
+
+        {
+            Y_ABORT_UNLESS(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            WriteInfos.clear();
+        }
     }
 
     void Handle(TEvTxProxy::TEvProposeTransactionStatus::TPtr &ev) {

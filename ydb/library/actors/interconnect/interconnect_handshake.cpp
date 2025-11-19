@@ -244,8 +244,6 @@ namespace NActors {
         TString HandshakeKind;
         TMaybe<THolder<TProgramInfo>> ProgramInfo; // filled in in case of successful handshake; even if null
         TSessionParams Params;
-        std::optional<TInstant> LastLogNotice;
-        const TDuration MuteDuration = TDuration::Seconds(15);
         TMonotonic Deadline;
         TActorId HandshakeBroker;
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
@@ -749,8 +747,7 @@ namespace NActors {
 
             // perform connection and log its result
             MainChannel.Connect(&PeerAddr);
-            auto logPriority = std::exchange(LastLogNotice, std::nullopt) ? NActors::NLog::PRI_NOTICE : NActors::NLog::PRI_DEBUG;
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", logPriority, "connected to peer");
+            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH05", NActors::NLog::PRI_DEBUG, "connected to peer");
 
             // Try to create rdma stuff
             CreateRdmaPrimitives();
@@ -1492,13 +1489,7 @@ namespace NActors {
                 PeerAddr.size() ? PeerAddr.data() : "<unknown>", explanation.data());
 
             if (network) {
-                TInstant now = Now();
-                NActors::NLog::EPriority logPriority = NActors::NLog::PRI_DEBUG;
-                if (!LastLogNotice || now - *LastLogNotice > MuteDuration) {
-                    logPriority = NActors::NLog::PRI_NOTICE;
-                    LastLogNotice.emplace(now);
-                }
-                LOG_LOG_NET_X(logPriority, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
+                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
             } else {
                 // calculate log severity based on failure type; permanent failures lead to error log messages
                 auto severity = reason == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT

@@ -92,7 +92,7 @@ private:
 
         // returns true and gets ownership if queue size less than limit
         // otherwise returns false and doesn't not touch ctx
-        bool TryPush(std::unique_ptr<IGetSessionCtx>& p);
+        IGetSessionCtx* TryPush(std::unique_ptr<IGetSessionCtx>& p);
         std::unique_ptr<IGetSessionCtx> TryGet();
         void GetOld(TDeadline deadline, std::vector<std::unique_ptr<IGetSessionCtx>>& oldWaiters);
         std::uint32_t Size() const;

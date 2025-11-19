@@ -58,12 +58,12 @@ TSessionPool::TWaitersQueue::TWaitersQueue(std::uint32_t maxQueueSize)
 {
 }
 
-bool TSessionPool::TWaitersQueue::TryPush(std::unique_ptr<IGetSessionCtx>& p) {
+IGetSessionCtx* TSessionPool::TWaitersQueue::TryPush(std::unique_ptr<IGetSessionCtx>& p) {
     if (Waiters_.size() < MaxQueueSize_) {
-        Waiters_.insert(std::make_pair(p->GetDeadline(), std::move(p)));
-        return true;
+        auto it = Waiters_.insert(std::make_pair(p->GetDeadline(), std::move(p)));
+        return it->second.get();
     }
-    return false;
+    return nullptr;
 }
 
 std::unique_ptr<IGetSessionCtx> TSessionPool::TWaitersQueue::TryGet() {
@@ -134,8 +134,9 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
 
         if (MaxActiveSessions_ == 0 || ActiveSessions_ < MaxActiveSessions_) {
             IncrementActiveCounterUnsafe();
-        } else if (WaitersQueue_.TryPush(ctx)) {
+        } else if (auto* ctxPtr = WaitersQueue_.TryPush(ctx)) {
             sessionSource = TSessionSource::Waiter;
+            ctxPtr->ScheduleOnDeadlineWaiterCleanup();
         } else {
             sessionSource = TSessionSource::Error;
         }
@@ -150,7 +151,7 @@ void TSessionPool::GetSession(std::unique_ptr<IGetSessionCtx> ctx)
     }
 
     if (sessionSource == TSessionSource::Waiter) {
-        ctx->ScheduleOnDeadlineWaiterCleanup();
+        // ctxPtr->ScheduleOnDeadlineWaiterCleanup() is called after TryPush
     } else if (sessionSource == TSessionSource::Error) {
         FakeSessionsCounter_.Inc();
         ctx->ReplyError(CLIENT_RESOURCE_EXHAUSTED_ACTIVE_SESSION_LIMIT);

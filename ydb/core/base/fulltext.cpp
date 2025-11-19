@@ -190,6 +190,7 @@ namespace {
             for (auto ptr = sb_stemmer_list(); *ptr != nullptr; ++ptr) {
                 if (settings.language() == *ptr) {
                     supportedLanguage = true;
+                    break;
                 }
             }
             if (!supportedLanguage) {
@@ -294,7 +295,7 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
 
     if (settings.use_filter_snowball()) {
         struct sb_stemmer* stemmer = sb_stemmer_new(settings.language().c_str(), nullptr);
-        if (stemmer == nullptr) {
+        if (Y_UNLIKELY(stemmer == nullptr)) {
             ythrow yexception() << "sb_stemmer_new returned nullptr";
         }
         for (auto& token : tokens) {

@@ -788,7 +788,8 @@ public:
                             },
                             .Level = StatsModeToCollectStatsLevel(Settings.StatsMode),
                             .TransportVersion = outputChannelDesc.GetTransportVersion(),
-                            .PackerVersion = FromProto(task.GetValuePackerVersion())
+                            .PackerVersion = FromProto(task.GetValuePackerVersion()),
+                            .Storage = settings.ChannelStorage
                         };
                         outputChannel = Context.ChannelService->GetOutputChannel(params);
                     } else {

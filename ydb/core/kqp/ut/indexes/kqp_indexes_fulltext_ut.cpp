@@ -91,8 +91,8 @@ void AddIndexCovered(NQuery::TQueryClient& db) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-void AddIndexSnowball(NQuery::TQueryClient& db) {
-    TString query = R"sql(
+void AddIndexSnowball(NQuery::TQueryClient& db, const TString& language) {
+    TString query = Sprintf(R"sql(
         ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
             GLOBAL USING fulltext
             ON (Text)
@@ -101,9 +101,9 @@ void AddIndexSnowball(NQuery::TQueryClient& db) {
                 tokenizer=standard,
                 use_filter_lowercase=true,
                 use_filter_snowball=true,
-                language=english
+                language=%s
             )
-    )sql";
+    )sql", language.c_str());
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
@@ -247,7 +247,7 @@ Y_UNIT_TEST(AddIndexSnowball) {
 
     CreateTexts(db);
     UpsertTexts(db);
-    AddIndexSnowball(db);
+    AddIndexSnowball(db, "english");
     const auto index = ReadIndex(db);
     Cerr << index.RowsCount() << Endl;
     CompareYson(R"([
@@ -265,6 +265,16 @@ Y_UNIT_TEST(AddIndexSnowball) {
         [[100u];"small"];
         [[200u];"small"]
     ])", NYdb::FormatResultSetYson(index));
+}
+
+Y_UNIT_TEST(AddIndexSnowballWithWrongLanguage) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertTexts(db);
+
+    UNIT_ASSERT_TEST_FAILS(AddIndexSnowball(db, "klingon"));
 }
 
 Y_UNIT_TEST(InsertRow) {

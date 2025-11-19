@@ -2057,6 +2057,8 @@ void THive::Handle(TEvHive::TEvRequestHiveNodeStats::TPtr& ev) {
         nodeStats.SetNodeId(node.Id);
         if (!node.ServicedDomains.empty()) {
             nodeStats.MutableNodeDomain()->CopyFrom(node.ServicedDomains.front());
+        } else if (!node.LastSeenServicedDomains.empty()) {
+            nodeStats.MutableNodeDomain()->CopyFrom(node.LastSeenServicedDomains.front());
         }
         if (!node.Name.empty()) {
             nodeStats.SetNodeName(node.Name);

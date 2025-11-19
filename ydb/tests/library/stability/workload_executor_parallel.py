@@ -1,4 +1,3 @@
-from typing import Optional
 import allure
 import logging
 import time as time_module
@@ -6,11 +5,9 @@ import pytest
 
 from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
 from ydb.tests.library.stability.build_report import create_parallel_allure_report
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 from ydb.tests.library.stability.run_stress import StressRunExecutor
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
 
 
@@ -77,13 +74,25 @@ class ParallelWorkloadTestBase:
         nodes_percentage: int = 100,
     ):
         """
-        Executes full workload test cycle
+        Executes full workload test cycle with three phases:
+        1. Preparation (deploy binaries to nodes)
+        2. Execution (run workloads in parallel)
+        3. Results collection and diagnostics
 
         Args:
-            workload_params: Workload name for reports
-            duration_value: Execution time in seconds (if None, uses self.timeout)
-            nemesis_enabled: Whether to start nemesis service 15 seconds after workload starts
-            nodes_percentage: Percentage of cluster nodes to run workload on (1-100)
+            stress_executor: Stress test executor instance
+            stress_deployer: Stress test deployer instance
+            olap_load_base: Load test base configuration
+            workload_params: Dictionary of workload configurations
+            duration_value: Execution time in seconds (None uses self.timeout)
+            nemesis_enabled: Whether to start nemesis after 15 seconds
+            nodes_percentage: Percentage of nodes to use (1-100)
+
+        Returns:
+            None (results are processed internally and reported via Allure)
+
+        Raises:
+            ValueError: If nodes_percentage is invalid
         """
 
         if duration_value is None:
@@ -92,21 +101,21 @@ class ParallelWorkloadTestBase:
         # Validate nodes percentage
         if nodes_percentage < 1 or nodes_percentage > 100:
             raise ValueError(
-                f"nodes_percentage должен быть от 1 до 100, получено: {nodes_percentage}"
+                f"nodes_percentage must be between 1 and 100, got: {nodes_percentage}"
             )
 
         additional_stats = {}
         additional_stats["nemesis_enabled"] = nemesis_enabled
         additional_stats["nodes_percentage"] = nodes_percentage
 
-        logging.info("=== Starting env preparation ===")
+        logging.info("=== Starting environment preparation ===")
 
-        # PHASE 1: PREPARATION
+        # PHASE 1: PREPARATION (deploy binaries to nodes)
         preparation_result = stress_deployer.prepare_stress_execution(olap_load_base, workload_params, nodes_percentage)
 
         logging.debug(f"Deploy finished with {preparation_result}")
 
-        # PHASE 2: EXECUTION
+        # PHASE 2: EXECUTION (run workloads in parallel)
         execution_result = stress_executor.execute_stress_runs(
             stress_deployer,
             workload_params,
@@ -117,7 +126,7 @@ class ParallelWorkloadTestBase:
         logging.debug(f"Execution finished with {execution_result}")
         logging.debug(f"Additional stats {additional_stats}")
 
-        # PHASE 3: RESULTS
+        # PHASE 3: RESULTS (collect diagnostics and finalize)
         self._finalize_workload_results(
             olap_load_base,
             execution_result,
@@ -185,10 +194,19 @@ class ParallelWorkloadTestBase:
         Processes workload result with diagnostic information
 
         Args:
-            result: Workload execution result
-            workload_name: Workload name for reports
-            check_scheme: Whether to check database schema
-            use_node_subcols: Whether to use node subcolumns in iterations table
+            olap_load_base: Load test base configuration
+            result: Workload execution results
+            workload_name: Name of workload for reporting
+
+        Returns:
+            Tuple containing:
+            - node_errors: List of node error objects
+            - verify_errors: Dictionary of verification errors
+
+        Note:
+            - Collects node diagnostics and verification results
+            - Generates Allure report with detailed information
+            - Handles error cases gracefully
         """
         with allure.step(f"Process workload result for {workload_name}"):
             node_errors = []
@@ -249,7 +267,19 @@ class ParallelWorkloadTestBase:
             return node_errors, verify_errors
 
     def _handle_final_status(self, result: StressUtilTestResults, workload_name, node_errors, verify_errors):
-        """Обрабатывает финальный статус теста: fail, broken, etc."""
+        """
+        Handles final test status (fail, broken, etc.)
+
+        Args:
+            result: Test results object
+            workload_name: Name of workload
+            node_errors: List of node errors
+            verify_errors: Verification errors
+
+        Raises:
+            pytest.fail: If nodes have coredumps/OOMs
+            Exception: If workload errors occurred
+        """
         nodes_with_issues = len(node_errors) + len(verify_errors)
         workload_errors = []
         if result.errors:

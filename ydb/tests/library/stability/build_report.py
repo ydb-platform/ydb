@@ -4,13 +4,23 @@ import logging
 import allure
 from datetime import datetime
 from ydb.tests.library.stability.aggregate_results import StressUtilTestResults
-from ydb.tests.olap.lib.allure_utils import NodeErrors, _attach_sanitizer_outputs, _produce_sanitizer_report, _produce_verify_report, _set_coredumps, _set_logs_command, _set_monitoring, _set_node_errors, _set_results_plot
+from ydb.tests.olap.lib.allure_utils import (
+    NodeErrors,
+    _attach_sanitizer_outputs,
+    _produce_sanitizer_report,
+    _produce_verify_report,
+    _set_coredumps,
+    _set_logs_command,
+    _set_monitoring,
+    _set_node_errors,
+    _set_results_plot
+)
 from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get_self_version
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
 
 def create_parallel_allure_report(result: StressUtilTestResults, workload_name, node_errors, verify_errors):
-    """Формирует allure-отчёт по результатам workload"""
+    """Creates an Allure report for workload test results"""
     additional_table_strings = {}
     parallel_allure_test_description(
         suite="Parallel tests",
@@ -37,6 +47,21 @@ def parallel_allure_test_description(
     addition_blocks: list[str] = [],
     execution_result: StressUtilTestResults = None
 ):
+    """Creates a detailed Allure test description for parallel tests
+    
+    Args:
+        suite: Test suite name
+        test: Test name
+        start_time: Test start timestamp
+        end_time: Test end timestamp
+        addition_table_strings: Additional key-value pairs for info table
+        attachments: Tuple of (body, name, type) for attachments
+        refference_set: Reference set name for results comparison
+        node_errors: List of node error objects
+        verify_errors: Verification errors
+        addition_blocks: Additional HTML blocks to include
+        execution_result: Test execution results
+    """
     if addition_table_strings is None:
         addition_table_strings = {}
     if attachments is None:
@@ -45,6 +70,7 @@ def parallel_allure_test_description(
         node_errors = []
 
     def _pretty_str(s):
+        """Convert snake_case strings to pretty display format"""
         return ' '.join(s.split('_')).capitalize()
 
     for body, name, type in attachments:
@@ -109,13 +135,13 @@ def parallel_allure_test_description(
 
 
 def __create_parallel_test_table(execution_result):
-    # Создаем заголовок таблицы с подколонками для каждой ноды
+    # Create table header with columns for each node
     table_html = """
     <table border='1' cellpadding='2px' style='border-collapse: collapse; font-size: 12px;'>
         <tr style='background-color: #f0f0f0;'>
             <th>Stress type</th>
     """
-    # Группируем ноды по хостам
+    # Group nodes by host
     all_cluster_nodes = YdbCluster.get_cluster_nodes(db_only=True)
     hosts_to_nodes = {}
     for node in all_cluster_nodes:
@@ -123,14 +149,14 @@ def __create_parallel_test_table(execution_result):
             hosts_to_nodes[node.host] = []
         hosts_to_nodes[node.host].append(node)
 
-    # Для каждого хоста берем первую ноду в качестве представителя
+    # For each host, take the first node as representative
     unique_hosts = sorted(hosts_to_nodes.keys())
-    # Добавляем объединенные колонки для каждого хоста
+    # Add combined columns for each host
     if unique_hosts:
         for host in unique_hosts:
             table_html += f'<th>{host.split('.')[0]}</th>'
     else:
-        # Если нет нод, добавляем агрегированные колонки
+        # If no nodes, add aggregated columns
         table_html += '<th>Aggregated</th>'
     logging.info(f"unique_hosts: {unique_hosts}")
 

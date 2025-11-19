@@ -6,7 +6,12 @@ import time as time_module
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult, StressUtilTestResults, process_single_run_result, StressUtilResult, StressUtilRunResult
+from ydb.tests.library.stability.aggregate_results import (
+    StressUtilDeployResult,
+    StressUtilTestResults,
+    StressUtilResult,
+    StressUtilRunResult
+)
 from ydb.tests.library.stability.deploy import StressUtilDeployer
 
 from ydb.tests.library.stability import deploy
@@ -83,15 +88,21 @@ class StressRunExecutor:
         PHASE 2: Parallel workload execution on all nodes
 
         Args:
-            workload_name: Workload name for reports
-            command_args_template: Command line arguments template
-            duration_param: Parameter for passing execution time
-            use_chunks: Whether to use iteration splitting (deprecated parameter)
+            stress_deployer: Stress test deployer instance
+            workload_params: Dictionary of workload configurations
+            duration_value: Execution duration in seconds
             preparation_result: Preparation phase results
             nemesis: Whether to start nemesis service
 
         Returns:
-            Dictionary with execution results
+            StressUtilTestResults object containing:
+            - overall_result: Aggregated test results
+            - successful_runs: Count of successful runs
+            - total_runs: Total count of runs
+            - total_execution_time: Total execution time
+            - workload_start_time: Timestamp when workload started
+            - deployed_nodes: Nodes where workload was deployed
+            - node_results: Individual node results
         """
 
         with allure.step("Phase 2: Execute workload runs in parallel"):
@@ -109,7 +120,7 @@ class StressRunExecutor:
                     "deployed_nodes": [],
                 }
 
-            # Параллельное выполнение на всех нодах
+            # Parallel execution on all nodes
             with allure.step(
                 f"Execute workload in parallel on {preparation_result['total_hosts']} nodes"
             ):
@@ -243,7 +254,7 @@ class StressRunExecutor:
                             logging.error(
                                 f"Error executing on {node_host}: {e}")
                             logging.error(traceback.format_exc())
-                            # Добавляем информацию об ошибке
+                            # Add error information
                             error_result = StressUtilRunResult()
                             error_result.node = node_plan[1]['node']
                             error_result.host = node_host
@@ -286,18 +297,33 @@ class StressRunExecutor:
         run_config: dict,
     ):
         """
-        Executes a single workload run
+        Executes a single workload run with detailed logging and timeout handling
 
         Args:
-            deployed_binary_path: Path to workload binary
-            target_node: Target node for execution
-            run_name: Base run name
-            command_args_template: Command line arguments template
-            duration_param: Parameter for passing execution time
-            run_config: Run configuration with iteration info
+            deployed_binary_path: Path to workload binary on target node
+            target_node: Node object where workload will run
+            run_name: Base name for the run (used in logging)
+            command_args_template: Command arguments with placeholders
+            duration_param: CLI parameter name for duration (e.g. '--duration')
+            run_config: Dictionary containing:
+                - duration: Planned run duration in seconds
+                - iteration_num: Current iteration number
+                - node_host: Target node hostname
+                - node_role: Node role/type
+                - thread_id: Worker thread identifier
 
         Returns:
-            Tuple (success, execution_time, stdout, stderr, timeout_flag)
+            Tuple containing:
+            - success: Boolean indicating if run succeeded
+            - execution_time: Actual run duration in seconds
+            - stdout: Standard output from command
+            - stderr: Standard error from command
+            - is_timeout: Boolean indicating if run timed out
+
+        Note:
+            - Automatically adds buffer time to timeout
+            - Attaches full execution details to Allure report
+            - Handles command output buffering properly
         """
         # Substitute variables in command_args_template for unique paths
         command_args = self.__substitute_variables_in_template(

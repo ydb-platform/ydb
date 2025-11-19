@@ -18,6 +18,20 @@ class StressUtilRunResult:
 
 
 class StressUtilResult:
+    """Aggregates results of multiple runs for a single stress test
+    
+    Attributes:
+        stress_name: Name of the stress test
+        node: Node identifier where test ran
+        host: Hostname where test ran
+        resolution: Final resolution of the test
+        start_time: Timestamp when test started
+        end_time: Timestamp when test ended
+        total_execution_time: Total duration across all runs
+        successful_runs: Count of successful runs
+        total_runs: Total count of runs
+        runs: List of individual run results
+    """
     stress_name: str = None
     node: str = None
     host: str = None
@@ -30,20 +44,39 @@ class StressUtilResult:
     runs: list[StressUtilRunResult] = []
 
     def __init__(self):
+        """Initialize StressUtilResult with empty runs list"""
         self.runs = []
 
 
 class StressUtilDeployResult:
+    """Stores deployment results for a stress test
+    
+    Attributes:
+        stress_name: Name of the stress test
+        nodes: List of nodes where test was deployed
+        hosts: List of hostnames where test was deployed
+    """
     stress_name: str = None
     nodes: list[YdbCluster.Node] = None
     hosts: list[str] = None
 
     def __init__(self):
+        """Initialize StressUtilDeployResult with empty nodes/hosts"""
         self.nodes = None
         self.hosts = None
 
 
 class StressUtilTestResults:
+    """Aggregates results from all stress test runs
+    
+    Attributes:
+        start_time: Timestamp when testing started
+        end_time: Timestamp when testing ended
+        stress_util_runs: Dictionary mapping test names to their results
+        nemesis_deploy_results: Dictionary of nemesis deployment results
+        errors: List of error messages
+        error_message: Combined error message string
+    """
     start_time: float = None
     end_time: float = None
     stress_util_runs: dict[str, list[StressUtilResult]] = dict()
@@ -52,6 +85,7 @@ class StressUtilTestResults:
     error_message: str = ''
 
     def __init__(self):
+        """Initialize StressUtilTestResults with empty collections"""
         self.start_time = None
         self.end_time = None
         self.stress_util_runs = dict()
@@ -60,6 +94,14 @@ class StressUtilTestResults:
         self.error_message = ''
 
     def add_error(self, msg: Optional[str]) -> bool:
+        """Add an error message to the test results
+        
+        Args:
+            msg: Error message to add (can be None)
+            
+        Returns:
+            bool: True if message was added, False if msg was None
+        """
         if msg:
             self.errors.append(msg)
             if len(self.error_message) > 0:
@@ -70,16 +112,43 @@ class StressUtilTestResults:
         return False
 
     def get_stress_successful_runs(self, stress_name: str) -> int:
+        """Get count of successful runs for a specific stress test
+        
+        Args:
+            stress_name: Name of the stress test to query
+            
+        Returns:
+            int: Total count of successful runs
+        """
         return sum(run_result.successful_runs for run_result in self.stress_util_runs[stress_name])
 
     def get_stress_total_runs(self, stress_name: str) -> int:
+        """Get total count of runs for a specific stress test
+        
+        Args:
+            stress_name: Name of the stress test to query
+            
+        Returns:
+            int: Total count of runs (successful + failed)
+        """
         return sum(run_result.total_runs for run_result in self.stress_util_runs[stress_name])
 
     def is_all_success(self) -> bool:
+        """Check if all runs across all stress tests were successful
+        
+        Returns:
+            bool: True if all runs succeeded, False otherwise
+        """
         return all(all(run_result.successful_runs == run_result.total_runs for run_result in result) for result in self.stress_util_runs.values())
 
     def __repr__(self):
-        return f"StressUtilTestResults(start_time={self.start_time}, end_time={self.end_time}, stress_util_runs={self.stress_util_runs}, nemesis_deploy_results={self.nemesis_deploy_results}, errors={self.errors})"
+        return (
+            f"StressUtilTestResults(start_time={self.start_time}, "
+            f"end_time={self.end_time}, "
+            f"stress_util_runs={self.stress_util_runs}, "
+            f"nemesis_deploy_results={self.nemesis_deploy_results}, "
+            f"errors={self.errors})"
+        )
 
 
 def process_single_run_result(
@@ -95,20 +164,20 @@ def process_single_run_result(
     ignore_stderr_content: bool
 ) -> YdbCliHelper.WorkloadRunResult:
     """
-    Обрабатывает результат одного запуска
+    Processes the result of a single workload run
 
     Args:
-        overall_result: Общий результат для добавления информации
-        workload_name: Имя workload
-        run_num: Номер запуска
-        run_config: Конфигурация запуска
-        success: Успешность выполнения
-        execution_time: Время выполнения
-        stdout: Вывод workload
-        stderr: Ошибки workload
-        is_timeout: Флаг таймаута
+        overall_result: Overall result object to add information to
+        workload_name: Workload name
+        run_num: Run number
+        run_config: Run configuration
+        success: Whether the run was successful
+        execution_time: Execution time
+        stdout: Workload stdout output
+        stderr: Workload stderr output
+        is_timeout: Timeout flag
     """
-    # Создаем результат для run'а
+    # Create result for the run
     run_result = create_workload_result(
         workload_name=f"{workload_name}_run_{run_num}",
         stdout=stdout,
@@ -118,13 +187,13 @@ def process_single_run_result(
             "run_number": run_num,
             "run_duration": run_config.get("duration"),
             "run_execution_time": execution_time,
-            # Номер итерации
+            # Iteration number
             "iteration_num": run_config.get("iteration_num", 1),
-            # Идентификатор потока
+            # Thread identifier
             "thread_id": run_config.get("thread_id", ""),
             "iter_prefix_added": run_config.get(
                 "iter_prefix_added", False
-            ),  # Флаг, что префикс iter_ уже добавлен
+            ),  # Flag indicating iter_ prefix was already added
             **run_config,
         },
         is_timeout=is_timeout,
@@ -149,27 +218,27 @@ def create_workload_result(
     ignore_stderr_content: bool = False,
 ) -> YdbCliHelper.WorkloadRunResult:
     """
-    Создает и заполняет WorkloadRunResult с общей логикой
+    Creates and populates a WorkloadRunResult with common logic
 
     Args:
-        workload_name: Имя workload для статистики
-        stdout: Вывод workload
-        stderr: Ошибки workload
-        success: Успешность выполнения
-        additional_stats: Дополнительная статистика
-        is_timeout: Флаг таймаута
-        iteration_number: Номер итерации
-        actual_execution_time: Фактическое время выполнения
+        workload_name: Workload name for statistics
+        stdout: Workload stdout output
+        stderr: Workload stderr output
+        success: Whether execution was successful
+        additional_stats: Additional statistics
+        is_timeout: Timeout flag
+        iteration_number: Iteration number
+        actual_execution_time: Actual execution time
 
     Returns:
-        Заполненный WorkloadRunResult
+        Populated WorkloadRunResult object
     """
     result = YdbCliHelper.WorkloadRunResult()
     result.start_time = start_time
     result.stdout = str(stdout)
     result.stderr = str(stderr)
 
-    # Добавляем диагностическую информацию о входных данных
+    # Add diagnostic information about input data
     logging.info(f"Creating workload result for {workload_name}")
     logging.info(
         f"Input parameters - success: {success}, stdout length: {
@@ -189,16 +258,16 @@ def create_workload_result(
                 str(stderr)[
                     :200]}")
 
-    # Анализируем результаты выполнения
+    # Analyze execution results
     error_found = False
 
-    # Проверяем на timeout сначала (это warning, не error)
+    # Check for timeout first (this is a warning, not an error)
     if is_timeout:
         result.add_warning(
             f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}"
         )
     else:
-        # Проверяем явные ошибки (только если не timeout)
+        # Check for explicit errors (only if not timeout)
         if not success:
             result.add_error(
                 f"Workload execution failed. stderr: {stderr}")
@@ -211,41 +280,41 @@ def create_workload_result(
                 result.add_warning(f"Error detected in stdout: {stdout}")
                 error_found = True
 
-    # Проверяем предупреждения
+    # Check for warnings
     if (
         "warning: permanently added" not in str(stderr).lower()
         and "warning" in str(stderr).lower()
     ):
         result.add_warning(f"Warning in stderr: {stderr}")
 
-    # Добавляем информацию о выполнении в iterations
+    # Add execution information to iterations
     iteration = YdbCliHelper.Iteration()
-    # Используем фактическое время выполнения, если оно указано, иначе
-    # плановое время
+    # Use actual execution time if specified, otherwise
+    # use planned time
     execution_time = (
         actual_execution_time if actual_execution_time is not None else 0
     )
     iteration.time = execution_time
 
-    # Добавляем имя итерации для лучшей идентификации
+    # Add iteration name for better identification
     if additional_stats:
         node_host = additional_stats.get("node_host", "")
         iteration_num = additional_stats.get(
             "iteration_num", iteration_number)
 
-        # Проверяем, был ли уже добавлен префикс iter_ в имя
+        # Check if iter_ prefix was already added to the name
         iter_prefix_added = additional_stats.get(
             "iter_prefix_added", False)
 
-        # Формируем имя итерации
+        # Form the iteration name
         if iter_prefix_added:
-            # Если префикс уже добавлен, просто используем имя workload
+            # If prefix was already added, just use workload name
             iteration.name = f"{workload_name}_{node_host}"
         else:
-            # Если префикс еще не добавлен, добавляем его
+            # If prefix wasn't added yet, add it
             iteration.name = f"{workload_name}_{node_host}_iter_{iteration_num}"
 
-        # Добавляем статистику об итерации и потоке в итерацию
+        # Add iteration and thread statistics to the iteration
         if not hasattr(iteration, "stats"):
             iteration.stats = {}
 
@@ -271,14 +340,14 @@ def create_workload_result(
 
     result.iterations[iteration_number] = iteration
 
-    # Добавляем базовую статистику
+    # Add basic statistics
     result.add_stat(
         workload_name, "execution_time", execution_time
-    )  # Используем фактическое время
+    )  # Use actual execution time
     result.add_stat(
         workload_name, "planned_duration", 0
-    )  # Добавляем плановую длительность отдельно
-    # Timeout не считается неуспешным выполнением, это warning
+    )  # Add planned duration separately
+    # Timeout is not considered a failed execution, it's a warning
     result.add_stat(
         workload_name,
         "workload_success",
@@ -289,7 +358,7 @@ def create_workload_result(
         "success_flag",
         success)  # Исходный флаг успеха
 
-    # Добавляем дополнительную статистику если есть
+    # Add additional statistics if present
     if additional_stats:
         for key, value in additional_stats.items():
             result.add_stat(workload_name, key, value)
@@ -305,20 +374,20 @@ def create_workload_result(
 
 def _has_real_error_in_stdout(stdout: str) -> bool:
     """
-    Проверяет, есть ли в stdout настоящие ошибки, исключая статистику workload
+    Checks if there are real errors in stdout, excluding workload statistics
 
     Args:
-        stdout: Вывод stdout для анализа
+        stdout: stdout output to analyze
 
     Returns:
-        bool: True если найдены настоящие ошибки
+        bool: True if real errors are found
     """
     if not stdout:
         return False
 
     stdout_lower = stdout.lower()
 
-    # Список паттернов, которые НЕ являются ошибками (статистика workload)
+    # List of patterns that are NOT errors (workload statistics)
     false_positive_patterns = [
         "error responses count:",  # статистика ответов
         "_error responses count:",  # например scheme_error responses count
@@ -338,8 +407,8 @@ def _has_real_error_in_stdout(stdout: str) -> bool:
         "responses count:",  # общий паттерн счетчиков ответов
     ]
 
-    # Проверяем, есть ли слово "error" в контексте, который НЕ является
-    # ложным срабатыванием
+    # Check if "error" appears in a context that is NOT
+    # a false positive
     error_positions = []
     start_pos = 0
     while True:
@@ -349,20 +418,20 @@ def _has_real_error_in_stdout(stdout: str) -> bool:
         error_positions.append(pos)
         start_pos = pos + 1
 
-    # Для каждого найденного "error" проверяем контекст
+    # For each found "error", check its context
     for pos in error_positions:
-        # Берем контекст вокруг найденного "error" (50 символов до и после)
+        # Get context around found "error" (50 chars before and after)
         context_start = max(0, pos - 50)
         context_end = min(len(stdout), pos + 50)
         context = stdout[context_start:context_end].lower()
 
-        # Проверяем, является ли это ложным срабатыванием
+        # Check if this is a false positive
         is_false_positive = any(
             pattern in context for pattern in false_positive_patterns
         )
 
         if not is_false_positive:
-            # Дополнительные проверки на реальные ошибочные сообщения
+            # Additional checks for real error messages
             real_error_indicators = [
                 "fatal:",  # "Fatal: something went wrong"
                 "error:",  # "Error: something went wrong"
@@ -379,7 +448,7 @@ def _has_real_error_in_stdout(stdout: str) -> bool:
                 "exceptions must derive from baseexception",  # Python exception error
             ]
 
-            # Если найден реальный индикатор ошибки, возвращаем True
+            # If real error indicator found, return True
             if any(indicator in context for indicator in real_error_indicators):
                 return True
 
@@ -392,6 +461,14 @@ def analyze_execution_results(
     total_runs: int,
     use_iterations: bool,
 ):
+    """Analyze execution results and add appropriate errors/warnings
+    
+    Args:
+        overall_result: Result object to modify
+        successful_runs: Number of successful runs
+        total_runs: Total number of runs
+        use_iterations: Whether iterations were used in the test
+    """
     """
     Analyzes execution results and adds errors/warnings
 
@@ -412,7 +489,7 @@ def analyze_execution_results(
         real_iter_num = None
         node_host = None
 
-        # Проверяем статистику
+        # Check statistics
         if hasattr(iteration, "stats") and iteration.stats:
             for stat_key, stat_value in iteration.stats.items():
                 if isinstance(stat_value, dict):
@@ -501,6 +578,16 @@ def add_execution_statistics(
     duration_value: float,
     use_iterations: bool,
 ):
+    """Collect and add execution statistics to the result object
+    
+    Args:
+        overall_result: Result object to modify
+        workload_name: Name of the workload
+        execution_result: Dictionary of execution results
+        additional_stats: Additional statistics to include
+        duration_value: Planned execution duration
+        use_iterations: Whether iterations were used in the test
+    """
     """
     Collects and adds execution statistics
 

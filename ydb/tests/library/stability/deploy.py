@@ -8,8 +8,6 @@ from datetime import datetime, timedelta
 from ydb.tests.olap.lib.remote_execution import execute_command
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.aggregate_results import StressUtilDeployResult
-from concurrent.futures import ThreadPoolExecutor
-import logging
 from ydb.tests.olap.lib.remote_execution import (
     deploy_binaries_to_hosts,
 )
@@ -30,17 +28,20 @@ class StressUtilDeployer:
         nodes_percentage: int = 100,
     ):
         """
-        ФАЗА 1: Подготовка к выполнению workload
+        PHASE 1: Prepare for workload execution
 
         Args:
-            workload_name: Имя workload для отчетов
-            duration_value: Время выполнения в секундах
-            use_chunks: Использовать ли разбивку на итерации (устаревший параметр)
-            duration_param: Параметр для передачи времени выполнения
-            nodes_percentage: Процент нод кластера для запуска workload
+            load_test_instance: Load test instance
+            workload_params: Dictionary of workload parameters
+            nodes_percentage: Percentage of cluster nodes to run workload on (1-100)
 
         Returns:
-            Словарь с результатами подготовки
+            Dictionary with preparation results:
+            {
+                "deployed_nodes": dict of deployed nodes by workload,
+                "total_hosts": set of all hosts used,
+                "workload_start_time": timestamp when workload started
+            }
         """
 
         with allure.step("Phase 1: Prepare workload execution"):
@@ -48,7 +49,7 @@ class StressUtilDeployer:
                 f"Preparing execution: Nodes_percentage={nodes_percentage}%, mode=parallel"
             )
 
-            # Останавливаем nemesis перед каждым запуском workload для чистого старта
+            # Stop nemesis before each workload run for clean start
             try:
                 logging.info("Stopping nemesis service before workload execution for clean start")
 
@@ -56,7 +57,7 @@ class StressUtilDeployer:
                 prep_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 nemesis_log = [f"Workload preparation started at {prep_time}"]
 
-                # Останавливаем nemesis через общий метод
+                # Stop nemesis using common method
                 self._manage_nemesis(
                     False, "Stopping nemesis before workload execution", nemesis_log)
 
@@ -74,11 +75,11 @@ class StressUtilDeployer:
                 except Exception:
                     pass
 
-            # Сохраняем состояние нод для диагностики
+            # Save node state for diagnostics
             load_test_instance.save_nodes_state()
 
             deployed_nodes = {}
-            # Выполняем deploy на выбранный процент нод
+            # Deploy to selected percentage of nodes
             deploy_futures = []
             with ThreadPoolExecutor(max_workers=10) as tpe:
                 for workload_name, workload_info in workload_params.items():
@@ -115,11 +116,18 @@ class StressUtilDeployer:
 
         Args:
             workload_name: Workload name for reports
+            workload_path: Path to workload binary
             nodes_percentage: Percentage of cluster nodes to deploy to (1-100)
 
         Returns:
             List of dictionaries with info about deployed nodes:
-            [{'node': node_object, 'binary_path': path_to_binary}, ...]
+            [{
+                'node': node_object,
+                'binary_path': path_to_binary
+            }, ...]
+            
+        Raises:
+            Exception: If deployment fails on all target nodes
         """
         with allure.step("Deploy workload binary"):
             logging.info(
@@ -276,9 +284,16 @@ class StressUtilDeployer:
             existing_log: Existing log to append info to
 
         Returns:
-            List of strings with operation log
+            List of strings with operation log containing:
+            - Operation status per host
+            - Timing information
+            - Error details if any
+            
+        Note:
+            This method handles both binary deployment and service management
+            when starting nemesis
         """
-        # Создаем сводный лог для Allure
+        # Create summary log for Allure
         nemesis_log = existing_log if existing_log is not None else []
 
         try:
@@ -652,6 +667,10 @@ class StressUtilDeployer:
 
         Args:
             delay_seconds: Delay in seconds before starting nemesis
+            
+        Note:
+            Creates a separate thread to handle the delayed start
+            and attaches detailed timing information to Allure report
         """
         try:
             # Создаем лог для Allure

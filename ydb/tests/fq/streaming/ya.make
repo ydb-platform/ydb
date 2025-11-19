@@ -21,7 +21,7 @@ PEERDIR(
     ydb/tests/olap/common
     ydb/tests/tools/datastreams_helpers
 )
-TIMEOUT(180)
+
 DEPENDS(
     ydb/apps/ydb
     ydb/tests/tools/pq_read

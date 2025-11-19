@@ -294,6 +294,9 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
 
     if (settings.use_filter_snowball()) {
         struct sb_stemmer* stemmer = sb_stemmer_new(settings.language().c_str(), nullptr);
+        if (stemmer == nullptr) {
+            ythrow yexception() << "sb_stemmer_new returned nullptr";
+        }
         for (auto& token : tokens) {
             const sb_symbol* stemmed = sb_stemmer_stem(
                 stemmer,

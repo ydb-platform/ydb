@@ -736,6 +736,7 @@ After resolving conflicts, mark this PR as ready for review.
             status_lines: List of git status lines (from 'git status --porcelain')
             commit_sha: SHA of the commit being cherry-picked
         """
+        self.logger.debug(f"_add_missing_conflict_markers called with {len(status_lines)} status lines for commit {commit_sha[:7]}")
         for line in status_lines:
             # Extract status code and file path
             if len(line) < 3:
@@ -756,8 +757,11 @@ After resolving conflicts, mark this PR as ready for review.
             if status_code not in ('DU', 'UD', 'AA'):
                 continue
             
+            self.logger.debug(f"Processing {status_code} conflict for {file_path}")
+            
             # Check if file already has conflict markers
             if self._find_first_conflict_line(file_path) is not None:
+                self.logger.debug(f"File {file_path} already has conflict markers, skipping")
                 continue  # Markers already present, skip
             
             try:
@@ -795,19 +799,28 @@ After resolving conflicts, mark this PR as ready for review.
                 if status_code == 'DU':
                     # Deleted by us (HEAD), updated by them (cherry-pick)
                     # File exists in cherry-pick but not in HEAD
+                    self.logger.debug(f"DU conflict: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}")
                     if cherry_pick_content is not None:
                         conflict_markers_content = f"<<<<<<< HEAD\n=======\n{cherry_pick_content}>>>>>>> {commit_sha[:7]}\n"
+                    else:
+                        self.logger.warning(f"DU conflict for {file_path}: cherry_pick_content is None, cannot add markers")
                 
                 elif status_code == 'UD':
                     # Updated by us (HEAD), deleted by them (cherry-pick)
                     # File exists in HEAD but not in cherry-pick
+                    self.logger.debug(f"UD conflict: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}")
                     if head_content is not None:
                         conflict_markers_content = f"<<<<<<< HEAD\n{head_content}=======\n>>>>>>> {commit_sha[:7]}\n"
+                    else:
+                        self.logger.warning(f"UD conflict for {file_path}: head_content is None, cannot add markers")
                 
                 elif status_code == 'AA':
                     # Both added - file added in both branches with different content
+                    self.logger.debug(f"AA conflict: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}")
                     if head_content is not None and cherry_pick_content is not None:
                         conflict_markers_content = f"<<<<<<< HEAD\n{head_content}=======\n{cherry_pick_content}>>>>>>> {commit_sha[:7]}\n"
+                    else:
+                        self.logger.warning(f"AA conflict for {file_path}: head_content={head_content is not None}, cherry_pick_content={cherry_pick_content is not None}, cannot add markers")
                 
                 # Write conflict markers to file if we have content
                 if conflict_markers_content is not None:
@@ -816,13 +829,17 @@ After resolving conflicts, mark this PR as ready for review.
                     if file_dir:
                         os.makedirs(file_dir, exist_ok=True)
                     
+                    # For DU conflicts, file may already exist in working directory (Git left it there)
+                    # We need to overwrite it with conflict markers
                     with open(file_path, 'w', encoding='utf-8') as f:
                         f.write(conflict_markers_content)
                     
                     self.logger.info(f"Added conflict markers to {file_path} for {status_code} conflict")
+                else:
+                    self.logger.warning(f"Could not generate conflict markers for {file_path} (status_code={status_code})")
             
             except Exception as e:
-                self.logger.warning(f"Failed to add conflict markers to {file_path}: {e}")
+                self.logger.warning(f"Failed to add conflict markers to {file_path}: {e}", exc_info=True)
 
     def _handle_cherry_pick_conflict(self, commit_sha: str, git_output: str = ""):
         """Handle cherry-pick conflict: commit the conflict and return list of conflicted files with conflict messages
@@ -845,6 +862,7 @@ After resolving conflicts, mark this PR as ready for review.
             if result.stdout.strip():
                 # Check for conflict markers in files
                 status_lines = result.stdout.strip().split('\n')
+                self.logger.debug(f"Git status output: {result.stdout.strip()}")
                 
                 # Add conflict markers for special conflict types (DU, UD, AA) where Git doesn't generate them
                 # To disable this feature, comment out the next line:
